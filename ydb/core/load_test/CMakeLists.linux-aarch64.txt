@@ -7,6 +7,12 @@
 
 
 add_subdirectory(ut_ycsb)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(ydb-core-load_test)
 target_link_libraries(ydb-core-load_test PUBLIC
@@ -28,8 +34,11 @@ target_link_libraries(ydb-core-load_test PUBLIC
   public-lib-base
   public-lib-operation_id
   cpp-client-ydb_proto
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-load_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/aggregated_result.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/archive.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/keyvalue_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/kqp.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/memory.cpp
@@ -47,4 +56,9 @@ target_sources(ydb-core-load_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/kqp_upsert.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/test_load_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ycsb/test_load_read_iterator.cpp
+)
+generate_enum_serilization(ydb-core-load_test
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/percentile.h
+  INCLUDE_HEADERS
+  ydb/core/load_test/percentile.h
 )

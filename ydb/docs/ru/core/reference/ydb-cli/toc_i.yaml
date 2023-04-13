@@ -1,12 +1,12 @@
 items:
   - name: Установка
     href: install.md
+  - name: Соединение с БД и аутентификация
+    href: connect.md
   - name: Все команды по алфавиту
     href: commands.md
   - name: Сервисные команды
     href: commands/service.md
-  - name: Соединение с БД и аутентификация
-    href: connect.md
   - name: Глобальные параметры
     href: commands/global-options.md
   - name: Команды YDB CLI

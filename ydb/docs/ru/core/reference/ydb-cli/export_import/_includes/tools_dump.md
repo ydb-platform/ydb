@@ -28,26 +28,26 @@
 
 ## Примеры
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Выгрузка базы данных
 
 С автоматическим созданием директории `backup_...` в текущей директории:
 
 ```
-{{ ydb-cli }} --profile db1 tools dump 
+{{ ydb-cli }} --profile quickstart tools dump 
 ```
 
 В заданную директорию:
 
 ```
-{{ ydb-cli }} --profile db1 tools dump -o ~/backup_db1
+{{ ydb-cli }} --profile quickstart tools dump -o ~/backup_quickstart
 ```
 
 ### Выгрузка структуры таблиц в заданной директории базы данных и её поддиректориях
 
 ```
-{{ ydb-cli }} --profile db1 tools dump -p dir1 --scheme-only
+{{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
 
 

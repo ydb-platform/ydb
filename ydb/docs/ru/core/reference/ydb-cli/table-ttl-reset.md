@@ -25,6 +25,6 @@
 Выключите TTL для таблицы `series`:
 
 ```bash
-{{ ydb-cli }} -p db1 table ttl reset \
+{{ ydb-cli }} -p quickstart table ttl reset \
   series
 ```

@@ -51,20 +51,20 @@
 
 ## Примеры {#examples}
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Загрузка в корень базы данных
 
 Из текущей директории файловой системы:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p . -i .
+{{ ydb-cli }} -p quickstart tools restore -p . -i .
 ```
 
 Из заданной директории файловой системы:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p . -i ~/backup_db1
+{{ ydb-cli }} -p quickstart tools restore -p . -i ~/backup_quickstart
 ```
 
 ### Загрузка в заданную директорию в базе данных
@@ -72,17 +72,17 @@
 Из текущей директории файловой системы:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p dir1/dir2 -i .
+{{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i .
 ```
 
 Из заданной директории файловой системы:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p dir1/dir2 -i ~/backup_db1
+{{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart
 ```
 
 Проверка соответствия схемы данных в базе данных и файловой системе:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p dir1/dir2 -i ~/backup_db1 --dry-run
+{{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart --dry-run
 ```

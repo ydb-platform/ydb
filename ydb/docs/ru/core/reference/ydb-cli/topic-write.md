@@ -49,22 +49,22 @@
 
 * Запись ввода с терминала в одно сообщение. После запуска команды можно ввести произвольный многострочный текст, завершив ввод нажатием `Ctrl+D`.
   ```bash
-  {{ ydb-cli }} -p db1 topic write topic1
+  {{ ydb-cli }} -p quickstart topic write topic1
   ```
 
 * Запись содержимого бинарного файла `message.bin` в одно сообщение с использованием сжатия кодеком GZIP
   ```bash
-  {{ ydb-cli }} -p db1 topic write topic1 -f message.bin --codec GZIP
+  {{ ydb-cli }} -p quickstart topic write topic1 -f message.bin --codec GZIP
   ```
 
 * Запись содержимого строкового файла `example.txt` с разделением на сообщения по строкам
   ```bash
-  {{ ydb-cli }} -p db1 topic write topic1 -f example.txt --format newline-delimited
+  {{ ydb-cli }} -p quickstart topic write topic1 -f example.txt --format newline-delimited
   ```
 
 * Запись скачивамого по протоколу HTTP ресурса с разделением на сообщения символами табуляции
   ```bash
-  curl http://example.com/resource | {{ ydb-cli }} -p db1 topic write topic1 --delimiter "\t"
+  curl http://example.com/resource | {{ ydb-cli }} -p quickstart topic write topic1 --delimiter "\t"
   ```
 
 * [Примеры интеграции команд YDB CLI](topic-pipeline.md)

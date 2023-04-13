@@ -34,7 +34,7 @@
 Установите TTL для таблицы `series`
 
 ```bash
-{{ ydb-cli }} -p db1 table ttl set \
+{{ ydb-cli }} -p quickstart table ttl set \
   --column createtime \
   --expire-after 3600 \
   --run-interval 1200 \

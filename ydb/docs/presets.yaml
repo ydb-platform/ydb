@@ -31,6 +31,7 @@ default:
   objstorage-name: Object Storage
   ydb-cli: ydb
   k8s: Kubernetes
+  quickstart-path: ../../../../administration/quickstart.md#queries
   oss: true
   feature_not_null_for_pk: true
   ydb_non_deterministic_functions: true

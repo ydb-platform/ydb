@@ -20,57 +20,57 @@
 
 **Примеры**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 - Получение объектов в корневой директории базы данных в сжатом формате
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls
+{{ ydb-cli }} --profile quickstart scheme ls
 ```
 
 - Получение объектов во всех директориях базы данных в сжатом формате
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls -R
+{{ ydb-cli }} --profile quickstart scheme ls -R
 ```
 
 - Получение объектов в заданной директории базы данных в сжатом формате
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls dir1
-{{ ydb-cli }} --profile db1 scheme ls dir1/dir2
+{{ ydb-cli }} --profile quickstart scheme ls dir1
+{{ ydb-cli }} --profile quickstart scheme ls dir1/dir2
 ```
 
 - Получение объектов во всех поддиректориях заданной директории базы данных в сжатом формате
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls dir1 -R
-{{ ydb-cli }} --profile db1 scheme ls dir1/dir2 -R
+{{ ydb-cli }} --profile quickstart scheme ls dir1 -R
+{{ ydb-cli }} --profile quickstart scheme ls dir1/dir2 -R
 ```
 
 - Получение полной информации по объектам в корневой директории базы данных
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls -l
+{{ ydb-cli }} --profile quickstart scheme ls -l
 ```
 
 - Получение полной информации по объектам в заданной директории базы данных
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls dir1 -l
-{{ ydb-cli }} --profile db1 scheme ls dir2/dir3 -l
+{{ ydb-cli }} --profile quickstart scheme ls dir1 -l
+{{ ydb-cli }} --profile quickstart scheme ls dir2/dir3 -l
 ```
 
 - Получение полной информации по объектам во всех директориях базы данных
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls -lR
+{{ ydb-cli }} --profile quickstart scheme ls -lR
 ```
 
 - Получение полной информации по объектам во всех поддиректориях заданной директории базы данных
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls dir1 -lR
-{{ ydb-cli }} --profile db1 scheme ls dir2/dir3 -lR
+{{ ydb-cli }} --profile quickstart scheme ls dir1 -lR
+{{ ydb-cli }} --profile quickstart scheme ls dir2/dir3 -lR
 ```
 

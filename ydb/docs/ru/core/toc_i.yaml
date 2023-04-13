@@ -3,8 +3,10 @@ items:
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
-  include: { mode: link, path: getting_started/toc_p.yaml }
-
+  href: administration/quickstart.md
+# - name: Начало работы
+#   hidden: true
+#   include: { mode: link, path: getting_started/toc_p.yaml }
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }

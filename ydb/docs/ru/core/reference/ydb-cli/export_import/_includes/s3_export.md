@@ -63,7 +63,7 @@
 Выгрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе выгрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation get "ydb://export/6?id=281474976788395&kind=s3"
+{{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind=s3"
 ```
 
 Формат вывода `operation get` также устанавливается опцией `--format`.
@@ -96,7 +96,7 @@
 После выполнения выгрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка была завершена: удалена из перечня операций, а также были удалены все созданные для неё файлы:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation forget "ydb://export/6?id=281474976788395&kind=s3"
+{{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind=s3"
 ```
 
 ### Список операций выгрузки {#list}
@@ -104,21 +104,21 @@
 Для получения списка операций выгрузки воспользуйтесь командой `operation list export/s3`:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation list export/s3
+{{ ydb-cli }} -p quickstart operation list export/s3
 ```
 
 Формат вывода `operation list` также устанавливается опцией `--format`.
 
 ## Примеры {#examples}
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Выгрузка базы данных {#example-full-db}
 
 Выгрузка всех объектов базы данных, имена которых не начинаются с точки, и не размещенных внутри директорий, имена которых начинаются с точки, в директорию `export1` в бакете `mybucket` с использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`:
 
 ```
-ydb -p db1 export s3 \
+ydb -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --item src=.,dst=export1
 ```
@@ -128,7 +128,7 @@ ydb -p db1 export s3 \
 Выгрузка объектов из директорий dir1 и dir2 базы данных, в директорию `export1` в бакете `mybucket`, с использованием явно заданных параметров аутентификации в S3:
 
 ```
-ydb -p db1 export s3 \
+ydb -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
@@ -139,7 +139,7 @@ ydb -p db1 export s3 \
 Для получения перечня идентификаторов операций выгрузки в удобном для обработки в скриптах bash формате вы можете применить утилиту [jq](https://stedolan.github.io/jq/download/):
 
 ``` bash
-{{ ydb-cli }} -p db1 operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id"
+{{ ydb-cli }} -p quickstart operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id"
 ```
 
 Вы получите вывод, где в каждой новой строке находится идентификатор операции, например:
@@ -153,6 +153,6 @@ ydb://export/6?id=281474976788779&kind=s3
 По этим идентификаторам может быть, например, запущен цикл для завершения всех текущих операций:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p db1 operation forget $line;done
+{{ ydb-cli }} -p quickstart operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
 

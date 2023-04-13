@@ -1127,7 +1127,12 @@ public:
     TNodePtr BuildUdf(bool forReduce) {
         auto result = Node ? Node : BuildCallable(Pos, Module, Func, Args, forReduce);
         if (to_lower(Module) == "tensorflow" && Func == "RunBatch") {
-            Args.erase(Args.begin() + 2);
+            if (Args.size() > 2) {
+                Args.erase(Args.begin() + 2);
+            } else {
+                Ctx.Error(Pos) << "Excepted >= 3 arguments, but got: " << Args.size();
+                return nullptr;
+            }
         }
         return result;
     }

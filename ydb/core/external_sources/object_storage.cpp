@@ -1,6 +1,7 @@
 #include "external_source.h"
 
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
@@ -43,6 +44,41 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         return objectStorage.SerializeAsString();
+    }
+
+    virtual TString GetName() const override {
+        return TString{NYql::S3ProviderName};
+    }
+
+    virtual TMap<TString, TString> GetParamters(const TString& content) const override {
+        NKikimrExternalSources::TObjectStorage objectStorage;
+        objectStorage.ParseFromStringOrThrow(content);
+
+        TMap<TString, TString> parameters{objectStorage.format_setting().begin(), objectStorage.format_setting().end()};
+        if (objectStorage.format()) {
+            parameters["format"] = objectStorage.format();
+        }
+
+        if (objectStorage.compression()) {
+            parameters["compression"] = objectStorage.compression();
+        }
+
+        NSc::TValue projection;
+        for (const auto& [key, value]: objectStorage.projection()) {
+            projection[key] = value;
+        }
+
+        if (!projection.DictEmpty()) {
+            parameters["projection"] = projection.ToJson();
+        }
+
+        NSc::TValue partitionedBy;
+        partitionedBy.AppendAll(objectStorage.partitioned_by());
+        if (!partitionedBy.ArrayEmpty()) {
+            parameters["partitioned_by"] = partitionedBy.ToJson();
+        }
+
+        return parameters;
     }
 
 private:

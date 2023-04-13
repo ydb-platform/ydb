@@ -3,6 +3,7 @@
 #include "yql_kikimr_gateway.h"
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -452,7 +453,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

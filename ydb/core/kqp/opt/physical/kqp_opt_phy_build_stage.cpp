@@ -285,7 +285,6 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                 .Settings(read.Settings())
                 .Done();
             break;
-
         default:
             YQL_ENSURE(false, "Unexpected table kind: " << (ui32)tableDesc.Metadata->Kind);
             break;

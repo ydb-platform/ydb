@@ -283,7 +283,8 @@ enum class EKikimrTableKind : ui32 {
     Unspecified = 0,
     Datashard = 1,
     SysView = 2,
-    Olap = 3
+    Olap = 3,
+    External = 4
 };
 
 enum class ETableType : ui32 {
@@ -303,6 +304,16 @@ TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr)
 enum class EStoreType : ui32 {
     Row = 0,
     Column = 1
+};
+
+struct TExternalSource {
+    TString Type;
+    TString TableLocation;
+    TString TableContent;
+    TString DataSourcePath;
+    TString DataSourceLocation;
+    TString DataSourceInstallation;
+    NKikimrSchemeOp::TAuth DataSourceAuth;
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
@@ -335,6 +346,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
+
+    TExternalSource ExternalSource;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)

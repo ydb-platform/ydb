@@ -230,7 +230,7 @@ public:
             return false;  // Do not acquire locks after first lock issue
         }
 
-        if (!DeferredEffects.Empty()) {
+        if (TxHasEffects()) {
             return true; // Acquire locks in read write tx
         }
 

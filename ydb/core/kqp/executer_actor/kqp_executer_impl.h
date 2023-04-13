@@ -952,6 +952,10 @@ protected:
         return TasksGraph.GetMeta().Snapshot;
     }
 
+    void SetSnapshot(ui64 step, ui64 txId) {
+        TasksGraph.GetMeta().SetSnapshot(step, txId);
+    }
+
     IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {
         IActor* proxy;
 

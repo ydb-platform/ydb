@@ -89,6 +89,10 @@ struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
+
+    void SetSnapshot(ui64 step, ui64 txId) {
+        Snapshot = IKqpGateway::TKqpSnapshot(step, txId);
+    }
 };
 
 struct TTaskInputMeta {};

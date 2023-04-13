@@ -572,30 +572,29 @@ private:
         }
 
         // NodeId -> {Tasks}
-        THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> scanTasks;
+        THashMap<ui64, TVector<ui64>> scanTasks;
         ui32 nShardScans = 0;
         ui32 nScanTasks = 0;
 
-        TVector<NYql::NDqProto::TDqTask> computeTasks;
+        TVector<ui64> computeTasks;
 
         InitializeChannelProxies();
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            NYql::NDqProto::TDqTask taskDesc = SerializeTaskToProto(TasksGraph, task);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // Task with source
                 if (!task.Meta.Reads) {
-                    scanTasks[task.Meta.NodeId].emplace_back(std::move(taskDesc));
+                    scanTasks[task.Meta.NodeId].emplace_back(task.Id);
                     nScanTasks++;
                     continue;
                 }
 
                 if (stageInfo.Meta.IsSysView()) {
-                    computeTasks.emplace_back(std::move(taskDesc));
+                    computeTasks.emplace_back(task.Id);
                 } else {
-                    scanTasks[task.Meta.NodeId].emplace_back(std::move(taskDesc));
+                    scanTasks[task.Meta.NodeId].emplace_back(task.Id);
                     nScanTasks++;
                 }
 
@@ -607,7 +606,7 @@ private:
                 }
 
             } else {
-                computeTasks.emplace_back(std::move(taskDesc));
+                computeTasks.emplace_back(task.Id);
             }
         }
 
@@ -617,12 +616,6 @@ private:
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Requested too many execution units: " << (computeTasks.size() + nScanTasks)));
-            return;
-        }
-
-        bool fitSize = AllOf(scanTasks, [this](const auto& x){ return ValidateTaskSize(x.second); })
-                    && ValidateTaskSize(computeTasks);
-        if (!fitSize) {
             return;
         }
 
@@ -675,27 +668,32 @@ public:
     }
 
 private:
-    void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks,
+    void ExecuteScanTx(TVector<ui64>&& computeTasks, THashMap<ui64, TVector<ui64>>&& tasksPerNode,
         TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
-        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), scanTasks.size());
-        for (const auto& [_, tasks]: scanTasks) {
+        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), tasksPerNode.size());
+        for (const auto& [_, tasks]: tasksPerNode) {
             for (const auto& task : tasks) {
-                PendingComputeTasks.insert(task.GetId());
+                PendingComputeTasks.insert(task);
             }
         }
 
-        for (auto& taskDesc : computeTasks) {
-            PendingComputeTasks.insert(taskDesc.GetId());
+        for (auto& task : computeTasks) {
+            PendingComputeTasks.insert(task);
         }
 
-        Planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
-            std::move(scanTasks), GetSnapshot(),
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), std::move(computeTasks),
+            std::move(tasksPerNode), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling,
-            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig);
-        LOG_D("Execute scan tx, computeTasks: " << Planner->GetComputeTasksNumber() << ", scanTasks: " << Planner->GetMainTasksNumber());
+            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */);
+        LOG_D("Execute scan tx, PendingComputeTasks: " << PendingComputeTasks.size());
+        auto err = Planner->PlanExecution();
+        if (err) {
+            TlsActivationContext->Send(err.release());
+            return;
+        }
 
-        Planner->ProcessTasksForScanExecuter();
+        Planner->Submit();
     }
 
 private:

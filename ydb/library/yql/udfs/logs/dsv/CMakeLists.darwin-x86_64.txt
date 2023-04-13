@@ -19,7 +19,7 @@ target_link_libraries(dsv_udf INTERFACE
 add_global_library_for(dsv_udf.global dsv_udf)
 target_compile_options(dsv_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=27
+  -DUDF_ABI_VERSION_MINOR=28
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(dsv_udf.global PUBLIC

@@ -1,0 +1,19 @@
+name: test-python
+description: Run functional Python tests
+inputs:
+  test_python_suite:
+    required: false
+    type: string
+    
+runs:
+  using: "composite"
+  steps:
+  - name: Test
+    shell: bash
+    run: |
+      export source_root=$(pwd)
+      export build_root=$(pwd)/../build/
+      rm -rf ${source_root}/ydb/tests/functional/test-results/*
+      source ${source_root}/ydb/tests/oss/launch/prepare.sh
+      pytest -o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml \
+        ${source_root}/ydb/tests/functional/${{ inputs.test_python_suite }}

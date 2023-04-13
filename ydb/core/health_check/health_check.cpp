@@ -113,6 +113,7 @@ public:
         TabletState,
         SystemTabletState,
         OverloadState,
+        SyncState,
     };
 
     struct TTenantInfo {
@@ -422,6 +423,7 @@ public:
 
     THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>> NodeSystemState;
     THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> MergedNodeSystemState;
+    THashSet<TNodeId> UsedClockSkewNodes;
 
     THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>> NodeVDiskState;
     TList<NKikimrWhiteboard::TVDiskStateInfo> VDisksAppended;
@@ -1377,7 +1379,7 @@ public:
         return tabletsStatus;
     }
 
-    void FillComputeNodeStatus(TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+    void FillNodeInfo(TNodeId nodeId, Ydb::Monitoring::LocationNode* node) {
         const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
         auto itNodeInfo = MergedNodeInfo.find(nodeId);
         if (itNodeInfo != MergedNodeInfo.end()) {
@@ -1385,11 +1387,15 @@ public:
         }
         TString id(ToString(nodeId));
 
-        context.Location.mutable_compute()->mutable_node()->set_id(nodeId);
+        node->set_id(nodeId);
         if (nodeInfo) {
-            context.Location.mutable_compute()->mutable_node()->set_host(nodeInfo->Host);
-            context.Location.mutable_compute()->mutable_node()->set_port(nodeInfo->Port);
+            node->set_host(nodeInfo->Host);
+            node->set_port(nodeInfo->Port);
         }
+    }
+
+    void FillComputeNodeStatus(TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+        FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
         auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
         if (itNodeSystemState != MergedNodeSystemState.end()) {
@@ -1417,22 +1423,12 @@ public:
                 }
                 loadAverageStatus.set_overall(laContext.GetOverallStatus());
             }
-
-            TSelfCheckContext clockSkewContext(&context, "CLOCK_SKEW");
-            computeNodeStatus.set_maxclockskewmicrosec(nodeSystemState.clockskewmicrosec());
-            if (nodeSystemState.clockskewmicrosec() > 25000) {
-                clockSkewContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "ClockSkew above 25 ms", ETags::NodeState);
-            } else if (nodeSystemState.clockskewmicrosec() > 5000) {
-                clockSkewContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "ClockSkew above 5 ms", ETags::NodeState);
-            } else {
-                clockSkewContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-            }
         } else {
             // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
             //                      TStringBuilder() << "Compute node is not available",
-            //                      ETags::NodeState);
+             //                      ETags::NodeState);
         }
-        computeNodeStatus.set_id(id);
+        computeNodeStatus.set_id(ToString(nodeId));
         computeNodeStatus.set_overall(context.GetOverallStatus());
     }
 
@@ -1456,18 +1452,11 @@ public:
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
                 context.ReportStatus(systemStatus, "Compute has issues with system tablets", ETags::ComputeState, {ETags::SystemTabletState});
             }
-            ui64 clockSkew = 0;
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(nodeId, computeNode, {&context, "COMPUTE_NODE"});
-                ui64 skew = computeNode.maxclockskewmicrosec();
-                if (skew > clockSkew) {
-                    clockSkew = skew;
-                }
             }
-            computeStatus.set_maxclockskewmicrosec(clockSkew);
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
-            context.ReportWithMaxChildStatus("ClockSkew exceeded", ETags::ComputeState, {ETags::NodeState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
             for (TNodeId nodeId : *computeNodeIds) {
@@ -2293,6 +2282,60 @@ public:
         }
     }
 
+    bool IsRequiredClockSkewIssue(const NKikimrWhiteboard::TSystemStateInfo& nodeSystemState) {
+        if (!nodeSystemState.has_clockskewpeerid()) {
+            return true;
+        }
+        const ui32 peerId = nodeSystemState.clockskewpeerid();
+        auto itPeerState = MergedNodeSystemState.find(peerId);
+        if (itPeerState == MergedNodeSystemState.end() || UsedClockSkewNodes.contains(peerId)) {
+            return false;
+        }
+        const NKikimrWhiteboard::TSystemStateInfo& peerState(*itPeerState->second);
+        if (!peerState.has_clockskewpeerid()) {
+            return true;
+        }
+        const ui32 nextPeerId = peerState.clockskewpeerid();
+        if (nextPeerId != nodeSystemState.nodeid() && !UsedClockSkewNodes.contains(nextPeerId)) {
+            return false;
+        }
+        return true;
+    }
+
+    void FillClockSkewResult(TNodeId nodeId, TSelfCheckContext context) {
+        FillNodeInfo(nodeId, context.Location.mutable_node());
+        auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
+        if (itNodeSystemState != MergedNodeSystemState.end()) {
+            const NKikimrWhiteboard::TSystemStateInfo& nodeSystemState(*itNodeSystemState->second);
+            if (IsRequiredClockSkewIssue(nodeSystemState)) {
+                UsedClockSkewNodes.emplace(nodeId);
+                if (nodeSystemState.has_clockskewpeerid()) {
+                    const ui32 peerId = nodeSystemState.clockskewpeerid();
+                    UsedClockSkewNodes.emplace(peerId);
+                    FillNodeInfo(peerId, context.Location.mutable_peer());
+                }
+                if (nodeSystemState.clockskewmicrosec() > 25000) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Time difference is more than 25 ms", ETags::NodeState);
+                } else if (nodeSystemState.clockskewmicrosec() > 5000) {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Time difference is more than 5 ms", ETags::NodeState);
+                } else {
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                }
+            }
+        }
+    }
+
+    void FillNodesSyncResult(TOverallStateContext& context) {
+        TSelfCheckResult syncContext;
+        syncContext.Type = "NODES_SYNC";
+        for (TNodeId nodeId : NodeIds) {
+            FillClockSkewResult(nodeId, {&syncContext, "TIME"});
+        }
+        syncContext.ReportWithMaxChildStatus("Time difference exceeded", ETags::SyncState, {ETags::NodeState});
+        context.UpdateMaxStatus(syncContext.GetOverallStatus());
+        context.AddIssues(syncContext.IssueRecords);
+    }
+
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -2301,6 +2344,7 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
+        FillNodesSyncResult(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;

@@ -307,6 +307,7 @@ message TSystemStateInfo {
     optional double MaxDiskUsage = 30;
     optional NActorsInterconnect.TNodeLocation Location = 31;
     optional uint64 ClockSkewMicrosec = 32;
+    optional uint64 ClockSkewPeerId = 33;
 }
 
 message TEvSystemStateRequest {

@@ -36,6 +36,7 @@ def main():
     parser.add_argument('--processes', type=int, default=1, help='Number of processes to fork into, default is 1')
     parser.add_argument('--print-unique-errors', dest='print_unique_errors', action='store_const', const=1, default=0, help='Print unique errors that happen during execution')
     parser.add_argument('--print-unique-traceback', dest='print_unique_errors', action='store_const', const=2, help='Print traceback for unique errors that happen during execution')
+    parser.add_argument('--oplog-results', dest='oplog_results', action='store_true', default=False, help='Store operation results in oplog dumps')
     args = parser.parse_args()
 
     logger = DummyLogger()
@@ -53,8 +54,9 @@ def main():
     options.read_table_ranges = args.read_table_ranges
     options.ignore_read_table = args.ignore_read_table
     options.read_table_snapshot = args.read_table_snapshot
+    options.oplog_results = args.oplog_results
 
-    async def async_run_single():
+    async def async_run_single_inner():
         iterations = args.iterations
 
         async with DatabaseChecker(args.endpoint, args.database, path=args.path, logger=logger, print_unique_errors=args.print_unique_errors) as checker:
@@ -63,20 +65,36 @@ def main():
                     await checker.async_run(options)
                 except SerializabilityError as e:
                     e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json'))
+                    e.history.write_log_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_log.json'))
                     raise
 
                 if iterations is not None:
                     iterations -= 1
 
-    def run_single():
-        def handler(signum, frame, sys=sys, logger=logger):
+    async def async_run_single():
+        loop = asyncio.get_event_loop()
+        task = asyncio.create_task(async_run_single_inner())
+
+        def handler(signum, frame, sys=sys, logger=logger, loop=loop, task=task):
             logger.warning('Terminating on signal %d', signum)
+
+            def do_cancel():
+                if not task.done():
+                    task.cancel()
+
+            loop.call_soon_threadsafe(do_cancel)
             sys.exit(1)
 
         signal.signal(signal.SIGINT, handler)
         signal.signal(signal.SIGTERM, handler)
 
-        asyncio.run(async_run_single())
+        await task
+
+    def run_single():
+        try:
+            asyncio.run(async_run_single())
+        except asyncio.exceptions.CancelledError:
+            sys.exit(1)
 
     def run_multiple():
         def handler(signum, frame, sys=sys, logger=logger):

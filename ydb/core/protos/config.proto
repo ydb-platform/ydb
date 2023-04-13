@@ -1584,6 +1584,10 @@ message THiveConfig {
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
     optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
     optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 1500]; // milliseconds
+    optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
+    optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
+    optional bool WarmUpEnabled = 55 [default = false];
 }
 
 message TDataShardConfig {

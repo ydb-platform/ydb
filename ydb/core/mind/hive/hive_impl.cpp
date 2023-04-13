@@ -179,6 +179,13 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 
 void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
     TInstant now = TActivationContext::Now();
+    TInstant allowed = std::min(LastConnect + GetWarmUpBootWaitingPeriod(), StartTime() + GetMaxWarmUpPeriod());
+    if (WarmUp && now < allowed) {
+        BLOG_D("ProcessBootQueue - last connect was at " << LastConnect << "- not long enough ago");
+        ProcessBootQueueScheduled = false;
+        PostponeProcessBootQueue(allowed - now);
+        return;
+    }
     BLOG_D("Handle ProcessBootQueue (size: " << BootQueue.BootQueue.size() << ")");
     THPTimer bootQueueProcessingTimer;
     if (ProcessWaitQueueScheduled) {
@@ -188,6 +195,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     }
     ProcessBootQueueScheduled = false;
     ui64 processedItems = 0;
+    ui64 tabletsStarted = 0;
     TInstant postponedStart;
     TStackVec<TBootQueue::TBootQueueRecord> delayedTablets;
     while (!BootQueue.BootQueue.empty() && processedItems < GetMaxBootBatchSize()) {
@@ -198,12 +206,14 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
             continue;
         }
         if (tablet->IsAlive()) {
+            BLOG_D("tablet " << record.TabletId << " already alive, skipping");
             continue;
         }
         if (tablet->IsReadyToStart(now)) {
             TBestNodeResult bestNodeResult = FindBestNode(*tablet);
             if (bestNodeResult.BestNode != nullptr) {
                 if (tablet->InitiateStart(bestNodeResult.BestNode)) {
+                    ++tabletsStarted;
                     continue;
                 }
             } else {
@@ -225,6 +235,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
             }
         } else {
             TInstant tabletPostponedStart = tablet->PostponedStart;
+            BLOG_D("tablet " << record.TabletId << " has postponed start at " << tabletPostponedStart);
             if (tabletPostponedStart > now) {
                 if (postponedStart) {
                     postponedStart = std::min(postponedStart, tabletPostponedStart);
@@ -250,6 +261,9 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
         BLOG_D("ProcessBootQueue - BootQueue empty (WaitQueue: " << BootQueue.WaitQueue.size() << ")");
     }
     if (processedItems > 0) {
+        if (tabletsStarted > 0) {
+            WarmUp = false;
+        }
         if (processedItems == delayedTablets.size() && postponedStart < now) {
             BLOG_D("ProcessBootQueue - BootQueue throttling (size: " << BootQueue.BootQueue.size() << ")");
             return;
@@ -270,6 +284,7 @@ void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr&) {
 }
 
 void THive::Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&) {
+    BLOG_D("Handle PostponeProcessBootQueue");
     ProcessBootQueuePostponed = false;
     ProcessBootQueue();
 }
@@ -578,6 +593,7 @@ void THive::BuildCurrentConfig() {
         }
     }
     MakeTabletTypeSet(BalancerIgnoreTabletTypes);
+    WarmUp = CurrentConfig.GetWarmUpEnabled();
 }
 
 void THive::Cleanup() {

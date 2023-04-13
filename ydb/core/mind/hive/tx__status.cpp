@@ -28,6 +28,13 @@ public:
             if (Record.HasStartTime()) {
                 node.StartTime = TInstant::MicroSeconds(Record.GetStartTime());
             }
+            if (!node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].empty()) {
+                Self->WarmUp = false;
+            }
+            if (Self->WarmUp &&
+                node.Statistics.RestartTimestampSize() < Self->GetNodeRestartsToIgnoreInWarmup()) {
+                Self->LastConnect = TActivationContext::Now();
+            }
             if (node.LocationAcquired) {
                 NIceDb::TNiceDb db(txc.DB);
                 NActorsInterconnect::TNodeLocation location;

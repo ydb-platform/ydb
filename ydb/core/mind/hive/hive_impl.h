@@ -343,6 +343,8 @@ protected:
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
+    TInstant LastConnect;
+    bool WarmUp;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -770,6 +772,18 @@ public:
 
     double GetSpaceUsagePenalty() {
         return CurrentConfig.GetSpaceUsagePenalty();
+    }
+
+    TDuration GetWarmUpBootWaitingPeriod() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetWarmUpBootWaitingPeriod());
+    }
+
+    TDuration GetMaxWarmUpPeriod() const {
+        return TDuration::Seconds(CurrentConfig.GetMaxWarmUpPeriod());
+    }
+
+    ui64 GetNodeRestartsToIgnoreInWarmup() const {
+        return CurrentConfig.GetNodeRestartsToIgnoreInWarmup();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

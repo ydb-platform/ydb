@@ -1,3 +1,5 @@
 common:
   - from: /reference/ydb-cli/table-ttl-drop.md
     to: /reference/ydb-cli/table-ttl-reset.md
+  - from: changelog.md
+    to: changelog-server.md

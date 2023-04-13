@@ -11,6 +11,16 @@ Y_UNIT_TEST_SUITE(FYamlCpp) {
         UNIT_ASSERT_EQUAL((int)NFyaml::ENodeType::Scalar, FYNT_SCALAR);
         UNIT_ASSERT_EQUAL((int)NFyaml::ENodeType::Sequence, FYNT_SEQUENCE);
         UNIT_ASSERT_EQUAL((int)NFyaml::ENodeType::Mapping, FYNT_MAPPING);
+
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Any, FYNS_ANY);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Flow, FYNS_FLOW);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Block, FYNS_BLOCK);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Plain, FYNS_PLAIN);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::SingleQuoted, FYNS_SINGLE_QUOTED);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::DoubleQuoted, FYNS_DOUBLE_QUOTED);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Literal, FYNS_LITERAL);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Folded, FYNS_FOLDED);
+        UNIT_ASSERT_EQUAL((int)NFyaml::ENodeStyle::Alias, FYNS_ALIAS);
     }
 
     Y_UNIT_TEST(ErrorHandling) {

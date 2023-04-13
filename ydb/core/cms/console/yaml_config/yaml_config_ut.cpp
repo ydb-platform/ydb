@@ -742,36 +742,23 @@ config:
 allowed_labels:
   tenant:
     type: string
-selector_config: [
-  {
-    description: test 4,
-    selector: {
-      tenant: /dev_global
-    },
-    config: {
-      actor_system_config: {},
-      cms_config: {
-        sentinel_config: {
-          enable: false
-        }
-      }
-    }
-  },
-  {
-    description: test 5,
-    selector: {
-      canary: true
-    },
-    config: {
-      actor_system_config: {},
-      cms_config: {
-        sentinel_config: {
-          enable: true
-        }
-      }
-    }
-  }
-  ]
+selector_config:
+- description: test 4
+  selector:
+    tenant: /dev_global
+  config:
+    actor_system_config: {}
+    cms_config:
+      sentinel_config:
+        enable: false
+- description: test 5
+  selector:
+    canary: true
+  config:
+    actor_system_config: {}
+    cms_config:
+      sentinel_config:
+        enable: true
 )";
 
 using EType = NYamlConfig::TLabel::EType;

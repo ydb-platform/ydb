@@ -745,10 +745,12 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         // Distributed commits of some unknown keys are complicated, and mean
         // there are almost certainly readsets involved and it's difficult to
         // make it atomic, so we currently make them global writers to handle
-        // out-of-order execution issues. Immediate operations are atomic by
-        // their construction and will find conflicts dynamically. We may
-        // want to do something similar with distributed commits as well.
-        if (commitWriteLock && !op->IsImmediate()) {
+        // out-of-order execution issues.
+        // We also can't allow immediate commits to happen between readset
+        // generation and applying effects, so we have to make them global
+        // writers as well.
+        // TODO: figure out how to handle lock conflicts directly
+        if (commitWriteLock) {
             isGlobalWriter = true;
         }
 

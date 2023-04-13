@@ -2598,14 +2598,6 @@ private:
 
         const auto initState = input->Child(1);
         argsConstraints.emplace_back(initState->GetAllConstraints());
-        argsConstraints.back().erase(
-            std::remove_if(
-                argsConstraints.back().begin(),
-                argsConstraints.back().end(),
-                [](const TConstraintNode* c) { return c->GetName() == TEmptyConstraintNode::Name(); }
-            ),
-            argsConstraints.back().cend()
-        );
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argsConstraints)
             .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argsConstraints)); status != TStatus::Ok) {
@@ -2620,44 +2612,6 @@ private:
                     mapping.erase(myPasstrought);
                 if (!mapping.empty())
                     input->AddConstraint(ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)));
-            }
-        }
-
-        if (const auto switchLambda = input->Child(2); switchLambda->Tail().IsCallable(TCoBool::CallableName()) && IsFalse(switchLambda->Tail().Head().Content())) {
-            if (const auto& fields = GetAllItemTypeFields(*input->GetTypeAnn(), ctx); !fields.empty()) {
-                TUniqueConstraintNode::TFullSetType sets;
-                sets.reserve(fields.size());
-                for (const auto& field: fields)
-                    sets.insert_unique(TUniqueConstraintNode::TSetType{TConstraintNode::TPathType(1U, field)});
-                input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TFullSetType(sets)));
-                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(sets)));
-            }
-        } else {
-            TVector<TStringBuf> groupByKeys;
-            if (const auto groupBy = switchLambda->GetConstraint<TGroupByConstraintNode>()) {
-                groupByKeys.assign(groupBy->GetColumns().begin(), groupBy->GetColumns().end());
-            } else {
-                ExtractOnlySimpleKeys(*switchLambda, groupByKeys);
-            }
-
-            if (!groupByKeys.empty() && lambdaPassthrough) {
-                const auto& mapping = lambdaPassthrough->GetReverseMapping();
-                std::vector<std::string_view> uniqColumns;
-                for (auto key: groupByKeys) {
-                    auto range = mapping.equal_range(key);
-                    if (range.first != range.second) {
-                        for (auto i = range.first; i != range.second; ++i) {
-                            uniqColumns.emplace_back(i->second);
-                        }
-                    } else {
-                        uniqColumns.clear();
-                        break;
-                    }
-                }
-                if (!uniqColumns.empty()) {
-                    input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
-                    input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(uniqColumns));
-                }
             }
         }
 

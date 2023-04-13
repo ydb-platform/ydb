@@ -180,6 +180,7 @@ namespace NActors {
 
         TInputSessionTCP(const TActorId& sessionId,
                          TIntrusivePtr<NInterconnect::TStreamSocket> socket,
+                         TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
                          TIntrusivePtr<TReceiveContext> context,
                          TInterconnectProxyCommon::TPtr common,
                          std::shared_ptr<IInterconnectMetrics> metrics,
@@ -208,7 +209,9 @@ namespace NActors {
 
         const TActorId SessionId;
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         TPollerToken::TPtr PollerToken;
+        TPollerToken::TPtr XdcPollerToken;
         TIntrusivePtr<TReceiveContext> Context;
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
@@ -473,7 +476,9 @@ namespace NActors {
         TInstant LastHandshakeDone;
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         TPollerToken::TPtr PollerToken;
+        TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
         ui64 InflightDataAmount = 0;
 

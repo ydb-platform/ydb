@@ -6,6 +6,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <util/system/getpid.h>
+#include <util/random/entropy.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -256,6 +257,7 @@ namespace NActors {
         TString PeerHostName;
         TString PeerAddr;
         TConnection MainChannel;
+        TConnection ExternalDataChannel;
         TString State;
         TString HandshakeKind;
         TMaybe<THolder<TProgramInfo>> ProgramInfo; // filled in in case of successful handshake; even if null
@@ -265,6 +267,8 @@ namespace NActors {
         TMonotonic Deadline;
         TActorId HandshakeBroker;
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
+        std::optional<TString> HandshakeId; // for XDC
+        bool SubscribedForConnection = false;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -277,6 +281,7 @@ namespace NActors {
             , NextPacketToPeer(nextPacket)
             , PeerHostName(std::move(peerHostName))
             , MainChannel(this, nullptr)
+            , ExternalDataChannel(this, nullptr)
             , HandshakeKind("outgoing handshake")
             , Params(std::move(params))
         {
@@ -284,12 +289,17 @@ namespace NActors {
             Y_VERIFY(SelfVirtualId.NodeId());
             Y_VERIFY(PeerNodeId);
             HandshakeBroker = MakeHandshakeBrokerOutId();
+
+            // generate random handshake id
+            HandshakeId = TString::Uninitialized(32);
+            EntropyPool().Read(HandshakeId->Detach(), HandshakeId->size());
         }
 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
             : TActorCoroImpl(StackSize, true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
+            , ExternalDataChannel(this, nullptr)
             , HandshakeKind("incoming handshake")
         {
             Y_VERIFY(MainChannel);
@@ -314,9 +324,12 @@ namespace NActors {
                 }
                 throw;
             } catch (const TExPoison&) {
-                return; // just stop execution
+                // just stop execution, do nothing
             } catch (...) {
-                throw;
+                Y_FAIL("unhandled exception");
+            }
+            if (SubscribedForConnection) {
+                SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, false));
             }
         }
 
@@ -348,7 +361,8 @@ namespace NActors {
             Schedule(Deadline, new TEvents::TEvWakeup);
 
             try {
-                if (MainChannel) {
+                const bool incoming = MainChannel;
+                if (incoming) {
                     PerformIncomingHandshake();
                 } else {
                     PerformOutgoingHandshake();
@@ -356,8 +370,26 @@ namespace NActors {
 
                 // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
                 if (ProgramInfo) {
+                    if (Params.UseExternalDataChannel) {
+                        if (incoming) {
+                            Y_VERIFY(SubscribedForConnection);
+                            auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
+                            SubscribedForConnection = false;
+                            if (ev->Get()->HandshakeId != *HandshakeId) {
+                                Y_VERIFY_DEBUG(false);
+                                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Mismatching HandshakeId in external data channel");
+                            }
+                            ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
+                        } else {
+                            EstablishExternalDataChannel();
+                        }
+                    }
+
                     if (Params.Encryption) {
                         EstablishSecureConnection(MainChannel);
+                        if (ExternalDataChannel) {
+                            EstablishSecureConnection(ExternalDataChannel);
+                        }
                     } else if (Common->Settings.EncryptionMode == EEncryptionMode::REQUIRED && !Params.AuthOnly) {
                         Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer doesn't support encryption, which is required");
                     }
@@ -370,11 +402,14 @@ namespace NActors {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH04", NLog::PRI_INFO, "handshake succeeded");
                 Y_VERIFY(NextPacketFromPeer);
                 MainChannel.ResetPollerToken();
+                ExternalDataChannel.ResetPollerToken();
+                Y_VERIFY(!ExternalDataChannel == !Params.UseExternalDataChannel);
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
-                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
+                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef())));
             }
 
             MainChannel.Reset();
+            ExternalDataChannel.Reset();
         }
 
         void EstablishSecureConnection(TConnection& connection) {
@@ -651,6 +686,16 @@ namespace NActors {
             return success;
         }
 
+        void EstablishExternalDataChannel() {
+            ExternalDataChannel.Connect(nullptr);
+            char buf[12] = {'x', 'd', 'c', ' ', 'p', 'a', 'y', 'l', 'o', 'a', 'd', 0};
+            TInitialPacket packet(TActorId(SelfActorId.NodeId(), TStringBuf(buf, 12)), {}, 0, INTERCONNECT_XDC_STREAM_VERSION);
+            ExternalDataChannel.SendData(&packet, sizeof(packet), "SendXdcStream");
+            NActorsInterconnect::TExternalDataChannelParams params;
+            params.SetHandshakeId(*HandshakeId);
+            SendExBlock(ExternalDataChannel, params, "ExternalDataChannelParams");
+        }
+
         void PerformOutgoingHandshake() {
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH01", NLog::PRI_DEBUG,
                 "starting outgoing handshake");
@@ -661,7 +706,16 @@ namespace NActors {
             LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", logPriority, "connected to peer");
 
             // send initial request packet
-            SendInitialPacket(MainChannel);
+            if (Params.UseExternalDataChannel && PeerVirtualId) { // special case for XDC continuation
+                TInitialPacket packet(SelfVirtualId, PeerVirtualId, NextPacketToPeer, INTERCONNECT_XDC_CONTINUATION_VERSION);
+                MainChannel.SendData(&packet, sizeof(packet), "SendInitialPacket");
+                NActorsInterconnect::TContinuationParams request;
+                request.SetHandshakeId(*HandshakeId);
+                SendExBlock(MainChannel, request, "ExRequest");
+            } else {
+                TInitialPacket packet(SelfVirtualId, PeerVirtualId, NextPacketToPeer, INTERCONNECT_PROTOCOL_VERSION);
+                MainChannel.SendData(&packet, sizeof(packet), "SendInitialPacket");
+            }
 
             TInitialPacket response;
             MainChannel.ReceiveData(&response, sizeof(response), "ReceiveResponse");
@@ -727,6 +781,7 @@ namespace NActors {
                 request.SetRequestAuthOnly(Common->Settings.TlsAuthOnly);
                 request.SetRequestExtendedTraceFmt(true);
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
+                request.SetHandshakeId(*HandshakeId);
 
                 SendExBlock(MainChannel, request, "ExRequest");
 
@@ -789,7 +844,9 @@ namespace NActors {
             MainChannel.ReceiveData(&request, sizeof(request), "ReceiveRequest");
             if (!request.Check()) {
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_TRANSIENT, "Initial packet CRC error");
-            } else if (request.Header.Version != INTERCONNECT_PROTOCOL_VERSION) {
+            } else if (request.Header.Version != INTERCONNECT_PROTOCOL_VERSION &&
+                    request.Header.Version != INTERCONNECT_XDC_CONTINUATION_VERSION &&
+                    request.Header.Version != INTERCONNECT_XDC_STREAM_VERSION) {
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, Sprintf("Incompatible protocol %" PRIu64, request.Header.Version));
             }
 
@@ -803,6 +860,29 @@ namespace NActors {
 
             // extract next packet
             NextPacketFromPeer = request.Header.NextPacket;
+
+            // process some extra payload, if necessary
+            switch (request.Header.Version) {
+                case INTERCONNECT_XDC_CONTINUATION_VERSION: {
+                    NActorsInterconnect::TContinuationParams params;
+                    if (!params.ParseFromString(ReceiveExBlock(MainChannel, "ContinuationParams")) || !params.HasHandshakeId()) {
+                        Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
+                    }
+                    HandshakeId = params.GetHandshakeId();
+                    SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, true));
+                    SubscribedForConnection = true;
+                    break;
+                }
+                case INTERCONNECT_XDC_STREAM_VERSION: {
+                    NActorsInterconnect::TExternalDataChannelParams params;
+                    if (!params.ParseFromString(ReceiveExBlock(MainChannel, "ExternalDataChannelParams")) || !params.HasHandshakeId()) {
+                        Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Incorrect packet from peer");
+                    }
+                    MainChannel.ResetPollerToken();
+                    SendToProxy(MakeHolder<TEvReportConnection>(params.GetHandshakeId(), std::move(MainChannel.GetSocketRef())));
+                    throw TExHandshakeFailed();
+                }
+            }
 
             if (request.Header.PeerVirtualId) {
                 // issue request to the proxy and wait for the response
@@ -917,6 +997,16 @@ namespace NActors {
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
                 Params.UseExtendedTraceFmt = request.GetRequestExtendedTraceFmt();
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
+
+                if (Params.UseExternalDataChannel) {
+                    if (request.HasHandshakeId()) {
+                        HandshakeId = request.GetHandshakeId();
+                        SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, true));
+                        SubscribedForConnection = true;
+                    } else {
+                        generateError("Peer has requested ExternalDataChannel feature, but did not provide HandshakeId");
+                    }
+                }
 
                 if (request.HasClientScopeId()) {
                     ParsePeerScopeId(request.GetClientScopeId());

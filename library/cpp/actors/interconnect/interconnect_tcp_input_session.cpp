@@ -7,11 +7,12 @@ namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
-                                       TIntrusivePtr<TReceiveContext> context, TInterconnectProxyCommon::TPtr common,
-                                       std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
-                                       TDuration deadPeerTimeout, TSessionParams params)
+            TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
+            TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
+            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params)
         : SessionId(sessionId)
         , Socket(std::move(socket))
+        , XdcSocket(std::move(xdcSocket))
         , Context(std::move(context))
         , Common(std::move(common))
         , NodeId(nodeId)
@@ -62,7 +63,12 @@ namespace NActors {
     }
 
     void TInputSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
-        PollerToken = std::move(ev->Get()->PollerToken);
+        const auto& sk = ev->Get()->Socket;
+        if (auto *token = sk == Socket ? &PollerToken : sk == XdcSocket ? &XdcPollerToken : nullptr) {
+            *token = std::move(ev->Get()->PollerToken);
+        } else {
+            return;
+        }
         ReceiveData();
     }
 

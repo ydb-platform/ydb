@@ -3352,6 +3352,18 @@ enum fy_node_style fy_node_get_style(struct fy_node *fyn)
 	return fyn ? fyn->style : FYNS_PLAIN;
 }
 
+void fy_node_set_style(struct fy_node *fyn, enum fy_node_style style)
+{
+	if (!fyn)
+		return;
+
+	/* ignore alias nodes to save document structure */
+	if (fyn->style == FYNS_ALIAS)
+		return;
+
+	fyn->style = style;
+}
+
 bool fy_node_is_null(struct fy_node *fyn)
 {
 	if (!fyn)

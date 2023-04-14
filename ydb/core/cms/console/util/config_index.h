@@ -156,6 +156,8 @@ struct TUsageScope {
     //    1 - lhs is more prioritized
     static int ComparePriority(const TUsageScope &lhs,
                                const TUsageScope &rhs);
+
+    bool operator<(const TUsageScope& other) const { return ComparePriority(*this, other) < 0; };
 };
 
 /**

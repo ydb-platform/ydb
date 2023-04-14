@@ -1,7 +1,9 @@
-#include <util/string/type.h>
 #include "cli.h"
 #include "cli_cmds.h"
 
+#include <ydb/core/cms/console/yaml_config/console_dumper.h>
+
+#include <util/string/type.h>
 #include <util/string/split.h>
 #include <util/system/fs.h>
 
@@ -313,12 +315,44 @@ public:
     }
 };
 
+class TClientCommandConsoleConfigsDumpYaml : public TConsoleClientCommand {
+public:
+    TClientCommandConsoleConfigsDumpYaml()
+        : TConsoleClientCommand("dump-yaml", {}, "Dump config in yaml format")
+    {
+    }
+
+    virtual void Config(TConfig& config) override {
+        TConsoleClientCommand::Config(config);
+        config.SetFreeArgsNum(0);
+    }
+
+    virtual void Parse(TConfig& config) override {
+        TConsoleClientCommand::Parse(config);
+        Request.MutableGetConfigItemsRequest();
+    }
+
+    virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response) override
+    {
+        if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+            Cout << "ERROR: " << response.GetStatus().GetCode()
+                 << " (" << response.GetStatus().GetReason() << ")" << Endl;
+            return;
+        }
+
+        auto &items = response.GetGetConfigItemsResponse().GetConfigItems();
+
+        Cout << NYamlConfig::DumpConsoleConfigs(items);
+    }
+};
+
 class TClientCommandConsoleConfigs : public TClientCommandTree {
 public:
     TClientCommandConsoleConfigs()
         : TClientCommandTree("configs", {}, "")
     {
         AddCommand(std::make_unique<TClientCommandConsoleConfigsLoad>());
+        AddCommand(std::make_unique<TClientCommandConsoleConfigsDumpYaml>());
         AddCommand(std::make_unique<TClientCommandConsoleConfigsUpdate>());
     }
 };

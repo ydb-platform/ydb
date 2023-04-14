@@ -1,10 +1,10 @@
 #include "console_configs_subscriber.h"
 #include "console.h"
-#include "config_index.h"
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

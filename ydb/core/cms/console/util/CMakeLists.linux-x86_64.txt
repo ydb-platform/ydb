@@ -6,21 +6,15 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-add_subdirectory(ut)
 
-add_library(cms-console-yaml_config)
-target_link_libraries(cms-console-yaml_config PUBLIC
+add_library(cms-console-util)
+target_link_libraries(cms-console-util PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
-  cpp-actors-core
-  cpp-protobuf-json
-  cpp-yaml-fyamlcpp
-  cms-console-util
+  ydb-core-base
   ydb-core-protos
 )
-target_sources(cms-console-yaml_config PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/console_dumper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config.cpp
+target_sources(cms-console-util PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/util/config_index.cpp
 )

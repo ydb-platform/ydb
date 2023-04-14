@@ -1,11 +1,11 @@
 #pragma once
 
 #include "config_helpers.h"
-#include "config_index.h"
 #include "console_configs_provider.h"
 #include "console_impl.h"
 #include "console_tenants_manager.h"
 
+#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/testlib/tenant_helpers.h>
 

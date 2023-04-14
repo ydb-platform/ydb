@@ -1,11 +1,11 @@
 #include "config_helpers.h"
-#include "config_index.h"
 #include "configs_dispatcher.h"
 #include "console_configs_subscriber.h"
 #include "console.h"
 #include "http.h"
 #include "util.h"
 
+#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/cms/console/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>

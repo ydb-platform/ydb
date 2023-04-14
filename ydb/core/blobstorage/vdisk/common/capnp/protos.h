@@ -699,6 +699,10 @@ namespace NKikimrCapnProto {
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
+            bool ParseFromString(TString) {
+                return true;
+            }
+
             TExtremeQuery::Builder AddExtremeQueries() {
                 auto orphan = message->getOrphanage().newOrphan<NKikimrCapnProto_::TExtremeQuery>();
                 elements.emplace_back(orphan.getReader());

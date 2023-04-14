@@ -122,7 +122,7 @@ private:
     }
 
     void HandleBrowseTimeout(const TActorContext& ctx) {
-        return SendErrorReplyAndDie(Viewer->GetHTTPGATEWAYTIMEOUT(), ctx);
+        return SendErrorReplyAndDie(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), ctx);
     }
 
     void SendErrorReplyAndDie(const TString& error, const TActorContext& ctx) {

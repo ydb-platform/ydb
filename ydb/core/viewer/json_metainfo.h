@@ -115,7 +115,7 @@ public:
 
     void HandleTimeout(const TActorContext &ctx) {
         TStringStream result;
-        result << Viewer->GetHTTPGATEWAYTIMEOUT();
+        result << Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get());
         RenderPendingRequests(result);
         ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(result.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);

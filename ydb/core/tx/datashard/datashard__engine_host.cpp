@@ -323,8 +323,11 @@ public:
 
         if (auto lock = Self->SysLocksTable().GetRawLock(lockId, TRowVersion::Min()); lock && !VolatileCommitOrdered) {
             lock->ForAllVolatileDependencies([this](ui64 txId) {
-                if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
-                    VolatileTxId = EngineBay.GetTxId();
+                auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId);
+                if (info && info->State != EVolatileTxState::Aborting) {
+                    if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
+                        VolatileTxId = EngineBay.GetTxId();
+                    }
                 }
             });
         }

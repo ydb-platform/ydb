@@ -17,6 +17,9 @@ namespace NKqpHelpers {
     using TEvDeleteSessionRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
         Ydb::Table::DeleteSessionResponse>;
 
+    using TEvCommitTransactionRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CommitTransactionRequest,
+        Ydb::Table::CommitTransactionResponse>;
+
     template<class TResp>
     inline TResp AwaitResponse(TTestActorRuntime& runtime, NThreading::TFuture<TResp> f) {
         if (!f.HasValue() && !f.HasException()) {
@@ -48,6 +51,20 @@ namespace NKqpHelpers {
         sessionId = result.session_id();
         UNIT_ASSERT(!sessionId.empty());
         return sessionId;
+    }
+
+    inline TString CommitTransactionRPC(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& database = {}) {
+        Ydb::Table::CommitTransactionRequest request;
+        request.set_session_id(sessionId);
+        request.set_tx_id(txId);
+
+        auto future = NRpcService::DoLocalRpc<TEvCommitTransactionRequest>(
+            std::move(request), database, "", runtime.GetActorSystem(0));
+        auto response = AwaitResponse(runtime, future);
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            return TStringBuilder() << "ERROR: " << response.operation().status();
+        }
+        return "";
     }
 
     inline NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> SendRequest(

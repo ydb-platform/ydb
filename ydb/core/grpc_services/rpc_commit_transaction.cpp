@@ -102,5 +102,10 @@ void DoCommitTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilit
     f.RegisterActor(new TCommitTransactionRPC(p.release()));
 }
 
+template<>
+IActor* TEvCommitTransactionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TCommitTransactionRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

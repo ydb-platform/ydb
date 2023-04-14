@@ -225,7 +225,7 @@ namespace NActors {
         static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
-//                Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
+                Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
             } else {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 ui64 size = input->GetSize();
@@ -515,7 +515,7 @@ namespace NActors {
 
     template <typename ActorId>
     inline void ActorIdToProto(const TActorId& src, ActorId dest) {
-//        Y_VERIFY_DEBUG(dest);
+        Y_VERIFY_DEBUG(dest);
         dest.SetRawX1(src.RawX1());
         dest.SetRawX2(src.RawX2());
     }

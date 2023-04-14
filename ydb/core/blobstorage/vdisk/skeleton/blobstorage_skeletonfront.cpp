@@ -1133,17 +1133,12 @@ namespace NKikimr {
             }
         }
 
-        void FillInCostSettingsAndTimestampIfRequired(NKikimrBlobStorage::TMsgQoS *qos, TInstant now) const {
+        template <typename TProtoMsgQoS>
+        void FillInCostSettingsAndTimestampIfRequired(TProtoMsgQoS *qos, TInstant now) const {
             qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue());
             if (qos->GetSendMeCostSettings() && CostModel) {
-                CostModel->FillInSettings(*qos->MutableCostSettings());
-            }
-        }
-
-        void FillInCostSettingsAndTimestampIfRequired(NKikimrCapnProto::TMsgQoS::Builder *qos, TInstant now) const {
-            qos->MutableExecTimeStats().SetReceivedTimestamp(now.GetValue());
-            if (qos->GetSendMeCostSettings() && CostModel) {
-                CostModel->FillInSettings(qos->MutableCostSettings());
+                auto settings = *qos->MutableCostSettings();
+                CostModel->FillInSettings(settings);
             }
         }
 

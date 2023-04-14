@@ -93,26 +93,17 @@ bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExpl
     return true;
 }
 
-TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto) {
+template <typename TProtoLogoBlobId>
+TLogoBlobID LogoBlobIDFromLogoBlobID(const TProtoLogoBlobId &proto) {
     return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
 }
 
-TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrCapnProto::TLogoBlobID::Reader &proto) {
-    return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
-}
-
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto) {
+template <typename TProtoLogoBlobId>
+void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TProtoLogoBlobId proto) {
     const ui64* raw = id.GetRaw();
     proto->SetRawX1(raw[0]);
     proto->SetRawX2(raw[1]);
     proto->SetRawX3(raw[2]);
-}
-
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Builder proto) {
-    const ui64* raw = id.GetRaw();
-    proto.SetRawX1(raw[0]);
-    proto.SetRawX2(raw[1]);
-    proto.SetRawX3(raw[2]);
 }
 
 void LogoBlobIDVectorFromLogoBlobIDRepeated(

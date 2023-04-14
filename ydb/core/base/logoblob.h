@@ -305,12 +305,11 @@ namespace NKikimr {
         {}
     };
 
-    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrProto::TLogoBlobID &proto);
-    TLogoBlobID LogoBlobIDFromLogoBlobID(const NKikimrCapnProto::TLogoBlobID::Reader &proto);
+    template <typename TProtoLogoBlobId>
+    TLogoBlobID LogoBlobIDFromLogoBlobID(const TProtoLogoBlobId &proto);
 
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *proto);
-
-    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrCapnProto::TLogoBlobID::Builder proto);
+    template <typename TProtoLogoBlobId>
+    void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TProtoLogoBlobId proto);
     
     void LogoBlobIDVectorFromLogoBlobIDRepeated(
                 TVector<TLogoBlobID> *to,

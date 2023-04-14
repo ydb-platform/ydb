@@ -208,22 +208,14 @@ namespace NKikimr {
                 , MsgId(msgId)
             {}
 
-            TMessageId(const NKikimrCapnProto::TMessageId::Reader& from)
+            template <typename TProtoMessageId>
+            TMessageId(const TProtoMessageId& from)
                 : SequenceId(from.GetSequenceId())
                 , MsgId(from.GetMsgId())
             {}
 
-            TMessageId(const NKikimrBlobStorage::TMessageId &from)
-                    : SequenceId(from.GetSequenceId())
-                    , MsgId(from.GetMsgId())
-            {}
-
-            void Serialize(NKikimrBlobStorage::TMessageId &to) const {
-                to.SetSequenceId(SequenceId);
-                to.SetMsgId(MsgId);
-            }
-
-            void Serialize(NKikimrCapnProto::TMessageId::Builder &to) const {
+            template <typename TProtoMessageId>
+            void Serialize(TProtoMessageId &to) const {
                 to.SetSequenceId(SequenceId);
                 to.SetMsgId(MsgId);
             }
@@ -304,16 +296,8 @@ namespace NKikimr {
                 return str.Str();
             }
 
-            void Serialize(NKikimrBlobStorage::TWindowFeedback &to) const {
-                to.SetStatus(Status);
-                to.SetActualWindowSize(ActualWindowSize);
-                to.SetMaxWindowSize(MaxWindowSize);
-                ExpectedMsgId.Serialize(*to.MutableExpectedMsgId());
-                if (!FailedMsgId.Empty())
-                    FailedMsgId.Serialize(*to.MutableFailedMsgId());
-            }
-
-            void Serialize(NKikimrCapnProto::TWindowFeedback::Builder &to) const {
+            template <typename TProtoWindowFeedback>
+            void Serialize(TProtoWindowFeedback &to) const {
                 to.SetStatus(Status);
                 to.SetActualWindowSize(ActualWindowSize);
                 to.SetMaxWindowSize(MaxWindowSize);
@@ -843,74 +827,8 @@ namespace NKikimr {
             return ToString(Record);
         }
 
-        static void OutMsgQos(const NKikimrBlobStorage::TMsgQoS &qos, TStringStream &str) {
-            str << "{MsgQoS";
-            if (qos.HasDeadlineSeconds()) {
-                str << " DeadlineSeconds# " << qos.GetDeadlineSeconds();
-            }
-            if (qos.HasMsgId()) {
-                str << " MsgId# " << qos.GetMsgId();
-            }
-            if (qos.HasCost()) {
-                str << " Cost# " << qos.GetCost();
-            }
-            if (qos.HasExtQueueId()) {
-                str << " ExtQueueId# " << NKikimrBlobStorage::EVDiskQueueId_Name(qos.GetExtQueueId()).data();
-            }
-            if (qos.HasIntQueueId()) {
-                str << " IntQueueId# " << NKikimrBlobStorage::EVDiskInternalQueueId_Name(qos.GetIntQueueId()).data();
-            }
-            if (qos.HasCostSettings()) {
-                str << " CostSettings# {";
-                const NKikimrBlobStorage::TVDiskCostSettings &costSettings = qos.GetCostSettings();
-                if (costSettings.HasSeekTimeUs()) {
-                    str << " SeekTimeUs# " << costSettings.GetSeekTimeUs();
-                }
-                if (costSettings.HasReadSpeedBps()) {
-                    str << " ReadSpeedBps# " << costSettings.GetReadSpeedBps();
-                }
-                if (costSettings.HasWriteSpeedBps()) {
-                    str << " WriteSpeedBps# " << costSettings.GetWriteSpeedBps();
-                }
-                if (costSettings.HasReadBlockSize()) {
-                    str << " ReadBlockSize# " << costSettings.GetReadBlockSize();
-                }
-                if (costSettings.HasWriteBlockSize()) {
-                    str << " WriteBlockSize# " << costSettings.GetWriteBlockSize();
-                }
-                if (costSettings.HasMinREALHugeBlobInBytes()) {
-                    str << " MinREALHugeBlobInBytes# " << costSettings.GetMinREALHugeBlobInBytes();
-                }
-                str << "}";
-            }
-
-            if (qos.HasSendMeCostSettings()) {
-                str << " SendMeCostSettings# " << qos.GetSendMeCostSettings();
-            }
-            if (qos.HasWindow()) {
-                str << " Window# {";
-                const NKikimrBlobStorage::TWindowFeedback &window = qos.GetWindow();
-                if (window.HasStatus()) {
-                    str << " Status# " << NKikimrBlobStorage::TWindowFeedback::EStatus_Name(window.GetStatus()).data();
-                }
-                if (window.HasActualWindowSize()) {
-                    str << " ActualWindowSize# " << window.GetActualWindowSize();
-                }
-                if (window.HasMaxWindowSize()) {
-                    str << " MaxWindowSize# " << window.GetMaxWindowSize();
-                }
-                if (window.HasExpectedMsgId()) {
-                    str << " ExpectedMsgId# " << window.GetExpectedMsgId();
-                }
-                if (window.HasFailedMsgId()) {
-                    str << " FailedMsgId# " << window.GetFailedMsgId();
-                }
-                str << "}";
-            }
-            str << "}";
-        }
-
-        static void OutMsgQos(const NKikimrCapnProto::TMsgQoS::Reader &qos, TStringStream &str) {
+        template <typename TProtoMsgQoS>
+        static void OutMsgQos(const TProtoMsgQoS &qos, TStringStream &str) {
             str << "{MsgQoS";
             if (qos.HasDeadlineSeconds()) {
                 str << " DeadlineSeconds# " << qos.GetDeadlineSeconds();
@@ -922,10 +840,10 @@ namespace NKikimr {
                 str << " Cost# " << qos.GetCost();
             }
             if (qos.HasExtQueueId()) {
-                str << " ExtQueueId# " << static_cast<size_t>(qos.GetExtQueueId());
+                str << " ExtQueueId# " << static_cast<int>(qos.GetExtQueueId());
             }
             if (qos.HasIntQueueId()) {
-                str << " IntQueueId# " << static_cast<size_t>(qos.GetIntQueueId());
+                str << " IntQueueId# " << static_cast<int>(qos.GetIntQueueId());
             }
             if (qos.HasCostSettings()) {
                 str << " CostSettings# {";
@@ -958,7 +876,7 @@ namespace NKikimr {
                 str << " Window# {";
                 const auto &window = qos.GetWindow();
                 if (window.HasStatus()) {
-                    str << " Status# " << static_cast<size_t>(window.GetStatus());
+                    str << " Status# " << static_cast<int>(window.GetStatus());
                 }
                 if (window.HasActualWindowSize()) {
                     str << " ActualWindowSize# " << window.GetActualWindowSize();

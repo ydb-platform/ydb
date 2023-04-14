@@ -131,9 +131,8 @@ namespace NKikimr {
         TCostModel(const NKikimrBlobStorage::TVDiskCostSettings &settings, TBlobStorageGroupType gType);
 
         /// SETTINGS
-        void FillInSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const;
-        void FillInSettings(NKikimrCapnProto::TVDiskCostSettings::Builder &&settings) const;
-
+        template <typename TProtoVDiskCostSettings>
+        void FillInSettings(TProtoVDiskCostSettings &settings) const;
 
         /// READS
         ui64 GetCost(const TEvBlobStorage::TEvVGet &ev) const {

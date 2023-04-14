@@ -21,12 +21,8 @@ namespace NKikimr {
             ythrow yexception() << "incorrect format";
     }
 
-    bool TVDiskID::SameDisk(const NKikimrBlobStorage::TVDiskID &x) const {
-        TVDiskID vdisk = VDiskIDFromVDiskID(x);
-        return *this == vdisk;
-    }
-
-    bool TVDiskID::SameDisk(NKikimrCapnProto::TVDiskID::Reader x) const {
+    template <typename TProtoVDiskID>
+    bool TVDiskID::SameDisk(const TProtoVDiskID &x) const {
         TVDiskID vdisk = VDiskIDFromVDiskID(x);
         return *this == vdisk;
     }

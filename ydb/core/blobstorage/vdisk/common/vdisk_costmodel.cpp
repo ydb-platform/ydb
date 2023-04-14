@@ -24,16 +24,8 @@ namespace NKikimr {
         , GType(gType)
     {}
 
-    void TCostModel::FillInSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const {
-        settings.SetSeekTimeUs(SeekTimeUs);
-        settings.SetReadSpeedBps(ReadSpeedBps);
-        settings.SetWriteSpeedBps(WriteSpeedBps);
-        settings.SetReadBlockSize(ReadBlockSize);
-        settings.SetWriteBlockSize(WriteBlockSize);
-        settings.SetMinREALHugeBlobInBytes(MinREALHugeBlobInBytes);
-    }
-
-    void TCostModel::FillInSettings(NKikimrCapnProto::TVDiskCostSettings::Builder &&settings) const {
+    template <typename TProtoVDiskCostSettings>
+    void TCostModel::FillInSettings(TProtoVDiskCostSettings &settings) const {
         settings.SetSeekTimeUs(SeekTimeUs);
         settings.SetReadSpeedBps(ReadSpeedBps);
         settings.SetWriteSpeedBps(WriteSpeedBps);

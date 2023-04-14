@@ -13,6 +13,15 @@ namespace NKikimr {
 class TBlobStorageGroupInfo;
 struct TVDiskIdShort;
 
+struct TVDiskID;
+
+template <typename SerializerType>
+TVDiskID VDiskIDFromVDiskID(const SerializerType &x);
+
+template <typename SerializerType>
+void VDiskIDFromVDiskID(const TVDiskID &id, SerializerType proto);
+
+
 ////////////////////////////////////////////////////////////////////////////
 // TVDiskID -- global vdisk identifier
 ////////////////////////////////////////////////////////////////////////////

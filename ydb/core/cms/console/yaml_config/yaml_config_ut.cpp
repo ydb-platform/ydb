@@ -761,6 +761,45 @@ selector_config:
         enable: true
 )";
 
+const char *UnresolvedSimpleConfigAppend = R"(---
+cluster: test
+version: 12.1
+config:
+  num:
+  - 0
+allowed_labels:
+  tenant:
+    type: string
+
+selector_config:
+- description: 1
+  selector:
+    tenant: abc
+  config: !inherit
+    num: !append
+    - 0
+- description: 2
+  selector:
+    tenant: ""
+  config: !inherit
+    num: !append
+    - 1
+)";
+
+const char *ResolvedSimpleConfigAppendAbc = R"(---
+config:
+  num:
+  - 0
+  - 0
+)";
+
+const char *ResolvedSimpleConfigAppendEmpty = R"(---
+config:
+  num:
+  - 0
+  - 1
+)";
+
 using EType = NYamlConfig::TLabel::EType;
 
 TMap<TSet<TVector<NYamlConfig::TLabel>>, TVector<int>> ExpectedResolved =
@@ -1342,6 +1381,31 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
             UNIT_ASSERT_UNEQUAL(firstIt, resolved.Configs.end());
             UNIT_ASSERT(firstIt->second.second.DeepEqual(empty.Root().Map()["config"]));
             UNIT_ASSERT(firstIt->second.second.DeepEqual(negative.Root().Map()["config"]));
+
+            TSet<TVector<NYamlConfig::TLabel>> second = {
+                {NYamlConfig::TLabel{EType::Common, "abc"}},
+            };
+
+            auto secondIt = resolved.Configs.find(second);
+            UNIT_ASSERT_UNEQUAL(secondIt, resolved.Configs.end());
+            UNIT_ASSERT(secondIt->second.second.DeepEqual(abc.Root().Map()["config"]));
+        }
+
+        {
+            auto doc = NFyaml::TDocument::Parse(UnresolvedSimpleConfigAppend);
+            auto resolved = NYamlConfig::ResolveAll(doc);
+            UNIT_ASSERT_VALUES_EQUAL(resolved.Labels, expectedLabels);
+
+            auto empty = NFyaml::TDocument::Parse(ResolvedSimpleConfigAppendEmpty);
+            auto abc = NFyaml::TDocument::Parse(ResolvedSimpleConfigAppendAbc);
+
+            TSet<TVector<NYamlConfig::TLabel>> first = {
+                {NYamlConfig::TLabel{EType::Empty, ""}},
+            };
+
+            auto firstIt = resolved.Configs.find(first);
+            UNIT_ASSERT_UNEQUAL(firstIt, resolved.Configs.end());
+            UNIT_ASSERT(firstIt->second.second.DeepEqual(empty.Root().Map()["config"]));
 
             TSet<TVector<NYamlConfig::TLabel>> second = {
                 {NYamlConfig::TLabel{EType::Common, "abc"}},

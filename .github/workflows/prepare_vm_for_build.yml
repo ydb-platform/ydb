@@ -9,6 +9,11 @@ on:
     secrets:
       rc_auth:
         required: false
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        required: true
+        type: string  
         
 jobs:
   prepare:

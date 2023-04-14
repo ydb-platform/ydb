@@ -54,7 +54,10 @@ struct TVDiskID {
     }
 
     template <typename TProtoVDiskID>
-    bool SameDisk(const TProtoVDiskID &x) const;
+    bool SameDisk(const TProtoVDiskID &x) const {
+        TVDiskID vdisk = VDiskIDFromVDiskID(x);
+        return *this == vdisk;
+    }
 
     auto ConvertToTuple() const {
         return std::make_tuple(GroupID, GroupGeneration, FailRealm, FailDomain, VDisk);

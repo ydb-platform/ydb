@@ -21,12 +21,6 @@ namespace NKikimr {
             ythrow yexception() << "incorrect format";
     }
 
-    template <typename TProtoVDiskID>
-    bool TVDiskID::SameDisk(const TProtoVDiskID &x) const {
-        TVDiskID vdisk = VDiskIDFromVDiskID(x);
-        return *this == vdisk;
-    }
-
     TString TVDiskID::ToString() const {
         return Sprintf("[%" PRIx32 ":%" PRIu32 ":%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
                         GroupID, GroupGeneration, FailRealm, FailDomain, VDisk).data();

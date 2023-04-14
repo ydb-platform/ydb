@@ -132,7 +132,14 @@ namespace NKikimr {
 
         /// SETTINGS
         template <typename TProtoVDiskCostSettings>
-        void FillInSettings(TProtoVDiskCostSettings &settings) const;
+        void FillInSettings(TProtoVDiskCostSettings &settings) const {
+            settings.SetSeekTimeUs(SeekTimeUs);
+            settings.SetReadSpeedBps(ReadSpeedBps);
+            settings.SetWriteSpeedBps(WriteSpeedBps);
+            settings.SetReadBlockSize(ReadBlockSize);
+            settings.SetWriteBlockSize(WriteBlockSize);
+            settings.SetMinREALHugeBlobInBytes(MinREALHugeBlobInBytes);
+        }
 
         /// READS
         ui64 GetCost(const TEvBlobStorage::TEvVGet &ev) const {

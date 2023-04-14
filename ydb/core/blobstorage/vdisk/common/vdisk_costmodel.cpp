@@ -24,16 +24,6 @@ namespace NKikimr {
         , GType(gType)
     {}
 
-    template <typename TProtoVDiskCostSettings>
-    void TCostModel::FillInSettings(TProtoVDiskCostSettings &settings) const {
-        settings.SetSeekTimeUs(SeekTimeUs);
-        settings.SetReadSpeedBps(ReadSpeedBps);
-        settings.SetWriteSpeedBps(WriteSpeedBps);
-        settings.SetReadBlockSize(ReadBlockSize);
-        settings.SetWriteBlockSize(WriteBlockSize);
-        settings.SetMinREALHugeBlobInBytes(MinREALHugeBlobInBytes);
-    }
-
     ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPatchStart &) const {
         return InMemReadCost();
     }

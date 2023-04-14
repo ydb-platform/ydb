@@ -268,42 +268,22 @@ namespace NActors {
 
             Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
 
-            char buffer[Max(sizeof(TEventDescr1), sizeof(TEventDescr2))];
-            auto& v1 = reinterpret_cast<TEventDescr1&>(buffer);
-            auto& v2 = reinterpret_cast<TEventDescr2&>(buffer);
+            TEventDescr2 v2;
             if (~part.Channel & TChannelPart::LastPartFlag) {
                 Payload.ExtractFront(part.Size, eventData);
-            } else if (part.Size != sizeof(v1) && part.Size != sizeof(v2)) {
+            } else if (part.Size != sizeof(v2)) {
                 LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
                 return DestroySession(TDisconnectReason::FormatError());
-            } else if (Payload.ExtractFrontPlain(buffer, part.Size)) {
-                TEventData descr;
-
-                switch (part.Size) {
-                    case sizeof(TEventDescr1):
-                        descr = {
-                            v1.Type,
-                            v1.Flags,
-                            v1.Recipient,
-                            v1.Sender,
-                            v1.Cookie,
-                            NWilson::TTraceId(), // do not accept traces with old format
-                            v1.Checksum
-                        };
-                        break;
-
-                    case sizeof(TEventDescr2):
-                        descr = {
-                            v2.Type,
-                            v2.Flags,
-                            v2.Recipient,
-                            v2.Sender,
-                            v2.Cookie,
-                            NWilson::TTraceId(v2.TraceId),
-                            v2.Checksum
-                        };
-                        break;
-                }
+            } else if (Payload.ExtractFrontPlain(&v2, part.Size)) {
+                TEventData descr = {
+                    v2.Type,
+                    v2.Flags,
+                    v2.Recipient,
+                    v2.Sender,
+                    v2.Cookie,
+                    NWilson::TTraceId(v2.TraceId),
+                    v2.Checksum
+                };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);
                 ProcessEvent(*eventData, descr);

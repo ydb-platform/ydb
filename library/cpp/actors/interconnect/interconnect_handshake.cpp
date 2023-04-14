@@ -810,12 +810,13 @@ namespace NActors {
 
                 if (!success.GetUseModernFrame()) {
                     generateError("UseModernFrame not set, obsolete peer version");
+                } else if (!success.GetUseExtendedTraceFmt()) {
+                    generateError("UseExtendedTraceFmt not set, obsolete peer version");
                 }
 
                 // recover flags
                 Params.Encryption = success.GetStartEncryption();
                 Params.AuthOnly = Params.Encryption && success.GetAuthOnly();
-                Params.UseExtendedTraceFmt = success.GetUseExtendedTraceFmt();
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
@@ -998,10 +999,11 @@ namespace NActors {
 
                 if (!request.GetRequestModernFrame()) {
                     generateError("RequestModernFrame not set, obsolete peer version");
+                } else if (!request.GetRequestExtendedTraceFmt()) {
+                    generateError("RequestExtendedTraceFmt not set, obsolete peer version");
                 }
 
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
-                Params.UseExtendedTraceFmt = request.GetRequestExtendedTraceFmt();
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
 
                 if (Params.UseExternalDataChannel) {
@@ -1039,7 +1041,7 @@ namespace NActors {
                     }
                     success.SetUseModernFrame(true);
                     success.SetAuthOnly(Params.AuthOnly);
-                    success.SetUseExtendedTraceFmt(Params.UseExtendedTraceFmt);
+                    success.SetUseExtendedTraceFmt(true);
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     SendExBlock(MainChannel, record, "ExReply");
 

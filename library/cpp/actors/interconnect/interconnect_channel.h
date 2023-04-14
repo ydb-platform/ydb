@@ -57,7 +57,7 @@ namespace NActors {
 
         std::pair<ui32, TEventHolder*> Push(IEventHandle& ev) {
             TEventHolder& event = Pool.Allocate(Queue);
-            const ui32 bytes = event.Fill(ev) + (Params.UseExtendedTraceFmt ? sizeof(TEventDescr2) : sizeof(TEventDescr1));
+            const ui32 bytes = event.Fill(ev) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
             if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
                 event.Span

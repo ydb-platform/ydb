@@ -12,7 +12,7 @@ LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
     bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
-        const size_t descrSize = Params.UseExtendedTraceFmt ? sizeof(TEventDescr2) : sizeof(TEventDescr1);
+        const size_t descrSize = sizeof(TEventDescr2);
         const size_t amount = sizeof(TChannelPart) + descrSize;
         if (task.GetVirtualFreeAmount() < amount) {
             return false;
@@ -32,31 +32,17 @@ namespace NActors {
         part->Channel = ChannelId | TChannelPart::LastPartFlag;
         part->Size = descrSize;
 
-        void *descr = part + 1;
-        if (Params.UseExtendedTraceFmt) {
-            auto *p = static_cast<TEventDescr2*>(descr);
-            *p = {
-                event.Descr.Type,
-                event.Descr.Flags,
-                event.Descr.Recipient,
-                event.Descr.Sender,
-                event.Descr.Cookie,
-                {},
-                event.Descr.Checksum
-            };
-            traceId.Serialize(&p->TraceId);
-        } else {
-            auto *p = static_cast<TEventDescr1*>(descr);
-            *p = {
-                event.Descr.Type,
-                event.Descr.Flags,
-                event.Descr.Recipient,
-                event.Descr.Sender,
-                event.Descr.Cookie,
-                {},
-                event.Descr.Checksum
-            };
-        }
+        auto *p = reinterpret_cast<TEventDescr2*>(part + 1);
+        *p = {
+            event.Descr.Type,
+            event.Descr.Flags,
+            event.Descr.Recipient,
+            event.Descr.Sender,
+            event.Descr.Cookie,
+            {},
+            event.Descr.Checksum
+        };
+        traceId.Serialize(&p->TraceId);
 
         task.AppendBuf(part, amount);
         *weightConsumed += amount;

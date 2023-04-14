@@ -61,16 +61,6 @@ struct TEventData {
 };
 
 #pragma pack(push, 1)
-struct TEventDescr1 {
-    ui32 Type;
-    ui32 Flags;
-    TActorId Recipient;
-    TActorId Sender;
-    ui64 Cookie;
-    char TraceId[16]; // obsolete trace id format
-    ui32 Checksum;
-};
-
 struct TEventDescr2 {
     ui32 Type;
     ui32 Flags;

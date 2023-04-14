@@ -214,27 +214,37 @@ private:
     }
 
     void DoHandleDisconnect(TActorId pipeClient, const TActorContext &ctx) {
-        if (pipeClient == SchemeShardPipe) {
-            SchemeShardPipe = TActorId();
-            // Resend all
-            for (const auto& w : SchemeTxWaiters) {
-                SendToSchemeshard(w.first, ctx);
-            }
+        const auto found = PipeToTx.find(pipeClient);
+        if (found != PipeToTx.end()) {
+            const auto pipeActor = found->first;
+            const auto txId = found->second;
+
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "tests -- TTxNotificationSubscriber for txId " << txId << ": disconnected from schemeshard, resend EvNotifyTxCompletion");
+
+            // Remove entry from the tx-pipe mapping. Pipe actor has already died.
+            PipeToTx.erase(pipeActor);
+            TxToPipe.erase(txId);
+
+            // Recreate pipe to schemeshard and resend notification request for txId
+            SendToSchemeshard(txId, ctx);
         }
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TTxNotificationSubscriber got TEvNotifyTxCompletion"
-                    << ", txId: " << txId);
 
-        if (SchemeTxWaiters.contains(txId)) {
-            return;
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "tests -- TTxNotificationSubscriber for txId " << txId << ": send EvNotifyTxCompletion");
+
+        // Add txId, add waiter, recreate pipe and send notification request
+
+        SchemeTxWaiters[txId].insert(ev->Sender);
+
+        if (TxToPipe.contains(txId)) {
+            DropTxPipe(txId, ctx);
         }
 
-        // Save TxId, forward to schemeshard
-        SchemeTxWaiters[txId].insert(ev->Sender);
         SendToSchemeshard(txId, ctx);
     }
 
@@ -242,41 +252,79 @@ private:
         ui64 txId = ev->Get()->Record.GetTxId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TTxNotificationSubscriber got TEvNotifyTxCompletionResult"
-                    << ", txId: " << txId);
+                    "tests -- TTxNotificationSubscriber for txId " << txId << ": got EvNotifyTxCompletionResult");
 
         if (!SchemeTxWaiters.contains(txId))
             return;
 
-        // Notify all waiters and forget TxId
+        // Notify all waiters, forget txId, drop pipe
+
         for (TActorId waiter : SchemeTxWaiters[txId]) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "tests -- TTxNotificationSubscriber satisfy subscriber"
-                        << ", waiter: " << waiter
-                        << ", txId: " << txId);
+                        "tests -- TTxNotificationSubscriber for txId " << txId <<": satisfy waiter " << waiter);
             ctx.Send(waiter, new TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
         }
         SchemeTxWaiters.erase(txId);
+
+        DropTxPipe(txId, ctx);
+    }
+
+    void DropTxPipe(ui64 txId, const TActorContext &ctx) {
+        // Remove entry from the tx-pipe mapping
+        auto pipeActor = TxToPipe.at(txId);
+        PipeToTx.erase(pipeActor);
+        TxToPipe.erase(txId);
+
+        // Destroy pipe actor
+        NTabletPipe::CloseClient(ctx, pipeActor);
     }
 
     void SendToSchemeshard(ui64 txId, const TActorContext &ctx) {
-        if (!SchemeShardPipe) {
-            SchemeShardPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SchemeshardTabletId, GetPipeConfigWithRetries()));
-        }
-        NTabletPipe::SendData(ctx, SchemeShardPipe, new TEvSchemeShard::TEvNotifyTxCompletion(txId));
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "tests -- TTxNotificationSubscriber, SendToSchemeshard, txId " << txId);
+
+        // NOTE: the only reason why we should send every EvNotifyTxCompletion to schemeshard
+        // with a separate pipe is to avoid out-of-order reception of 2 events on the schemeshard side:
+        // 1. ModifyScheme -- that starts operation/Tx
+        // 2. NotifyTxCompletion -- that subscribes to that operation completion
+        //
+        // Helper methods (Async...()) our tests use, send every new ModifyScheme through TabletResolver
+        // (with ForwardToTablet()) and if TestWaitNotification() does not use TabletResolver
+        // (in some way or another) to send every new NotifyTxCompletion, then NotifyTxCompletion could be quicker
+        // and on the schemeshard side NotifyTxCompletion could be processed before ModifyScheme registers as an operation.
+        // Which will allow test to proceed before operation actually will have complete.
+        // Been there, caught that in flaky tests.
+        //
+        // Event sending paths for ModifyScheme and NotifyTxCompletion should provide sequential delivery.
+        // Pipe creation also uses TabletResolver. Hence: new pipe for every NotifyTxCompletion.
+
+        auto pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, SchemeshardTabletId, GetPipeConfigWithRetries()));
+        NTabletPipe::SendData(ctx, pipe, new TEvSchemeShard::TEvNotifyTxCompletion(txId));
+
+        // Add entry to the tx-pipe mapping
+        TxToPipe[txId] = pipe;
+        PipeToTx[pipe] = txId;
     }
 
     void Handle(TEvents::TEvPoisonPill::TPtr, const TActorContext &ctx) {
-        if (SchemeShardPipe) {
-            NTabletPipe::CloseClient(ctx, SchemeShardPipe);
+        // Destroy pipe actors
+        for (auto& [pipeActor, _] : PipeToTx) {
+            NTabletPipe::CloseClient(ctx, pipeActor);
         }
+        // Cleanup tx-pipe mapping
+        PipeToTx.clear();
+        TxToPipe.clear();
+
         Die(ctx);
     }
 
 private:
     ui64 SchemeshardTabletId;
-    TActorId SchemeShardPipe;
+    // txId to waiters map
     THashMap<ui64, THashSet<TActorId>> SchemeTxWaiters;
+    // txId to/from pipe-to-schemeshard mapping
+    THashMap<ui64, TActorId> TxToPipe;
+    THashMap<TActorId, ui64> PipeToTx;
 };
 
 

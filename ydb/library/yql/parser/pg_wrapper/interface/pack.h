@@ -10,8 +10,10 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 class TPgType;
+class TPagedBuffer;
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf);
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TPagedBuffer& buf);
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf);
 
 void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output);

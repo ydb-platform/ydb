@@ -25,13 +25,28 @@ namespace NMiniKQL {
 
 #ifdef WITH_VALGRIND
 constexpr static size_t PERFORMANCE_COUNT = 0x1000;
-#else
+#elifdef NDEBUG
 constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x4000000, 0x1000);
+#else
+constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x1000000, 0x1000);
 #endif
 
+template<bool Fast, bool Transport>
+struct TPackerTraits;
+
 template<bool Fast>
+struct TPackerTraits<Fast, false> {
+    using TPackerType = TValuePackerGeneric<Fast>;
+};
+
+template<bool Fast>
+struct TPackerTraits<Fast, true> {
+    using TPackerType = TValuePackerTransport<Fast>;
+};
+
+template<bool Fast, bool Transport>
 class TMiniKQLComputationNodePackTest: public TTestBase {
-    using TValuePackerType = std::conditional_t<Fast, TValuePackerFast, TValuePacker>;
+    using TValuePackerType = typename TPackerTraits<Fast, Transport>::TPackerType;
 protected:
     TMiniKQLComputationNodePackTest()
         : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
@@ -308,18 +323,25 @@ protected:
         const THPTimer timer;
         for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i)
             packer.Pack(uValue);
-        Cout << timer.Passed() << Endl;
+        Cerr << timer.Passed() << Endl;
     }
 
     NUdf::TUnboxedValue TestPackUnpack(TValuePackerType& packer, const NUdf::TUnboxedValuePod& uValue,
         const TString& additionalMsg, const std::optional<ui32>& expectedLength = {})
     {
-        TStringBuf packedValue = packer.Pack(uValue);
+        const auto& packedValue = packer.Pack(uValue);
         if (expectedLength) {
-            UNIT_ASSERT_VALUES_EQUAL_C(packedValue.size(), *expectedLength, additionalMsg);
+            UNIT_ASSERT_VALUES_EQUAL_C(packedValue.Size(), *expectedLength, additionalMsg);
         }
-        ValidateEmbeddedLength(packedValue,  additionalMsg);
-        return packer.Unpack(packedValue, HolderFactory);
+        if constexpr (Transport) {
+            TString str;
+            packedValue.CopyTo(str);
+            ValidateEmbeddedLength(str, additionalMsg);
+            return packer.Unpack(str, HolderFactory);
+        } else {
+            ValidateEmbeddedLength(packedValue, additionalMsg);
+            return packer.Unpack(packedValue, HolderFactory);
+        }
     }
 
     NUdf::TUnboxedValue TestPackUnpack(TType* type, const NUdf::TUnboxedValuePod& uValue, const TString& additionalMsg,
@@ -387,6 +409,9 @@ protected:
         TestStringValue("1234567", packer, typeDesc, Fast ? (7 + 4) : (7 + 1));
         TestStringValue("", packer, typeDesc, Fast ? (0 + 4) : (0 + 1));
         TestStringValue("12345678", packer, typeDesc, 8 + 4);
+
+        TString hugeString(12345678, 'X');
+        TestStringValue(hugeString, packer, typeDesc, hugeString.size() + 4);
     }
 
     void TestUuidType() {
@@ -505,8 +530,8 @@ private:
     THolderFactory HolderFactory;
 };
 
-class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePackTest<false> {
-    UNIT_TEST_SUITE(TMiniKQLComputationNodePackBySwitchTest);
+class TMiniKQLComputationNodeGenericPackTest: public TMiniKQLComputationNodePackTest<false, false> {
+    UNIT_TEST_SUITE(TMiniKQLComputationNodeGenericPackTest);
         UNIT_TEST(TestNumericTypes);
         UNIT_TEST(TestOptionalNumericTypes);
         UNIT_TEST(TestStringTypes);
@@ -527,8 +552,8 @@ class TMiniKQLComputationNodePackBySwitchTest: public TMiniKQLComputationNodePac
     UNIT_TEST_SUITE_END();
 };
 
-class TMiniKQLComputationNodeFastPackBySwitchTest: public TMiniKQLComputationNodePackTest<true> {
-    UNIT_TEST_SUITE(TMiniKQLComputationNodeFastPackBySwitchTest);
+class TMiniKQLComputationNodeGenericFastPackTest: public TMiniKQLComputationNodePackTest<true, false> {
+    UNIT_TEST_SUITE(TMiniKQLComputationNodeGenericFastPackTest);
         UNIT_TEST(TestNumericTypes);
         UNIT_TEST(TestOptionalNumericTypes);
         UNIT_TEST(TestStringTypes);
@@ -549,7 +574,53 @@ class TMiniKQLComputationNodeFastPackBySwitchTest: public TMiniKQLComputationNod
     UNIT_TEST_SUITE_END();
 };
 
-UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodePackBySwitchTest);
-UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeFastPackBySwitchTest);
+class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePackTest<false, true> {
+    UNIT_TEST_SUITE(TMiniKQLComputationNodeTransportPackTest);
+        UNIT_TEST(TestNumericTypes);
+        UNIT_TEST(TestOptionalNumericTypes);
+        UNIT_TEST(TestStringTypes);
+        UNIT_TEST(TestUuidType);
+        UNIT_TEST(TestOptionalStringTypes);
+        UNIT_TEST(TestListType);
+        UNIT_TEST(TestListOfOptionalsType);
+        UNIT_TEST(TestTupleType);
+        UNIT_TEST(TestStructType);
+        UNIT_TEST(TestOptionalType);
+        UNIT_TEST(TestDictType);
+        UNIT_TEST(TestVariantTypeOverStruct);
+        UNIT_TEST(TestVariantTypeOverTuple);
+        UNIT_TEST(TestIntegerPackPerformance);
+        UNIT_TEST(TestShortStringPackPerformance);
+        UNIT_TEST(TestPairPackPerformance);
+        UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST_SUITE_END();
+};
+
+class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNodePackTest<true, true> {
+    UNIT_TEST_SUITE(TMiniKQLComputationNodeTransportFastPackTest);
+        UNIT_TEST(TestNumericTypes);
+        UNIT_TEST(TestOptionalNumericTypes);
+        UNIT_TEST(TestStringTypes);
+        UNIT_TEST(TestUuidType);
+        UNIT_TEST(TestOptionalStringTypes);
+        UNIT_TEST(TestListType);
+        UNIT_TEST(TestListOfOptionalsType);
+        UNIT_TEST(TestTupleType);
+        UNIT_TEST(TestStructType);
+        UNIT_TEST(TestOptionalType);
+        UNIT_TEST(TestDictType);
+        UNIT_TEST(TestVariantTypeOverStruct);
+        UNIT_TEST(TestVariantTypeOverTuple);
+        UNIT_TEST(TestIntegerPackPerformance);
+        UNIT_TEST(TestShortStringPackPerformance);
+        UNIT_TEST(TestPairPackPerformance);
+        UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST_SUITE_END();
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeGenericPackTest);
+UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeGenericFastPackTest);
+UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeTransportPackTest);
+UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeTransportFastPackTest);
 }
 }

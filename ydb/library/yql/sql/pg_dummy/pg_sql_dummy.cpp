@@ -1,5 +1,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 
+#include <ydb/library/yql/minikql/mkql_buffer.h>
+
 namespace NSQLTranslationPG {
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
@@ -151,6 +153,14 @@ ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
 }
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+   Y_UNUSED(stable);
+   Y_UNUSED(type);
+   Y_UNUSED(value);
+   Y_UNUSED(buf);
+   throw yexception() << "PG types are not supported";
+}
+
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPagedBuffer& buf) {
    Y_UNUSED(stable);
    Y_UNUSED(type);
    Y_UNUSED(value);

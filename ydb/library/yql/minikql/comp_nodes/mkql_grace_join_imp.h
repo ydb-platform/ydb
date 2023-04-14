@@ -71,7 +71,7 @@ struct TupleData {
 struct TColTypeInterface {
     NYql::NUdf::IHash::TPtr HashI = nullptr;  // Interface to calculate hash of column value
     NYql::NUdf::IEquate::TPtr EquateI = nullptr; // Interface to compare two column values
-    TValuePacker Packer; // Class to pack and unpack column values
+    std::shared_ptr<TValuePacker> Packer; // Class to pack and unpack column values
     const THolderFactory& HolderFactory; // To use during unpacking 
 };
 

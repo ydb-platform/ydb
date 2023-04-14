@@ -20,7 +20,7 @@ namespace {
 
 template<bool Fast>
 NDqProto::TData SerializeValuePickleV1(const TType* type, const NUdf::TUnboxedValuePod& value) {
-    using TPacker = std::conditional_t<Fast, TValuePackerFast, TValuePacker>;
+    using TPacker = TValuePackerGeneric<Fast>;
 
     TPacker packer(/* stable */ false, type);
     TStringBuf packResult = packer.Pack(value);
@@ -37,7 +37,7 @@ template<bool Fast>
 void DeserializeValuePickleV1(const TType* type, const NDqProto::TData& data, NUdf::TUnboxedValue& value,
     const THolderFactory& holderFactory)
 {
-    using TPacker = std::conditional_t<Fast, TValuePackerFast, TValuePacker>;
+    using TPacker = TValuePackerGeneric<Fast>;
     YQL_ENSURE(data.GetTransportVersion() == (ui32) (Fast ? NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0));
     TPacker packer(/* stable */ false, type);
     value = packer.Unpack(data.GetRaw(), holderFactory);

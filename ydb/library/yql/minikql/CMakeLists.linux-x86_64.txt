@@ -50,6 +50,7 @@ target_sources(library-yql-minikql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_buffer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_function_metadata.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_function_registry.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node.cpp

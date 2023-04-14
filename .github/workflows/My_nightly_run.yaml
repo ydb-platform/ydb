@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
     uses: ./.github/workflows/My_build_and_test_provisioned.yml
     with:
-      runner_label: ARM64
+      runner_label: X64
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
       launch_unit_tests: ${{inputs.launch_unit_tests}}

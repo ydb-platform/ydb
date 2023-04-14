@@ -53,6 +53,17 @@ namespace NKikimrCapnProto {
             bool HasSentByVDiskUs() const { return getSentByVDiskUs() != 0; }
             bool HasReceivedByDSProxyUs() const { return getReceivedByDSProxyUs() != 0; }
             const NKikimrCapnProto_::TTimestamps::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#SentByDSProxyUs " << GetSentByDSProxyUs() << " "
+                   << "#ReceivedByVDiskUs " << GetReceivedByVDiskUs() << " "
+                   << "#SentByVDiskUs " << GetSentByVDiskUs() << " "
+                   << "#ReceivedByDSProxyUs " << GetReceivedByDSProxyUs() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TTimestamps::Builder, public Reader {
@@ -299,6 +310,21 @@ namespace NKikimrCapnProto {
             bool HasVDiskLoadId() const { return getVDiskLoadId() != 0; }
             bool HasVPatchVDiskId() const { return getVPatchVDiskId() != 0; }
             const NKikimrCapnProto_::TMsgQoS::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#DeadlineSeconds " << GetDeadlineSeconds() << " "
+                   << "#Cost " << GetCost() << " "
+                   << "#SendMeCostSettings " << GetSendMeCostSettings() << " "
+                   << "#ProxyNodeId " << GetProxyNodeId() << " "
+                   << "#ReplVDiskId " << GetReplVDiskId() << " "
+                   << "#VPatchVDiskId " << GetVPatchVDiskId() << " "
+                   << "#EVDiskQueueId " << static_cast<int>(GetExtQueueId()) << " "
+                   << "#EVDiskInternalQueueId " << static_cast<int>(GetIntQueueId()) << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TMsgQoS::Builder, public Reader {
@@ -353,6 +379,18 @@ namespace NKikimrCapnProto {
             bool HasDomain() const { return getDomain() != 0; }
             bool HasVDisk() const { return getVDisk() != 0; }
             const NKikimrCapnProto_::TVDiskID::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#groupID " << GetGroupID() << " "
+                   << "#groupGeneration " << GetGroupGeneration() << " "
+                   << "#ring " << GetRing() << " "
+                   << "#domain " << GetDomain() << " "
+                   << "#vdisk " << GetVDisk() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TVDiskID::Builder, public Reader {
@@ -383,6 +421,16 @@ namespace NKikimrCapnProto {
             bool HasRawX2() const { return getRawX2() != 0; }
             bool HasRawX3() const { return getRawX3() != 0; }
             const NKikimrCapnProto_::TLogoBlobID::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#rawX1 " << GetRawX1() << " "
+                   << "#rawX2 " << GetRawX2() << " "
+                   << "#rawX3 " << GetRawX3() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TLogoBlobID::Builder, public Reader {
@@ -413,6 +461,18 @@ namespace NKikimrCapnProto {
             bool HasCookie() const { return getCookie() != 0; }
             bool HasMaxResults() const { return getMaxResults() != 0; }
             const NKikimrCapnProto_::TRangeQuery::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#notifyIfNotReady " << GetCookie() << " "
+                   << "#showInternals " << GetMaxResults() << " "
+                   << "#cookie " << GetCookie() << " "
+                   << "#from " << GetFrom().ShortDebugString() << " "
+                   << "#to " << GetTo().ShortDebugString() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TRangeQuery::Builder, public Reader {
@@ -447,6 +507,17 @@ namespace NKikimrCapnProto {
             bool HasSize() const { return getSize() != 0; }
             bool HasCookie() const { return getCookie() != 0; }
             const NKikimrCapnProto_::TExtremeQuery::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#shift " << GetShift() << " "
+                   << "#size " << GetSize() << " "
+                   << "#cookie " << GetCookie() << " "
+                   << "#id " << GetId().ShortDebugString() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TExtremeQuery::Builder, public Reader {
@@ -475,6 +546,15 @@ namespace NKikimrCapnProto {
             bool HasId() const { return getId() != 0; }
             bool HasGeneration() const { return getGeneration() != 0; }
             const NKikimrCapnProto_::TTabletData::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#id " << GetId() << " "
+                   << "#generation " << GetGeneration() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TTabletData::Builder, public Reader {
@@ -565,11 +645,23 @@ namespace NKikimrCapnProto {
             std::string ShortDebugString() const {
                 TStringStream ss;
                 ss << "{ "
-                   << "#tabletId " << GetTabletId() << " "
-                   << "#snapshotId " << GetSnapshotId() << " "
-                   << "#VDiskId " << GetVDiskID().GetVDisk() << " "
+                   << "#notifyIfNotReady " << GetNotifyIfNotReady() << " "
+                   << "#showInternals " << GetShowInternals() << " "
                    << "#cookie " << GetCookie() << " "
+                   << "#indexOnly " << GetIndexOnly() << " "
+                   << "#suppressBarrierCheck " << GetSuppressBarrierCheck() << " "
+                   << "#tabletId " << GetTabletId() << " "
+                   << "#acquireBlockedGeneration " << GetAcquireBlockedGeneration() << " "
+                   << "#forceBlockedGeneration" << GetForceBlockedGeneration() << " "
+                   << "#snapshotId " << GetSnapshotId() << " "
+                   << "#rangeQuery " << GetRangeQuery().ShortDebugString() << " "
+                   << "#vdiskid " << GetVDiskID().ShortDebugString() << " "
+                   << "#msgQos " << GetMsgQoS().ShortDebugString() << " "
+                   << "#timestamps " << GetTimestamps().ShortDebugString() << " "
+                   << "#readerTabletData " << GetReaderTabletData().ShortDebugString() << " "
+                   << "#forceBlockTabletData " << GetForceBlockTabletData().ShortDebugString() << " "
                    << "#extremeQueriesCnt " << elements.size() << " "
+                   << "#handleClass " << static_cast<int>(GetHandleClass()) << " "
                    << " }";
                 return ss.Str();
             }

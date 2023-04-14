@@ -93,19 +93,6 @@ bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExpl
     return true;
 }
 
-template <typename TProtoLogoBlobId>
-TLogoBlobID LogoBlobIDFromLogoBlobID(const TProtoLogoBlobId &proto) {
-    return TLogoBlobID(proto.GetRawX1(), proto.GetRawX2(), proto.GetRawX3());
-}
-
-template <typename TProtoLogoBlobId>
-void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, TProtoLogoBlobId proto) {
-    const ui64* raw = id.GetRaw();
-    proto->SetRawX1(raw[0]);
-    proto->SetRawX2(raw[1]);
-    proto->SetRawX3(raw[2]);
-}
-
 void LogoBlobIDVectorFromLogoBlobIDRepeated(
             TVector<TLogoBlobID> *to,
             const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto) {

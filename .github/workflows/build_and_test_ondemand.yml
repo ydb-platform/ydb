@@ -14,6 +14,17 @@ on:
         required: false
         default: fd8snjpoq85qqv0mk9gi
   workflow_dispatch:
+    inputs: 
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
+      image:
+        type: string
+        required: false
+        default: fd8snjpoq85qqv0mk9gi
     
 jobs:
 

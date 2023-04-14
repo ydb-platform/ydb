@@ -800,6 +800,7 @@ message TFeatureFlags {
     optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
+    optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
 }
 
 

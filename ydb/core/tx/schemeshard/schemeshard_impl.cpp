@@ -4101,6 +4101,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableBorrowedSplitCompaction = appData->FeatureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
+    EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4303,6 +4304,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NKesus::TEvKesus::TEvSetConfigResult, Handle);
         HFuncTraced(TEvPersQueue::TEvDropTabletReply, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfigResponse, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
         //pipes mgs
@@ -4370,6 +4372,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
+
+        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
@@ -4937,6 +4941,42 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
+void TSchemeShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
+{
+    auto sendReadSetAck = [&]() {
+        auto ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID()); 
+        ctx.Send(ev->Sender, ack.release());
+    };
+
+    const auto txId = TTxId(ev->Get()->Record.GetTxId());
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvTxProcessing::TEvReadSet"
+                   << " for unknown txId " << txId
+                   << " message " << ev->Get()->Record.ShortDebugString());
+
+        sendReadSetAck();
+
+        return;
+    }
+
+    const TTabletId tabletId(ev->Get()->Record.GetTabletSource());
+    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvProposeTransactionResult but partId is unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+
+        sendReadSetAck();
+
+        return;
+    }
+
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
     const auto tabletId = TTabletId(ev->Get()->TabletId);
     const TActorId clientId = ev->Get()->ClientId;
@@ -5221,8 +5261,9 @@ void TSchemeShard::Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TAct
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx) {
-    const auto txId = TTxId(ev->Get()->Record.GetTxId());
+void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx)
+{
+    const TTxId txId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "Got TEvPersQueue::TEvUpdateConfigResponse"
@@ -5231,11 +5272,36 @@ void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const
         return;
     }
 
-    auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
-    TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    const TTabletId tabletId(ev->Get()->Record.GetOrigin());
+    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "Got TEvUpdateConfigResponse but partId is unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx)
+{
+    const TTxId txId(ev->Get()->Record.GetTxId());
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvPersQueue::TEvProposeTransactionResult"
+                   << " for unknown txId " << txId
+                   << " message " << ev->Get()->Record.ShortDebugString());
+        return;
+    }
+
+    const TTabletId tabletId(ev->Get()->Record.GetOrigin());
+    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvProposeTransactionResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());
@@ -6417,6 +6483,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableBorrowedSplitCompaction = featureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
+    EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

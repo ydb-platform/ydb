@@ -820,6 +820,7 @@ message TDataTransaction {
 }
 
 message TConfigTransaction {
+    optional uint64 SchemeShardId = 1;
     optional TPQTabletConfig TabletConfig = 2;
     optional TBootstrapConfig BootstrapConfig = 3;
 }
@@ -915,6 +916,7 @@ message TTransaction {
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
+    optional uint64 SchemeShardId = 16;
 };
 
 message TTabletTxInfo {

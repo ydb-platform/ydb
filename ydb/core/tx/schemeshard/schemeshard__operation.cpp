@@ -383,6 +383,27 @@ void OutOfScopeEventHandler<TEvDataShard::TEvSchemaChanged>(const TEvDataShard::
     context.OnComplete.Send(ackTo, event.Release());
 }
 
+//
+// PQ tablet sends TEvTxProcessing::TEvReadSet and is waiting for a response. If there is no response, the
+// transaction for changing the config will not be completed. As a result, the execution of other transactions
+// in the queue will stop on the tablet side of the PQ
+//
+template <>
+void OutOfScopeEventHandler<TEvTxProcessing::TEvReadSet>(const TEvTxProcessing::TEvReadSet::TPtr& ev, TOperationContext& context)
+{
+    const auto txId = ev->Get()->Record.GetTxId();
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "TTxOperationReply<" <<  ev->GetTypeName() << "> execute"
+            << ", at schemeshard: " << context.SS->TabletID()
+            << ", send out-of-scope reply, for txId " << txId
+    );
+
+    const TActorId ackTo = ev->Sender;
+    const TTabletId ssId = context.SS->SelfTabletId();
+
+    auto ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), ui64(ssId));
+    context.OnComplete.Send(ackTo, ack.release());
+}
 
 template <class TEvType>
 struct TTxTypeFrom;

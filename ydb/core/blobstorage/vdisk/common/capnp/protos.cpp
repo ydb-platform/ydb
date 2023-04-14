@@ -13,6 +13,16 @@ namespace NKikimrCapnProto {
         }
     }
 
+    NKikimrCapnProto::EGetHandleClass ConvertEGetHandleClassToCapnProto(NKikimrBlobStorage::EGetHandleClass cls) {
+        switch (cls) {
+            case NKikimrBlobStorage::EGetHandleClass::AsyncRead: return NKikimrCapnProto::EGetHandleClass::AsyncRead;
+            case NKikimrBlobStorage::EGetHandleClass::FastRead: return NKikimrCapnProto::EGetHandleClass::FastRead;
+            case NKikimrBlobStorage::EGetHandleClass::Discover: return NKikimrCapnProto::EGetHandleClass::Discover;
+            case NKikimrBlobStorage::EGetHandleClass::LowRead: return NKikimrCapnProto::EGetHandleClass::LowRead;
+            default: return static_cast<NKikimrCapnProto::EGetHandleClass>(-1); // Return an invalid value for unrecognized cases
+        }
+    }
+
     NKikimrBlobStorage::TWindowFeedback_EStatus ConvertEStatus(NKikimrCapnProto::EStatus capnProtoEStatus) {
         switch (capnProtoEStatus) {
             case NKikimrCapnProto::EStatus::Unknown: return NKikimrBlobStorage::TWindowFeedback_EStatus_Unknown;
@@ -24,6 +34,18 @@ namespace NKikimrCapnProto {
             default: return NKikimrBlobStorage::TWindowFeedback_EStatus_Unknown;
         }
     }
+
+//    NKikimrCapnProto::EStatus ConvertEStatusToCapnProto(NKikimrBlobStorage::TWindowFeedback_EStatus cls) {
+//        switch (cls) {
+//            case NKikimrBlobStorage::TWindowFeedback_EStatus_Unknown: return NKikimrCapnProto::EStatus::Unknown;
+//            case NKikimrBlobStorage::TWindowFeedback_EStatus_Success: return NKikimrCapnProto::EStatus::Success;
+//            case NKikimrBlobStorage::TWindowFeedback_EStatus_WindowUpdate: return NKikimrCapnProto::EStatus::WindowUpdate;
+//            case NKikimrBlobStorage::TWindowFeedback_EStatus_Processed: return NKikimrCapnProto::EStatus::Processed;
+//            case NKikimrBlobStorage::TWindowFeedback_EStatus_IncorrectMsgId: return NKikimrCapnProto::EStatus::IncorrectMsgId;
+//            case NKikimrBlobStorage::TWindowFeedback_EStatus_HighWatermarkOverflow: return NKikimrCapnProto::EStatus::HighWatermarkOverflow;
+//            default: return NKikimrCapnProto::EStatus::Unknown;
+//        }
+//    }
 
     NKikimrBlobStorage::EVDiskQueueId ConvertEVDiskQueueId(NKikimrCapnProto::EVDiskQueueId capnProtoQueueId) {
         switch (capnProtoQueueId) {

@@ -24,6 +24,15 @@ namespace NKikimrCapnProto {
             bool HasSequenceId() const { return getSequenceId() != 0; }
             bool HasMsgId() const { return getMsgId() != 0; }
             const NKikimrCapnProto_::TMessageId::Reader& GetCapnpBase() const { return *this; }
+
+            std::string ShortDebugString() const {
+                TStringStream ss;
+                ss << "{ "
+                   << "#SequenceId " << GetSequenceId() << " "
+                   << "#MsgId " << GetMsgId() << " "
+                   << " }";
+                return ss.Str();
+            }
         };
 
         struct Builder : private NKikimrCapnProto_::TMessageId::Builder, public Reader {
@@ -96,6 +105,7 @@ namespace NKikimrCapnProto {
         LowRead,
     };
     NKikimrBlobStorage::EGetHandleClass ConvertEGetHandleClass(NKikimrCapnProto::EGetHandleClass capnProtoGetHandleClass);
+    NKikimrCapnProto::EGetHandleClass ConvertEGetHandleClassToCapnProto(NKikimrBlobStorage::EGetHandleClass cls);
 
     struct TActorId {
         struct Reader : private NKikimrCapnProto_::TActorId::Reader {
@@ -319,9 +329,11 @@ namespace NKikimrCapnProto {
                    << "#SendMeCostSettings " << GetSendMeCostSettings() << " "
                    << "#ProxyNodeId " << GetProxyNodeId() << " "
                    << "#ReplVDiskId " << GetReplVDiskId() << " "
+                   << "#VDiskLoadId " << GetVDiskLoadId() << " "
                    << "#VPatchVDiskId " << GetVPatchVDiskId() << " "
                    << "#EVDiskQueueId " << static_cast<int>(GetExtQueueId()) << " "
                    << "#EVDiskInternalQueueId " << static_cast<int>(GetIntQueueId()) << " "
+                   << "#MsgId " << GetMsgId().ShortDebugString() << " "
                    << " }";
                 return ss.Str();
             }

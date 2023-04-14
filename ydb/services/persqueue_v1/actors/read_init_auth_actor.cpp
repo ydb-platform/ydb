@@ -233,7 +233,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {
         const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-        CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status, PersQueue::ErrorCode::ERROR, ctx);
+        CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
 

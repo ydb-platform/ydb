@@ -713,7 +713,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvCreateSes
         TStringBuilder errorReason;
         errorReason << "kqp error Marker# PQ53 : " <<  record;
 
-        CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
+        CloseSession(errorReason, PersQueue::ErrorCode::INITIALIZING, ctx);
         return;
     }
 
@@ -800,7 +800,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
             LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, errorReason);
             SourceIdUpdatesInflight--;
         } else {
-            CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
+            CloseSession(errorReason, PersQueue::ErrorCode::INITIALIZING, ctx);
         }
         return;
     }
@@ -1196,7 +1196,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 
             for (size_t messageIndex = 0, endIndex = userWriteRequest->Request.write_request().sequence_numbers_size(); messageIndex != endIndex; ++messageIndex) {
                 if (partitionCmdWriteResultIndex == resp.CmdWriteResultSize()) {
-                    CloseSession("too less responses from server", PersQueue::ErrorCode::ERROR, ctx);
+                    CloseSession("too few responses from server", PersQueue::ErrorCode::ERROR, ctx);
                     return;
                 }
                 const auto& partitionCmdWriteResult = resp.GetCmdWriteResult(partitionCmdWriteResultIndex);
@@ -1216,7 +1216,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 
             for (size_t messageIndex = 0, endIndex = userWriteRequest->Request.write_request().messages_size(); messageIndex != endIndex; ++messageIndex) {
                 if (partitionCmdWriteResultIndex == resp.CmdWriteResultSize()) {
-                    CloseSession("too less responses from server", PersQueue::ErrorCode::ERROR, ctx);
+                    CloseSession("too few responses from server", PersQueue::ErrorCode::ERROR, ctx);
                     return;
                 }
                 const auto& partitionCmdWriteResult = resp.GetCmdWriteResult(partitionCmdWriteResultIndex);

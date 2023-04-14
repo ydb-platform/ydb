@@ -1296,7 +1296,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCon
         }
 
         // TODO: remove it
-        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+        return CloseSession(PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, TStringBuilder()
             << "unable to connect to one of topics, tablet " << msg->TabletId, ctx);
 
 #if 0

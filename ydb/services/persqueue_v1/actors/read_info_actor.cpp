@@ -113,6 +113,7 @@ void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorC
 
 void TReadInfoActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+        // map NMsgBusProxy::EResponseStatus to PersQueue::ErrorCode???
         return AnswerError(ev->Get()->Record.GetErrorReason(), PersQueue::ErrorCode::ERROR, ctx);
     }
 

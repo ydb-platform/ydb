@@ -967,7 +967,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
         if (GetProtoRequest()->include_stats()) {
             if (Consumer && !found) {
-                Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::ERROR));
+                Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::BAD_REQUEST));
                 return ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
 
@@ -1020,7 +1020,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             break;
         }
         if (!found) {
-            Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::ERROR));
+            Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::BAD_REQUEST));
             return ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
 

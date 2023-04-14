@@ -176,7 +176,7 @@ namespace NKikimr::NDataStreams::V1 {
         {
             return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
                                   static_cast<size_t>(NYds::EErrorCodes::IN_USE),
-                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " is already exists",
+                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " already exists",
                                   ctx);
         }
         return TBase::TBase::Handle(ev, ctx);
@@ -568,13 +568,13 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-                ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+                ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
             }
         }
 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
 
@@ -1471,7 +1471,7 @@ namespace NKikimr::NDataStreams::V1 {
                         return;
                     default:
                         return ReplyWithError(ConvertPersQueueInternalCodeToStatus(record.GetErrorCode()),
-                                              static_cast<size_t>(NYds::EErrorCodes::ERROR),
+                                              ConvertOldCode(record.GetErrorCode()),
                                               record.GetErrorReason(), ctx);
                 }
                 break;
@@ -1516,13 +1516,13 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
     }
 
     void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+        ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 
@@ -1798,13 +1798,13 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
     }
 
     void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+        ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 

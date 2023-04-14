@@ -207,12 +207,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (ev->Get()->Request.Get()->ResultSet.size() != 1 ||
                 ev->Get()->Request.Get()->ResultSet.begin()->Kind !=
                 NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                this->Request_->RaiseIssue(
-                    FillIssue(
-                              TStringBuilder() << "path '" << path << "' is not a stream",
-                              Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
-                              )
-                    );
+                this->Request_->RaiseIssue(FillIssue(TStringBuilder() << "path '" << path << "' is not a topic",
+                                                     Ydb::PersQueue::ErrorCode::VALIDATION_ERROR));
                 TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                 return true;
             }
@@ -418,7 +414,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (status ==  TEvTxUserProxy::TResultStatus::ExecError && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPreconditionFailed)
             {
                 return TBase::ReplyWithError(Ydb::StatusIds::OVERLOADED,
-                                                         Ydb::PersQueue::ErrorCode::ERROR,
+                                                         Ydb::PersQueue::ErrorCode::OVERLOAD,
                                                          TStringBuilder() << "Topic with name " << TBase::GetTopicPath(ctx) << " has another alter in progress",
                                                          ctx);
             }

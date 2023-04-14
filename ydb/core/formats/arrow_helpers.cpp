@@ -720,49 +720,14 @@ TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
     return out;
 }
 
-i64 LowerBound(const std::shared_ptr<arrow::Array>& array, const arrow::Scalar& border, i64 offset) {
-    i64 pos = 0;
-    SwitchType(array->type_id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using T = typename TWrap::T;
-        using TArray = typename arrow::TypeTraits<T>::ArrayType;
-        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
-
-        auto& column = static_cast<const TArray&>(*array);
-
-        if constexpr (arrow::is_number_type<T>() || arrow::is_timestamp_type<T>()) {
-            const auto* start = column.raw_values() + offset;
-            const auto* end = column.raw_values() + column.length();
-            pos = offset;
-            pos += std::lower_bound(start, end, static_cast<const TScalar&>(border).value) - start;
-        } else if constexpr (arrow::has_string_view<T>()) {
-            arrow::util::string_view value(*static_cast<const TScalar&>(border).value);
-
-            // TODO: binary search
-            for (pos = offset; pos < column.length(); ++pos) {
-                if (!(column.GetView(pos) < value)) {
-                    return true;
-                }
-            }
-        } else {
-            Y_VERIFY(false); // not implemented
-        }
-
-        return true;
-    });
-
-    return pos;
-}
-
-// TODO: implement
-i64 LowerBound(const std::shared_ptr<arrow::RecordBatch>& batch, const TReplaceKey& key, i64 offset) {
-    Y_VERIFY(batch->num_columns() == 1);
-    Y_VERIFY(key.Size() == 1);
-
-    auto res = key.Column(0).GetScalar(key.GetPosition());
-    Y_VERIFY_OK(res.status());
-    Y_VERIFY(*res);
-    return LowerBound(batch->column(0), *(*res), offset);
+size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset) {
+    Y_VERIFY(offset <= batchKeys.size());
+    if (offset == batchKeys.size()) {
+        return offset;
+    }
+    auto start = batchKeys.begin() + offset;
+    auto it = std::lower_bound(start, batchKeys.end(), key.ToRaw());
+    return it - batchKeys.begin();
 }
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {

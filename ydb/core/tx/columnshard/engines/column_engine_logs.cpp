@@ -343,13 +343,22 @@ SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
         const auto effKey = GetEffectiveKey(batch, indexInfo);
         Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
+        std::vector<NArrow::TRawReplaceKey> keys;
+        {
+            const auto& columns = effKey->columns();
+            keys.reserve(effKey->num_rows());
+            for (i64 i = 0; i < effKey->num_rows(); ++i) {
+                keys.emplace_back(NArrow::TRawReplaceKey(&columns, i));
+            }
+        }
+
         i64 offset = 0;
-        for (size_t i = 0; i < granules.size(); ++i) {
+        for (size_t i = 0; i < granules.size() && offset < effKey->num_rows(); ++i) {
             const i64 end = (i + 1 == granules.size())
                 // Just take the number of elements in the key column for the last granule.
                 ? effKey->num_rows()
                 // Locate position of the next granule in the key.
-                : NArrow::LowerBound(effKey, granules[i + 1].first.Border, offset);
+                : NArrow::LowerBound(keys, granules[i + 1].first.Border, offset);
 
             if (const i64 size = end - offset) {
                 Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
@@ -1789,9 +1798,18 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
         const auto effKey = GetEffectiveKey(batch, indexInfo);
         Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
+        std::vector<NArrow::TRawReplaceKey> keys;
+        {
+            const auto& columns = effKey->columns();
+            keys.reserve(effKey->num_rows());
+            for (i64 i = 0; i < effKey->num_rows(); ++i) {
+                keys.emplace_back(NArrow::TRawReplaceKey(&columns, i));
+            }
+        }
+
         batchOffsets.push_back(0);
         for (const auto& border : borders) {
-            int offset = NArrow::LowerBound(effKey, border, batchOffsets.back());
+            int offset = NArrow::LowerBound(keys, border, batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
             batchOffsets.push_back(offset);
         }

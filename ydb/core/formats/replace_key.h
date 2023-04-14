@@ -105,6 +105,14 @@ public:
         return *(*Columns)[i];
     }
 
+    TReplaceKeyTemplate<const TArrayVec*> ToRaw() const {
+        if constexpr (IsOwning) {
+            return TReplaceKeyTemplate<const TArrayVec*>(Columns.get(), Position);
+        } else {
+            return *this;
+        }
+    }
+
     template<typename T = TArrayVecPtr> requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                        const std::shared_ptr<arrow::Schema>& key, int row) {

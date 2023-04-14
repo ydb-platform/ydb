@@ -149,7 +149,6 @@ void TTabletExecutedFlat::DefaultSignalTabletActive(const TActorContext &ctx) {
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
     Y_UNUSED(ev);
-    Y_UNUSED(ctx);
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
@@ -245,45 +244,47 @@ void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev)
     Executor()->GetTabletCounters(ev);
 }
 
-bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
+bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const TActorIdentity& id) {
+    auto ctx(NActors::TActivationContext::ActorContextFor(id));
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvTablet::TEvBoot, Handle);
-        HFunc(TEvTablet::TEvRestored, Handle);
-        HFunc(TEvTablet::TEvFBoot, Handle);
+        HFuncCtx(TEvTablet::TEvBoot, Handle, ctx);
+        HFuncCtx(TEvTablet::TEvRestored, Handle, ctx);
+        HFuncCtx(TEvTablet::TEvFBoot, Handle, ctx);
         hFunc(TEvTablet::TEvFUpdate, Handle);
         hFunc(TEvTablet::TEvFAuxUpdate, Handle);
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
         hFunc(TEvTablet::TEvNewFollowerAttached, Handle);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
-        HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
-        HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-        HFunc(TEvTablet::TEvLocalMKQL, HandleLocalMKQL);
-        HFunc(TEvTablet::TEvLocalSchemeTx, HandleLocalSchemeTx);
-        HFunc(TEvTablet::TEvLocalReadColumns, HandleLocalReadColumns);
+        HFuncCtx(TEvTablet::TEvTabletStop, HandleTabletStop, ctx);
+        HFuncCtx(TEvTablet::TEvTabletDead, HandleTabletDead, ctx);
+        HFuncCtx(TEvTablet::TEvLocalMKQL, HandleLocalMKQL, ctx);
+        HFuncCtx(TEvTablet::TEvLocalSchemeTx, HandleLocalSchemeTx, ctx);
+        HFuncCtx(TEvTablet::TEvLocalReadColumns, HandleLocalReadColumns, ctx);
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
-        HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);
+        HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
     default:
         return false;
     }
     return true;
 }
 
-void TTabletExecutedFlat::StateInitImpl(STFUNC_SIG) {
+void TTabletExecutedFlat::StateInitImpl(TAutoPtr<IEventHandle>& ev, const TActorIdentity& id) {
+    auto ctx(NActors::TActivationContext::ActorContextFor(id));
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvTablet::TEvBoot, Handle);
-        HFunc(TEvTablet::TEvFBoot, Handle);
+        HFuncCtx(TEvTablet::TEvBoot, Handle, ctx);
+        HFuncCtx(TEvTablet::TEvFBoot, Handle, ctx);
         hFunc(TEvTablet::TEvFUpdate, Handle);
         hFunc(TEvTablet::TEvFAuxUpdate, Handle);
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
-        HFunc(TEvTablet::TEvRestored, Handle);
-        HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
-        HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+        HFuncCtx(TEvTablet::TEvRestored, Handle, ctx);
+        HFuncCtx(TEvTablet::TEvTabletStop, HandleTabletStop, ctx);
+        HFuncCtx(TEvTablet::TEvTabletDead, HandleTabletDead, ctx);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
-        HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);
+        HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
     default:
-        return Enqueue(ev, ctx);
+        return Enqueue(ev);
     }
 }
 

@@ -23,7 +23,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -56,7 +56,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 

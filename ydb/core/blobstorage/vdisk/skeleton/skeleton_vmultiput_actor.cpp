@@ -166,7 +166,6 @@ namespace NKikimr {
             }
 
             STFUNC(StateWait) {
-                Y_UNUSED(ctx);
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvVMultiPutItemResult, Handle);
                     HFunc(TEvBlobStorage::TEvVPutResult, Handle);

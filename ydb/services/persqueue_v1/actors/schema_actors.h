@@ -51,7 +51,7 @@ public:
      TPQDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescribeTopicRequest* request);
     ~TPQDescribeTopicActor() = default;
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    void StateWork(TAutoPtr<IEventHandle>& ev);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -125,7 +125,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    void StateWork(TAutoPtr<IEventHandle>& ev);
 
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) override;
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;
@@ -151,7 +151,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    void StateWork(TAutoPtr<IEventHandle>& ev);
 
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) override;
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) override;

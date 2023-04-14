@@ -53,12 +53,11 @@ public:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        Y_UNUSED(ctx);
         InitialEventsQueue.push_back(ev);
     }
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
@@ -123,12 +122,11 @@ public:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        Y_UNUSED(ctx);
         InitialEventsQueue.push_back(ev);
     }
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
@@ -194,7 +192,7 @@ public:
     {}
 
 private:
-    void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
         HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -297,7 +295,7 @@ private:
             HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
             HFunc(NMetering::TEvMetering::TEvWriteMeteringJson, HandleWriteMeteringJson);
         default:
-            HandleUnexpectedEvent(ev, ctx);
+            HandleUnexpectedEvent(ev);
             break;
         }
     }
@@ -323,9 +321,7 @@ private:
 
     void HandleUnexpectedEvent(STFUNC_SIG)
     {
-        Y_UNUSED(ctx);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        ALOG_DEBUG(NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TFakeMetering:"
                         << " unhandled event type: " << ev->GetTypeRewrite()
                         << " event: " << ev->ToString());
@@ -347,7 +343,7 @@ private:
     using TPreSerializedMessage = std::pair<ui32, TIntrusivePtr<TEventSerializedData>>; // ui32 it's a type
 
 private:
-    void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);

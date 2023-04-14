@@ -321,7 +321,7 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_REPL, BSVR02, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Bootstrap"));
             TimeAccount.SetState(ETimeState::PREPARE_PLAN);
             auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr, UnreplicatedBlobsPtr);
-            auto aid = RunInBatchPool(TActivationContext::ActorContextFor(SelfId()), actor.release());
+            auto aid = RunInBatchPool(ActorContext(), actor.release());
             ActiveActors.Insert(aid);
             Become(&TThis::StatePreparePlan);
         }
@@ -771,13 +771,13 @@ namespace NKikimr {
         }
 
         void HandleYard(NPDisk::TEvChunkWriteResult::TPtr& ev) {
-            CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, TActivationContext::ActorContextFor(SelfId()));
+            CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, ActorContext());
             Writer.Apply(ev->Get());
             Merge();
         }
 
         void HandleYard(NPDisk::TEvChunkReserveResult::TPtr& ev) {
-            CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, TActivationContext::ActorContextFor(SelfId()));
+            CHECK_PDISK_RESPONSE(ReplCtx->VCtx, ev, ActorContext());
             STLOG(PRI_INFO, BS_REPL, BSVR10, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "reserved chunks"),
                 (ChunkIds, FormatList(ev->Get()->ChunkIds)));
             Writer.Apply(ev->Get());
@@ -826,7 +826,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            ActiveActors.KillAndClear(TActivationContext::ActorContextFor(SelfId()));
+            ActiveActors.KillAndClear(ActorContext());
             TActorBootstrapped::PassAway();
         }
 

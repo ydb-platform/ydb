@@ -68,8 +68,7 @@ void TNodeBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
     Die(ctx);
 }
 
-void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
-                          const TActorContext &ctx)
+void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
     switch (ev->GetTypeRewrite()) {
     case TEvNodeBroker::EvListNodes:
@@ -78,7 +77,7 @@ void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
         EnqueuedEvents.push_back(ev);
         break;
     default:
-        TTabletExecutedFlat::Enqueue(ev, ctx);
+        TTabletExecutedFlat::Enqueue(ev);
     }
 }
 
@@ -286,10 +285,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     }
 }
 
-void TNodeBroker::ProcessEnqueuedEvents(const TActorContext& ctx)
+void TNodeBroker::ProcessEnqueuedEvents(const TActorContext&)
 {
     for (auto &ev : EnqueuedEvents)
-        Receive(ev, ctx);
+        Receive(ev);
     EnqueuedEvents.clear();
 }
 

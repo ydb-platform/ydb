@@ -146,7 +146,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             HFunc(IContext::TEvReadFinished, Handle);
         }
@@ -197,7 +196,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             HFunc(IContext::TEvReadFinished, Handle);
             HFunc(IContext::TEvWriteFinished, Handle);
@@ -235,7 +233,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             HFunc(IContext::TEvNotifiedWhenDone, Handle);
         }

@@ -52,8 +52,7 @@ public:
 
 private:
     void ProtocolFunc(
-        TAutoPtr<NActors::IEventHandle>& ev,
-        const TActorContext& ctx) noexcept;
+        TAutoPtr<NActors::IEventHandle>& ev) noexcept;
 
     void TryAgain(const TActorContext& ctx) noexcept;
 

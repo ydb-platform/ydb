@@ -599,7 +599,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
         LastPeriodicBackActivation = TInstant::Now();
     }
 
-    const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
+    const TActorContext& ctx = ActorContext();
     SendPeriodicStats();
 
     if (activity.IndexationOnly()) {

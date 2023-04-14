@@ -559,6 +559,7 @@ public:
     {}
 
     STFUNC(StateInit) {
+        auto ctx(ActorContext());
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
@@ -575,12 +576,13 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             default:
-                StateInitImpl(ev, ctx);
+                StateInitImpl(ev, SelfId());
                 break;
         }
     }
 
     STFUNC(StateWork) {
+        auto ctx(ActorContext());
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
@@ -607,12 +609,13 @@ public:
             HFunc(TEvPersQueue::TEvStatus, Handle);
 
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
                 break;
         }
     }
 
     STFUNC(StateBroken) {
+        auto ctx(ActorContext());
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {

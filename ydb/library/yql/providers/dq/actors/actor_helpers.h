@@ -132,18 +132,18 @@ private:
     ui32 ExpectedEventType_{0};
     THashSet<ui32> CriticalEventTypes_{};
 
-    void SyncHandler(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void SyncHandler(TAutoPtr<NActors::IEventHandle>& ev) {
         const ui32 etype = ev->GetTypeRewrite();
         if (etype == ExpectedEventType_) {
-            OnSync(ev, ctx);
+            OnSync(ev);
         } else if (CriticalEventTypes_.contains(etype)) {
-            (this->*InterruptedHandler_)(ev, ctx);
+            (this->*InterruptedHandler_)(ev);
         } else {
             EnqueueEvent(ev);
         }
     }
 
-    void OnSync(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void OnSync(TAutoPtr<NActors::IEventHandle>& ev) {
         YQL_CLOG(DEBUG, ProviderDq) << "OnSync(): delayed messages " << DelayedEvents_.size();
         SyncState_ = E_SYNC_RECEIVED;
         TBase::Become(InterruptedHandler_);
@@ -157,7 +157,7 @@ private:
             auto event = std::move(DelayedEvents_.front());
             DelayedEvents_.pop_front();
             InterruptedHandler_ = TBase::CurrentStateFunc();
-            (this->*InterruptedHandler_)(event, ctx);
+            (this->*InterruptedHandler_)(event);
             if (SyncState_ == E_SYNC_REQUESTED) {
                 return;
             }

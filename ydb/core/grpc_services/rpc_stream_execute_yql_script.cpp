@@ -123,7 +123,7 @@ public:
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(NKqp::TEvKqp::TEvDataQueryStreamPart, Handle);
@@ -132,7 +132,7 @@ private:
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             default: {
                 return ReplyFinishStream(TStringBuilder()
-                    << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite(), ctx);
+                    << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite());
             }
         }
     }
@@ -140,7 +140,7 @@ private:
     void Proceed(const TActorContext &ctx) {
         const auto& featureFlags = AppData(ctx)->FeatureFlags;
         if (!featureFlags.GetAllowStreamExecuteYqlScript()) {
-            return ReplyFinishStream("StreamExecuteYqlScript request is not supported", ctx);
+            return ReplyFinishStream("StreamExecuteYqlScript request is not supported");
         }
 
         const auto req = GetProtoRequest();
@@ -158,10 +158,10 @@ private:
 
         TParseRequestError parseError;
         if (!FillKqpRequest(*req, ev->Record, parseError)) {
-            return ReplyFinishStream(parseError.Status, parseError.Issues, ctx);
+            return ReplyFinishStream(parseError.Status, parseError.Issues);
         }
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
-            return ReplyFinishStream("Couldn't send request to KqpProxy", ctx);
+            return ReplyFinishStream("Couldn't send request to KqpProxy");
         }
     }
 
@@ -182,7 +182,7 @@ private:
         }
     }
 
-    void SendDataQueryResultPart(const TActorContext& ctx) {
+    void SendDataQueryResultPart(const TActorContext&) {
         ++ResultsReceived_;
         const auto& kqpResult = *DataQueryStreamContext->ResultIterator;
 
@@ -193,7 +193,7 @@ private:
         try {
             NKqp::ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
         } catch (std::exception ex) {
-            ReplyFinishStream(ex.what(), ctx);
+            ReplyFinishStream(ex.what());
         }
 
         result->set_result_set_index(ResultsReceived_ - 1);
@@ -212,12 +212,10 @@ private:
         GatewayRequestHandlerActorId_ = ActorIdFromProto(ev->Get()->Record.GetGatewayActorId());
 
         if (!ev->Get()->Record.GetResults().size()) {
-            return ReplyFinishStream("Received TEvDataQueryStreamPart with no results",
-                ctx);
+            return ReplyFinishStream("Received TEvDataQueryStreamPart with no results");
         }
         if (DataQueryStreamContext) {
-            return ReplyFinishStream("Received TEvDataQueryStreamPart event while previous data query is in progress",
-                ctx);
+            return ReplyFinishStream("Received TEvDataQueryStreamPart event while previous data query is in progress");
         }
 
         DataQueryStreamContext = MakeHolder<TDataQueryStreamContext>(ev);
@@ -316,7 +314,7 @@ private:
     }
 
     // Final response
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;
@@ -339,7 +337,7 @@ private:
             RequestPtr()->SendSerializedResult(std::move(out), record.GetYdbStatus());
         }
 
-        ReplyFinishStream(record.GetYdbStatus(), issues, ctx);
+        ReplyFinishStream(record.GetYdbStatus(), issues);
     }
 
 private:
@@ -363,7 +361,7 @@ private:
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
         // this call do nothing but Die will be called after reply to grpc
-        ReplyFinishStream("Client should not see this message, if so... may the force be with you", ctx);
+        ReplyFinishStream("Client should not see this message, if so... may the force be with you");
     }
 
     void HandleClientTimeout(const TActorContext& ctx) {
@@ -383,7 +381,7 @@ private:
                 }
 
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
-                return ReplyFinishStream(StatusIds::TIMEOUT, issue, ctx);
+                return ReplyFinishStream(StatusIds::TIMEOUT, issue);
             }
             TDuration remain = InactiveClientTimeout_ - processTime;
             timeout = timeout ? Min(timeout, remain) : remain;
@@ -403,36 +401,36 @@ private:
         }
 
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Operation timeout");
-        return ReplyFinishStream(StatusIds::TIMEOUT, issue, ctx);
+        return ReplyFinishStream(StatusIds::TIMEOUT, issue);
     }
 
-    void ReplyFinishStream(const TString& message, const TActorContext& ctx) {
+    void ReplyFinishStream(const TString& message) {
         NYql::TIssues issues;
         issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
-        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         NYql::IssueToMessage(issue, issuesMessage.Add());
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         for (auto& issue : issues) {
             auto item = issuesMessage.Add();
             NYql::IssueToMessage(issue, item);
         }
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        LOG_INFO_S(ctx, NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
+        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
             << Ydb::StatusIds::StatusCode_Name(status));
 
         // Skip sending empty result in case of success status - simplify client logic

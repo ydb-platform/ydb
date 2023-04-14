@@ -215,7 +215,7 @@ public:
             hFunc(TEvModificationFinished, Handle);
             hFunc(TEvModificationProblem, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
 

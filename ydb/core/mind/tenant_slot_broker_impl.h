@@ -949,8 +949,7 @@ private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
                       const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<IEventHandle> &ev,
-                 const TActorContext &ctx) override;
+    void Enqueue(TAutoPtr<IEventHandle> &ev) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                              const TActorContext &ctx) override;
 
@@ -1097,7 +1096,7 @@ private:
 
     STFUNC(StateInit)
     {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -1126,7 +1125,7 @@ private:
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
+            if (!HandleDefaultEvents(ev, SelfId())) {
                 Y_FAIL("TTenantSlotBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
                        ev->GetTypeRewrite(), ev->ToString().data());
             }

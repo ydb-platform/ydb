@@ -66,7 +66,7 @@ namespace NActors {
         STFUNC(StateInit) {
             Bootstrap();
             if (ev->Type != TEvents::TSystem::Bootstrap) { // for dynamic nodes we do not receive Bootstrap event
-                Receive(ev, ctx);
+                Receive(ev);
             }
         }
 

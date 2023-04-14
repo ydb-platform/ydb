@@ -67,7 +67,7 @@ public:
         , TGrpcServiceClient(settings)
     {}
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvAccessService::TEvAuthenticateRequest, Handle);
             hFunc(TEvAccessService::TEvAuthorizeRequest, Handle);

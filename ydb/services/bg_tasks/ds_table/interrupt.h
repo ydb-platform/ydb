@@ -22,7 +22,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
 

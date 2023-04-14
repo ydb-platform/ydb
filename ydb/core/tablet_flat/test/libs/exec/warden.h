@@ -44,7 +44,7 @@ namespace NFake {
             Logger = new NUtil::TLogger(sys, NKikimrServices::FAKE_ENV);
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
+        void Inbox(TEventHandlePtr &eh)
         {
             if (ShouldForward(eh->GetTypeRewrite())) {
                 auto proxy = eh.Get()->GetForwardOnNondeliveryRecipient();

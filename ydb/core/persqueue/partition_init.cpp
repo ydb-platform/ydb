@@ -35,7 +35,7 @@ void TInitializer::Execute(const TActorContext& ctx) {
 
 bool TInitializer::Handle(STFUNC_SIG) {
     Y_VERIFY(InProgress, "Initialization is not started");
-    return CurrentStep->Get()->Handle(ev,ctx);
+    return CurrentStep->Get()->Handle(ev);
 }
 
 void TInitializer::Next(const TActorContext& ctx) {
@@ -44,8 +44,8 @@ void TInitializer::Next(const TActorContext& ctx) {
 }
 
 void TInitializer::Done(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName() 
-                                                << "' partition " << Partition->Partition 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName()
+                                                << "' partition " << Partition->Partition
                                                 << ". Completed.");
     InProgress = false;
     Partition->InitComplete(ctx);
@@ -66,8 +66,8 @@ void TInitializer::DoNext(const TActorContext& ctx) {
         }
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName() 
-                                                << "' partition " << Partition->Partition 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName()
+                                                << "' partition " << Partition->Partition
                                                 << ". Step " << CurrentStep->Get()->Name);
     CurrentStep->Get()->Execute(ctx);
 }
@@ -77,7 +77,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
 // TInitializerStep
 //
 
-TInitializerStep::TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition) 
+TInitializerStep::TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition)
     : Name(name)
     , SkipNewPartition(skipNewPartition)
     , Initializer(initializer) {
@@ -89,7 +89,6 @@ void TInitializerStep::Done(const TActorContext& ctx) {
 
 bool TInitializerStep::Handle(STFUNC_SIG) {
     Y_UNUSED(ev);
-    Y_UNUSED(ctx);
 
     return false;
 }
@@ -122,7 +121,7 @@ TBaseKVStep::TBaseKVStep(TInitializer* initializer, TString name, bool skipNewPa
 bool TBaseKVStep::Handle(STFUNC_SIG) {
     switch(ev->GetTypeRewrite())
     {
-        HFunc(TEvKeyValue::TEvResponse, Handle);
+        HFuncCtx(TEvKeyValue::TEvResponse, Handle, TActivationContext::AsActorContext());
         default:
             return false;
     }
@@ -406,7 +405,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         default:
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_FAIL("bad status");
-    };    
+    };
 }
 
 
@@ -495,7 +494,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                     << " offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
                     << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
         );
-        dataKeysBody.push_back({k, pair.GetValueSize(), 
+        dataKeysBody.push_back({k, pair.GetValueSize(),
                         TInstant::Seconds(pair.GetCreationUnixTime()),
                         dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size});
     }

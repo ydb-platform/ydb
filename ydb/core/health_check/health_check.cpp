@@ -2543,7 +2543,7 @@ public:
         ReplyAndPassAway();
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvPrivate::TEvResult, Handle);
@@ -2652,7 +2652,7 @@ public:
         }
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSelfCheckRequest, Handle);
             hFunc(TEvNodeCheckRequest, Handle);

@@ -53,6 +53,19 @@ public:
         (protoThis->*Member)(ev, ctx);
     }
 
+    template <
+        typename TOrigActor,
+        typename TProtocol,
+        void (TProtocol::*Member)(
+            TAutoPtr<IEventHandle>&)>
+    void CallProtocolStateFunc(
+        TAutoPtr<IEventHandle>& ev)
+    {
+        TOrigActor* orig = static_cast<TOrigActor*>(this);
+        TProtocol* protoThis = static_cast<TProtocol*>(orig);
+        (protoThis->*Member)(ev);
+    }
+
     TProtoReadyActor() {
         DerivedActorFunc = this->CurrentStateFunc();
         this->TBaseActor<TDerived>::Become(
@@ -83,11 +96,11 @@ private:
         auto funcIter = ProtocolFunctions.find(ev->Type);
 
         if (funcIter == ProtocolFunctions.end()) {
-            return (this->*DerivedActorFunc)(ev, ctx);
+            return (this->*DerivedActorFunc)(ev);
         }
 
         auto func = funcIter->second;
-        return (this->*func)(ev, ctx);
+        return (this->*func)(ev);
     }
 };
 

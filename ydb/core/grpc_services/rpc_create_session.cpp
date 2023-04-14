@@ -74,13 +74,13 @@ private:
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             // Overide default forget action which terminate this actor on client disconnect
             hFunc(TRpcServices::TEvForgetOperation, HandleForget);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 

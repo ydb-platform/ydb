@@ -52,7 +52,6 @@ public:
     { }
 
     STFUNC(Handler) {
-        Y_UNUSED(ctx);
         try {
             switch (ev->GetTypeRewrite()) {
                 cFunc(NActors::TEvents::TEvPoison::EventType, TLocalTaskRunnerActor::PassAway);

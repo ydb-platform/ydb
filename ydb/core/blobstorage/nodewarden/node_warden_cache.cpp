@@ -15,7 +15,7 @@ void TNodeWarden::Handle(TEvents::TEvInvokeResult::TPtr ev) {
 
     // process message
     try {
-        ev->Get()->Process(TActivationContext::ActorContextFor(SelfId()));
+        ev->Get()->Process(ActorContext());
     } catch (const std::exception&) {
         Y_FAIL("Exception while executing sync callback: %s", CurrentExceptionMessage().data());
     }

@@ -383,7 +383,7 @@ public:
 
 private:
     STFUNC(StateWork) {
-        Callback(ev, ctx);
+        Callback(ev, this->ActorContext());
     }
 
 private:

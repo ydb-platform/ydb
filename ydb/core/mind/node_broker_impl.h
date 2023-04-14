@@ -135,8 +135,7 @@ private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
                       const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<IEventHandle> &ev,
-                 const TActorContext &ctx) override;
+    void Enqueue(TAutoPtr<IEventHandle> &ev) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                              const TActorContext &ctx) override;
     void Cleanup(const TActorContext &ctx);
@@ -159,9 +158,9 @@ private:
 
     STFUNC(StateInit)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
+        LOG_DEBUG(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
                   ev->GetTypeRewrite(), ev->ToString().data());
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -184,7 +183,7 @@ private:
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
+            if (!HandleDefaultEvents(ev, SelfId())) {
                 Y_FAIL("TNodeBroker::StateWork unexpected event type: %" PRIx32 " event: %s from %s",
                        ev->GetTypeRewrite(), ev->ToString().data(),
                        ev->Sender.ToString().data());

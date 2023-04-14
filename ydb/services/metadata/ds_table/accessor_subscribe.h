@@ -55,7 +55,7 @@ public:
             hFunc(TEvAsk, Handle);
             hFunc(TEvUnsubscribe, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
 

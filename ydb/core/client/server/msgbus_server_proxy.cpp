@@ -70,7 +70,7 @@ public:
     }
 
     //STFUNC(StateWork)
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
         }

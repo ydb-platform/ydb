@@ -3738,7 +3738,6 @@ void TExecutor::AllowBorrowedGarbageCompaction(ui32 tableId) {
 
 STFUNC(TExecutor::StateInit) {
     Y_UNUSED(ev);
-    Y_UNUSED(ctx);
     Y_FAIL("must be no events before boot processing");
 }
 
@@ -3751,7 +3750,7 @@ STFUNC(TExecutor::StateBoot) {
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
     default:
-        return TranscriptBootOpResult(BootLogic->Receive(*ev), ctx);
+        return TranscriptBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }
 }
 
@@ -3787,7 +3786,6 @@ STFUNC(TExecutor::StateWork) {
 }
 
 STFUNC(TExecutor::StateFollower) {
-    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
@@ -3816,7 +3814,7 @@ STFUNC(TExecutor::StateFollowerBoot) {
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
     default:
-        return TranscriptFollowerBootOpResult(BootLogic->Receive(*ev), ctx);
+        return TranscriptFollowerBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }
 }
 

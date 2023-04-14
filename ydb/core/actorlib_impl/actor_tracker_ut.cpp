@@ -90,7 +90,7 @@ public:
     }
 
     STFUNC(StateFunc) {
-        if (Tracker.HandleTracking(ev, ctx)) {
+        if (Tracker.HandleTracking(ev)) {
             return;
         }
 

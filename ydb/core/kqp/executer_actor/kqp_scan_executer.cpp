@@ -140,7 +140,7 @@ private:
 
         auto channelIt = resultChannelProxies.begin();
         auto handle = ev->Forward(channelIt->second->SelfId());
-        channelIt->second->Receive(handle, TlsActivationContext->AsActorContext());
+        channelIt->second->Receive(handle);
     }
 
 private:
@@ -720,7 +720,7 @@ private:
             TAutoPtr<IEventHandle> ev = new IEventHandle(
                 channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison
             );
-            channelPair.second->Receive(ev, TActivationContext::AsActorContext());
+            channelPair.second->Receive(ev);
         }
 
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {

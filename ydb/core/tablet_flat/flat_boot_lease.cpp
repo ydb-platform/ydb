@@ -25,7 +25,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
             sFunc(TEvents::TEvWakeup, HandleTimeout);

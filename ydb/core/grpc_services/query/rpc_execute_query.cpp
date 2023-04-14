@@ -89,18 +89,18 @@ public:
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-                HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 default:
-                    UnexpectedEvent(__func__, ev, ctx);
+                    UnexpectedEvent(__func__, ev);
             }
         } catch (const yexception& ex) {
-            InternalError(ex.what(), ctx);
+            InternalError(ex.what());
         }
     }
 
@@ -121,13 +121,13 @@ private:
 
         auto [fillStatus, fillIssues] = FillKqpRequest(*req, ev->Record);
         if (fillStatus != Ydb::StatusIds::SUCCESS) {
-            return ReplyFinishStream(fillStatus, fillIssues, ctx);
+            return ReplyFinishStream(fillStatus, fillIssues);
         }
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
-            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues);
         }
     }
 
@@ -199,14 +199,14 @@ private:
         ctx.Send(ev->Sender, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, issues);
 
-        ReplyFinishStream(record.GetYdbStatus(), issues, ctx);
+        ReplyFinishStream(record.GetYdbStatus(), issues);
     }
 
 private:
@@ -215,27 +215,27 @@ private:
         Y_UNUSED(ctx);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         NYql::IssueToMessage(issue, issuesMessage.Add());
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         for (auto& issue : issues) {
             auto item = issuesMessage.Add();
             NYql::IssueToMessage(issue, item);
         }
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        LOG_INFO_S(ctx, NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
+        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
             << Ydb::StatusIds::StatusCode_Name(status));
 
         // Skip sending empty result in case of success status - simplify client logic
@@ -252,16 +252,16 @@ private:
         this->PassAway();
     }
 
-    void InternalError(const TString& message, const TActorContext& ctx) {
-        LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+    void InternalError(const TString& message) {
+        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
 
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
-        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue, ctx);
+        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }
 
-    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
+    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
         InternalError(TStringBuilder() << "TExecuteQueryRPC in state " << state << " received unexpected event " <<
-            ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()), ctx);
+            ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));
     }
 
 private:

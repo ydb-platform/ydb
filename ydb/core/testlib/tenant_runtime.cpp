@@ -121,7 +121,6 @@ public:
     STFUNC(StateWork)
     {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
     }
 };
 
@@ -169,7 +168,7 @@ class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecuted
         } else {
             HoldResolve = false;
             for (auto &e : Queue)
-                StateWork(e, ctx);
+                StateWork(e);
             Queue.clear();
         }
     }
@@ -209,7 +208,7 @@ public:
 
     STFUNC(StateInit)
     {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -254,13 +253,12 @@ public:
 
     STFUNC(StateInit)
     {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
     {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
     }
 };
 
@@ -309,7 +307,7 @@ public:
 
     STFUNC(StateInit)
     {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -318,7 +316,7 @@ public:
             HFunc(TEvTenantSlotBroker::TEvAlterTenant, Handle);
             HFunc(TEvTenantSlotBroker::TEvGetTenantState, Handle);
         default:
-            HandleDefaultEvents(ev, ctx);
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 private:
@@ -651,7 +649,7 @@ public:
 
     STFUNC(StateInit)
     {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -671,7 +669,7 @@ public:
             IgnoreFunc(TEvLocal::TEvSyncTablets);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
+            if (!HandleDefaultEvents(ev, SelfId())) {
                 //Y_FAIL("TFakeHive::StateWork unexpected event type: %" PRIx32 " event: %s",
                 //       ev->GetTypeRewrite(), ev->HasEvent() ? ~ev->GetBase()->ToString() : "serialized?");
             }

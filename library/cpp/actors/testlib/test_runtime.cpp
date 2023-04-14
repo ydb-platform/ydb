@@ -95,7 +95,6 @@ namespace NActors {
         }
 
         STFUNC(StateFunc) {
-            Y_UNUSED(ctx);
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
             if (Runtime->BlockedOutput.find(ev->Sender) != Runtime->BlockedOutput.end()) {
@@ -397,7 +396,7 @@ namespace NActors {
                             TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
                             TActivationContext *prevTlsActivationContext = TlsActivationContext;
                             TlsActivationContext = &ctx;
-                            recipientActor->Receive(ev, ctx);
+                            recipientActor->Receive(ev);
                             TlsActivationContext = prevTlsActivationContext;
                             // we expect the logger to never die in tests
                         }
@@ -1627,7 +1626,7 @@ namespace NActors {
                 TCallstack::GetTlsCallstack() = ev->Callstack;
                 TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
-                recipientActor->Receive(ev, ctx);
+                recipientActor->Receive(ev);
                 node->ExecutorThread->DropUnregistered();
             }
             CurrentRecipient = TActorId();
@@ -1853,7 +1852,7 @@ namespace NActors {
             bool wasEmpty = !Context->Queue->Head();
             Context->Queue->Push(ev.Release());
             if (wasEmpty) {
-                SendHead(ctx);
+                SendHead(ActorContext());
             }
         }
 
@@ -1865,6 +1864,7 @@ namespace NActors {
             if (HasReply) {
                 delete Context->Queue->Pop();
             }
+            auto ctx(ActorContext());
             ctx.ExecutorThread.Send(IEventHandle::Forward(ev, originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
@@ -1916,7 +1916,7 @@ namespace NActors {
     };
 
     void TStrandingActorDecorator::TReplyActor::StateFunc(STFUNC_SIG) {
-        Owner->Reply(ev, ctx);
+        Owner->Reply(ev);
     }
 
     class TStrandingDecoratorFactory : public IStrandingDecoratorFactory {

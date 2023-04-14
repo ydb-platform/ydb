@@ -78,7 +78,7 @@ public:
             HFunc(TEvReadyState, OnReadyState);
             HFunc(TEvPingResponse, OnPingResponse);
             default:
-                TBase::HandlerBase(ev, ctx);
+                TBase::HandlerBase(ev);
         }
     }
 
@@ -86,7 +86,7 @@ public:
         switch (const ui32 etype = ev->GetTypeRewrite()) {
             sFunc(TEvMessageProcessed, OnMessageProcessed);
             default:
-                TBase::ShutdownHandlerBase(ev, ctx);
+                TBase::ShutdownHandlerBase(ev);
         }
     }
 

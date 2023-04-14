@@ -91,7 +91,7 @@ protected:
             CFunc(TEvTabletPipe::TEvClientDestroyed::EventType, Disconnect);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:
-            LOG_DEBUG(ctx, NKikimrServices::CMS, "HTTP::StateWork ignored event type: %" PRIx32 " event: %s",
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "HTTP::StateWork ignored event type: %" PRIx32 " event: %s",
                       ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

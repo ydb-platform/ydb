@@ -57,7 +57,7 @@ public:
             hFunc(TEvents::TEvUndelivered, ResendToOwnerAndDie);
             hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, Handle);
             default:
-                LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }

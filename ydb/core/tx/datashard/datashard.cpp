@@ -3195,14 +3195,14 @@ bool TDataShard::AddExpectation(ui64 target, ui64 step, ui64 txId) {
 bool TDataShard::RemoveExpectation(ui64 target, ui64 txId) {
     bool removed = OutReadSets.RemoveExpectation(target, txId);
     if (removed && !OutReadSets.HasExpectations(target)) {
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = ActorContext();
         ResendReadSetPipeTracker.DetachTablet(Max<ui64>(), target, 0, ctx);
     }
 
     // progress one more tx to force delayed schema operations
     if (removed && OutReadSets.Empty() && Pipeline.HasSchemaOperation()) {
         // TODO: wait for empty OutRS in a separate unit?
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = ActorContext();
         Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         PlanQueue.Progress(ctx);
     }

@@ -373,14 +373,14 @@ public:
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleEnqueue);
             hFunc(TEvConfigureQueryTimeout, WakeupUnconfigured);
-            default: return StateCommon(ev, ctx);
+            default: return StateCommon(ev);
         }
     }
 
     STFUNC(StateUnconfiguredTimeout) {
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleError);
-            default: return StateUnconfigured(ev, ctx);
+            default: return StateUnconfigured(ev);
         }
     }
 
@@ -388,28 +388,28 @@ public:
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleEnqueue);
             hFunc(TEvEstablishingSessionTimeout, WakeupEstablishingSessions);
-            default: return StateCommon(ev, ctx);
+            default: return StateCommon(ev);
         }
     }
 
     STFUNC(StateEstablishingSessionsTimeout) {
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleError);
-            default: return StateEstablishingSessions(ev, ctx);
+            default: return StateEstablishingSessions(ev);
         }
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleNormal);
-            default: return StateCommon(ev, ctx);
+            default: return StateCommon(ev);
         }
     }
 
     STFUNC(StateEjected) {
         switch (ev->GetTypeRewrite()) {
             HANDLE_EVENTS(HandleError);
-            default: return StateCommon(ev, ctx);
+            default: return StateCommon(ev);
         }
     }
 };

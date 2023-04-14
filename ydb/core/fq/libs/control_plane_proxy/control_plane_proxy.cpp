@@ -528,7 +528,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRateLimiter::TEvCreateResourceResponse, Handle);
         default:
-            return TBaseRequestActor::StateFunc(ev, ctx);
+            return TBaseRequestActor::StateFunc(ev);
         }
     }
 

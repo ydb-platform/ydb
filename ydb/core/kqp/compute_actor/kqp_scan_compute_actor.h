@@ -39,7 +39,7 @@ public:
                 hFunc(TEvScanExchange::TEvFetcherFinished, Handle);
                 hFunc(TEvScanExchange::TEvTerminateFromFetcher, Handle)
                 default:
-                    BaseStateFuncBody(ev, ctx);
+                    BaseStateFuncBody(ev);
             }
         } catch (const TMemoryLimitExceededException& e) {
             const TString sInfo = TStringBuilder() << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()

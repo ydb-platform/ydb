@@ -61,7 +61,7 @@ namespace NKikimr {
         }
 
         void StateInit(STFUNC_SIG) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         void StateWork(STFUNC_SIG) {

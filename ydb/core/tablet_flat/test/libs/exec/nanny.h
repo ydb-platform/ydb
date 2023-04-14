@@ -116,7 +116,7 @@ namespace NFake {
             Owner = owner, StartTablet();
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
+        void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<NFake::TEvResult>()) {
                 Handle(*ev);

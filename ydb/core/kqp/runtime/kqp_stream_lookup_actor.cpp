@@ -238,8 +238,6 @@ private:
     }
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
-
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);

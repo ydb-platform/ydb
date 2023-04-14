@@ -30,14 +30,14 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
 
     private:
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvCustomTablet::TEvHelloRequest, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
             }
         }
 

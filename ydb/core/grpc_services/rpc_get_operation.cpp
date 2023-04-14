@@ -112,7 +112,7 @@ public:
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
 
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 private:

@@ -45,7 +45,6 @@ public:
     }
 
     STFUNC(StatePublish) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
             sFunc(TEvents::TEvUndelivered, SomeSleep);
@@ -56,7 +55,6 @@ public:
     }
 
     STFUNC(StateSleep) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
             sFunc(TEvents::TEvWakeup, Bootstrap);
@@ -99,7 +97,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
         default:

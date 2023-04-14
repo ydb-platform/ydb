@@ -333,10 +333,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             IsDead = true;
         }
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
             }
         }
 
@@ -422,10 +422,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             return TBase::TBase::Handle(ev, ctx);
         }
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-                default: TBase::StateWork(ev, ctx);
+                default: TBase::StateWork(ev);
             }
         }
 

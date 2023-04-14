@@ -38,12 +38,12 @@ STFUNC(TController::StateInit) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvents::TEvPoison, Handle);
     default:
-        return StateInitImpl(ev, ctx);
+        return StateInitImpl(ev, SelfId());
     }
 }
 
 STFUNC(TController::StateZombie) {
-    StateInitImpl(ev, ctx);
+    StateInitImpl(ev, SelfId());
 }
 
 STFUNC(TController::StateWork) {

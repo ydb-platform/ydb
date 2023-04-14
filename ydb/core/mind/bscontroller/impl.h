@@ -1699,7 +1699,6 @@ private:
     void RenderGroupRow(IOutputStream& out, const TGroupInfo& group);
 
     void Enqueue(STFUNC_SIG) override {
-        Y_UNUSED(ctx);
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC04, "Enqueue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
             (Event, ev->ToString()));
         InitQueue.push_back(ev);
@@ -1880,7 +1879,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             default:
-                StateInitImpl(ev, ctx);
+                StateInitImpl(ev, SelfId());
         }
     }
 
@@ -1985,7 +1984,7 @@ public:
             cFunc(TEvPrivate::EvVSlotNotReadyHistogramUpdate, VSlotNotReadyHistogramUpdate);
             cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
             default:
-                if (!HandleDefaultEvents(ev, ctx)) {
+                if (!HandleDefaultEvents(ev, SelfId())) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
                         (Event, ev->ToString()));
                 }
@@ -1999,7 +1998,7 @@ public:
     }
 
     STFUNC(StateBroken) {
-        HandleDefaultEvents(ev, ctx);
+        HandleDefaultEvents(ev, SelfId());
     }
 
     void LoadFinished() {

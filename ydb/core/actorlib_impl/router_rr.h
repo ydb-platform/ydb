@@ -26,15 +26,15 @@ namespace NActors {
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
                     HFunc(TEvents::TEvBootstrap, Handle);
-                default: HandleDefault(ev, ctx);
+                default: HandleDefault(ev);
             }
         }
 
-        void HandleDefault(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
+        void HandleDefault(TAutoPtr<IEventHandle> &ev) {
             TAutoPtr<IEventHandle> f = ev->Forward(Actors[Pos++]);
             if (Pos == Num)
                 Pos = 0;
-            ctx.ExecutorThread.Send(f);
+            Send(f);
         }
 
         void Handle(TEvents::TEvBootstrap::TPtr &, const TActorContext &ctx) {

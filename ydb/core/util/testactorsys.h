@@ -153,7 +153,7 @@ class TTestActorSystem {
             HandlePtr = nullptr;
         }
 
-        void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& /*ctx*/) {
+        void StateFunc(TAutoPtr<IEventHandle>& ev) {
             Y_VERIFY(HandlePtr, "event is not being captured by this actor Tag# %s", Tag.data());
             Y_VERIFY(!*HandlePtr);
             HandlePtr->reset(ev.Release());
@@ -521,7 +521,7 @@ public:
                 const ui32 type = ev->GetTypeRewrite();
 
                 THPTimer timer;
-                actor->Receive(ev, TActivationContext::AsActorContext());
+                actor->Receive(ev);
                 const TDuration timing = TDuration::Seconds(timer.Passed());
 
                 const auto it = ActorName.find(actor);

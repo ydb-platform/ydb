@@ -70,7 +70,7 @@ namespace NKikimr {
         using IActor::Send; // name is used by IActor API
 
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
@@ -83,7 +83,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvPong, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
             }
         }
 
@@ -226,7 +226,7 @@ namespace NKikimr {
         }
 
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
@@ -241,7 +241,7 @@ namespace NKikimr {
                 HFunc(TEvConsumerTablet::TEvReject, Handle);
                 HFunc(TEvPrivate::TEvGetServerPipeInfo, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
             }
         }
 
@@ -349,7 +349,7 @@ namespace NKikimr {
         }
 
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
@@ -360,7 +360,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvPing, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
             }
         }
 
@@ -1073,7 +1073,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
@@ -1084,7 +1084,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
                 HFunc(TEvents::TEvPing, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
             }
         }
 

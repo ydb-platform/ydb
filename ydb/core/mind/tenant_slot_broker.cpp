@@ -437,10 +437,9 @@ void TTenantSlotBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &,
     Die(ctx);
 }
 
-void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
-                                const TActorContext &ctx)
+void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
+    LOG_DEBUG(*TlsActivationContext, NKikimrServices::TENANT_SLOT_BROKER,
               "Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
               TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
     InitQueue.push_back(ev);

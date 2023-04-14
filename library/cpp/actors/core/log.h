@@ -84,6 +84,16 @@
 #define LOG_DEBUG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
 #define LOG_TRACE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, stream)
 
+#define ALOG_EMERG(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_EMERG, component, stream)
+#define ALOG_ALERT(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_ALERT, component, stream)
+#define ALOG_CRIT(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_CRIT, component, stream)
+#define ALOG_ERROR(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_ERROR, component, stream)
+#define ALOG_WARN(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_WARN, component, stream)
+#define ALOG_NOTICE(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_NOTICE, component, stream)
+#define ALOG_INFO(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_INFO, component, stream)
+#define ALOG_DEBUG(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_DEBUG, component, stream)
+#define ALOG_TRACE(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, component, stream)
+
 #define LOG_EMERG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, __VA_ARGS__)
 #define LOG_ALERT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, __VA_ARGS__)
 #define LOG_CRIT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, __VA_ARGS__)
@@ -205,7 +215,7 @@ namespace NActors {
                      std::shared_ptr<NMonitoring::TMetricRegistry> metrics);
         ~TLoggerActor();
 
-        void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void StateFunc(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TFlushLogBuffer, FlushLogBufferMessageEvent);
                 HFunc(NLog::TEvLog, HandleLogEvent);

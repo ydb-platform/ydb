@@ -47,10 +47,10 @@ private:
         this->Become(&TDerived::StateResolvePath);
     }
 
-    void StateResolvePath(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateResolvePath(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 
@@ -97,10 +97,10 @@ private:
         this->Become(&TDerived::StateWork);
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 

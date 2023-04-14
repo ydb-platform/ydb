@@ -54,9 +54,9 @@ TPQDescribeTopicActor::TPQDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescrib
 {
 }
 
-void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
+        default: TBase::StateWork(ev);
     }
 }
 
@@ -488,24 +488,24 @@ TDescribeTopicActorImpl::TDescribeTopicActorImpl(const TString& consumer)
 
 bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-        HFunc(NKikimr::TEvPersQueue::TEvStatusResponse, Handle);
-        HFunc(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
+        HFuncCtx(TEvTabletPipe::TEvClientDestroyed, Handle, ctx);
+        HFuncCtx(TEvTabletPipe::TEvClientConnected, Handle, ctx);
+        HFuncCtx(NKikimr::TEvPersQueue::TEvStatusResponse, Handle, ctx);
+        HFuncCtx(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle, ctx);
         default: return false;
     }
     return true;
 }
 
-void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-    if (!TDescribeTopicActorImpl::StateWork(ev, ctx)) {
-        TBase::StateWork(ev, ctx);
+void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
+    if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
+        TBase::StateWork(ev);
     }
 }
 
-void TDescribeConsumerActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-    if (!TDescribeTopicActorImpl::StateWork(ev, ctx)) {
-        TBase::StateWork(ev, ctx);
+void TDescribeConsumerActor::StateWork(TAutoPtr<IEventHandle>& ev) {
+    if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
+        TBase::StateWork(ev);
     }
 }
 

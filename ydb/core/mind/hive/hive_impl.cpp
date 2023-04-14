@@ -2515,13 +2515,13 @@ STFUNC(THive::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
     default:
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 }
 
 STFUNC(THive::StateWork) {
     if (ResponsivenessPinger)
-        ResponsivenessPinger->OnAnyEvent(ctx);
+        ResponsivenessPinger->OnAnyEvent();
 
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvHive::TEvCreateTablet, Handle);
@@ -2593,7 +2593,7 @@ STFUNC(THive::StateWork) {
         hFunc(TEvHive::TEvTabletOwnersReply, Handle);
         hFunc(TEvPrivate::TEvBalancerOut, Handle);
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
+        if (!HandleDefaultEvents(ev, SelfId())) {
             BLOG_W("THive::StateWork unhandled event type: " << ev->GetTypeRewrite()
                    << " event: " << ev->ToString());
         }

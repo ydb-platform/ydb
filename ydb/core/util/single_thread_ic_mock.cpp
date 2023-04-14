@@ -174,7 +174,6 @@ public:
     }
 
     void StateUndelivered(STFUNC_SIG) {
-        Y_UNUSED(ctx);
         if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
             TActor::PassAway();
         } else {
@@ -360,7 +359,7 @@ void TMock::TProxyActor::CreateSession() {
 
 void TMock::TProxyActor::ForwardToSession(TAutoPtr<IEventHandle> ev) {
     if (TSessionActor *session = GetSession()) {
-        InvokeOtherActor(*session, &TSessionActor::Receive, ev, TActivationContext::ActorContextFor(session->SelfId()));
+        InvokeOtherActor(*session, &TSessionActor::Receive, ev);
     } else {
         const bool first = PendingEvents.empty();
         PendingEvents.emplace_back(ev.Release());

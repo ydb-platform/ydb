@@ -97,7 +97,7 @@ public:
             hFunc(TTableExistsActor::TEvController::TEvError, Handle);
             hFunc(TTableExistsActor::TEvController::TEvResult, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
     TDSAccessorSimple(const NRequest::TConfig& config, ISnapshotConstructorController::TPtr outputController,

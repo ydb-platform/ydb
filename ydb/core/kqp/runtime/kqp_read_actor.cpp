@@ -395,7 +395,6 @@ public:
     }
 
     STFUNC(ReadyState) {
-        Y_UNUSED(ctx);
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDataShard::TEvReadResult, HandleRead);

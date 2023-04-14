@@ -952,7 +952,7 @@ public:
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
-                LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }
@@ -1516,7 +1516,7 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
 
         default:
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
+            ALOG_DEBUG(NKikimrServices::LOCAL,
                         "TLocal: Unhandled in StateResolveSubDomain type: " <<  ev->GetTypeRewrite() <<
                         " event: " << ev->ToString());
             break;

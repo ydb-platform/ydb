@@ -382,7 +382,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -403,8 +403,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         default:
-            if (!Initializer.Handle(ev, ctx)) {
-                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+            if (!Initializer.Handle(ev)) {
+                ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
             }
             break;
         };
@@ -414,7 +414,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -458,7 +458,7 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
         };
     }
@@ -467,7 +467,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
+        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -512,7 +512,7 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
+            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
             break;
         };
     }

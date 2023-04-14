@@ -115,7 +115,6 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         STFUNC(DefaultFunc) {
-            Y_UNUSED(ctx);
             Y_UNUSED(ev);
         }
 
@@ -173,7 +172,6 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         STFUNC(DefaultFunc) {
-            Y_UNUSED(ctx);
             Y_UNUSED(ev);
         }
 
@@ -269,7 +267,6 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         }
 
         STFUNC(DefaultFunc) {
-            Y_UNUSED(ctx);
             Y_UNUSED(ev);
         }
 

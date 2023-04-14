@@ -57,7 +57,6 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         }
 
         STFUNC(StateLookup) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvStateStorage::TEvInfo, HandleLookup);
             }
@@ -74,7 +73,6 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
         }
 
         STFUNC(StateUpdate) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvStateStorage::TEvInfo, HandleUpdate);
             }

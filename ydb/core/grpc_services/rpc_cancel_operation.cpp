@@ -111,7 +111,7 @@ public:
             hFunc(TEvImport::TEvCancelImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvCancelResponse, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 

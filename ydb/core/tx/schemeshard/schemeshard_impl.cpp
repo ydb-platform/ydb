@@ -3970,7 +3970,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , CompactionStarter(this)
     , BorrowedCompactionStarter(this)
     , ShardDeleter(info->TabletID)
-    , TableStatsQueue(this, 
+    , TableStatsQueue(this,
             COUNTER_STATS_QUEUE_SIZE,
             COUNTER_STATS_WRITTEN,
             COUNTER_STATS_BATCH_LATENCY)
@@ -4148,7 +4148,6 @@ void TSchemeShard::Cleanup(const TActorContext &ctx) {
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
-    Y_UNUSED(ctx);
     Y_FAIL_S("No enqueue method implemented."
               << " unhandled event type: " << ev->GetTypeRewrite()
              << " event: " << ev->ToString());
@@ -4167,12 +4166,12 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
     default:
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 }
 
 void TSchemeShard::StateConfigure(STFUNC_SIG) {
-    SelfPinger->OnAnyEvent(ctx);
+    SelfPinger->OnAnyEvent(this->ActorContext());
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
@@ -4205,8 +4204,8 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateConfigure:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
@@ -4215,7 +4214,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
 }
 
 void TSchemeShard::StateWork(STFUNC_SIG) {
-    SelfPinger->OnAnyEvent(ctx);
+    SelfPinger->OnAnyEvent(this->ActorContext());
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
@@ -4376,8 +4375,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
 
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateWork:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
@@ -4391,8 +4390,8 @@ void TSchemeShard::BrokenState(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "BrokenState:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());

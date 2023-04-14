@@ -313,7 +313,7 @@ private:
     {
         UNIT_ASSERT_VALUES_EQUAL((int)Abort, (int)abort);
 
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = ActorContext();
         if (abort == EAbort::None) {
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRows, StoredRows);
         }
@@ -509,7 +509,7 @@ public:
     {}
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
@@ -524,7 +524,7 @@ public:
             HFunc(NFake::TEvReturn, Handle);
             HFunc(TEvents::TEvPoison, Handle);
         default:
-            HandleDefaultEvents(ev, ctx);
+            HandleDefaultEvents(ev, SelfId());
             break;
         }
     }
@@ -3450,11 +3450,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 TAutoPtr<IEventHandle>& ev)
         {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTablet::TEvFollowerAttach, Handle);
-                HFunc(TEvTablet::TEvFollowerDetach, Handle);
-                HFunc(TEvTablet::TEvFollowerUpdate, Handle);
-                HFunc(TEvTablet::TEvCommit, Handle);
-                HFunc(TEvTabletBase::TEvWriteLogResult, Handle);
+                HFuncCtx(TEvTablet::TEvFollowerAttach, Handle, ctx);
+                HFuncCtx(TEvTablet::TEvFollowerDetach, Handle, ctx);
+                HFuncCtx(TEvTablet::TEvFollowerUpdate, Handle, ctx);
+                HFuncCtx(TEvTablet::TEvCommit, Handle, ctx);
+                HFuncCtx(TEvTabletBase::TEvWriteLogResult, Handle, ctx);
                 default:
                     return PrevObserverFunc(ctx, ev);
             }

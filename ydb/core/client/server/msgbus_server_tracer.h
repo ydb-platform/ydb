@@ -86,7 +86,7 @@ public:
     }
 
     TMessageBusTracerService();
-    void StateFunc(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
+    void StateFunc(TAutoPtr<IEventHandle> &ev);
 
 private:
     void HandleStartTrace(TEvMessageBusTracer::TEvStartTrace::TPtr &ev, const TActorContext &ctx);

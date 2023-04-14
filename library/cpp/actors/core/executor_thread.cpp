@@ -192,7 +192,7 @@ namespace NActors {
                         NProfiling::TMemoryTagScope::Reset(ActorSystem->MemProfActivityBase + activityType);
                     }
 
-                    actor->Receive(ev, ctx);
+                    actor->Receive(ev);
 
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);

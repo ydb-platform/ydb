@@ -215,7 +215,6 @@ public:
 
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvBeginTxResult, Handle);
         }
@@ -278,7 +277,6 @@ public:
 
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvCommitTxResult, Handle);
         }
@@ -350,7 +348,6 @@ public:
 
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvRollbackTxResult, Handle);
         }
@@ -513,7 +510,6 @@ public:
     }
 
     STFUNC(StateMain) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
@@ -704,7 +700,6 @@ protected:
 
 private:
     STFUNC(StateMain) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TWritersController::TEvPrivate::TEvShardsWriteResult, Handle)
             hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle);
@@ -829,7 +824,6 @@ public:
     }
 
     STFUNC(StateNavigate) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         }
@@ -1016,7 +1010,6 @@ private:
     }
 
     STFUNC(StateNavigate) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         }
@@ -1082,7 +1075,6 @@ private:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);

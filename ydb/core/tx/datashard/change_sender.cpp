@@ -301,12 +301,12 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvActivateSender, Handle);
         default:
-            return StateBase(ev, ctx);
+            return StateBase(ev);
         }
     }
 
     STFUNC(StateActive) {
-        return StateBase(ev, ctx);
+        return StateBase(ev);
     }
 
 private:

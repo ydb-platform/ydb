@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TDummyActor() : TActor<TDummyActor>(&TDummyActor::StateFunc) {}
         STFUNC(StateFunc) {
             (void)ev;
-            (void)ctx;
         }
     };
 
@@ -113,6 +112,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             if (CheckWorkIsDone())
                 return;
 
+            auto ctx(ActorContext());
             if (AllocatesMemory) {
                 SpecialSend(new IEventHandle(ev->Sender, SelfId(), new TEvents::TEvPing()), ctx);
             } else {
@@ -564,14 +564,14 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         {
         }
 
-        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
+        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
             *Counter += 1;
             if (ev->Type != TEvents::THelloWorld::Pong) {
                 TAutoPtr<IEventHandle> pingEv = new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPing());
                 SavedEvent = ev;
-                Actor->Receive(pingEv, ctx);
+                Actor->Receive(pingEv);
             } else {
-                Actor->Receive(SavedEvent, ctx);
+                Actor->Receive(SavedEvent);
             }
             return false;
         }

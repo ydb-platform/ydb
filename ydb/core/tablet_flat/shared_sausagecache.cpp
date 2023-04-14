@@ -1017,7 +1017,6 @@ public:
     }
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(NSharedCache::TEvAttach, Handle);
             hFunc(NSharedCache::TEvRequest, Handle);

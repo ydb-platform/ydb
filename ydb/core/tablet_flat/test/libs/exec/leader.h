@@ -44,7 +44,7 @@ namespace NFake {
             Sys->RegisterLocalService(TWorld::Where(EPath::Root), SelfId());
         }
 
-        void Inbox(TAutoPtr<::NActors::IEventHandle> &eh, const ::NActors::TActorContext&)
+        void Inbox(TAutoPtr<::NActors::IEventHandle> &eh)
         {
             if (auto *fire = eh->CastAsLocal<NFake::TEvFire>()) {
                 DoFire(fire->Level, fire->Alias, fire->Cmd);

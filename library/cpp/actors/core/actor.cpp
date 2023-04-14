@@ -12,6 +12,10 @@ namespace NActors {
         SelfActorId.Out(out);
     }
 
+    bool IActor::Send(TAutoPtr<IEventHandle> ev) const noexcept {
+        return TActivationContext::Send(ev);
+    }
+
     bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
         return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
     }
@@ -142,7 +146,7 @@ namespace NActors {
     }
 
     void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
-        (actor->*StateFunc)(ev, TActivationContext::AsActorContext());
+        (actor->*StateFunc)(ev);
     }
 
     void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {

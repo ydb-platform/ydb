@@ -82,7 +82,7 @@ namespace NActors {
         }
     }
 
-    bool TActorTracker::HandleTracking(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    bool TActorTracker::HandleTracking(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTrackActor, Handle);
             HFunc(TEvUntrackActor, Handle);
@@ -184,11 +184,11 @@ namespace NActors {
         return new IEventHandle(self, parent, new TEvents::TEvBootstrap);
     }
 
-    void TTrackedActorBase::InitialReceiveFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TTrackedActorBase::InitialReceiveFunc(TAutoPtr<IEventHandle>& ev) {
         // the first event MUST be the TEvBootstrap one
         Y_VERIFY(ev->GetTypeRewrite() == TEvents::TEvBootstrap::EventType);
         // notify implementation
-        AfterBootstrap(ctx);
+        AfterBootstrap(this->ActorContext());
     }
 
     void TTrackedActorBase::BindToTracker(TActorTracker *tracker) {

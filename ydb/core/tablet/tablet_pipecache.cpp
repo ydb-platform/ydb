@@ -477,7 +477,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvGetTabletNode, Handle);
             hFunc(TEvPipeCache::TEvForcePipeReconnect, Handle);

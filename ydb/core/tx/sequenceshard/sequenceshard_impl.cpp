@@ -79,13 +79,13 @@ namespace NSequenceShard {
             hFunc(TEvents::TEvPoison, Handle);
 
             default:
-                StateInitImpl(ev, ctx);
+                StateInitImpl(ev, SelfId());
                 break;
         }
     }
 
     STFUNC(TSequenceShard::StateZombie) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(TSequenceShard::StateWork) {
@@ -105,7 +105,7 @@ namespace NSequenceShard {
             HFunc(TEvSequenceShard::TEvRedirectSequence, Handle);
 
             default:
-                if (!HandleDefaultEvents(ev, ctx)) {
+                if (!HandleDefaultEvents(ev, SelfId())) {
                     Y_FAIL("Unexpected event 0x%x", ev->GetTypeRewrite());
                 }
                 break;

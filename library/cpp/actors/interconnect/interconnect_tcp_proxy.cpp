@@ -608,7 +608,7 @@ namespace NActors {
 
         Y_VERIFY(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
-        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev, TActivationContext::ActorContextFor(SessionID));
+        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {

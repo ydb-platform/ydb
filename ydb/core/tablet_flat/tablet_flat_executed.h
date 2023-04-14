@@ -61,12 +61,12 @@ protected:
     void HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx);
     void HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev);
 
-    STFUNC(StateInitImpl);
+    void StateInitImpl(TAutoPtr<IEventHandle>&, const TActorIdentity&);
 
     void ActivateExecutor(const TActorContext &ctx) override; // executor is active after this point
     void Detach(const TActorContext &ctx) override; // executor is dead after this point
 
-    bool HandleDefaultEvents(STFUNC_SIG);
+    bool HandleDefaultEvents(TAutoPtr<IEventHandle>&, const TActorIdentity&);
     virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&, const TActorContext &ctx);
 
     bool TryCaptureTxCache(ui64 size) {
@@ -97,7 +97,7 @@ private:
         switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
             HANDLERS                                                                                \
             default:                                                                                \
-                TTabletExecutedFlat::StateInitImpl(ev, ctx);                                        \
+                TTabletExecutedFlat::StateInitImpl(ev, SelfId());                                             \
         }                                                                                           \
     }
 
@@ -106,7 +106,7 @@ private:
         switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
             HANDLERS                                                                                \
             default:                                                                                \
-                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, ctx))                             \
+                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                             \
                     Y_VERIFY_DEBUG(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \
                                    __func__, ev->GetTypeRewrite(),                                  \
                                    ev->ToString().data());                                          \
@@ -118,6 +118,6 @@ private:
         switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
             HANDLERS                                                                                \
             default:                                                                                \
-                TTabletExecutedFlat::HandleDefaultEvents(ev, ctx);                                  \
+                TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId());                                  \
         }                                                                                           \
     }

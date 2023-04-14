@@ -32,7 +32,7 @@ namespace NActors {
                     }
                     Y_VERIFY(Proxy);
                 }
-                InvokeOtherActor(*Proxy, &IActor::Receive, ev, ctx);
+                InvokeOtherActor(*Proxy, &IActor::Receive, ev);
             }
         }
     };

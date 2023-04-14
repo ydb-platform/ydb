@@ -74,7 +74,7 @@ private:
             this->Send(LongTimerId, new TEvents::TEvPoison);
 
         When = this->Now() + delta;
-        auto ctx = TActivationContext::ActorContextFor(TActorBase::SelfId());
+        auto ctx = TActorBase::ActorContext();
         LongTimerId = CreateLongTimer(ctx, delta,
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
             AppData(ctx)->UserPoolId);
@@ -95,7 +95,6 @@ private:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvWakeupQueue::EventType, HandleWakeup);
         }

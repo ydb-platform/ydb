@@ -52,7 +52,7 @@
 #include "sequencer.h"
 #include "boot_queue.h"
 
-#define DEPRECATED_CTX (TlsActivationContext->ActorContextFor(SelfId()))
+#define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
 
 template <typename T>

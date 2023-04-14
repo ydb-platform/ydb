@@ -170,7 +170,7 @@ namespace NKikimr::NStorage {
         const TString& path = pdisk.GetPath();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
-        Cfg->PDiskServiceFactory->Create(TActivationContext::ActorContextFor(SelfId()), pdiskID, pdiskConfig,
+        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig,
             Cfg->CreatePDiskKey(), AppData()->SystemPoolId, LocalNodeId);
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));

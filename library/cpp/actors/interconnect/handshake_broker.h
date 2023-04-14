@@ -131,7 +131,6 @@ namespace NActors {
         static constexpr char ActorName[] = "HANDSHAKE_BROKER_ACTOR";
 
         STFUNC(StateFunc) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvHandshakeBrokerTake, Handle);
                 hFunc(TEvHandshakeBrokerFree, Handle);

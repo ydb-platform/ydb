@@ -285,7 +285,7 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
@@ -298,7 +298,7 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
@@ -311,7 +311,7 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }

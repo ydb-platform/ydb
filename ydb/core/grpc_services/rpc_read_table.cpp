@@ -173,7 +173,7 @@ public:
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleResponseData);
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);

@@ -222,7 +222,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
     }
 
@@ -234,7 +234,7 @@ protected:
             LOG_S_WARN("TColumnShard.StateBroken at " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -267,7 +267,7 @@ protected:
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
+            if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
                            << " unhandled event type: "<< ev->GetTypeRewrite()
                            << " event: " << ev->ToString());

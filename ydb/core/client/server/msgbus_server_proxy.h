@@ -82,7 +82,7 @@ public:
     void Bootstrap(const TActorContext &ctx);
 
     //STFUNC(StateFunc)
-    void StateFunc(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateFunc(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBusProxy::TEvRequest, Handle);
             HFunc(TEvBusProxy::TEvPersQueue, Handle);

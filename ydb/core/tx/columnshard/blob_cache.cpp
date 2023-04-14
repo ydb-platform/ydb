@@ -185,7 +185,7 @@ private:
         default:
             LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         };
     }

@@ -49,7 +49,6 @@ public:
     {}
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExample::TEvReplicaInfo, Handle);
             sFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -120,7 +119,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExample::TEvReplicaInfo, Handle);
         default:

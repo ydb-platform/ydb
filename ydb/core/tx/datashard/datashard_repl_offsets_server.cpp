@@ -16,7 +16,6 @@ void TReplicationSourceOffsetsServer::Unlink() {
 }
 
 void TReplicationSourceOffsetsServer::StateWork(STFUNC_SIG) {
-    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
@@ -314,8 +313,7 @@ void TDataShard::HandleByReplicationSourceOffsetsServer(STATEFN_SIG) {
     InvokeOtherActor(
         *ReplicationSourceOffsetsServer,
         &TReplicationSourceOffsetsServer::Receive,
-        ev,
-        TActivationContext::ActorContextFor(ReplicationSourceOffsetsServer->SelfId()));
+        ev);
 }
 
 } // namespace NKikimr::NDataShard

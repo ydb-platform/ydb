@@ -82,11 +82,11 @@ public:
     TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info);
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     void Enqueue(STFUNC_SIG) override {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_ALLOCATOR,
+        ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
                     "tablet# " << TabletID() <<
                     " IGNORING message type# " <<  ev->GetTypeRewrite() <<
                     " from Sender# " << ev->Sender.ToString() <<
@@ -100,8 +100,8 @@ public:
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_ALLOCATOR,
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
                             "tablet# " << TabletID() <<
                             " IGNORING message type# " <<  ev->GetTypeRewrite() <<
                             " from Sender# " << ev->Sender.ToString() <<
@@ -111,8 +111,8 @@ public:
     }
 
     STFUNC(StateBroken) {
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_ALLOCATOR,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
                         "tablet# " << TabletID() <<
                         " IGNORING message type# " <<  ev->GetTypeRewrite() <<
                         " from Sender# " << ev->Sender.ToString() <<

@@ -47,7 +47,7 @@ public:
     TNodeTrackerActor(NActors::TActorId schemeCacheActor);
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void WorkFunc(TAutoPtr<IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void WorkFunc(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvWakeup, HandleWakeup);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);

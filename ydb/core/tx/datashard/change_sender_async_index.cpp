@@ -44,7 +44,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -70,7 +70,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvStatus, Handshake);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -101,7 +101,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvRecords, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -167,7 +167,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvStatus, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -400,7 +400,7 @@ class TAsyncIndexChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleUserTable);
             sFunc(TEvents::TEvWakeup, ResolveUserTable);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -455,7 +455,7 @@ class TAsyncIndexChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndex);
             sFunc(TEvents::TEvWakeup, ResolveIndex);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -511,7 +511,7 @@ class TAsyncIndexChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndexTable);
             sFunc(TEvents::TEvWakeup, ResolveIndexTable);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -590,7 +590,7 @@ class TAsyncIndexChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleKeys);
             sFunc(TEvents::TEvWakeup, ResolveIndexTable);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -633,7 +633,7 @@ class TAsyncIndexChangeSenderMain
     /// Main
 
     STATEFN(StateMain) {
-        return StateBase(ev, TlsActivationContext->AsActorContext());
+        return StateBase(ev);
     }
 
     void Resolve() override {

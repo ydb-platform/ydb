@@ -104,7 +104,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            TBase::HandleUnexpectedEvent("TProxyRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TProxyRequestHandler", ev->GetTypeRewrite());
         }
     }
 };
@@ -147,7 +147,7 @@ public:
             HFunc(TResponse, HandleResponse);
 
         default:
-            TBase::HandleUnexpectedEvent("TKqpRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TKqpRequestHandler", ev->GetTypeRewrite());
         }
     }
 };
@@ -258,7 +258,7 @@ public:
             HFunc(TResponse, HandleResponse);
 
         default:
-            TBase::HandleUnexpectedEvent("TKqpScanQueryRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TKqpScanQueryRequestHandler", ev->GetTypeRewrite());
         }
     }
 
@@ -361,7 +361,7 @@ public:
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
 
         default:
-            TBase::HandleUnexpectedEvent("TKqpStreamRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TKqpStreamRequestHandler", ev->GetTypeRewrite());
         }
     }
 
@@ -454,7 +454,7 @@ public:
             HFunc(TResponse, HandleResponse);
 
         default:
-            TBase::HandleUnexpectedEvent("TKqpScanQueryStreamRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TKqpScanQueryStreamRequestHandler", ev->GetTypeRewrite());
         }
     }
 
@@ -690,7 +690,7 @@ public:
             HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
         default:
-            TBase::HandleUnexpectedEvent("TSchemeOpRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TSchemeOpRequestHandler", ev->GetTypeRewrite());
         }
     }
 

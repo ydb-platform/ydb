@@ -26,7 +26,6 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ctx);
                 UNIT_ASSERT_EQUAL_C(ev->Sender, Sender, "sender check");
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::Wakeup, "ev. type check");
             }
@@ -53,7 +52,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             STFUNC(StateFunc)
             {
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::PoisonPill, "ev. type check");
-                Die(ctx);
+                PassAway();
             }
         };
 
@@ -75,14 +74,12 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(OldStateFunc)
             {
-                Y_UNUSED(ctx);
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Ping, "ev. type check");
                 Become(&TMyActor::NewStateFunc);
             }
 
             STFUNC(NewStateFunc)
             {
-                Y_UNUSED(ctx);
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Pong, "ev. type check");
                 StateChanged = true;
             }
@@ -116,7 +113,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                ctx.Send(ev->Sender, new TEvents::TEvPong());
+                Send(ev->Sender, new TEvents::TEvPong());
             }
         };
 
@@ -149,7 +146,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             STFUNC(StateFunc)
             {
                 Y_UNUSED(ev);
-                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
             }
         };
 
@@ -180,7 +177,6 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ctx);
                 Y_UNUSED(ev);
             }
         };
@@ -195,8 +191,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             STFUNC(StateFunc)
             {
                 Y_UNUSED(ev);
-                ChildId = ctx.RegisterWithSameMailbox(new TChildActor());
-                ctx.Send(ChildId, new TEvents::TEvPing());
+                ChildId = RegisterWithSameMailbox(new TChildActor());
+                Send(ChildId, new TEvents::TEvPing());
             }
 
             TActorId GetChildId() const {
@@ -247,8 +243,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 Y_VERIFY(SyncMutex);
 
                 auto sender = ev->Sender;
-                auto selfID = ctx.SelfID;
-                auto actorSystem = ctx.ExecutorThread.ActorSystem;
+                auto selfID = SelfId();
+                auto actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
                 TMutex *syncMutex = SyncMutex;
 
                 SystemThreadFactory()->Run([=](){
@@ -308,12 +304,12 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             {
                 switch (ev->GetTypeRewrite()) {
                 case TEvents::THelloWorld::Ping:
-                    ctx.Schedule(TDuration::MilliSeconds(1000), new TEvents::TEvWakeup);
+                    Schedule(TDuration::MilliSeconds(1000), new TEvents::TEvWakeup);
                     Sender = ev->Sender;
                     break;
                 case TEvents::TSystem::Wakeup:
-                    CurrentTime = ctx.Now();
-                    ctx.Send(Sender, new TEvents::TEvPong());
+                    CurrentTime = TActivationContext::Now();
+                    Send(Sender, new TEvents::TEvPong());
                 };
             }
 
@@ -374,7 +370,6 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ctx);
                 switch (ev->GetTypeRewrite()) {
                 case EvCounter:
                     ui32 eventCounter = ev->CastAsLocal<TEvCounter>()->Counter;
@@ -406,8 +401,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             STFUNC(StateFunc)
             {
                 Y_UNUSED(ev);
-                SelfId = ctx.SelfID;
-                ActorSystem = ctx.ExecutorThread.ActorSystem;
+                ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
                 Thread.Reset(new TThread(&TProducerActor::ThreadProc, this));
                 Thread->Start();
             }
@@ -416,7 +410,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 TProducerActor* actor = (TProducerActor*)(param);
                 for (ui32 i = 0; i < actor->Count; ++i) {
                     for (const auto& recip : actor->Recipents) {
-                        actor->ActorSystem->Send(new IEventHandle(recip, actor->SelfId, new TEvCounter(i)));
+                        actor->ActorSystem->Send(new IEventHandle(recip, actor->SelfId(), new TEvCounter(i)));
                         if ((i % (1 + rand() % 100)) == 0) {
                             Sleep(TDuration::MilliSeconds(1 + rand() % 10));
                         }
@@ -431,7 +425,6 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             const TVector<TActorId> Recipents;
             TAutoPtr<TThread> Thread;
             TActorSystem* ActorSystem = nullptr;
-            TActorId SelfId;
         };
 
         TTestActorRuntime runtime;

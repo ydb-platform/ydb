@@ -164,7 +164,7 @@ public:
     }
 
 protected:
-    void StateFuncBase(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateFuncBase(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             HFunc(TRpcServices::TEvForgetOperation, HandleForget);
@@ -174,7 +174,7 @@ protected:
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unexpected event received in TRpcOperationRequestActor::StateWork: "
                         << ev->GetTypeRewrite()));
-                return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+                return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, TActivationContext::AsActorContext());
             }
         }
     }

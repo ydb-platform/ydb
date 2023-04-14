@@ -59,7 +59,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NSchemeShard::TEvSchemeShard::TEvProcessingResponse, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
     TSSFetchingActor(NSchemeShard::ISSDataProcessor::TPtr processor, ISSFetchingController::TPtr controller, const TDuration livetime);

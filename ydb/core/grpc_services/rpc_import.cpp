@@ -76,7 +76,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvImport::TEvCreateImportResponse, Handle);
         default:
-            return this->StateBase(ev, TlsActivationContext->AsActorContext());
+            return this->StateBase(ev);
         }
     }
 

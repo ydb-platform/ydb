@@ -100,7 +100,6 @@ public:
     }
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (const ui32 type = ev->GetTypeRewrite()) {
             default: Y_FAIL("unexpected message 0x%08" PRIx32, type);
         }

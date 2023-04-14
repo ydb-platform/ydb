@@ -811,13 +811,13 @@ private:
 #define QueueRequestHFunc(TEvType) \
     case TEvType::EventType: { \
         TEvType::TPtr *x = reinterpret_cast<TEvType::TPtr *>(&ev); \
-        HandleRequest<TEvType::TPtr, TEvType, TEvType##Result>(*x, ctx); \
+        HandleRequest<TEvType::TPtr, TEvType, TEvType##Result>(*x, this->ActorContext()); \
         break; \
     }
 #define QueueRequestSpecialHFunc(TEvType, TEvResult) \
     case TEvType::EventType: { \
         TEvType::TPtr *x = reinterpret_cast<TEvType::TPtr *>(&ev); \
-        HandleRequest<TEvType::TPtr, TEvType, TEvResult>(*x, ctx); \
+        HandleRequest<TEvType::TPtr, TEvType, TEvResult>(*x, this->ActorContext()); \
         break; \
     }
 
@@ -841,8 +841,8 @@ private:
     }
 
     void StateFuncWrapper(STFUNC_SIG) {
-        StateFunc(ev, ctx);
-        UpdateWatchdogStatus(ctx);
+        StateFunc(ev);
+        UpdateWatchdogStatus(this->ActorContext());
     }
 
 #if BSQUEUE_EVENT_COUNTERS

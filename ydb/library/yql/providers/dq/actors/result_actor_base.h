@@ -153,7 +153,6 @@ namespace NYql::NDqs::NExecutionHelpers {
 
     protected:
         STFUNC(HandlerBase) {
-            Y_UNUSED(ctx);
             switch (const ui32 etype = ev->GetTypeRewrite()) {
                 hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered);
                 HFunc(TEvQueryResponse, OnQueryResult);
@@ -169,7 +168,6 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         STFUNC(ShutdownHandlerBase) {
-            Y_UNUSED(ctx);
             switch (const ui32 etype = ev->GetTypeRewrite()) {
                 HFunc(NActors::TEvents::TEvGone, OnShutdownQueryResult);
                 cFunc(NActors::TEvents::TEvPoison::EventType, TBase::PassAway);

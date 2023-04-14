@@ -117,12 +117,12 @@ TString MakeRecordInsertionYql(const TVector<TAggregatedResult>& items) {
     return ss.Str();
 }
 
-TString MakeRecordSelectionYql(int limit) {
+TString MakeRecordSelectionYql(ui32 offset, ui32 limit) {
     TStringStream ss;
     ss << "--!syntax_v1\n";
     ss << "SELECT * FROM `" << kResultTablePath << "` ";
     ss << "ORDER BY `start` DESC ";
-    ss << "LIMIT " << limit;
+    ss << "LIMIT " << limit << " OFFSET " << offset << ";";
     return ss.Str();
 }
 

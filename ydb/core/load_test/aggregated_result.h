@@ -8,6 +8,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
+#include <util/string/cast.h>
+#include <util/string/printf.h>
 #include <util/system/types.h>
 
 #include <array>
@@ -18,7 +20,7 @@ template<typename T>
 struct TAggregatedField {
     T MinValue;
     T MaxValue;
-    T AvgValue;
+    double AvgValue;
 };
 
 template<typename T>
@@ -28,10 +30,28 @@ IOutputStream& operator<<(IOutputStream& output, const TAggregatedField<T>& fiel
 }
 
 template<typename T>
+TString PrintValueFixedPrecision(const T& x) {
+    return ToString(x);
+}
+
+template<>
+inline TString PrintValueFixedPrecision(const double& x) {
+    if (fabs(x) < 0.01) {
+        return Sprintf("%.4lf", x);
+    } else if (fabs(x) < 0.1) {
+        return Sprintf("%.3lf", x);
+    } else {
+        return Sprintf("%.2lf", x);
+    }
+}
+
+template<typename T>
 void PrintFieldToHtml(const TAggregatedField<T>& field, IOutputStream& output) {
-    output << "<abbr title=\"";
-    output << field.MinValue << " &le; " << field.AvgValue << " &le; " << field.MaxValue;
-    output << "\">" << field.AvgValue << "</abbr>";
+    output << "<span title=\"";
+    output << PrintValueFixedPrecision(field.MinValue) <<
+        " &le; " << PrintValueFixedPrecision(field.AvgValue) <<
+        " &le; " << PrintValueFixedPrecision(field.MaxValue);
+    output << "\">" << PrintValueFixedPrecision(field.AvgValue) << "</span>";
 }
 
 struct TAggregatedStats {
@@ -49,7 +69,7 @@ template<typename T>
 class TFieldAggregator {
     T MinValue = 0;
     T MaxValue = 0;
-    T Sum = 0;
+    double Sum = 0;
     ui32 Count = 0;
 public:
     void Add(T value) {
@@ -65,7 +85,7 @@ public:
     }
 
     TAggregatedField<T> Get() const {
-        T avgValue = Count == 0 ? 0 : (Sum / Count);
+        double avgValue = Count == 0 ? 0 : (Sum / Count);
         return TAggregatedField<T>{
             .MinValue = MinValue,
             .MaxValue = MaxValue,
@@ -91,6 +111,8 @@ public:
     void Add(const TEvNodeFinishResponse::TNodeStats& stats);
     TAggregatedStats Get() const;
 };
+
+void PrintStartFinishToHtml(const TInstant& start, const TInstant& finish, IOutputStream& output);
 
 struct TAggregatedResult {
     TString Uuid;

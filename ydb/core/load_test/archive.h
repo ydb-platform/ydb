@@ -10,6 +10,6 @@ static constexpr TStringBuf kRecordsSelectedResult = "Records selected";
 
 TString MakeTableCreationYql();
 TString MakeRecordInsertionYql(const TVector<TAggregatedResult>& items);
-TString MakeRecordSelectionYql(int limit);
+TString MakeRecordSelectionYql(ui32 offset, ui32 limit);
 
 }  // namespace NKikimr

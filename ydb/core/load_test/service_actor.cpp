@@ -22,6 +22,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
+#include <util/string/type.h>
 
 namespace NKikimr {
 
@@ -55,6 +56,19 @@ namespace {
 
 bool IsJsonContentType(const TString& acceptFormat) {
     return acceptFormat == "application/json";
+}
+
+ui32 GetCgiParamNumber(const TCgiParameters& params, const TStringBuf name, ui32 minValue, ui32 maxValue, ui32 defaultValue) {
+    if (params.Has(name)) {
+        auto param = params.Get(name);
+        if (IsNumber(param)) {
+            i64 value = FromString(param);
+            if (minValue <= value && value <= maxValue) {
+                return static_cast<ui32>(value);
+            }
+        }
+    }
+    return defaultValue;
 }
 
 bool IsLegacyRequest(const TEvLoadTestRequest& request) {
@@ -164,6 +178,8 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         ui32 HttpInfoResPending; // number of requests pending
         TString Mode; // mode of page content
         TString AcceptFormat;
+        ui32 Offset = 0;
+        ui32 Limit = 0;
     };
 
     struct TNodeFinishedTestInfo {
@@ -349,8 +365,8 @@ private:
         LOG_N("Created actor for table creation " << TableCreationActor.ToString());
     }
 
-    void StartReadingResultsFromTable() {
-        const TString query = MakeRecordSelectionYql(10);
+    void StartReadingResultsFromTable(ui32 offset, ui32 limit) {
+        const TString query = MakeRecordSelectionYql(offset, limit);
         LOG_D("YQL query to select records: " << query);
         auto recordSelectionActor = TlsActivationContext->Register(
             CreateYqlSingleQueryActor(
@@ -767,7 +783,11 @@ public:
                 GenerateHttpInfoRes(mode, id);
             }
         } else if (mode == "archive") {
-            StartReadingResultsFromTable();
+            ui32 offset = GetCgiParamNumber(params, "offset", 0, Max<ui32>(), 0);
+            ui32 limit = GetCgiParamNumber(params, "limit", 1, 100, 10);
+            info.Offset = offset;
+            info.Limit = limit;
+            StartReadingResultsFromTable(offset, limit);
         } else {
             GenerateHttpInfoRes(mode, id);
         }
@@ -1120,13 +1140,23 @@ public:
                         TABLEHEAD() {
                             TABLER() {
                                 TABLEH() { str << "UUID"; }
-                                TABLEH() { str << "Start / finish"; }
-                                TABLEH() { str << "Success / total nodes"; }
-                                TABLEH() { str << "Transactions"; }
-                                TABLEH() { str << "Transactions per second"; }
-                                TABLEH() { str << "Errors per second"; }
+                                TABLEH() { str << "Time"; }
+                                TABLEH() {
+                                    str << "<span title=\"Success nodes / total nodes\">Ok / nodes</span>";
+                                }
+                                TABLEH() { str << "Txs"; }
+                                TABLEH() { str << "Txs/Sec"; }
+                                TABLEH() { str << "Errors/Sec"; }
                                 for (ui32 level : xrange(EPL_COUNT_NUM)) {
-                                    TABLEH() { str << "percentile " << ToString(static_cast<EPercentileLevel>(level)); }
+                                    TABLEH() {
+                                        str << "p";
+                                        if (level == EPL_100) {
+                                            str << "Max";
+                                        } else {
+                                            str << ToString(static_cast<EPercentileLevel>(level));
+                                        }
+                                        str << "(ms)";
+                                    }
                                 }
                                 TABLEH() { str << "Config"; }
                             }
@@ -1139,7 +1169,7 @@ public:
                                         PrintUuidToHtml(result.Uuid, str);
                                     }
                                     TABLED() {
-                                        str << result.Start.ToStringUpToSeconds() << " / " << result.Finish.ToStringUpToSeconds();
+                                        PrintStartFinishToHtml(result.Start, result.Finish, str);
                                     }
                                     const TAggregatedStats& stats = result.Stats;
                                     TABLED() {
@@ -1169,6 +1199,29 @@ public:
                             }
                         }
                     }
+                    str << "<div>\n";
+                    {
+                        str << "<span>";
+                        if (info.Offset) {
+                            ui32 prevOffset = info.Offset - Min(info.Limit, info.Offset);
+                            str << "<a href='?mode=archive&offset=" << prevOffset << "&limit=" << info.Limit << "' ";
+
+                        } else {
+                            str << "<a href='#' disabled ";
+                        }
+                        str << "class='btn btn-default'>&lt; prev</a></span>\n";
+                    }
+                    {
+                        str << "<span>";
+                        if (ArchivedResults.size() >= info.Limit) {
+                            ui32 nextOffset = info.Offset + info.Limit;
+                            str << "<a href='?mode=archive&offset=" << nextOffset << "&limit=" << info.Limit << "' ";
+                        } else {
+                            str << "<a href='#' disabled ";
+                        }
+                        str << "class='btn btn-default'>next &gt;</a></span>\n";
+                    }
+                    str << "</div>\n";
                 }
             }
             str << "</div>";

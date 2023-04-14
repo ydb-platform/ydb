@@ -13,7 +13,7 @@ IOutputStream& operator<<(IOutputStream& output, const TAggregatedStats& stats) 
     output << "transactions_per_sec: [" << stats.TransactionsPerSecond << "], ";
     output << "errors_per_sec: [" << stats.ErrorsPerSecond << "], ";
     for (ui32 level : xrange(stats.Percentiles.size())) {
-        output << "percentile" << ToString(static_cast<EPercentileLevel>(level)) << ": [" << stats.Percentiles[level] << "], ";        
+        output << "percentile" << ToString(static_cast<EPercentileLevel>(level)) << ": [" << stats.Percentiles[level] << "], ";
     }
     output << "}";
     return output;
@@ -46,9 +46,25 @@ TAggregatedStats TStatsAggregator::Get() const {
     return result;
 }
 
+TString PrintShortDate(const TInstant& instant) {
+    // Output format: Apr 13
+    return instant.FormatGmTime("%b %d");
+}
+
+TString PrintShortTime(const TInstant& instant) {
+    // Output format: 16:45:03
+    return instant.FormatGmTime("%H:%M:%S");
+}
+
+void PrintStartFinishToHtml(const TInstant& start, const TInstant& finish, IOutputStream& output) {
+    output << "<span title=\"" << start.ToStringUpToSeconds() << " / " << finish.ToStringUpToSeconds() <<
+        "\">" << PrintShortDate(start) << " " <<
+        PrintShortTime(start) << " / " << PrintShortTime(finish) << "</span>";
+}
+
 void PrintUuidToHtml(const TString& uuid, IOutputStream& output) {
     auto dashPos = uuid.find('-');
-    output << "<abbr title=\"" << uuid << "\">" << uuid.substr(0, dashPos) << "</abbr>";
+    output << "<span title=\"" << uuid << "\">" << uuid.substr(0, dashPos) << "..</span>";
 }
 
 IOutputStream& operator<<(IOutputStream& output, const TAggregatedResult& result) {
@@ -82,7 +98,7 @@ NKikimrMiniKQL::TValue GetOptional(const NKikimrMiniKQL::TValue& listItem, ui32 
 template<typename T>
 T ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
     Y_UNUSED(listItem, pos);
-    Y_FAIL("unimplemented");    
+    Y_FAIL("unimplemented");
 }
 
 template<>

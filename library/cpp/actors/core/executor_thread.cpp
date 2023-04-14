@@ -5,6 +5,7 @@
 #include "mailbox.h"
 #include "event.h"
 #include "events.h"
+#include "executor_pool_base.h"
 
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/actors/util/affinity.h>
@@ -64,6 +65,21 @@ namespace NActors {
     }
 
     void TExecutorThread::DropUnregistered() {
+#if defined(ACTORSLIB_COLLECT_EXEC_STATS)
+        if (ActorSystem->MonitorStuckActors()) {
+            if (auto *pool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ExecutorPool)) {
+                with_lock (pool->StuckObserverMutex) {
+                    for (const auto& actor : DyingActors) {
+                        const size_t i = actor->StuckIndex;
+                        auto& actorPtr = pool->Actors[i];
+                        actorPtr = pool->Actors.back();
+                        actorPtr->StuckIndex = i;
+                        pool->Actors.pop_back();
+                    }
+                }
+            }
+        }
+#endif
         DyingActors.clear(); // here is actual destruction of actors
     }
 

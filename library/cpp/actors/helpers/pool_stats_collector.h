@@ -56,6 +56,7 @@ private:
             ReceivedEventsByActivityBuckets.resize(GetActivityTypeCount());
             ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
             ScheduledEventsByActivityBuckets.resize(GetActivityTypeCount());
+            StuckActorsByActivityBuckets.resize(GetActivityTypeCount());
         }
 
         void Set(const TExecutorThreadStats& stats) {
@@ -65,6 +66,7 @@ private:
                 ui64 events = stats.ReceivedEventsByActivity[i];
                 ui64 actors = stats.ActorsAliveByActivity[i];
                 ui64 scheduled = stats.ScheduledEventsByActivity[i];
+                ui64 stuck = stats.StuckActorsByActivity[i];
 
                 if (!ActorsAliveByActivityBuckets[i]) {
                     if (ticks || events || actors || scheduled) {
@@ -78,6 +80,7 @@ private:
                 *ReceivedEventsByActivityBuckets[i] = events;
                 *ActorsAliveByActivityBuckets[i] = actors;
                 *ScheduledEventsByActivityBuckets[i] = scheduled;
+                *StuckActorsByActivityBuckets[i] = stuck;
             }
         }
 
@@ -95,6 +98,8 @@ private:
                 Group->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity", bucketName, false);
             ScheduledEventsByActivityBuckets[activityType] =
                 Group->GetSubgroup("sensor", "ScheduledEventsByActivity")->GetNamedCounter("activity", bucketName, true);
+            StuckActorsByActivityBuckets[activityType] =
+                Group->GetSubgroup("sensor", "StuckActorsByActivity")->GetNamedCounter("activity", bucketName, false);
         }
 
     private:
@@ -104,6 +109,7 @@ private:
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ReceivedEventsByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ScheduledEventsByActivityBuckets;
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> StuckActorsByActivityBuckets;
     };
 
     struct TExecutorPoolCounters {

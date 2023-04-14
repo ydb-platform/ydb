@@ -126,6 +126,7 @@ message TActorSystemConfig {
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
 
+    optional bool MonitorStuckActors = 15;
 }
 
 message TStaticNameserviceConfig {

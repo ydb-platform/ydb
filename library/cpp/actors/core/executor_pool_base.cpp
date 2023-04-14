@@ -27,6 +27,33 @@ namespace NActors {
         MailboxTable.Destroy();
     }
 
+#if defined(ACTORSLIB_COLLECT_EXEC_STATS)
+    void TExecutorPoolBaseMailboxed::RecalculateStuckActors(TExecutorThreadStats& stats) const {
+        if (!ActorSystem || !ActorSystem->MonitorStuckActors()) {
+            return;
+        }
+
+        const TMonotonic now = ActorSystem->Monotonic();
+
+        std::vector<ui32> stuckActors;
+        stuckActors.reserve(Actors.size());
+
+        with_lock (StuckObserverMutex) {
+            for (IActor *actor : Actors) {
+                const TDuration delta = now - actor->LastReceiveTimestamp;
+                if (delta > TDuration::Seconds(30)) {
+                    stuckActors.push_back(actor->GetActivityType());
+                }
+            }
+        }
+
+        std::fill(stats.StuckActorsByActivity.begin(), stats.StuckActorsByActivity.end(), 0);
+        for (ui32 activity : stuckActors) {
+            ++stats.StuckActorsByActivity[activity];
+        }
+    }
+#endif
+
     TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, ui32 maxActivityType)
         : TExecutorPoolBaseMailboxed(poolId, maxActivityType)
         , PoolThreads(threads)
@@ -95,6 +122,13 @@ namespace NActors {
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
+        if (ActorSystem->MonitorStuckActors()) {
+            with_lock (StuckObserverMutex) {
+                Y_VERIFY(actor->StuckIndex == Max<size_t>());
+                actor->StuckIndex = Actors.size();
+                Actors.push_back(actor);
+            }
+        }
 #endif
         AtomicIncrement(ActorRegistrations);
 
@@ -169,6 +203,13 @@ namespace NActors {
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
+        if (ActorSystem->MonitorStuckActors()) {
+            with_lock (StuckObserverMutex) {
+                Y_VERIFY(actor->StuckIndex == Max<size_t>());
+                actor->StuckIndex = Actors.size();
+                Actors.push_back(actor);
+            }
+        }
 #endif
         AtomicIncrement(ActorRegistrations);
 

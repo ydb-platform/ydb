@@ -313,6 +313,13 @@ namespace NActors {
         i64 ElapsedTicks;
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
+
+    private: // stuck actor monitoring
+        TMonotonic LastReceiveTimestamp;
+        size_t StuckIndex = Max<size_t>();
+        friend class TExecutorPoolBaseMailboxed;
+        friend class TExecutorThread;
+
     protected:
         TActorCallbackBehaviour CImpl;
     public:
@@ -494,6 +501,7 @@ namespace NActors {
 
         void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& /*ctx*/) {
             ++HandledEvents;
+            LastReceiveTimestamp = TActivationContext::Monotonic();
             if (CImpl.Initialized()) {
                 CImpl.Receive(this, ev);
             } else {

@@ -266,6 +266,14 @@ std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
     return std::make_unique<TPgDummyBuilder>();
 }
 
+bool HasPgKernel(ui32 procOid) {
+    Y_UNUSED(procOid);
+    return false;
+}
+
+void RegisterPgKernels() {
+}
+
 std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,
     const NKikimr::NMiniKQL::TComputationNodeFactoryContext&)> GetPgFactory()
 {

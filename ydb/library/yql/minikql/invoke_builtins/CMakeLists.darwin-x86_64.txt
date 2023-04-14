@@ -19,6 +19,7 @@ target_link_libraries(yql-minikql-invoke_builtins PUBLIC
   library-yql-minikql
   yql-minikql-arrow
   yql-minikql-computation
+  parser-pg_wrapper-interface
   yql-public-udf
   libs-apache-arrow
   yql-minikql-codegen

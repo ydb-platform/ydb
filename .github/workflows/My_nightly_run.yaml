@@ -8,10 +8,10 @@ on:
         required: false
         type: string
       launch_unit_tests:
-        required: true
+        required: false
         type: boolean
       launch_functional_tests:
-        required: true
+        required: false
         type: boolean
   
 jobs:

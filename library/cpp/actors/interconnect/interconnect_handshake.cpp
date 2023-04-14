@@ -808,9 +808,12 @@ namespace NActors {
                 const auto& s = success.GetSenderActorId();
                 PeerVirtualId.Parse(s.data(), s.size());
 
+                if (!success.GetUseModernFrame()) {
+                    generateError("UseModernFrame not set, obsolete peer version");
+                }
+
                 // recover flags
                 Params.Encryption = success.GetStartEncryption();
-                Params.UseModernFrame = success.GetUseModernFrame();
                 Params.AuthOnly = Params.Encryption && success.GetAuthOnly();
                 Params.UseExtendedTraceFmt = success.GetUseExtendedTraceFmt();
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
@@ -993,7 +996,10 @@ namespace NActors {
                         break;
                 }
 
-                Params.UseModernFrame = request.GetRequestModernFrame();
+                if (!request.GetRequestModernFrame()) {
+                    generateError("RequestModernFrame not set, obsolete peer version");
+                }
+
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
                 Params.UseExtendedTraceFmt = request.GetRequestExtendedTraceFmt();
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
@@ -1031,7 +1037,7 @@ namespace NActors {
                     if (Common->LocalScopeId != TScopeId()) {
                         FillInScopeId(*success.MutableServerScopeId());
                     }
-                    success.SetUseModernFrame(Params.UseModernFrame);
+                    success.SetUseModernFrame(true);
                     success.SetAuthOnly(Params.AuthOnly);
                     success.SetUseExtendedTraceFmt(Params.UseExtendedTraceFmt);
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);

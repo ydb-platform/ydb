@@ -300,8 +300,7 @@ namespace NActors {
 
         BytesUnwritten = 0;
         for (const auto& packet : SendQueue) {
-            BytesUnwritten += (Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1)) +
-                packet.GetDataSize();
+            BytesUnwritten += sizeof(TTcpPacketHeader_v2) + packet.GetDataSize();
         }
 
         SwitchStuckPeriod();
@@ -582,11 +581,6 @@ namespace NActors {
             LOG_DEBUG_IC_SESSION("ICS30", "WriteData WriteBlockedByFullSendBuffer# %s SendQueue.size# %zu",
                 ReceiveContext->WriteBlockedByFullSendBuffer ? "true" : "false", SendQueue.size());
 
-            // update last confirmed packet number if it has changed
-            if (SendQueuePos != SendQueue.end()) {
-                SendQueuePos->UpdateConfirmIfPossible(ReceiveContext->GetLastProcessedPacketSerial());
-            }
-
             while (SendQueuePos != SendQueue.end() && !ReceiveContext->WriteBlockedByFullSendBuffer) {
                 for (auto it = SendQueuePos; it != SendQueue.end() && wbuffers.size() < maxElementsInIOV; ++it) {
                     it->AppendToIoVector(wbuffers, maxElementsInIOV);
@@ -805,7 +799,7 @@ namespace NActors {
         packet->Sign();
 
         // count number of bytes pending for write
-        ui64 packetSize = (Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1)) + packet->GetDataSize();
+        ui64 packetSize = sizeof(TTcpPacketHeader_v2) + packet->GetDataSize();
         BytesUnwritten += packetSize;
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %zu"
@@ -1144,7 +1138,7 @@ namespace NActors {
                             }
                             TABLER() {
                                 TABLED() { str << "Frame version/Checksum"; }
-                                TABLED() { str << (!Params.UseModernFrame ? "v1/crc32c" : Params.Encryption ? "v2/none" : "v2/crc32c"); }
+                                TABLED() { str << (Params.Encryption ? "v2/none" : "v2/crc32c"); }
                             }
 #define MON_VAR(NAME)     \
     TABLER() {            \

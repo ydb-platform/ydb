@@ -114,7 +114,7 @@ namespace NActors {
                     Y_VERIFY(maxBytes);
 
                     auto addChunk = [&](const void *data, size_t len) {
-                        event.UpdateChecksum(Params, data, len);
+                        event.UpdateChecksum(data, len);
                         task.AppendBuf(data, len);
                         part->Size += len;
                         Y_VERIFY_DEBUG(maxBytes >= len);

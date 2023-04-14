@@ -218,11 +218,7 @@ namespace NActors {
         const TSessionParams Params;
 
         // header we are currently processing (parsed from the stream)
-        union {
-            TTcpPacketHeader_v1 v1;
-            TTcpPacketHeader_v2 v2;
-            char Data[1];
-        } Header;
+        TTcpPacketHeader_v2 Header;
         ui64 HeaderConfirm, HeaderSerial;
 
         size_t PayloadSize;
@@ -250,7 +246,7 @@ namespace NActors {
         void HandleResumeReceiveData();
         void HandleConfirmUpdate();
         void ReceiveData();
-        void ProcessHeader(size_t headerLen);
+        void ProcessHeader();
         void ProcessPayload(ui64& numDataBytes);
         void ProcessEvent(TRope& data, TEventData& descr);
         bool ReadMore();

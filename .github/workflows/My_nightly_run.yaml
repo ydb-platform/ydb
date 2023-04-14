@@ -10,9 +10,11 @@ on:
       launch_unit_tests:
         required: false
         type: boolean
+        default: true
       launch_functional_tests:
         required: false
         type: boolean
+        default: true
   
 jobs:
   build_ondemand:

@@ -9,6 +9,11 @@ on:
       test_label_regexp:
         required: false
         type: string
+      image:
+        type: string
+        required: false
+        default: fd8snjpoq85qqv0mk9gi
+  workflow_dispatch:
     
 jobs:
 
@@ -28,7 +33,7 @@ jobs:
           yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           folder-id: ${{secrets.YC_FOLDER}}
-          image-id: fd8snjpoq85qqv0mk9gi
+          image-id: ${{inputs.image}}
           disk-size: 930GB
           disk-type: network-ssd-nonreplicated
           cores: 32

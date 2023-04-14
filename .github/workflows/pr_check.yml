@@ -1,7 +1,7 @@
 name: PR check
 on: 
   pull_request_target:
-    types: [ opened, edited, reopened ]
+    types: [ opened, edited, approved, reopened ]
     branches:
       - 'main'
     paths-ignore:
@@ -10,6 +10,7 @@ on:
 jobs:
   build_and_test:
     uses: ./.github/workflows/build_and_test_ondemand.yml
+    if: github.event.review.state == 'approved'
     with:
       test_label_regexp: '(SMALL|MEDIUM)'
     secrets: inherit

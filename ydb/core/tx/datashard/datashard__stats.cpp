@@ -229,7 +229,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard %" PRIu64, TabletID());
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard " << TabletID() << ", for tableId " << tableId);
 
     i64 dataSize = 0;
     if (TableInfos.contains(tableId)) {
@@ -253,6 +253,10 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         tableInfo.StatsUpdateInProgress = false;
 
         SendPeriodicTableStats(ctx);
+
+    } else {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Drop stats at datashard " << TabletID()
+                    << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
     }
 
     if (dataSize > HighDataSizeReportThreshlodBytes) {

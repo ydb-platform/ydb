@@ -1471,6 +1471,12 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->SetSchema(schema);
     Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
 
+    //NOTE: Stats building is bound to table id, but move-table changes table id,
+    // so already built stats couldn't be inherited by moved table
+    // and have to be rebuilt from the ground up
+    newTableInfo->StatsUpdateInProgress = false;
+    newTableInfo->StatsNeedUpdate = true;
+
     RemoveUserTable(prevId);
     AddUserTable(newId, newTableInfo);
 

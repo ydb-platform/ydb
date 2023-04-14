@@ -2923,8 +2923,12 @@ protected:
             const TUserTable &ti = *t.second;
 
             // Don't report stats until they are build for the first time
-            if (!ti.Stats.StatsUpdateTime)
-                break;
+            if (!ti.Stats.StatsUpdateTime) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard " << TabletID()
+                            << ", for tableId " << tableId << ", but no stats yet"
+                );
+                continue;
+            }
 
             if (!DbStatsReportPipe) {
                 NTabletPipe::TClientConfig clientConfig;

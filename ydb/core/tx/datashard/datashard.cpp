@@ -3741,13 +3741,13 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
 {
     const float rejectProbabilty = Executor()->GetRejectProbability();
     if (rejectProbabilty > 0) {
         const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
         if (rnd < rejectProbabilty) {
-            auto response = MakeHolder<TEvDataShard::TEvUnsafeUploadRowsResponse>(
+            auto response = MakeHolder<TEvDataShard::TEvS3UploadRowsResponse>(
                 TabletID(), NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
             response->Record.SetErrorDescription("Reject due to given RejectProbability");
             ctx.Send(ev->Sender, std::move(response));
@@ -3757,7 +3757,7 @@ void TDataShard::Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, cons
         }
     }
 
-    Execute(new TTxUnsafeUploadRows(this, ev), ctx);
+    Execute(new TTxS3UploadRows(this, ev), ctx);
 }
 
 void TDataShard::ScanComplete(NTable::EAbort,

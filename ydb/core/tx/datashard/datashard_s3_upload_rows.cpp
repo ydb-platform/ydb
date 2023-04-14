@@ -1,15 +1,14 @@
 #include "datashard_txs.h"
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
-TDataShard::TTxUnsafeUploadRows::TTxUnsafeUploadRows(TDataShard* ds, TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev)
+TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev)
     : TBase(ds)
     , TCommonUploadOps(ev, false, false)
 {
 }
 
-bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
     auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
     
     // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
@@ -34,7 +33,7 @@ bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TA
     return true;
 }
 
-void TDataShard::TTxUnsafeUploadRows::Complete(const TActorContext& ctx) {
+void TDataShard::TTxS3UploadRows::Complete(const TActorContext& ctx) {
     TActorId target;
     THolder<IEventBase> event;
     ui64 cookie;
@@ -47,5 +46,4 @@ void TDataShard::TTxUnsafeUploadRows::Complete(const TActorContext& ctx) {
     }
 }
 
-} // NDataShard
-} // NKikimr
+}

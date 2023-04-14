@@ -283,9 +283,8 @@ struct TEvDataShard {
         EvGetS3DownloadInfo,
         EvStoreS3DownloadInfo,
         EvS3DownloadInfo,
-
-        EvUnsafeUploadRowsRequest,
-        EvUnsafeUploadRowsResponse,
+        EvS3UploadRowsRequest,
+        EvS3UploadRowsResponse,
 
         EvKqpScan,
 
@@ -1280,15 +1279,15 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvUnsafeUploadRowsRequest
-        : public TEventLocal<TEvUnsafeUploadRowsRequest, TEvDataShard::EvUnsafeUploadRowsRequest>
+    struct TEvS3UploadRowsRequest
+        : public TEventLocal<TEvS3UploadRowsRequest, TEvDataShard::EvS3UploadRowsRequest>
     {
         ui64 TxId;
         std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest> RecordHolder;
         const NKikimrTxDataShard::TEvUploadRowsRequest& Record;
         NDataShard::TS3Download Info;
 
-        explicit TEvUnsafeUploadRowsRequest(
+        explicit TEvS3UploadRowsRequest(
                 ui64 txId,
                 const std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest>& record,
                 const NDataShard::TS3Download& info)
@@ -1308,13 +1307,13 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvUnsafeUploadRowsResponse
-        : public TEventLocal<TEvUnsafeUploadRowsResponse, TEvDataShard::EvUnsafeUploadRowsResponse>
+    struct TEvS3UploadRowsResponse
+        : public TEventLocal<TEvS3UploadRowsResponse, TEvDataShard::EvS3UploadRowsResponse>
     {
         NKikimrTxDataShard::TEvUploadRowsResponse Record;
         NDataShard::TS3Download Info;
 
-        explicit TEvUnsafeUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
+        explicit TEvS3UploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
         }

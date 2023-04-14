@@ -210,7 +210,7 @@ class TDataShard
     class TTxChangeS3UploadStatus;
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
-    class TTxUnsafeUploadRows;
+    class TTxS3UploadRows;
     class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
@@ -1199,7 +1199,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
@@ -2706,7 +2706,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
-            HFuncTraced(TEvDataShard::TEvUnsafeUploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);

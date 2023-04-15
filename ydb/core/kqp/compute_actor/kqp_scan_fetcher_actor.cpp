@@ -536,12 +536,12 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
 
     state->LastKey = std::move(msg.LastKey);
     const ui64 rowsCount = msg.GetRowsCount();
-    CA_LOG_D("action=got EvScanData;rows=" << rowsCount << ";finished=" << msg.Finished << ";exhausted=" << msg.RequestedBytesLimitReached
+    CA_LOG_D("action=got EvScanData;rows=" << rowsCount << ";finished=" << msg.Finished << ";exceeded=" << msg.RequestedBytesLimitReached
         << ";from=" << ev->Sender << ";shards remain=" << PendingShards.size()
         << ";in flight scans=" << InFlightShards.GetScansCount()
         << ";in flight shards=" << InFlightShards.GetShardsCount()
         << ";delayed_for=" << latency.SecondsFloat() << " seconds by ratelimiter"
-        << ";tabletId=" << state->TabletId);
+        << ";tablet_id=" << state->TabletId);
     ProvideDataToCompute(msg, state);
     InFlightShards.MutableStatistics(state->TabletId).AddPack(rowsCount, 0);
 
@@ -640,7 +640,7 @@ bool TKqpScanFetcherActor::SendScanDataAck(TShardState::TPtr state) {
     if (TrackingNodes.insert(state->ActorId.NodeId()).second) {
         flags |= IEventHandle::FlagSubscribeOnSession;
     }
-    Send(state->ActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace, state->Generation), flags, state->TabletId);
+    Send(state->ActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace, state->Generation, 1), flags, state->TabletId);
     InFlightShards.AckSent(state);
     return true;
 }

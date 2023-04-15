@@ -117,13 +117,13 @@ void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromFetcher: " << ev->Sender;
+    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromFetcher: " << ev->Sender << "/" << SelfId();
     TBase::InternalError(ev->Get()->GetStatusCode(), ev->Get()->GetIssues());
     State = ev->Get()->GetState();
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender;
+    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
     auto& msg = *ev->Get();
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {

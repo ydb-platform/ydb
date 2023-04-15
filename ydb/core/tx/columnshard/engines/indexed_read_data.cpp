@@ -114,7 +114,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 }
 
 bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
-    /// @warning The replace logic is correct only in assumption that predicate is applyed over a part of ReplaceKey.
+    /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
     auto batch = BatchConstructor.Assemble();

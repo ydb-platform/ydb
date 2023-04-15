@@ -566,6 +566,7 @@ message TEvRemoteScanData {
 message TEvRemoteScanDataAck {
     optional uint64 FreeSpace = 1;
     optional uint32 Generation = 2;
+    optional uint32 MaxChunksCount = 3;
 }
 
 message TEvRemoteCostData {

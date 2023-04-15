@@ -141,6 +141,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   lib-deprecated-kicli
   dq-actors-compute
   services-lib-sharding
+  ydb-library-chunks_limiter
 )
 target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
@@ -401,6 +402,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   lib-deprecated-kicli
   dq-actors-compute
   services-lib-sharding
+  ydb-library-chunks_limiter
 )
 target_sources(core-tx-datashard.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp

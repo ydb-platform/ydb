@@ -42,6 +42,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-util
   api-protos
   dq-actors-compute
+  ydb-library-chunks_limiter
 )
 target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob.cpp

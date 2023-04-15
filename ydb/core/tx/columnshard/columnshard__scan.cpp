@@ -12,6 +12,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
@@ -183,7 +184,7 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-            << " freeSpace: " << ev->Get()->FreeSpace << " prevFreeSpace: " << PeerFreeSpace);
+            << " freeSpace: " << ev->Get()->FreeSpace << " " << ChunksLimiter.DebugString());
 
         if (!ComputeActorId) {
             ComputeActorId = ev->Sender;
@@ -191,7 +192,7 @@ private:
 
         Y_VERIFY(ev->Get()->Generation == ScanGen);
 
-        PeerFreeSpace = ev->Get()->FreeSpace;
+        ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
 
         ContinueProcessing();
     }
@@ -226,8 +227,8 @@ private:
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got TEvReadBlobRangeResult"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-            << " blob: " << ev->Get()->BlobRange
-            << " prevFreeSpace: " << PeerFreeSpace);
+            << " blob: " << ev->Get()->BlobRange << ";"
+            << ChunksLimiter.DebugString());
 
         if (ScanIterator) {
             {
@@ -247,7 +248,7 @@ private:
         Y_VERIFY(!Finished);
         Y_VERIFY(ScanIterator);
 
-        if (!PeerFreeSpace) {
+        if (!ChunksLimiter.HasMore()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
                 "Scan " << ScanActorId << " producing result: bytes limit exhausted"
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
@@ -362,7 +363,7 @@ private:
             // * we have finished scanning ALL the ranges
             // * or there is an in-flight blob read or ScanData message for which
             //   we will get a reply and will be able to proceed further
-            if  (!ScanIterator || PeerFreeSpace == 0 || InFlightReads != 0 || (DataTasksProcessor && DataTasksProcessor->GetDataCounter() > TaskResultsCounter.Val())) {
+            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads != 0 || (DataTasksProcessor && DataTasksProcessor->GetDataCounter() > TaskResultsCounter.Val())) {
                 return;
             }
         }
@@ -499,12 +500,8 @@ private:
             << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
             << " arrow schema:\n" << (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : ""));
 
-        if (PeerFreeSpace < Bytes) {
-            Result->RequestedBytesLimitReached = true;
-            PeerFreeSpace = 0;
-        } else {
-            PeerFreeSpace -= Bytes;
-        }
+        Y_VERIFY(ChunksLimiter.Take(Bytes));
+        Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
 
         Finished = Result->Finished;
         if (Finished) {
@@ -594,7 +591,7 @@ private:
     TActorId TimeoutActorId;
     TMaybe<TString> AbortReason;
 
-    ui64 PeerFreeSpace = 0;
+    TChunksLimiter ChunksLimiter;
     THolder<TEvKqpCompute::TEvScanData> Result;
     i64 InFlightReads = 0;
     i64 InFlightReadBytes = 0;

@@ -150,12 +150,15 @@ struct TEvKqpCompute {
     };
 
     struct TEvScanDataAck : public NActors::TEventLocal<TEvScanDataAck, TKqpComputeEvents::EvScanDataAck> {
-        explicit TEvScanDataAck(ui64 freeSpace, ui32 generation = 0)
+        explicit TEvScanDataAck(ui64 freeSpace, ui32 generation = 0, const ui32 maxChunksCount = Max<ui32>())
             : FreeSpace(freeSpace)
-            , Generation(generation) {}
+            , Generation(generation)
+            , MaxChunksCount(maxChunksCount)
+        {}
 
         const ui64 FreeSpace;
         const ui32 Generation;
+        const ui32 MaxChunksCount;
         mutable THolder<TEvRemoteScanDataAck> Remote;
 
         bool IsSerializable() const override {
@@ -174,7 +177,11 @@ struct TEvKqpCompute {
 
         static NActors::IEventBase* Load(TEventSerializedData* data) {
             auto pbEv = THolder<TEvRemoteScanDataAck>(static_cast<TEvRemoteScanDataAck *>(TEvRemoteScanDataAck::Load(data)));
-            return new TEvScanDataAck(pbEv->Record.GetFreeSpace(), pbEv->Record.GetGeneration());
+            ui32 maxChunksCount = Max<ui32>();
+            if (pbEv->Record.HasMaxChunksCount()) {
+                maxChunksCount = pbEv->Record.GetMaxChunksCount();
+            }
+            return new TEvScanDataAck(pbEv->Record.GetFreeSpace(), pbEv->Record.GetGeneration(), maxChunksCount);
         }
 
     private:
@@ -183,6 +190,7 @@ struct TEvKqpCompute {
                 Remote.Reset(new TEvRemoteScanDataAck);
                 Remote->Record.SetFreeSpace(FreeSpace);
                 Remote->Record.SetGeneration(Generation);
+                Remote->Record.SetMaxChunksCount(MaxChunksCount);
             }
         }
     };

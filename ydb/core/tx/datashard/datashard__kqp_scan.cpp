@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 
+#include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 namespace NKikimr {
@@ -53,7 +54,6 @@ public:
         , Deadline(TInstant::Now() + (timeoutMs ? TDuration::MilliSeconds(timeoutMs) + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
         , Generation(generation)
         , DataFormat(dataFormat)
-        , PeerFreeSpace(0)
         , Sleep(true)
         , IsLocal(computeActorId.NodeId() == datashardActorId.NodeId())
     {
@@ -103,7 +103,7 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck"
             << ", at: " << ScanActorId << ", scanId: " << ScanId << ", table: " << TablePath
             << ", gen: " << ev->Get()->Generation << ", tablet: " << DatashardActorId
-            << ", freeSpace: " << ev->Get()->FreeSpace << ", prevFreeSpace: " << PeerFreeSpace);
+            << ", freeSpace: " << ev->Get()->FreeSpace << ";" << ChunksLimiter.DebugString());
 
         YQL_ENSURE(ev->Get()->Generation == Generation, "expected: " << Generation << ", got: " << ev->Get()->Generation);
 
@@ -111,8 +111,8 @@ private:
             ComputeActorId = ev->Sender;
         }
 
-        PeerFreeSpace = ev->Get()->FreeSpace;
-        if (PeerFreeSpace > 0) {
+        ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
+        if (ChunksLimiter.HasMore()) {
             if (Y_UNLIKELY(IsProfile())) {
                 StartWaitTime = TInstant::Now();
             }
@@ -287,7 +287,7 @@ private:
             return EScan::Feed;
         }
 
-        if (PeerFreeSpace <= 0) {
+        if (!ChunksLimiter.HasMore()) {
             Sleep = true;
             return EScan::Sleep;
         }
@@ -316,12 +316,12 @@ private:
         if (Result && !Result->Rows.empty()) {
             bool sent = SendResult(/* pageFault */ true);
 
-            if (sent && PeerFreeSpace == 0) {
+            if (sent && !ChunksLimiter.HasMore()) {
                 Sleep = true;
                 return EScan::Sleep;
             }
 
-            if (sent && PeerFreeSpace > 0 && Y_UNLIKELY(IsProfile())) {
+            if (sent && ChunksLimiter.HasMore() && Y_UNLIKELY(IsProfile())) {
                 StartWaitTime = TInstant::Now();
             }
         }
@@ -420,7 +420,7 @@ private:
     }
 
     bool SendResult(bool pageFault, bool finish = false) noexcept {
-        if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= PeerFreeSpace ||
+        if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= ChunksLimiter.GetRemainedBytes() ||
             (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish)
         {
             Result->PageFault = pageFault;
@@ -449,12 +449,8 @@ private:
                 << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
                 << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
 
-            if (PeerFreeSpace < sendBytes) {
-                Result->RequestedBytesLimitReached = true;
-                PeerFreeSpace = 0;
-            } else {
-                PeerFreeSpace -= sendBytes;
-            }
+            Y_VERIFY(ChunksLimiter.Take(sendBytes));
+            Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
 
             if (sendBytes >= 48_MB) {
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
@@ -518,7 +514,7 @@ private:
     const TInstant Deadline;
     const ui32 Generation;
     const NKikimrTxDataShard::EScanDataFormat DataFormat;
-    ui64 PeerFreeSpace = 0;
+    TChunksLimiter ChunksLimiter;
     bool Sleep;
     const bool IsLocal;
 

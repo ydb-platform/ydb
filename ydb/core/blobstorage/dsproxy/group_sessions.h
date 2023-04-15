@@ -46,9 +46,9 @@ namespace NKikimr {
                     Y_VERIFY(event.Record.HasMsgQoS());
                     const auto &msgQoS = event.Record.GetMsgQoS();
                     Y_VERIFY(msgQoS.HasExtQueueId());
-                    auto queueId = NKikimrCapnProtoUtil::convertToCapnProto(msgQoS.GetExtQueueId());
+                    auto queueId = NKikimrCapnProtoUtil::convertToProtobuf(msgQoS.GetExtQueueId());
                     Y_VERIFY(queueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
-                    return NKikimrCapnProtoUtil::convertToProtobuf(queueId);
+                    return queueId;
                 }
 
                 static NKikimrBlobStorage::EVDiskQueueId VDiskQueueId(const TEvBlobStorage::TEvVStatus&) {

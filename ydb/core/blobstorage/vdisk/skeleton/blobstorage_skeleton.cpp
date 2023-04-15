@@ -47,6 +47,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/intrlist.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/enums_conversions.h>
+
 
 using namespace NKikimrServices;
 
@@ -934,7 +936,7 @@ namespace NKikimr {
                 TMaybe<ui64> cookie;
                 if (record.HasCookie())
                     cookie = record.GetCookie();
-                auto handleClass = NKikimrCapnProto::ConvertEGetHandleClass(ev->Get()->Record.GetHandleClass());
+                auto handleClass = NKikimrCapnProtoUtil::convertToProtobuf(ev->Get()->Record.GetHandleClass());
                 auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(NKikimrProto::OK, SelfVDiskId, now,
                     ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
                     IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), cookie, ev->GetChannel(),

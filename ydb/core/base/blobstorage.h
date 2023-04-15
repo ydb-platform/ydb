@@ -2355,23 +2355,6 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
     }
 }
 
-// EGetHandleClass defines BlobStorage queue to a request to
-static inline NKikimrCapnProto::EVDiskQueueId HandleClassToQueueId(NKikimrCapnProto::EGetHandleClass cls) {
-    switch (cls) {
-        case NKikimrCapnProto::EGetHandleClass::AsyncRead:
-            return NKikimrCapnProto::EVDiskQueueId::GetAsyncRead;
-        case NKikimrCapnProto::EGetHandleClass::FastRead:
-            return NKikimrCapnProto::EVDiskQueueId::GetFastRead;
-        case NKikimrCapnProto::EGetHandleClass::Discover:
-            return NKikimrCapnProto::EVDiskQueueId::GetDiscover;
-        case NKikimrCapnProto::EGetHandleClass::LowRead:
-            return NKikimrCapnProto::EVDiskQueueId::GetLowRead;
-        default:
-            Y_FAIL("Unexpected case");
-    }
-}
-
-
 inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
         THolder<TEvBlobStorage::TEvPut> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     auto checkGroupId = [&] {

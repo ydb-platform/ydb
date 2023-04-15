@@ -7,6 +7,8 @@
 
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_common.h>
 
+#include <ydb/core/blobstorage/vdisk/common/capnp/enums_conversions.h>
+
 namespace NKikimr {
 
     constexpr ui32 TypicalDisksInGroup = 32;
@@ -44,7 +46,7 @@ namespace NKikimr {
                     Y_VERIFY(event.Record.HasMsgQoS());
                     const auto &msgQoS = event.Record.GetMsgQoS();
                     Y_VERIFY(msgQoS.HasExtQueueId());
-                    auto queueId = NKikimrCapnProto::ConvertEVDiskQueueId(msgQoS.GetExtQueueId());
+                    auto queueId = NKikimrCapnProtoUtil::convertToCapnProto(msgQoS.GetExtQueueId());
                     Y_VERIFY(queueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
                     return queueId;
                 }

@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/enums_conversions.h>
+
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -312,7 +314,7 @@ namespace NKikimr {
             TMaybe<ui64> cookie;
             if (record.HasCookie())
                 cookie = record.GetCookie();
-            const auto handleClass = NKikimrCapnProto::ConvertEGetHandleClass(record.GetHandleClass());
+            const auto handleClass = NKikimrCapnProtoUtil::convertToProtobuf(record.GetHandleClass());
             const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
             const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
             auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(status, vdiskID, now,

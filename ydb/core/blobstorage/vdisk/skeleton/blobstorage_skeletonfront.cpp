@@ -29,6 +29,9 @@
 #include <util/generic/set.h>
 #include <util/generic/maybe.h>
 
+#include <ydb/core/blobstorage/vdisk/common/capnp/enums_conversions.h>
+
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -1188,7 +1191,7 @@ namespace NKikimr {
                 }
                 // good, enqueue it in intQueue
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost,
-                        deadline, NKikimrCapnProto::ConvertEVDiskQueueId(extQueueId), *this, clientId, std::move(trace));
+                        deadline, NKikimrCapnProtoUtil::convertToProtobuf(extQueueId), *this, clientId, std::move(trace));
             }
 
             Sanitize(ctx);
@@ -1348,7 +1351,7 @@ namespace NKikimr {
             const ui64 cost = CostModel->GetCost(*ev->Get());
             // select correct internal queue
             Y_VERIFY(ev->Get()->Record.HasHandleClass());
-            auto cls = NKikimrCapnProto::ConvertEGetHandleClass(ev->Get()->Record.GetHandleClass());
+            auto cls = NKikimrCapnProtoUtil::convertToProtobuf(ev->Get()->Record.GetHandleClass());
             NKikimrBlobStorage::EVDiskInternalQueueId intQueueId;
             switch (cls) {
                 case NKikimrBlobStorage::EGetHandleClass::AsyncRead:

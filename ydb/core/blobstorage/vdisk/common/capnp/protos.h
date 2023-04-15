@@ -104,8 +104,6 @@ namespace NKikimrCapnProto {
         Discover,
         LowRead,
     };
-    NKikimrBlobStorage::EGetHandleClass ConvertEGetHandleClass(NKikimrCapnProto::EGetHandleClass capnProtoGetHandleClass);
-    NKikimrCapnProto::EGetHandleClass ConvertEGetHandleClassToCapnProto(NKikimrBlobStorage::EGetHandleClass cls);
 
     struct TActorId {
         struct Reader : private NKikimrCapnProto_::TActorId::Reader {
@@ -180,7 +178,6 @@ namespace NKikimrCapnProto {
         IncorrectMsgId,
         HighWatermarkOverflow,
     };
-    NKikimrBlobStorage::TWindowFeedback_EStatus ConvertEStatus(NKikimrCapnProto::EStatus capnProtoEStatus);
 
     struct TWindowFeedback {
         struct Reader : private NKikimrCapnProto_::TWindowFeedback::Reader {
@@ -232,8 +229,6 @@ namespace NKikimrCapnProto {
         Begin,
         End,
     };
-    NKikimrBlobStorage::EVDiskQueueId ConvertEVDiskQueueId(NKikimrCapnProto::EVDiskQueueId capnProtoQueueId);
-    NKikimrBlobStorage::EVDiskQueueId ConvertEVDiskQueueId(NKikimrBlobStorage::EVDiskQueueId capnProtoQueueId);
 
 
     enum class EVDiskInternalQueueId {
@@ -248,7 +243,6 @@ namespace NKikimrCapnProto {
         IntLowRead,
         IntEnd,
     };
-    NKikimrBlobStorage::EVDiskInternalQueueId ConvertEVDiskInternalQueueId(NKikimrCapnProto::EVDiskInternalQueueId capnProtoInternalQueueId);
 
     struct TVDiskCostSettings {
         struct Reader : private NKikimrCapnProto_::TVDiskCostSettings::Reader {
@@ -364,8 +358,8 @@ namespace NKikimrCapnProto {
             void SetWindow(const TWindowFeedback::Reader& value) { return setWindow(value.GetCapnpBase()); }
             void SetExecTimeStats(const TExecTimeStats::Reader& value) { return setExecTimeStats(value.GetCapnpBase()); }
             void SetSenderActorId(const TActorId::Reader& value) { return setSenderActorId(value.GetCapnpBase()); }
-            void SetExtQueueId(const EVDiskQueueId& value) { return setExtQueueId(static_cast<NKikimrCapnProto_::EVDiskQueueId>(static_cast<size_t>(value) + 1)); }
-            void SetIntQueueId(const EVDiskInternalQueueId& value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
+            void SetExtQueueId(EVDiskQueueId value) { return setExtQueueId(static_cast<NKikimrCapnProto_::EVDiskQueueId>(static_cast<size_t>(value) + 1)); }
+            void SetIntQueueId(EVDiskInternalQueueId value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
             void SetIntQueueId(size_t value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(value + 1)); }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }
             TVDiskCostSettings::Builder MutableCostSettings() { return getCostSettings(); }

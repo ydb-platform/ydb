@@ -17,6 +17,7 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/blobstorage/vdisk/common/capnp/enums_conversions.h>
 
 #include <ydb/core/util/pb.h>
 
@@ -371,8 +372,8 @@ namespace NKikimr {
                 , RecByteSize(recByteSize)
                 , MsgId(msgQoS.GetMsgId())
                 , Cost(msgQoS.GetCost())
-                , ExtQueueId(static_cast<NKikimrBlobStorage::EVDiskQueueId>(msgQoS.GetExtQueueId()))
-                , IntQueueId(static_cast<NKikimrBlobStorage::EVDiskInternalQueueId>(msgQoS.GetIntQueueId()))
+                , ExtQueueId(NKikimrCapnProtoUtil::convertToProtobuf(msgQoS.GetExtQueueId()))
+                , IntQueueId(NKikimrCapnProtoUtil::convertToProtobuf(msgQoS.GetIntQueueId()))
                 , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
         {}
 
@@ -615,7 +616,7 @@ namespace NKikimr {
                     }
 
                     if (queryMsg.HasStatus()) {
-                        resMsg->SetStatus(static_cast<NKikimrBlobStorage::TWindowFeedback_EStatus>(queryMsg.GetStatus()));
+                        resMsg->SetStatus(NKikimrCapnProtoUtil::convertToProtobuf(queryMsg.GetStatus()));
                     }
                 }
 
@@ -658,10 +659,10 @@ namespace NKikimr {
                 }
 
                 if (queryRecord->GetMsgQoS().HasExtQueueId()) {
-                    resultQoS->SetExtQueueId(static_cast<NKikimrBlobStorage::EVDiskQueueId>(queryRecord->GetMsgQoS().GetExtQueueId()));
+                    resultQoS->SetExtQueueId(NKikimrCapnProtoUtil::convertToProtobuf(queryRecord->GetMsgQoS().GetExtQueueId()));
                 }
                 if (queryRecord->GetMsgQoS().HasIntQueueId()) {
-                    resultQoS->SetIntQueueId(static_cast<NKikimrBlobStorage::EVDiskInternalQueueId>(queryRecord->GetMsgQoS().GetIntQueueId()));
+                    resultQoS->SetIntQueueId(NKikimrCapnProtoUtil::convertToProtobuf(queryRecord->GetMsgQoS().GetIntQueueId()));
                 }
 
                 resultQoS->ClearDeadlineSeconds();
@@ -1292,7 +1293,7 @@ namespace NKikimr {
         static std::unique_ptr<TEvVGet> CreateExtremeIndexQuery(const TVDiskID &vdisk, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, NKikimrCapnProto::ConvertEGetHandleClassToCapnProto(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, NKikimrCapnProtoUtil::convertToCapnProto(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, true, forceBlockTabletData));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
@@ -1303,7 +1304,7 @@ namespace NKikimr {
         static std::unique_ptr<TEvVGet> CreateExtremeDataQuery(const TVDiskID &vdisk, TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags = EFlags::None, TMaybe<ui64> requestCookie = {},
                 std::initializer_list<TExtremeQuery> queries = {}, std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, NKikimrCapnProto::ConvertEGetHandleClassToCapnProto(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, NKikimrCapnProtoUtil::convertToCapnProto(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, false, true, forceBlockTabletData));
             for (const auto &q : queries) {
                 res->AddExtremeQuery(std::get<0>(q), std::get<1>(q), std::get<2>(q), std::get<3>(q));
@@ -1315,7 +1316,7 @@ namespace NKikimr {
                 NKikimrBlobStorage::EGetHandleClass cls, EFlags flags, TMaybe<ui64> requestCookie,
                 const TLogoBlobID &fromId, const TLogoBlobID &toId, ui32 maxResults = 0, const ui64 *cookie = nullptr,
                 std::optional<TForceBlockTabletData> forceBlockTabletData = {}) {
-            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, NKikimrCapnProto::ConvertEGetHandleClassToCapnProto(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
+            std::unique_ptr<TEvVGet> res(new TEvVGet(vdisk, deadline, NKikimrCapnProtoUtil::convertToCapnProto(cls), bool(ui32(flags) & ui32(EFlags::NotifyIfNotReady)),
                     bool(ui32(flags) & ui32(EFlags::ShowInternals)), requestCookie, true, false, forceBlockTabletData));
             NKikimrCapnProto::TRangeQuery::Builder q = res->Record.MutableRangeQuery();
             LogoBlobIDFromLogoBlobID(fromId, q.MutableFrom());
@@ -1332,14 +1333,14 @@ namespace NKikimr {
         void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) {
             Y_VERIFY(Extreme);
 
-            NKikimrCapnProto::TExtremeQuery::Builder q = Record.AddExtremeQueries();
-            LogoBlobIDFromLogoBlobID(logoBlobId, q.MutableId());
+            auto q = Record.AddExtremeQueries();
+            LogoBlobIDFromLogoBlobID(logoBlobId, q->MutableId());
             if (sh != 0)
-                q.SetShift(sh);
+                q->SetShift(sh);
             if (sz != 0)
-                q.SetSize(sz);
+                q->SetSize(sz);
             if (cookie)
-                q.SetCookie(*cookie);
+                q->SetCookie(*cookie);
 #if BS_EVVGET_SIZE_VERIFY
             if (Record.HasIndexOnly() && Record.GetIndexOnly()) {
                 ExpectedReplySize += BlobProtobufHeaderMaxSize;
@@ -1371,11 +1372,11 @@ namespace NKikimr {
                 errorReason = "TEvVGet rejected by VDisk. It has no query";
             } else if (!Record.HasVDiskID()) {
                 errorReason = "TEvVGet rejected by VDisk. It has no VDiskID";
-            } else if (!Record.MutableVDiskID().HasGroupID()) {
+            } else if (!Record.MutableVDiskID()->HasGroupID()) {
                 errorReason = "TEvVGet rejected by VDisk. It has no VDiskID::GroupID";
             } else if (Record.HasMsgQoS()) {
                 errorReason = "TEvVGet rejected by VDisk. MsgQoS is undefined";
-            } else if (! Record.MutableMsgQoS().HasExtQueueId()) {
+            } else if (! Record.MutableMsgQoS()->HasExtQueueId()) {
                 errorReason = "TEvVGet rejected by VDisk. ExtQueueId is undefined";
             } else {
                 return true;
@@ -1474,13 +1475,13 @@ namespace NKikimr {
                 Record.SetIndexOnly(true);
             }
             if (deadline != TInstant::Max()) {
-                Record.MutableMsgQoS().SetDeadlineSeconds((ui32)deadline.Seconds());
+                Record.MutableMsgQoS()->SetDeadlineSeconds((ui32)deadline.Seconds());
             }
             if (forceBlockTabletData) {
-                Record.MutableForceBlockTabletData().SetId(forceBlockTabletData->Id);
-                Record.MutableForceBlockTabletData().SetGeneration(forceBlockTabletData->Generation);
+                Record.MutableForceBlockTabletData()->SetId(forceBlockTabletData->Id);
+                Record.MutableForceBlockTabletData()->SetGeneration(forceBlockTabletData->Generation);
             }
-            Record.MutableMsgQoS().SetExtQueueId(HandleClassToQueueId(cls));
+            Record.MutableMsgQoS()->SetExtQueueId(NKikimrCapnProtoUtil::convertToCapnProto(HandleClassToQueueId(NKikimrCapnProtoUtil::convertToProtobuf(cls))));
         }
     };
 

@@ -624,7 +624,13 @@ namespace NKikimrCapnProto {
             TTimestamps::Reader GetTimestamps() const { return getTimestamps(); }
             TTabletData::Reader GetReaderTabletData() const { return getReaderTabletData(); }
             TTabletData::Reader GetForceBlockTabletData() const { return getForceBlockTabletData(); }
-            EGetHandleClass GetHandleClass() const { return static_cast<EGetHandleClass>(static_cast<size_t>(getHandleClass()) - 1); }
+            EGetHandleClass GetHandleClass() const {
+                if (getHandleClass() == NKikimrCapnProto_::EGetHandleClass::NOT_SET) {
+                    return EGetHandleClass::AsyncRead;
+                }
+
+                return static_cast<EGetHandleClass>(static_cast<size_t>(getHandleClass()) - 1);
+            }
             bool HasRangeQuery() const { return hasRangeQuery(); }
             bool HasVDiskID() const { return hasVDiskID(); }
             bool HasMsgQoS() const { return hasMsgQoS(); }

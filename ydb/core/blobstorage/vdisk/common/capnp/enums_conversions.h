@@ -33,6 +33,10 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
+    NKikimrCapnProto::EVDiskQueueId convertToCapnProto(NKikimrCapnProto::EVDiskQueueId value) {
+        return value;
+    }
+
     NKikimrBlobStorage::EVDiskQueueId convertToProtobuf(NKikimrCapnProto::EVDiskQueueId value) {
         switch (value) {
             case NKikimrCapnProto::EVDiskQueueId::Unknown:
@@ -60,7 +64,7 @@ namespace NKikimrCapnProtoUtil {
         return value;
     }
 
-        NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrBlobStorage::TWindowFeedback_EStatus &value) {
+    NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrBlobStorage::TWindowFeedback_EStatus &value) {
         switch (value) {
             case NKikimrBlobStorage::TWindowFeedback_EStatus_Unknown:
                 return NKikimrCapnProto::EStatus::Unknown;
@@ -77,6 +81,10 @@ namespace NKikimrCapnProtoUtil {
             default:
                 throw std::runtime_error("Invalid Protobuf EStatus value");
         }
+    }
+
+    NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrCapnProto::EStatus &value) {
+        return value;
     }
 
     NKikimrBlobStorage::TWindowFeedback_EStatus convertToProtobuf(const NKikimrCapnProto::EStatus &value) {
@@ -102,7 +110,7 @@ namespace NKikimrCapnProtoUtil {
         return value;
     }
 
-        NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrBlobStorage::EGetHandleClass &value) {
+    NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrBlobStorage::EGetHandleClass &value) {
         switch (value) {
             case NKikimrBlobStorage::AsyncRead:
                 return NKikimrCapnProto::EGetHandleClass::AsyncRead;
@@ -115,6 +123,10 @@ namespace NKikimrCapnProtoUtil {
             default:
                 throw std::runtime_error("Invalid Protobuf EGetHandleClass value");
         }
+    }
+
+    NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrCapnProto::EGetHandleClass &value) {
+        return value;
     }
 
     NKikimrBlobStorage::EGetHandleClass convertToProtobuf(const NKikimrCapnProto::EGetHandleClass &value) {
@@ -159,6 +171,10 @@ namespace NKikimrCapnProtoUtil {
             default:
                 throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value");
         }
+    }
+
+    NKikimrCapnProto::EVDiskInternalQueueId convertToCapnProto(const NKikimrCapnProto::EVDiskInternalQueueId &value) {
+        return value;
     }
 
     NKikimrBlobStorage::EVDiskInternalQueueId convertToProtobuf(const NKikimrCapnProto::EVDiskInternalQueueId &value) {

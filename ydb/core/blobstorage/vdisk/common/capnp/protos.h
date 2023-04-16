@@ -187,7 +187,12 @@ namespace NKikimrCapnProto {
             uint64_t GetMaxWindowSize() const { return getMaxWindowSize(); }
             TMessageId::Reader GetExpectedMsgId() const { return getExpectedMsgId(); }
             TMessageId::Reader GetFailedMsgId() const { return getFailedMsgId(); }
-            EStatus GetStatus() const { return static_cast<EStatus>(static_cast<size_t>(getStatus()) - 1); }
+            EStatus GetStatus() const {
+                if (getStatus() == NKikimrCapnProto_::EStatus::NOT_SET) {
+                    return EStatus::Unknown;
+                }
+                return static_cast<EStatus>(static_cast<size_t>(getStatus()) - 1);
+            }
             bool HasExpectedMsgId() const { return hasExpectedMsgId(); }
             bool HasFailedMsgId() const { return hasFailedMsgId(); }
             bool HasStatus() const { return getStatus() != NKikimrCapnProto_::EStatus::NOT_SET; }
@@ -297,8 +302,18 @@ namespace NKikimrCapnProto {
             TWindowFeedback::Reader GetWindow() const { return getWindow(); }
             TExecTimeStats::Reader GetExecTimeStats() const { return getExecTimeStats(); }
             TActorId::Reader GetSenderActorId() const { return getSenderActorId(); }
-            EVDiskQueueId GetExtQueueId() const { return static_cast<EVDiskQueueId>(static_cast<size_t>(getExtQueueId()) - 1); }
-            EVDiskInternalQueueId GetIntQueueId() const { return static_cast<EVDiskInternalQueueId>(static_cast<size_t>(getIntQueueId()) - 1); }
+            EVDiskQueueId GetExtQueueId() const {
+                if (getExtQueueId() == NKikimrCapnProto_::EVDiskQueueId::NOT_SET) {
+                    return EVDiskQueueId::Unknown;
+                }
+                return static_cast<EVDiskQueueId>(static_cast<size_t>(getExtQueueId()) - 1);
+            }
+            EVDiskInternalQueueId GetIntQueueId() const {
+                if (getIntQueueId() == NKikimrCapnProto_::EVDiskInternalQueueId::NOT_SET) {
+                    return EVDiskInternalQueueId::IntUnknown;
+                }
+                return static_cast<EVDiskInternalQueueId>(static_cast<size_t>(getIntQueueId()) - 1);
+            }
             bool HasMsgId() const { return hasMsgId(); }
             bool HasCostSettings() const { return hasCostSettings(); }
             bool HasWindow() const { return hasWindow(); }

@@ -29,7 +29,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrBlobStorage::EVDiskQueueId::End:
                 return NKikimrCapnProto::EVDiskQueueId::End;
             default:
-                throw std::runtime_error("Invalid Protobuf EVDiskQueueId value");
+                throw std::runtime_error("Invalid Protobuf EVDiskQueueId value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -56,7 +56,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrCapnProto::EVDiskQueueId::GetLowRead:
                 return NKikimrBlobStorage::GetLowRead;
             default:
-                throw std::runtime_error("Invalid Protobuf EVDiskQueueId value");
+                throw std::runtime_error("Invalid Protobuf EVDiskQueueId value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -79,7 +79,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrBlobStorage::TWindowFeedback_EStatus_HighWatermarkOverflow:
                 return NKikimrCapnProto::EStatus::HighWatermarkOverflow;
             default:
-                throw std::runtime_error("Invalid Protobuf EStatus value");
+                throw std::runtime_error("Invalid Protobuf EStatus value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -102,7 +102,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrCapnProto::EStatus::HighWatermarkOverflow:
                 return NKikimrBlobStorage::TWindowFeedback_EStatus_HighWatermarkOverflow;
             default:
-                throw std::runtime_error("Invalid Cap'n Proto EStatus value");
+                throw std::runtime_error("Invalid Cap'n Proto EStatus value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -121,7 +121,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrBlobStorage::LowRead:
                 return NKikimrCapnProto::EGetHandleClass::LowRead;
             default:
-                throw std::runtime_error("Invalid Protobuf EGetHandleClass value");
+                throw std::runtime_error("Invalid Protobuf EGetHandleClass value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -140,7 +140,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrCapnProto::EGetHandleClass::LowRead:
                 return NKikimrBlobStorage::LowRead;
             default:
-                throw std::runtime_error("Invalid Cap'n Proto EGetHandleClass value");
+                throw std::runtime_error("Invalid Cap'n Proto EGetHandleClass value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -169,7 +169,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrBlobStorage::IntEnd:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntEnd;
             default:
-                throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value");
+                throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));
         }
     }
 
@@ -200,7 +200,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrCapnProto::EVDiskInternalQueueId::IntEnd:
                 return NKikimrBlobStorage::EVDiskInternalQueueId::IntEnd;
             default:
-                throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value");
+                throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));
         }
     }
 

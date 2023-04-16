@@ -8,7 +8,7 @@
 
 namespace NKikimrCapnProtoUtil {
 
-    NKikimrCapnProto::EVDiskQueueId convertToCapnProto(NKikimrBlobStorage::EVDiskQueueId value) {
+    inline NKikimrCapnProto::EVDiskQueueId convertToCapnProto(NKikimrBlobStorage::EVDiskQueueId value) {
         switch (value) {
             case NKikimrBlobStorage::EVDiskQueueId::Unknown:
                 return NKikimrCapnProto::EVDiskQueueId::Unknown;
@@ -33,11 +33,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrCapnProto::EVDiskQueueId convertToCapnProto(NKikimrCapnProto::EVDiskQueueId value) {
+    inline NKikimrCapnProto::EVDiskQueueId convertToCapnProto(NKikimrCapnProto::EVDiskQueueId value) {
         return value;
     }
 
-    NKikimrBlobStorage::EVDiskQueueId convertToProtobuf(NKikimrCapnProto::EVDiskQueueId value) {
+    inline NKikimrBlobStorage::EVDiskQueueId convertToProtobuf(NKikimrCapnProto::EVDiskQueueId value) {
         switch (value) {
             case NKikimrCapnProto::EVDiskQueueId::Unknown:
                 return NKikimrBlobStorage::Unknown;
@@ -60,11 +60,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrBlobStorage::EVDiskQueueId convertToProtobuf(NKikimrBlobStorage::EVDiskQueueId value) {
+    inline NKikimrBlobStorage::EVDiskQueueId convertToProtobuf(NKikimrBlobStorage::EVDiskQueueId value) {
         return value;
     }
 
-    NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrBlobStorage::TWindowFeedback_EStatus &value) {
+    inline NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrBlobStorage::TWindowFeedback_EStatus &value) {
         switch (value) {
             case NKikimrBlobStorage::TWindowFeedback_EStatus_Unknown:
                 return NKikimrCapnProto::EStatus::Unknown;
@@ -83,11 +83,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrCapnProto::EStatus &value) {
+    inline NKikimrCapnProto::EStatus convertToCapnProto(const NKikimrCapnProto::EStatus &value) {
         return value;
     }
 
-    NKikimrBlobStorage::TWindowFeedback_EStatus convertToProtobuf(const NKikimrCapnProto::EStatus &value) {
+    inline NKikimrBlobStorage::TWindowFeedback_EStatus convertToProtobuf(const NKikimrCapnProto::EStatus &value) {
         switch (value) {
             case NKikimrCapnProto::EStatus::Unknown:
                 return NKikimrBlobStorage::TWindowFeedback_EStatus_Unknown;
@@ -106,11 +106,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrBlobStorage::TWindowFeedback_EStatus convertToProtobuf(const NKikimrBlobStorage::TWindowFeedback_EStatus &value) {
+    inline NKikimrBlobStorage::TWindowFeedback_EStatus convertToProtobuf(const NKikimrBlobStorage::TWindowFeedback_EStatus &value) {
         return value;
     }
 
-    NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrBlobStorage::EGetHandleClass &value) {
+    inline NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrBlobStorage::EGetHandleClass &value) {
         switch (value) {
             case NKikimrBlobStorage::AsyncRead:
                 return NKikimrCapnProto::EGetHandleClass::AsyncRead;
@@ -125,11 +125,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrCapnProto::EGetHandleClass &value) {
+    inline NKikimrCapnProto::EGetHandleClass convertToCapnProto(const NKikimrCapnProto::EGetHandleClass &value) {
         return value;
     }
 
-    NKikimrBlobStorage::EGetHandleClass convertToProtobuf(const NKikimrCapnProto::EGetHandleClass &value) {
+    inline NKikimrBlobStorage::EGetHandleClass convertToProtobuf(const NKikimrCapnProto::EGetHandleClass &value) {
         switch (value) {
             case NKikimrCapnProto::EGetHandleClass::AsyncRead:
                 return NKikimrBlobStorage::AsyncRead;
@@ -144,11 +144,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrBlobStorage::EGetHandleClass convertToProtobuf(const NKikimrBlobStorage::EGetHandleClass &value) {
+    inline NKikimrBlobStorage::EGetHandleClass convertToProtobuf(const NKikimrBlobStorage::EGetHandleClass &value) {
         return value;
     }
 
-    NKikimrCapnProto::EVDiskInternalQueueId convertToCapnProto(const NKikimrBlobStorage::EVDiskInternalQueueId &value) {
+    inline NKikimrCapnProto::EVDiskInternalQueueId convertToCapnProto(const NKikimrBlobStorage::EVDiskInternalQueueId &value) {
         switch (value) {
             case NKikimrBlobStorage::IntUnknown:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntUnknown;
@@ -173,11 +173,11 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrCapnProto::EVDiskInternalQueueId convertToCapnProto(const NKikimrCapnProto::EVDiskInternalQueueId &value) {
+    inline NKikimrCapnProto::EVDiskInternalQueueId convertToCapnProto(const NKikimrCapnProto::EVDiskInternalQueueId &value) {
         return value;
     }
 
-    NKikimrBlobStorage::EVDiskInternalQueueId convertToProtobuf(const NKikimrCapnProto::EVDiskInternalQueueId &value) {
+    inline NKikimrBlobStorage::EVDiskInternalQueueId convertToProtobuf(const NKikimrCapnProto::EVDiskInternalQueueId &value) {
         switch (value) {
             case NKikimrCapnProto::EVDiskInternalQueueId::IntUnknown:
                 return NKikimrBlobStorage::IntUnknown;
@@ -204,7 +204,7 @@ namespace NKikimrCapnProtoUtil {
         }
     }
 
-    NKikimrBlobStorage::EVDiskInternalQueueId convertToProtobuf(const NKikimrBlobStorage::EVDiskInternalQueueId &value) {
+    inline NKikimrBlobStorage::EVDiskInternalQueueId convertToProtobuf(const NKikimrBlobStorage::EVDiskInternalQueueId &value) {
         return value;
     }
 }

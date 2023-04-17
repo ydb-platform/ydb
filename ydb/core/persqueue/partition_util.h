@@ -108,7 +108,6 @@ private:
 };
 
 void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels);
-void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
-void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
+NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i);
 
 } // namespace NKikimr::NPQ

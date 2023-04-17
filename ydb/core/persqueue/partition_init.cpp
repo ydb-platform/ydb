@@ -6,6 +6,8 @@ namespace NKikimr::NPQ {
 static const ui32 LEVEL0 = 32;
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
 bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
 //
@@ -937,6 +939,46 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
         diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
     }
     return !diskIsOk;
+}
+
+static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 partition,
+                         TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    auto read = request->Record.AddCmdReadRange();
+    auto range = read->MutableRange();
+    TKeyPrefix from(c, partition);
+    if (!key.empty()) {
+        Y_VERIFY(key.StartsWith(TStringBuf(from.Data(), from.Size())));
+        from.Clear();
+        from.Append(key.data(), key.size());
+    }
+    range->SetFrom(from.Data(), from.Size());
+
+    TKeyPrefix to(c, partition + 1);
+    range->SetTo(to.Data(), to.Size());
+
+    if(includeData)
+        read->SetIncludeData(true);
+
+    if (dropTmp) {
+        auto del = request->Record.AddCmdDeleteRange();
+        auto range = del->MutableRange();
+        TKeyPrefix from(TKeyPrefix::TypeTmpData, partition);
+        range->SetFrom(from.Data(), from.Size());
+
+        TKeyPrefix to(TKeyPrefix::TypeTmpData, partition + 1);
+        range->SetTo(to.Data(), to.Size());
+    }
+
+    ctx.Send(dst, request.Release());
+}
+
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeInfo, true, key, key == "");
+}
+
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
 }
 
 } // namespace NKikimr::NPQ

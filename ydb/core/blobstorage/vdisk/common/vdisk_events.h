@@ -1663,7 +1663,7 @@ namespace NKikimr {
             }
             if (request.HasTimestamps()) {
                 auto *timestamps = Record.MutableTimestamps();
-                auto other = request->GetTimestamps();
+                auto other = request.GetTimestamps();
                 timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
                 timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
                 timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());

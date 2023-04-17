@@ -1,0 +1,48 @@
+name: Build-and-Test Provisioned VM
+
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
+      test_python_suite:
+        required: false
+        type: string
+      launch_unit_tests:
+        required: true
+        type: boolean
+      launch_functional_tests:
+        required: true
+        type: boolean
+
+jobs:
+  main:
+    name: Build and test
+    runs-on: [ self-hosted, Provisioned, "${{ inputs.runner_label }}" ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Build
+      uses: ./.github/actions/build
+      with: 
+        sanitizer: ${{ inputs.sanitizer }}
+    - name: Launch unit tests
+      if: ${{ inputs.launch_unit_tests }}
+      uses: ./.github/actions/test
+      with: 
+        log_suffix: ${{format('{0}-{1}', inputs.runner_label, inputs.sanitizer)}}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+    - name: Launch functional tests
+      if: ${{ inputs.launch_functional_tests }}
+      uses: ./.github/actions/test_python
+      with:
+        test_python_suite: ${{ inputs.test_python_suite }}

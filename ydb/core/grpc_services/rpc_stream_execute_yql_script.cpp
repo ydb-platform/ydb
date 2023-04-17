@@ -130,11 +130,17 @@ private:
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            // Overide default forget action which terminate this actor on client disconnect
+            hFunc(TRpcServices::TEvForgetOperation, HandleForget);
             default: {
                 return ReplyFinishStream(TStringBuilder()
                     << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite());
             }
         }
+    }
+
+    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev) {
+        Y_UNUSED(ev);
     }
 
     void Proceed(const TActorContext &ctx) {

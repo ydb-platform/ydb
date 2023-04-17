@@ -504,28 +504,10 @@ TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& f
         auto argAsList = ctx.NewArgument(inputs[inputId].Pos(), TStringBuilder() << "_dq_list_arg" << inputId);
         auto stageInput = buildDqBroadcastCn(inputs[inputId]);
 
-        auto condenseInput = Build<TCoCondense>(ctx, stageInput.Pos())
-            .Input(args[inputId])
-            .State<TCoList>()
-                .ListType<TCoTypeOf>()
-                    .Value(stageInput)
-                    .Build()
-                .Build()
-            .SwitchHandler()
-                .Args({"item", "state"})
-                .Body(MakeBool<false>(stageInput.Pos(), ctx))
-                .Build()
-            .UpdateHandler()
-                .Args({"item", "state"})
-                .Body<TCoAppend>()
-                    .List("state")
-                    .Item("item")
-                    .Build()
-                .Build()
-            .Done().Ptr();
-
         newFlatMap = Build<TCoFlatMap>(ctx, stageInput.Pos())
-             .Input(condenseInput)
+             .Input<TCoSqueezeToList>()
+                 .Stream(args[inputId])
+                 .Build()
              .Lambda()
                 .Args({argAsList})
                 .Body(ctx.ReplaceNode(std::move(newFlatMap), args[inputId].Ref(), argAsList))

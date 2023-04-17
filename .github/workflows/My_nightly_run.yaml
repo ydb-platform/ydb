@@ -24,10 +24,12 @@ jobs:
         sanitizer: [ "", "sanitize=address" ]
       fail-fast: false
 
-    uses: ./.github/workflows/build_and_test_ondemand.yml
+    uses: ./.github/workflows/My_build_and_test_ondemand.yml
     with:
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
+      launch_unit_tests: ${{inputs.launch_unit_tests}}
+      launch_functional_tests: ${{inputs.launch_functional_tests}}
     secrets: inherit
 
   build_provisioned:
@@ -38,7 +40,7 @@ jobs:
       fail-fast: false
     uses: ./.github/workflows/My_build_and_test_provisioned.yml
     with:
-      runner_label: X64
+      runner_label: ARM64
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
       launch_unit_tests: ${{inputs.launch_unit_tests}}

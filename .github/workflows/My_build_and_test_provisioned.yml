@@ -23,8 +23,8 @@ on:
         type: boolean
 
 jobs:
-  unit-test:
-    name: Build and test unit
+  main:
+    name: Build and test
     runs-on: [ self-hosted, Provisioned, "${{ inputs.runner_label }}" ]
     steps:
     - name: Checkout

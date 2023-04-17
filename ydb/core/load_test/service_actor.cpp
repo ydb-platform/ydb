@@ -605,7 +605,7 @@ public:
             const TString& uuid = UuidByTag.at(msg->Tag);
             record.SetUuid(uuid);
             record.SetNodeId(SelfId().NodeId());
-            record.SetSuccess(msg->Report != nullptr);  // TODO check how load actors set the field
+            record.SetSuccess(msg->Report != nullptr);
             record.SetFinishTimestamp(finishTime.Seconds());
             record.SetErrorReason(msg->ErrorReason);
 

@@ -328,7 +328,7 @@ public:
         }
 
         LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
-        // TODO: report error in case of such death
+        EarlyStop = false;
         ctx.Schedule(TDuration::Seconds(DurationSeconds + 10), new TEvents::TEvPoisonPill);
 
         CreateSessionForTablesDDL(ctx);
@@ -336,12 +336,12 @@ public:
 
     void HandleWakeup(const TActorContext& ctx) {
         if (ResultsReceived) {
-            // if death process is started, then brake wakeup circuit
+            // if death process is started, then break wakeup circuit
             return;
         }
         size_t targetSessions;
         if (IncreaseSessions) {
-            targetSessions = 1 + NumOfSessions * (TInstant::Now() - Start).Seconds() / DurationSeconds;
+            targetSessions = 1 + NumOfSessions * (TAppData::TimeProvider->Now() - TestStartTime).Seconds() / DurationSeconds;
             targetSessions = std::min(targetSessions, NumOfSessions);
         } else {
             targetSessions = NumOfSessions;
@@ -376,6 +376,7 @@ private:
     // death
 
     void HandlePoisonPill(const TActorContext& ctx) {
+        EarlyStop = (TAppData::TimeProvider->Now() - TestStartTime).Seconds() < DurationSeconds;
         LOG_CRIT_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
             << "but it is supposed to pass away by receiving TEvKqpWorkerResponse from all of the workers");
         StartDeathProcess(ctx);
@@ -422,10 +423,19 @@ private:
     void DeathReport(const TActorContext& ctx) {
         CloseSession(ctx);
 
-        TIntrusivePtr<TEvLoad::TLoadReport> Report(new TEvLoad::TLoadReport());
-        Report->Duration = TDuration::Seconds(DurationSeconds);
+        TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
+        TString errorReason;
+        if (ResultsReceived >= Workers.size()) {
+            report.Reset(new TEvLoad::TLoadReport());
+            report->Duration = TDuration::Seconds(DurationSeconds);
+            errorReason = "OK, called StartDeathProcess";
+        } else if (EarlyStop) {
+            errorReason = "Abort, stop signal received";
+        } else {
+            errorReason = "Abort, timeout";
+        }
 
-        auto* finishEv = new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK, called StartDeathProcess");
+        auto* finishEv = new TEvLoad::TEvLoadTestFinished(Tag, report, errorReason);
         finishEv->LastHtmlPage = RenderHTML();
         finishEv->JsonResult = GetJsonResult();
         ctx.Send(Parent, finishEv);
@@ -544,7 +554,7 @@ private:
 
         if (InitData.empty()) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " initial query is executed, going to create workers");
-            Start = TInstant::Now();
+            TestStartTime = TAppData::TimeProvider->Now();
             if (IncreaseSessions) {
                 ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
             } else {
@@ -592,8 +602,8 @@ private:
                 TABLEBODY() {
                     TABLER() {
                         TABLED() {
-                            if (Start) {
-                                str << (TInstant::Now() - Start).Seconds() << " / " << DurationSeconds;
+                            if (TestStartTime) {
+                                str << (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << " / " << DurationSeconds;
                             } else {
                                 str << -1 << " / " << DurationSeconds;
                             }
@@ -629,7 +639,7 @@ private:
             WorkloadType,
             Tag,
             Workers.size(),
-            Start + TDuration::Seconds(DurationSeconds),
+            TestStartTime + TDuration::Seconds(DurationSeconds),
             Transactions,
             TransactionsBytesWritten);
         Workers.push_back(ctx.Register(worker));
@@ -646,7 +656,8 @@ private:
         ctx.Send(kqp_proxy, ev.Release());
     }
 
-    TInstant Start;
+    TInstant TestStartTime;
+    bool EarlyStop = false;
     TString TableSession = "wrong sessionId";
     TString WorkingDir;
     ui64 WorkloadType;

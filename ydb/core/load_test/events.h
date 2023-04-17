@@ -76,8 +76,8 @@ struct TEvLoad {
 
     struct TEvLoadTestFinished : public TEventLocal<TEvLoadTestFinished, TEvLoad::EvLoadTestFinished> {
         ui64 Tag;
-        TIntrusivePtr<TLoadReport> Report; // nullptr indicates error
-        TString ErrorReason;
+        TIntrusivePtr<TLoadReport> Report; // nullptr indicates an error or an early stop
+        TString ErrorReason; // human readable status, might be nonempty even in the case of success
         TString LastHtmlPage;
         NJson::TJsonValue JsonResult;
 

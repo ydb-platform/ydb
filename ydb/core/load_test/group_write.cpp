@@ -752,7 +752,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
     ::NMonitoring::TDynamicCounters::TCounterPtr ScheduleCounter;
 
-    ui32 TestStoppedRecieved = 0;
+    ui32 TestStoppedReceived = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -851,8 +851,8 @@ public:
     }
 
     void HandleStopTest(const TActorContext& ctx) {
-        ++TestStoppedRecieved;
-        if (TestStoppedRecieved == TabletWriters.size()) {
+        ++TestStoppedReceived;
+        if (TestStoppedReceived == TabletWriters.size()) {
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, "HandleStopTest"));
             Die(ctx);
         }

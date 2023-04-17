@@ -124,6 +124,7 @@ class TKeyValueWriterLoadTestActor : public TActorBootstrapped<TKeyValueWriterLo
     // Monitoring
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
     TInstant TestStartTime;
+    bool EarlyStop = false;
 
     ui64 TabletId;
     TActorId Pipe;
@@ -195,6 +196,7 @@ public:
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvKeyValueResult, "
                     << " all workers is initialized, start test");
         }
+        EarlyStop = false;
         Connect(ctx);
     }
 
@@ -203,6 +205,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandlePoisonPill(const TActorContext& ctx) {
+        EarlyStop = (TAppData::TimeProvider->Now() - TestStartTime).Seconds() < DurationSeconds;
         if (OwnerInitInProgress) {
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
                     << "not all workers is initialized, so wait them to end initialization");
@@ -217,9 +220,14 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
                 << " TKeyValueWriterLoadTestActor StartDeathProcess called");
         Become(&TKeyValueWriterLoadTestActor::StateEndOfWork);
-        TIntrusivePtr<TEvLoad::TLoadReport> Report(new TEvLoad::TLoadReport());
-        Report->Duration = TDuration::Seconds(DurationSeconds);
-        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, "OK called StartDeathProcess"));
+        TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
+        if (!EarlyStop) {
+            report.Reset(new TEvLoad::TLoadReport());
+            report->Duration = TDuration::Seconds(DurationSeconds);
+        }
+        const TString errorReason = EarlyStop ?
+            "Abort, stop signal received" : "OK, called StartDeathProcess";
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, report, errorReason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);
     }

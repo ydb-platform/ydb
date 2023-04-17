@@ -563,10 +563,10 @@ public:
                         << " GetReallyWrittenBytes()# " << worker->GetReallyWrittenBytes()
                         << " GetGlobalWrittenBytes()# " << worker->GetGlobalWrittenBytes());
             }
-            auto report = std::make_unique<TEvLoad::TLoadReport>();
+            TIntrusivePtr<TEvLoad::TLoadReport> report = new TEvLoad::TLoadReport();
             report->LoadType = TEvLoad::TLoadReport::LOAD_LOG_WRITE;
             report->Duration = TAppData::TimeProvider->Now() - TestStartTime;
-            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, report.release(), "OK"));
+            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, report, "OK"));
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " End of work, TEvLoadTestFinished is sent");
             Die(ctx);
         }

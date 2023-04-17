@@ -672,16 +672,6 @@ namespace NKikimr {
             }
         }
 
-        TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
-                                ui32, const TActorIDPtr &skeletonFrontIDPtr)
-                : TBase(now, counterPtr, histoPtr, channel)
-                , MsgCtx(TVMsgContext())
-                , SkeletonFrontIDPtr(skeletonFrontIDPtr)
-        {
-                Y_VERIFY(!SkeletonFrontIDPtr);
-        }
-
         void MarkHugeWriteTime() {
             if (auto *stats = GetExecTimeStats()) {
                 TDuration hugeWriteTime = TDuration::Seconds(ExecutionTimer.Passed());
@@ -1672,8 +1662,12 @@ namespace NKikimr {
                 Record.SetCookie(request.GetCookie());
             }
             if (request.HasTimestamps()) {
-                // TODO(stetsyuk): copy timestamps directly, without using CopyFrom
-//                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
+                auto *timestamps = Record.MutableTimestamps();
+                auto other = request->GetTimestamps();
+                timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
+                timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
+                timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());
+                timestamps->SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
             }
         }
     };

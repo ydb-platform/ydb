@@ -1697,64 +1697,6 @@ namespace NKikimr {
             return *intQueue;
         }
 
-        TExtQueueClass &GetExtQueue(NKikimrCapnProto::EVDiskQueueId extQueueId) {
-            TExtQueueClass *extQueue = nullptr;
-            switch (extQueueId) {
-                case NKikimrCapnProto::EVDiskQueueId::PutTabletLog:
-                    extQueue = &ExtQueueTabletLogPuts;
-                    break;
-                case NKikimrCapnProto::EVDiskQueueId::PutAsyncBlob:
-                    extQueue = &ExtQueueAsyncBlobPuts;
-                    break;
-                case NKikimrCapnProto::EVDiskQueueId::PutUserData:
-                    extQueue = &ExtQueueUserDataPuts;
-                    break;
-                case NKikimrCapnProto::EVDiskQueueId::GetAsyncRead:
-                    extQueue = &ExtQueueAsyncGets;
-                    break;
-                case NKikimrCapnProto::EVDiskQueueId::GetFastRead:
-                    extQueue = &ExtQueueFastGets;
-                    break;
-                case NKikimrCapnProto::EVDiskQueueId::GetDiscover:
-                    extQueue = &ExtQueueDiscoverGets;
-                    break;
-                case NKikimrCapnProto::EVDiskQueueId::GetLowRead:
-                    extQueue = &ExtQueueLowGets;
-                    break;
-                default: Y_FAIL("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
-            }
-            return *extQueue;
-        }
-
-        TIntQueueClass &GetIntQueue(NKikimrCapnProto::EVDiskInternalQueueId intQueueId) {
-            TIntQueueClass *intQueue = nullptr;
-            switch (intQueueId) {
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntGetAsync:
-                    intQueue = IntQueueAsyncGets.get();
-                    break;
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntGetFast:
-                    intQueue = IntQueueFastGets.get();
-                    break;
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntGetDiscover:
-                    intQueue = IntQueueDiscover.get();
-                    break;
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntLowRead:
-                    intQueue = IntQueueLowGets.get();
-                    break;
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntPutLog:
-                    intQueue = IntQueueLogPuts.get();
-                    break;
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeForeground:
-                    intQueue = IntQueueHugePutsForeground.get();
-                    break;
-                case NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeBackground:
-                    intQueue = IntQueueHugePutsBackground.get();
-                    break;
-                default: Y_FAIL("Unexpected case");
-            }
-            return *intQueue;
-        }
-
     private:
         void Die(const TActorContext &ctx) override {
             ActiveActors.KillAndClear(ctx);

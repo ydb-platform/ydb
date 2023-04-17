@@ -44,6 +44,8 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     // Settings below are for CSV format only
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
+    FLUENT_SETTING_DEFAULT(bool, NewlineDelimited, false);
+    FLUENT_SETTING_DEFAULT(TString, HeaderRow, "");
     FLUENT_SETTING_DEFAULT(TString, Delimiter, DefaultDelimiter);
     FLUENT_SETTING_DEFAULT(TString, NullValue, "");
 };
@@ -67,7 +69,10 @@ private:
     NTable::TBulkUpsertSettings UpsertSettings;
     NTable::TRetryOperationSettings RetrySettings;
 
+    static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
+
     TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
+    TStatus UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings);
     TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& buffer);
 
     TStatus UpsertJson(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);

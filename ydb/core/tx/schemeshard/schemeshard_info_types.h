@@ -847,9 +847,29 @@ public:
     }
 };
 
+class TColumnTablesLayout;
 
 struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     using TPtr = TIntrusivePtr<TOlapStoreInfo>;
+
+    class ILayoutPolicy {
+    protected:
+        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const = 0;
+    public:
+        using TPtr = std::shared_ptr<ILayoutPolicy>;
+        virtual ~ILayoutPolicy() = default;
+        bool Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const;
+    };
+
+    class TMinimalTablesCountLayout: public ILayoutPolicy {
+    protected:
+        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
+    };
+
+    class TIdentityGroupsLayout: public ILayoutPolicy {
+    protected:
+        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
+    };
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
@@ -875,6 +895,8 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     const TAggregatedStats& GetStats() const {
         return Stats;
     }
+
+    ILayoutPolicy::TPtr GetTablesLayoutPolicy() const;
 
     void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
         Stats.Aggregated.PartCount = ColumnShards.size();

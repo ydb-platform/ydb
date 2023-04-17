@@ -1613,6 +1613,23 @@ message TDataShardConfig {
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
 }
 
+message TColumnShardConfig {
+    message TTablesStorageLayoutPolicy {
+        message TMinimalTablesCountPolicy {
+        };
+
+        message TIdentityGroupsPolicy {
+        };
+
+        oneof Policy {
+            TMinimalTablesCountPolicy MinimalTables = 1;
+            TIdentityGroupsPolicy IdentityGroups = 2;
+        }
+
+    }
+    optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
+}
+
 message TSchemeShardConfig {
     message TInFlightCounterConfig {
         optional NKikimr.NSchemeShard.ESimpleCounters Type = 1;
@@ -1815,6 +1832,7 @@ message TAppConfig {
     optional TExternalIndexConfig ExternalIndexConfig = 63;
     optional bool YamlConfigEnabled = 64;
     optional TConveyorConfig ConveyorConfig = 65;
+    optional TColumnShardConfig ColumnShardConfig = 66;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

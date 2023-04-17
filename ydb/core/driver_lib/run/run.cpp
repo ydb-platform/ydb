@@ -1082,6 +1082,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
     }
 
+    if (runConfig.AppConfig.HasColumnShardConfig()) {
+        AppData->ColumnShardConfig = runConfig.AppConfig.GetColumnShardConfig();
+    }
+
     if (runConfig.AppConfig.HasSchemeShardConfig()) {
         AppData->SchemeShardConfig = runConfig.AppConfig.GetSchemeShardConfig();
     }

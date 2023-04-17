@@ -121,6 +121,7 @@ message TConfigItem {
         ExternalIndexConfigItem = 63;
         YamlConfigEnabledItem = 64;
         ConveyorConfigItem = 65;
+        ColumnShardConfigItem = 66;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

@@ -1,4 +1,5 @@
 #include "schemeshard_info_types.h"
+#include "schemeshard_tables_storage.h"
 #include "schemeshard_path.h"
 #include "schemeshard_utils.h"
 
@@ -380,6 +381,44 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
 
     return posById;
 }
+
+}
+
+bool TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+    if (!DoLayout(currentLayout, shardsCount, result)) {
+        return false;
+    }
+    Y_VERIFY(result.size() == shardsCount);
+    return true;
+}
+
+bool TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+    for (auto&& i : currentLayout.GetGroups()) {
+        if (i.GetTableIds().Size() == 0 && i.GetShardIds().Size() >= shardsCount) {
+            result = i.GetShardIds().GetIdsVector(shardsCount);
+            return true;
+        }
+        if (i.GetShardIds().Size() != shardsCount) {
+            continue;
+        }
+        result = i.GetShardIds().GetIdsVector();
+        return true;
+    }
+    return false;
+}
+
+bool TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+    std::vector<ui64> resultLocal;
+    for (auto&& i : currentLayout.GetGroups()) {
+        for (auto&& s : i.GetShardIds()) {
+            resultLocal.emplace_back(s);
+            if (resultLocal.size() == shardsCount) {
+                std::swap(result, resultLocal);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData) {
@@ -2020,6 +2059,18 @@ TOlapStoreInfo::TOlapStoreInfo(
             TOwnerId(shardIdx.GetOwnerId()),
             TLocalShardIdx(shardIdx.GetLocalId())));
     }
+}
+
+TOlapStoreInfo::ILayoutPolicy::TPtr TOlapStoreInfo::GetTablesLayoutPolicy() const {
+    ILayoutPolicy::TPtr result;
+    if (AppData()->ColumnShardConfig.GetTablesStorageLayoutPolicy().HasMinimalTables()) {
+        result = std::make_shared<TMinimalTablesCountLayout>();
+    } else if (AppData()->ColumnShardConfig.GetTablesStorageLayoutPolicy().HasIdentityGroups()) {
+        result = std::make_shared<TIdentityGroupsLayout>();
+    } else {
+        result = std::make_shared<TMinimalTablesCountLayout>();
+    }
+    return result;
 }
 
 TColumnTableInfo::TColumnTableInfo(

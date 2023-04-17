@@ -220,33 +220,6 @@ private:
 };
 
 
-void SetShardingTablets(
-        TColumnTableInfo::TPtr tableInfo,
-        const TVector<TShardIdx>& columnShards, ui32 columnShardCount, bool shuffle,
-        const TSchemeShard& ss)
-{
-    tableInfo->ColumnShards.reserve(columnShards.size());
-    for (const auto& shardIdx : columnShards) {
-        auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);
-        Y_VERIFY(shardInfo, "ColumnShard not found");
-        tableInfo->ColumnShards.push_back(shardInfo->TabletID.GetValue());
-    }
-    if (shuffle) {
-        ShuffleRange(tableInfo->ColumnShards);
-    }
-    tableInfo->ColumnShards.resize(columnShardCount);
-
-    tableInfo->Sharding.SetVersion(1);
-
-    tableInfo->Sharding.MutableColumnShards()->Clear();
-    tableInfo->Sharding.MutableColumnShards()->Reserve(tableInfo->ColumnShards.size());
-    for (ui64 columnShard : tableInfo->ColumnShards) {
-        tableInfo->Sharding.AddColumnShards(columnShard);
-    }
-    tableInfo->Sharding.ClearAdditionalColumnShards();
-}
-
-
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -409,7 +382,9 @@ public:
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
             Y_VERIFY(table->ColumnShards.empty());
-            SetShardingTablets(table.GetPtr(), table->OwnedColumnShards, table->OwnedColumnShards.size(), false, *context.SS);
+            auto currentLayout = TColumnTablesLayout::BuildTrivial(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
+            auto layoutPolicy = std::make_shared<TOlapStoreInfo::TMinimalTablesCountLayout>();
+            Y_VERIFY(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -697,7 +672,15 @@ public:
             }
             tableInfo = tableConstructor.BuildTableInfo(errors);
             if (tableInfo) {
-                SetShardingTablets(tableInfo, storeInfo->ColumnShards, shardsCount, true, *context.SS);
+                auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
+                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(
+                    TColumnTablesLayout::ShardIdxToTabletId(storeInfo->ColumnShards, *context.SS));
+                TTablesStorage::TTableCreateOperator createOperator(tableInfo);
+                if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy)) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "cannot layout table by shards");
+                    return result;
+                }
             }
         } else {
             TOlapTableConstructor tableConstructor;

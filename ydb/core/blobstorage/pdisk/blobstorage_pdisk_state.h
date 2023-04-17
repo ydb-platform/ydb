@@ -3,8 +3,10 @@
 
 #include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_logreader_base.h"
+#include "blobstorage_pdisk_tools.h"
 
 #include <ydb/core/util/metrics.h>
+#include <ydb/core/debug_tools/operation_log.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -80,6 +82,8 @@ struct TOwnerData {
 
     bool OnQuarantine = false;
 
+    TOperationLog<8> OperationLog;
+
     TOwnerData()
       : InFlight(new TOwnerInflight)
     {}
@@ -139,11 +143,65 @@ struct TOwnerData {
     }
 
     bool HaveRequestsInFlight() const {
-        return LogReader || InFlight->ChunkWrites || InFlight->ChunkReads || InFlight->LogWrites;
+        return LogReader || InFlight->ChunkWrites.load() || InFlight->ChunkReads.load() || InFlight->LogWrites.load();
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TOwnerData {";
+        str << "VDiskId# " << VDiskId.ToString();
+        str << " Status# " << RenderStatus(Status);
+        str << " CurrentFirstLsnToKeep# " << CurrentFirstLsnToKeep;
+        str << " LastWrittenCommitLsn# " << LastWrittenCommitLsn;
+        str << " LogRecordsInitiallyRead# " << LogRecordsInitiallyRead;
+        str << " LogRecordsConsequentlyRead# " << LogRecordsConsequentlyRead;
+        str << " OwnerRound# " << OwnerRound;
+        str << " AskedToCutLogAt# " << AskedToCutLogAt;
+        str << " CutLogAt# " << CutLogAt;
+        str << " LastSeenLsn# " << LastSeenLsn;
+        if (HasAlreadyLoggedThisIncarnation) {
+            str << " HasAlreadyLoggedThisIncarnation";
+        }
+        if (HasReadTheWholeLog) {
+            str << " HasReadTheWholeLog";
+        }
+        str << " VDiskSlotId# " << VDiskSlotId;
+        if (InFlight) {
+            str << " Inflight {";
+            str << " ChunkWrites# " << InFlight->ChunkWrites.load();
+            str << " ChunkReads# " << InFlight->ChunkReads.load();
+            str << " LogWrites# " << InFlight->LogWrites.load();
+            str << " }";
+        }
+        str << "}";
+
+        return str.Str();
     }
 
     void Reset(bool quarantine = false) {
-        *this = TOwnerData{};
+        StartingPoints.clear();
+        VDiskId = TVDiskID::InvalidId;
+        Status = EVDiskStatus::VDISK_STATUS_DEFAULT;
+        CurrentFirstLsnToKeep = 0;
+        LastWrittenCommitLsn = 0;
+        CutLogId = TActorId();
+        WhiteboardProxyId = TActorId();
+        LogRecordsInitiallyRead = 0;
+        LogRecordsConsequentlyRead = 0;
+        OwnerRound = 0;
+        AskedToCutLogAt = TInstant();
+        CutLogAt = TInstant();
+        LastSeenLsn = 0;
+        HasAlreadyLoggedThisIncarnation = false;
+        HasReadTheWholeLog = false;
+        LogStartPosition = TLogPosition{0, 0};
+        ReadThroughput = NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond>();
+        WriteThroughput = NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond>();
+        VDiskSlotId = 0;
+
+        LogReader.Reset();
+        InFlight.Reset(TIntrusivePtr<TOwnerInflight>(new TOwnerInflight));
+
         OnQuarantine = quarantine;
     }
 };

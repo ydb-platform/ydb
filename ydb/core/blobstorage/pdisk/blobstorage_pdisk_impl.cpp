@@ -737,6 +737,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                         ActorSystem->Send(new IEventHandle(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
                                     IEventHandle::FlagTrackDelivery, 0));
                         OwnerData[chunkOwner].AskedToCutLogAt = now;
+                        // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[chunkOwner].OperationLog, "System owner asked to cut log, OwnerId# " << chunkOwner);
                     } else {
                         LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK,
                                 "PDiskId# " << (ui32)PDiskId
@@ -780,6 +781,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                     ActorSystem->Send(new IEventHandle(OwnerData[ownerFilter].CutLogId, PDiskActor, cutLog.Release(),
                                 IEventHandle::FlagTrackDelivery, 0));
                     OwnerData[ownerFilter].AskedToCutLogAt = now;
+                    // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[ownerFilter].OperationLog, "User owner asked to cut log, OwnerId# " << ownerFilter);
                 } else {
                     LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK,
                             "PDiskId# " << (ui32)PDiskId
@@ -1735,6 +1737,8 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
 
     TOwnerData &ownerData = OwnerData[owner];
+    ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitForKnownVDisk, OwnerId# " << owner
+            << ", evYardInit# " << evYardInit.ToString());
 
     ownerData.OwnerRound = evYardInit.OwnerRound;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
@@ -1833,6 +1837,8 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     }
 
     // Update round and wait for all pending requests of old owner to finish
+    ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitStart, OwnerId# "
+            << owner << ", new OwnerRound# " << evYardInit.OwnerRound);
     ownerData.OwnerRound = evYardInit.OwnerRound;
     return true;
 }
@@ -1855,22 +1861,23 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         // TODO(cthulhu): don't allocate more owners than expected
         Keeper.AddOwner(owner, vDiskId);
 
-        OwnerData[owner].Reset(false);
-
+        TOwnerData& ownerData = OwnerData[owner];
+        ownerData.Reset(false);
         // A new owner is created.
 
         AtomicIncrement(TotalOwners);
-        OwnerData[owner].VDiskId = vDiskId;
+        ownerData.VDiskId = vDiskId;
         Y_VERIFY(SysLogFirstNoncesToKeep.FirstNonceToKeep[owner] <= SysLogRecord.Nonces.Value[NonceLog]);
         SysLogFirstNoncesToKeep.FirstNonceToKeep[owner] = SysLogRecord.Nonces.Value[NonceLog];
-        OwnerData[owner].CutLogId = evYardInit.CutLogId;
-        OwnerData[owner].WhiteboardProxyId = evYardInit.WhiteboardProxyId;
-        OwnerData[owner].VDiskSlotId = evYardInit.SlotId;
-        OwnerData[owner].OwnerRound = evYardInit.OwnerRound;
+        ownerData.CutLogId = evYardInit.CutLogId;
+        ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId;
+        ownerData.VDiskSlotId = evYardInit.SlotId;
+        ownerData.OwnerRound = evYardInit.OwnerRound;
         VDiskOwners[vDiskId] = owner;
-        OwnerData[owner].Status = TOwnerData::VDISK_STATUS_SENT_INIT;
+        ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
         SysLogRecord.OwnerVDisks[owner] = vDiskId;
-        ownerRound = OwnerData[owner].OwnerRound;
+        ownerRound = ownerData.OwnerRound;
+        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitFinish, OwnerId# " << owner);
 
         AddCbsSet(owner);
 
@@ -1878,8 +1885,8 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
                 << " new owner is created. ownerId# " << owner
                 << " vDiskId# " << vDiskId.ToStringWOGeneration()
                 << " FirstNonceToKeep# " << SysLogFirstNoncesToKeep.FirstNonceToKeep[owner]
-                << " CutLogId# " << OwnerData[owner].CutLogId
-                << " ownerRound# " << OwnerData[owner].OwnerRound
+                << " CutLogId# " << ownerData.CutLogId
+                << " ownerRound# " << ownerData.OwnerRound
                 << " Marker# BPD02");
 
         AskVDisksToCutLogs(OwnerSystem, false);
@@ -2010,6 +2017,8 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                 if (state.CommitState == TChunkState::DATA_ON_QUARANTINE) {
                     if (!pushedOwnerIntoQuarantine) {
                         pushedOwnerIntoQuarantine = true;
+                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, " 
+                                << "CommitState# DATA_ON_QUARANTINE, OwnerId# " << owner);
                         QuarantineOwners.push_back(owner);
                         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                                 << " push ownerId# " << owner
@@ -2045,6 +2054,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
 
                     if (!pushedOwnerIntoQuarantine) {
                         pushedOwnerIntoQuarantine = true;
+                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, OwnerId# " << owner);
                         QuarantineOwners.push_back(owner);
                         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                                 << " push ownerId# " << owner << " into quarantine");
@@ -2055,6 +2065,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
             }
         }
         if (!pushedOwnerIntoQuarantine) {
+            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Remove owner without quarantine, OwnerId# " << owner);
             Keeper.RemoveOwner(owner);
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                     << " removed ownerId# " << owner << " from chunks Keeper");
@@ -2307,6 +2318,7 @@ void TPDisk::ClearQuarantineChunks() {
             return Keeper.GetOwnerUsed(i);
         });
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
+            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[*delIt].OperationLog, "Remove owner from quarantine, OwnerId# " << *delIt);
             Keeper.RemoveOwner(*delIt);
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                     << " removed ownerId# " << *delIt << " from chunks Keeper through QuarantineOwners");

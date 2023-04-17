@@ -65,7 +65,7 @@ void TDSAccessorBase::Handle(TEvRecheckExistence::TPtr& ev) {
 }
 
 void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot detect path existence: " << ev->Get()->GetPath() << "/" << ev->Get()->GetErrorMessage();
+    AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("action", "cannot detect path existence")("path", ev->Get()->GetPath())("error", ev->Get()->GetErrorMessage());
     Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
 }
 

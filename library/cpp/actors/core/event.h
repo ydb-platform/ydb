@@ -97,7 +97,7 @@ namespace NActors {
             return x;
         }
 
-        enum EFlags {
+        enum EFlags: ui32 {
             FlagTrackDelivery = 1 << 0,
             FlagForwardOnNondelivery = 1 << 1,
             FlagSubscribeOnSession = 1 << 2,
@@ -105,9 +105,10 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
         };
+        using TEventFlags = ui32;
 
         const ui32 Type;
-        const ui32 Flags;
+        const TEventFlags Flags;
         const TActorId Recipient;
         TActorId Sender;
         const ui64 Cookie;
@@ -137,7 +138,7 @@ namespace NActors {
             return Flags & FlagUseSubChannel ? Sender.LocalId() : 0ULL;
         }
 
-        static ui32 MakeFlags(ui32 channel, ui32 flags) {
+        static ui32 MakeFlags(ui32 channel, TEventFlags flags) {
             Y_VERIFY(channel < (1 << ChannelBits));
             Y_VERIFY(flags < (1 << ChannelShift));
             return (flags | (channel << ChannelShift));
@@ -175,7 +176,7 @@ namespace NActors {
             return OnNondeliveryHolder.Get() ? OnNondeliveryHolder->Recipient : TActorId();
         }
 
-        IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0,
+        IEventHandle(const TActorId& recipient, const TActorId& sender, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0,
                      const TActorId* forwardOnNondelivery = nullptr, NWilson::TTraceId traceId = {})
             : Type(ev->Type())
             , Flags(flags)
@@ -195,7 +196,7 @@ namespace NActors {
         }
 
         IEventHandle(ui32 type,
-                     ui32 flags,
+                     TEventFlags flags,
                      const TActorId& recipient,
                      const TActorId& sender,
                      TIntrusivePtr<TEventSerializedData> buffer,
@@ -222,7 +223,7 @@ namespace NActors {
         // Special ctor for events from interconnect.
         IEventHandle(const TActorId& session,
                      ui32 type,
-                     ui32 flags,
+                     TEventFlags flags,
                      const TActorId& recipient,
                      const TActorId& sender,
                      TIntrusivePtr<TEventSerializedData> buffer,

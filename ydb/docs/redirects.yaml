@@ -1,6 +1,8 @@
 common:
   - from: /reference/ydb-cli/table-ttl-drop.md
     to: /reference/ydb-cli/table-ttl-reset.md
+  - from: changelog.md
+    to: changelog-server.md
 ru:
   - from: /getting_started/index.md
     to: /administration/quickstart.md
@@ -12,5 +14,4 @@ ru:
     to: /reference/ydb-cli/index.md
   - from: /getting_started/sdk.md
     to: /reference/ydb-sdk/index.md
-  - from: changelog.md
-    to: changelog-server.md
+

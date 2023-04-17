@@ -78,84 +78,12 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
         .Done();
 }
 
-// ReadRangesSource can't deal with skipnullkeys, so we should expand it to (ExtractMembers (SkipNullKeys))
-//FIXME: simplify KIKIMR-16987
-NYql::NNodes::TExprBase ExpandSkipNullMembersForReadTableSource(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx, const TKqpOptimizeContext&) {
-    auto stage = node.Cast<TDqStage>();
-    TMaybe<size_t> tableSourceIndex;
-    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
-        auto input = stage.Inputs().Item(i);
-        if (input.Maybe<TDqSource>() && input.Cast<TDqSource>().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
-            tableSourceIndex = i;
-        }
-    }
-    if (!tableSourceIndex) {
-        return node;
-    }
-
-    auto source = stage.Inputs().Item(*tableSourceIndex).Cast<TDqSource>();
-    auto readRangesSource = source.Settings().Cast<TKqpReadRangesSourceSettings>();
-    auto settings = TKqpReadTableSettings::Parse(readRangesSource.Settings());
-
-    if (settings.SkipNullKeys.empty()) {
-        return node;
-    }
-
-    auto sourceArg = stage.Program().Args().Arg(*tableSourceIndex);
-
-    THashSet<TString> seenColumns;
-    TVector<TCoAtom> columns;
-    TVector<TCoAtom> skipNullColumns;
-    for (size_t i = 0; i < readRangesSource.Columns().Size(); ++i) {
-        auto atom = readRangesSource.Columns().Item(i);
-        auto column = atom.StringValue();
-        if (seenColumns.insert(column).second) {
-            columns.push_back(atom);
-        }
-    }
-    for (auto& column : settings.SkipNullKeys) {
-        TCoAtom atom(ctx.NewAtom(readRangesSource.Settings().Pos(), column));
-        skipNullColumns.push_back(atom);
-        if (seenColumns.insert(column).second) {
-            columns.push_back(atom);
-        }
-    }
-
-    settings.SkipNullKeys.clear();
-    auto newSettings = Build<TKqpReadRangesSourceSettings>(ctx, source.Pos())
-        .Table(readRangesSource.Table())
-        .Columns().Add(columns).Build()
-        .Settings(settings.BuildNode(ctx, source.Settings().Pos()))
-        .RangesExpr(readRangesSource.RangesExpr())
-        .ExplainPrompt(readRangesSource.ExplainPrompt())
-        .Done();
-    TDqStage replacedSettings = ReplaceTableSourceSettings(stage, *tableSourceIndex, newSettings, ctx);
-
-    TCoArgument replaceArg{ctx.NewArgument(sourceArg.Pos(), TStringBuilder() << "_kqp_source_arg_0")};
-    auto replaceExpr =
-        Build<TCoExtractMembers>(ctx, node.Pos())
-            .Members(readRangesSource.Columns())
-            .Input<TCoSkipNullMembers>()
-                .Input(replaceArg)
-                .Members().Add(skipNullColumns).Build()
-            .Build()
-        .Done();
-
-    return ReplaceStageArg(replacedSettings, *tableSourceIndex, replaceArg, replaceExpr, ctx);
-}
-
 TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlReadTable>()) {
         return node;
     }
     const TKqlReadTable& read = node.Cast<TKqlReadTable>();
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
-
-    bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
-    useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
-    useSource = useSource &&
-        tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
-        tableDesc.Metadata->Kind != EKikimrTableKind::Olap;
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -225,58 +153,24 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                 .Build()
             .Done();
 
-        if (useSource) {
-            for (size_t i = 0; i < values.size(); ++i) {
-                auto replace = Build<TCoNth>(ctx, read.Pos())
-                    .Tuple(precompute)
-                    .Index().Build(ToString(i))
-                    .Done()
-                    .Ptr();
+        TCoArgument arg{ctx.NewArgument(read.Pos(), TStringBuilder() << "_kqp_pc_arg_0")};
+        programArgs.push_back(arg);
 
-                rangeReplaces[values[i].Raw()] = replace;
-            }
-        } else {
-            TCoArgument arg{ctx.NewArgument(read.Pos(), TStringBuilder() << "_kqp_pc_arg_0")};
-            programArgs.push_back(arg);
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto replace = Build<TCoNth>(ctx, read.Pos())
+                .Tuple(arg)
+                .Index().Build(ToString(i))
+                .Done()
+                .Ptr();
 
-            for (size_t i = 0; i < values.size(); ++i) {
-                auto replace = Build<TCoNth>(ctx, read.Pos())
-                    .Tuple(arg)
-                    .Index().Build(ToString(i))
-                    .Done()
-                    .Ptr();
-
-                rangeReplaces[values[i].Raw()] = replace;
-            }
-            inputs.push_back(precompute);
+            rangeReplaces[values[i].Raw()] = replace;
         }
-    }
-
-    if (useSource) {
-        inputs.push_back(
-            Build<TDqSource>(ctx, read.Pos())
-                .Settings<TKqpReadRangesSourceSettings>()
-                    .Table(read.Table())
-                    .Columns(read.Columns())
-                    .Settings(read.Settings())
-                    .RangesExpr(ctx.ReplaceNodes(read.Range().Ptr(), rangeReplaces))
-                .Build()
-                .DataSource<TCoDataSource>()
-                    .Category<TCoAtom>().Value(KqpReadRangesSourceName).Build()
-                .Build()
-            .Done());
+        inputs.push_back(precompute);
     }
 
     TMaybeNode<TExprBase> phyRead;
     switch (tableDesc.Metadata->Kind) {
         case EKikimrTableKind::Datashard:
-            if (useSource) {
-                TCoArgument arg{ctx.NewArgument(read.Pos(), TStringBuilder() << "_kqp_source_arg")};
-                programArgs.push_back(arg);
-
-                phyRead = arg;
-                break;
-            }
         case EKikimrTableKind::SysView:
             phyRead = Build<TKqpReadTable>(ctx, read.Pos())
                 .Table(read.Table())
@@ -299,7 +193,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
             .Body(phyRead.Cast())
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition(singleKey && useSource)
+            .SetSinglePartition(singleKey && UseSource(kqpCtx, tableDesc))
             .BuildNode(ctx, read.Pos()))
         .Done();
 
@@ -311,7 +205,6 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         .Done();
 }
 
-
 TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {
@@ -322,12 +215,6 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
 
     auto ranges = read.Ranges();
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
-
-    bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
-    useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
-    useSource = useSource &&
-        tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
-        tableDesc.Metadata->Kind != EKikimrTableKind::Olap;
 
     bool fullScan = TCoVoid::Match(ranges.Raw());
 
@@ -416,58 +303,28 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
             .Done();
 
         rangesExpr = precompute;
-        if (!useSource) {
-            argument = Build<TCoArgument>(ctx, read.Pos())
-                .Name("_kqp_pc_ranges_arg_0")
-                .Done();
+        argument = Build<TCoArgument>(ctx, read.Pos())
+            .Name("_kqp_pc_ranges_arg_0")
+            .Done();
 
-            input.push_back(precompute);
-            programArgs.push_back(argument.Cast<TCoArgument>());
-        }
+        input.push_back(precompute);
+        programArgs.push_back(argument.Cast<TCoArgument>());
     } else {
         rangesExpr = argument = read.Ranges();
     }
 
     TMaybeNode<TExprBase> phyRead;
 
-    TMaybeNode<TExprBase> sourceArg;
-    if (useSource) {
-        YQL_ENSURE(rangesExpr.IsValid());
-
-        input.push_back(
-            Build<TDqSource>(ctx, read.Pos())
-                .Settings<TKqpReadRangesSourceSettings>()
-                    .Table(read.Table())
-                    .Columns(read.Columns())
-                    .Settings(read.Settings())
-                    .RangesExpr(rangesExpr.Cast())
-                    .ExplainPrompt(read.ExplainPrompt())
-                .Build()
-                .DataSource<TCoDataSource>()
-                    .Category<TCoAtom>().Value(KqpReadRangesSourceName).Build()
-                .Build()
-            .Done());
-        sourceArg = Build<TCoArgument>(ctx, read.Pos())
-            .Name("_kqp_pc_source_arg_0")
-            .Done();
-        programArgs.push_back(sourceArg.Cast<TCoArgument>());
-    }
-
     switch (tableDesc.Metadata->Kind) {
         case EKikimrTableKind::Datashard:
         case EKikimrTableKind::SysView:
-            if (useSource) {
-                YQL_ENSURE(sourceArg.IsValid());
-                phyRead = sourceArg.Cast();
-            } else {
-                phyRead = Build<TKqpReadTableRanges>(ctx, read.Pos())
-                    .Table(read.Table())
-                    .Ranges(argument.Cast())
-                    .Columns(read.Columns())
-                    .Settings(read.Settings())
-                    .ExplainPrompt(read.ExplainPrompt())
-                    .Done();
-            }
+            phyRead = Build<TKqpReadTableRanges>(ctx, read.Pos())
+                .Table(read.Table())
+                .Ranges(argument.Cast())
+                .Columns(read.Columns())
+                .Settings(read.Settings())
+                .ExplainPrompt(read.ExplainPrompt())
+                .Done();
             break;
 
         case EKikimrTableKind::Olap:

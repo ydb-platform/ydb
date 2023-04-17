@@ -836,14 +836,9 @@ public:
         TString lastKey = "(empty)";
         if (!token.GetLastProcessedKey().empty()) {
             TStringBuilder builder;
-            TVector<NScheme::TTypeInfo> types;
-            for (auto& column : Settings.GetColumns()) {
-                types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
-            }
-
             TSerializedCellVec row(token.GetLastProcessedKey());
 
-            lastKey = DebugPrintPoint(types, row.GetCells(), *AppData()->TypeRegistry);
+            lastKey = DebugPrintPoint(KeyColumnTypes, row.GetCells(), *AppData()->TypeRegistry);
         }
         return TStringBuilder() << "first request = " << token.GetFirstUnprocessedQuery() << " lastkey = " << lastKey;
     }

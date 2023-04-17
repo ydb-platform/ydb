@@ -52,7 +52,7 @@
 #include "sequencer.h"
 #include "boot_queue.h"
 
-#define DEPRECATED_CTX (TlsActivationContext->ActorContextFor(SelfId()))
+#define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
 
 template <typename T>
@@ -343,6 +343,8 @@ protected:
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
+    TInstant LastConnect;
+    bool WarmUp;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -762,6 +764,26 @@ public:
         const auto& ignoreList = BalancerIgnoreTabletTypes;
         auto found = std::find(ignoreList.begin(), ignoreList.end(), type);
         return (found != ignoreList.end());
+    }
+
+    double GetSpaceUsagePenaltyThreshold() {
+        return CurrentConfig.GetSpaceUsagePenaltyThreshold();
+    }
+
+    double GetSpaceUsagePenalty() {
+        return CurrentConfig.GetSpaceUsagePenalty();
+    }
+
+    TDuration GetWarmUpBootWaitingPeriod() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetWarmUpBootWaitingPeriod());
+    }
+
+    TDuration GetMaxWarmUpPeriod() const {
+        return TDuration::Seconds(CurrentConfig.GetMaxWarmUpPeriod());
+    }
+
+    ui64 GetNodeRestartsToIgnoreInWarmup() const {
+        return CurrentConfig.GetNodeRestartsToIgnoreInWarmup();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

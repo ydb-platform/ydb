@@ -27,7 +27,16 @@ fastfloat_really_inline constexpr uint64_t byteswap(uint64_t val) {
     | (val & 0x00000000000000FF) << 56;
 }
 
-fastfloat_really_inline uint64_t read_u64(const char *chars) {
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20
+uint64_t read_u64(const char *chars) {
+  if (cpp20_and_in_constexpr()) {
+    uint64_t val = 0;
+    for(int i = 0; i < 8; ++i) {
+      val |= uint64_t(*chars) << (i*8);
+      ++chars;
+    }
+    return val;
+  }
   uint64_t val;
   ::memcpy(&val, chars, sizeof(uint64_t));
 #if FASTFLOAT_IS_BIG_ENDIAN == 1
@@ -37,7 +46,16 @@ fastfloat_really_inline uint64_t read_u64(const char *chars) {
   return val;
 }
 
-fastfloat_really_inline void write_u64(uint8_t *chars, uint64_t val) {
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20
+void write_u64(uint8_t *chars, uint64_t val) {
+  if (cpp20_and_in_constexpr()) {
+    for(int i = 0; i < 8; ++i) {
+      *chars = uint8_t(val);
+      val >>= 8;
+      ++chars;
+    }
+    return;
+  }
 #if FASTFLOAT_IS_BIG_ENDIAN == 1
   // Need to read as-if the number was in little-endian order.
   val = byteswap(val);
@@ -57,7 +75,8 @@ uint32_t parse_eight_digits_unrolled(uint64_t val) {
   return uint32_t(val);
 }
 
-fastfloat_really_inline uint32_t parse_eight_digits_unrolled(const char *chars)  noexcept  {
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20
+uint32_t parse_eight_digits_unrolled(const char *chars)  noexcept  {
   return parse_eight_digits_unrolled(read_u64(chars));
 }
 
@@ -67,7 +86,8 @@ fastfloat_really_inline constexpr bool is_made_of_eight_digits_fast(uint64_t val
      0x8080808080808080));
 }
 
-fastfloat_really_inline bool is_made_of_eight_digits_fast(const char *chars)  noexcept  {
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20
+bool is_made_of_eight_digits_fast(const char *chars)  noexcept  {
   return is_made_of_eight_digits_fast(read_u64(chars));
 }
 
@@ -87,7 +107,7 @@ struct parsed_number_string {
 
 // Assuming that you use no more than 19 digits, this will
 // parse an ASCII string.
-fastfloat_really_inline
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20
 parsed_number_string parse_number_string(const char *p, const char *pend, parse_options options) noexcept {
   const chars_format fmt = options.format;
   const char decimal_point = options.decimal_point;

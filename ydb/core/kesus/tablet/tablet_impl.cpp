@@ -245,13 +245,13 @@ STFUNC(TKesusTablet::StateInit) {
         hFunc(TEvents::TEvPoisonPill, Handle);
 
         default:
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
             break;
     }
 }
 
 STFUNC(TKesusTablet::StateZombie) {
-    StateInitImpl(ev, ctx);
+    StateInitImpl(ev, SelfId());
 }
 
 STFUNC(TKesusTablet::StateWork) {
@@ -308,7 +308,7 @@ STFUNC(TKesusTablet::StateWork) {
         IgnoreFunc(TEvTabletPipe::TEvServerConnected);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
+            if (!HandleDefaultEvents(ev, SelfId())) {
                 Y_FAIL("Unexpected event 0x%x", ev->GetTypeRewrite());
             }
             break;

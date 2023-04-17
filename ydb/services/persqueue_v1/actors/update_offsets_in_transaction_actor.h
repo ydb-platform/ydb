@@ -30,7 +30,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         default:
-            TBase::StateWork(ev, ctx);
+            TBase::StateWork(ev);
             break;
         }
     }

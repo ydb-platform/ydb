@@ -71,7 +71,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
     TTableExistsActor(ITableExistsController::TPtr controller, const TString& path, const TDuration d)

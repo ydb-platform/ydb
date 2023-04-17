@@ -382,7 +382,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvSysView::TEvCollectQueryStats, Handle);
             hFunc(TEvSysView::TEvGetQueryStats, Handle);

@@ -154,7 +154,7 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        void Enqueue(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+        void Enqueue(TAutoPtr<IEventHandle>& ev) override {
             Y_FAIL("unexpected event Type# %08" PRIx32, ev->GetTypeRewrite());
         }
 
@@ -223,12 +223,12 @@ namespace NKikimr::NBlobDepot {
             if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
                 HandlePoison();
             } else {
-                StateInitImpl(ev, ctx);
+                StateInitImpl(ev, SelfId());
             }
         }
 
         STFUNC(StateZombie) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         void HandleFromAgent(STATEFN_SIG);

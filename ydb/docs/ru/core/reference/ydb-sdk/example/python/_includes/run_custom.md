@@ -21,5 +21,3 @@ python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database>
 YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." \
 python3 ydb-python-sdk/examples/basic_example_v1/ -e grpcs://ydb.example.com:2135 -d /path/db )
 ```
-
-{% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}

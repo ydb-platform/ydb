@@ -3,8 +3,7 @@
 namespace NActors {
 
 void TResolveClientProtocol::ProtocolFunc(
-        TAutoPtr<NActors::IEventHandle>& ev,
-        const TActorContext& ctx) noexcept
+        TAutoPtr<NActors::IEventHandle>& ev) noexcept
 {
     switch (ev->GetTypeRewrite()) {
 
@@ -14,11 +13,11 @@ void TResolveClientProtocol::ProtocolFunc(
 
         MemLogPrintF("TResolveClientProtocol received address info");
 
-        CatchHostAddress(ctx, std::move(ev->Get<TEvAddressInfo>()->Address));
+        CatchHostAddress(TlsActivationContext->AsActorContext(), std::move(ev->Get<TEvAddressInfo>()->Address));
         break;
 
     case TEvResolveError::EventType:
-        CatchResolveError(ctx, std::move(ev->Get<TEvResolveError>()->Explain));
+        CatchResolveError(TlsActivationContext->AsActorContext(), std::move(ev->Get<TEvResolveError>()->Explain));
         break;
 
     default:

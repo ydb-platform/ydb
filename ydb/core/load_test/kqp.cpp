@@ -438,6 +438,7 @@ private:
     NJson::TJsonValue GetJsonResult() const {
         NJson::TJsonValue value;
         value["duration_s"] = DurationSeconds;
+        value["txs"] = Total->LatencyHist.GetTotalCount();
         value["rps"] = Total->LatencyHist.GetTotalCount() / static_cast<double>(DurationSeconds);
         value["errors"] = Total->Errors;
         {

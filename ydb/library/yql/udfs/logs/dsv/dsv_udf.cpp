@@ -244,6 +244,7 @@ public:
                 builder.Implementation(new TDsvReadRecord::TFactory(
                         resultIndexes, ksvIndexes));
             }
+            builder.IsStrict();
         } else if (TStringRef::Of("Parse") == name) {
             auto optionalStringType = builder.Optional()->Item<char*>().Build();
             auto dictType = builder.Dict()->Key<char*>().Value<char*>().Build();
@@ -255,6 +256,7 @@ public:
             if (!typesOnly) {
                 builder.Implementation(new TDsvParse(dictType));
             }
+            builder.IsStrict();
         } else if (TStringRef::Of("Serialize") == name) {
             auto typeHelper = builder.TypeInfoHelper();
             auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
@@ -301,6 +303,7 @@ public:
             if (!typesOnly) {
                 builder.Implementation(new TDsvSerialize(typeIds, structInspector.Release()));
             }
+            builder.IsStrict();
 
         }
     } catch (const std::exception& e) {

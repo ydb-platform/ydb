@@ -79,24 +79,6 @@ NKikimr::NMiniKQL::TType* MakeListType(NKikimr::NMiniKQL::TType* underlying, NKi
     return TListType::Create(underlying, env);
 }
 
-const NYql::TTypeAnnotationNode* MakeStructType(
-    const TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>>& i,
-    NYql::TExprContext& ctx)
-{
-    TVector<const NYql::TItemExprType*> items;
-    items.reserve(i.size());
-    for (const auto& [k, v] : i) {
-        items.push_back(ctx.MakeType<NYql::TItemExprType>(k, v));
-    }
-    return ctx.MakeType<NYql::TStructExprType>(items);
-}
-
-NKikimr::NMiniKQL::TType* MakeStructType(
-    const TVector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& items,
-    NKikimr::NMiniKQL::TTypeEnvironment& env)
-{
-    return TStructType::Create(items.data(), items.size(), env);
-}
 
 const NYql::TTypeAnnotationNode* MakeTupleType(
     const TVector<const NYql::TTypeAnnotationNode*>& items,
@@ -453,6 +435,29 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
             }
         }
     }
+}
+
+const NYql::TTypeAnnotationNode* MakeStructType(
+    const TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>>& i,
+    NYql::TExprContext& ctx)
+{
+    TVector<const NYql::TItemExprType*> items;
+    items.reserve(i.size());
+    for (const auto& [k, v] : i) {
+        items.push_back(ctx.MakeType<NYql::TItemExprType>(k, v));
+    }
+    return ctx.MakeType<NYql::TStructExprType>(items);
+}
+
+NKikimr::NMiniKQL::TType* MakeStructType(
+    const TVector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& items,
+    NKikimr::NMiniKQL::TTypeEnvironment& env)
+{
+    return TStructType::Create(items.data(), items.size(), env);
+}
+
+const NYql::TTypeAnnotationNode* MakeType(NYdb::TTypeParser& parser, NYql::TExprContext& ctx) {
+    return MakeType<const NYql::TTypeAnnotationNode*, NYql::TExprContext>(parser, ctx);
 }
 
 } // namespace NFq

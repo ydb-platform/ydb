@@ -339,6 +339,9 @@ namespace NActors {
             return;
         }
 
+        // drop any pending XDC subscriptions
+        ConnectionSubscriptions.clear();
+
         Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor);
         SwitchToState(__LINE__, "StateWork", &TThis::StateWork);
 
@@ -605,7 +608,7 @@ namespace NActors {
 
         Y_VERIFY(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
-        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev, TActivationContext::ActorContextFor(SessionID));
+        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -886,7 +889,7 @@ namespace NActors {
         stats.LastSessionDieTime = LastSessionDieTime;
         stats.TotalOutputQueueSize = Session ? Session->TotalOutputQueueSize : 0;
         stats.Connected = Session ? (bool)Session->Socket : false;
-        stats.ExternalDataChannel = Session && Session->Params.UseExternalDataChannel;
+        stats.ExternalDataChannel = Session && Session->XdcSocket;
         stats.Host = TechnicalPeerHostName;
         stats.Port = 0;
         ui32 rep = 0;

@@ -12,6 +12,8 @@
 namespace NActors {
     static constexpr TDuration DEFAULT_HANDSHAKE_TIMEOUT = TDuration::Seconds(5);
     static constexpr ui64 INTERCONNECT_PROTOCOL_VERSION = 2;
+    static constexpr ui64 INTERCONNECT_XDC_CONTINUATION_VERSION = 3;
+    static constexpr ui64 INTERCONNECT_XDC_STREAM_VERSION = 4;
 
     using TSocketPtr = TIntrusivePtr<NInterconnect::TStreamSocket>;
 

@@ -60,7 +60,7 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
         // Freeze persistent locks that we have cached
         for (auto& pr : tx->LocksCache().Locks) {
             ui64 lockId = pr.first;
-            auto lock = DataShard.SysLocksTable().GetRawLock(lockId);
+            auto lock = DataShard.SysLocksTable().GetRawLock(lockId, TRowVersion::Min());
             if (lock && lock->IsPersistent()) {
                 lock->SetFrozen();
             }

@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/tx_processor.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -134,8 +135,7 @@ private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
                       const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<IEventHandle> &ev,
-                 const TActorContext &ctx) override;
+    void Enqueue(TAutoPtr<IEventHandle> &ev) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                              const TActorContext &ctx) override;
     void Cleanup(const TActorContext &ctx);
@@ -158,9 +158,9 @@ private:
 
     STFUNC(StateInit)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
+        LOG_DEBUG(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
                   ev->GetTypeRewrite(), ev->ToString().data());
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -179,9 +179,11 @@ private:
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
+            if (!HandleDefaultEvents(ev, SelfId())) {
                 Y_FAIL("TNodeBroker::StateWork unexpected event type: %" PRIx32 " event: %s from %s",
                        ev->GetTypeRewrite(), ev->ToString().data(),
                        ev->Sender.ToString().data());

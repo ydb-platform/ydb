@@ -45,21 +45,19 @@ public:
     }
 
     STFUNC(StatePublish) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-            cFunc(TEvents::TEvUndelivered::EventType, SomeSleep);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
+            sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvUndelivered, SomeSleep);
+            sFunc(TEvInterconnect::TEvNodeDisconnected, SomeSleep);
         default:
             break;
         }
     }
 
     STFUNC(StateSleep) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-            cFunc(TEvents::TEvWakeup::EventType, Bootstrap);
+            sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvWakeup, Bootstrap);
         default:
             break;
         }
@@ -99,9 +97,8 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            sFunc(TEvents::TEvPoison, PassAway);
         default:
             break;
         }

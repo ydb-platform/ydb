@@ -103,7 +103,6 @@ public:
 
 private:
     STFUNC(StateSleep) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
             sFunc(TEvents::TEvWakeup, WakeUp);
@@ -120,7 +119,6 @@ private:
 
 private:
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvPoison, PassAway);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);

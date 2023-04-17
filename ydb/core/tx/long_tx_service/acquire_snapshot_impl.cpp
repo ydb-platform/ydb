@@ -55,7 +55,6 @@ namespace NLongTxService {
         }
 
         STFUNC(StateNavigate) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvents::TEvUndelivered, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -120,7 +119,6 @@ namespace NLongTxService {
         }
 
         STFUNC(StateWaitStep) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvents::TEvUndelivered, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);

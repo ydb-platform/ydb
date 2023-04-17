@@ -16,7 +16,7 @@ public:
     STFUNC(StateFunc) {
         if (!Counter--) {
             Event->Signal();
-            Die(ctx);
+            PassAway();
         } else {
             Forward(ev, PDiskId);
         }

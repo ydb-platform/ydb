@@ -40,7 +40,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPartitionWriter::TEvInitResult, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -75,7 +75,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             hFunc(TEvChangeExchange::TEvRecords, Handle);
             sFunc(TEvPartitionWriter::TEvWriteResponse, Lost);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -158,7 +158,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             IgnoreFunc(TEvPartitionWriter::TEvWriteAccepted);
             hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -490,7 +490,7 @@ class TCdcChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -560,7 +560,7 @@ class TCdcChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -656,7 +656,7 @@ class TCdcChangeSenderMain
     /// Main
 
     STATEFN(StateMain) {
-        return StateBase(ev, TlsActivationContext->AsActorContext());
+        return StateBase(ev);
     }
 
     void Resolve() override {

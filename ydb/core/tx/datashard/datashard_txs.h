@@ -6,8 +6,7 @@
 
 #include <library/cpp/actors/wilson/wilson_span.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 using NTabletFlatExecutor::TTransactionContext;
 
@@ -282,16 +281,15 @@ private:
     THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
 };
 
-class TDataShard::TTxUnsafeUploadRows: public NTabletFlatExecutor::TTransactionBase<TDataShard>
-                                     , public TCommonUploadOps<
-                                           TEvDataShard::TEvUnsafeUploadRowsRequest,
-                                           TEvDataShard::TEvUnsafeUploadRowsResponse>
+class TDataShard::TTxS3UploadRows
+    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
+    , public TCommonUploadOps<TEvDataShard::TEvS3UploadRowsRequest, TEvDataShard::TEvS3UploadRowsResponse>
 {
 public:
-    TTxUnsafeUploadRows(TDataShard* ds, TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev);
+    TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_UNSAFE_UPLOAD_ROWS; }
+    TTxType GetTxType() const override { return TXTYPE_S3_UPLOAD_ROWS; }
 
 private:
     TRowVersion MvccVersion = TRowVersion::Min();
@@ -307,4 +305,4 @@ private:
     bool ActivateWaitingOps = false;
 };
 
-}}
+}

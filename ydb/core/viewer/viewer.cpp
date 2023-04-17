@@ -146,8 +146,10 @@ public:
         return KikimrRunConfig;
     }
 
+    TString GetCORS(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) override;
-    TString GetHTTPGATEWAYTIMEOUT() override;
+    TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
 
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
@@ -427,12 +429,9 @@ IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
     return new TViewer(kikimrRunConfig);
 }
 
-TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) {
+TString TViewer::GetCORS(const NMon::TEvHttpInfo* request) {
     TStringBuilder res;
     TString origin;
-    res << "HTTP/1.1 200 Ok\r\n"
-        << "Content-Type: application/json; charset=utf-8\r\n"
-        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
     if (AllowOrigin) {
         origin = AllowOrigin;
     } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
@@ -444,6 +443,15 @@ TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString respons
             << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
             << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
     }
+    return res;
+}
+
+TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) {
+    TStringBuilder res;
+    res << "HTTP/1.1 200 Ok\r\n"
+        << "Content-Type: application/json; charset=utf-8\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
     if (response) {
         res << "Content-Length: " << response.size() << "\r\n";
     }
@@ -454,11 +462,29 @@ TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString respons
     return res;
 }
 
-TString TViewer::GetHTTPGATEWAYTIMEOUT() {
-    return TStringBuilder()
-            << "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n"
-            << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentWorkerName << "\r\n"
-            << "\r\nGateway Time-out\r\n";
+TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) {
+    TStringBuilder res;
+    res << "HTTP/1.1 504 Gateway Time-out\r\n"
+        << "Connection: Close\r\n"
+        << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
+    res << "\r\nGateway Time-out\r\n";
+    return res;
+}
+
+TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+    TStringBuilder res;
+    res << "HTTP/1.1 400 Bad Request\r\n"
+        << "Connection: Close\r\n";
+    if (contentType) {
+        res << "Content-Type: " << contentType << "\r\n";
+    }
+    res << GetCORS(request);
+    res << "\r\n";
+    if (response) {
+        res << response;
+    }
+    return res;
 }
 
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {

@@ -52,9 +52,7 @@ namespace NActors {
 
     struct TSessionParams {
         bool Encryption = {};
-        bool UseModernFrame = {};
         bool AuthOnly = {};
-        bool UseExtendedTraceFmt = {};
         bool UseExternalDataChannel = {};
         TString AuthCN;
         NActors::TScopeId PeerScopeId;

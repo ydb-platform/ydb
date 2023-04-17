@@ -57,7 +57,6 @@ namespace NSequenceProxy {
 
     private:
         STFUNC(StateAlloc) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvSequenceShard::TEvAllocateSequenceResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);

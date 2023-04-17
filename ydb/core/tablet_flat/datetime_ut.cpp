@@ -302,14 +302,14 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
         }
 
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvents::TEvWakeup, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
                 break;
             }
         }

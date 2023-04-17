@@ -424,7 +424,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -439,7 +439,7 @@ public:
             hFunc(TEvExternalStorage::TEvCompleteMultipartUploadResponse, Handle);
             hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 

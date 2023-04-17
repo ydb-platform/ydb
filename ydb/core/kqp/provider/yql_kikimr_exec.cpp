@@ -9,6 +9,9 @@
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+
 namespace NYql {
 namespace {
 
@@ -253,6 +256,182 @@ namespace {
         return TAlterColumnTableSettings{
             .Table = TString(alter.Table())
         };
+    }
+
+    [[nodiscard]] TString AddConsumerToTopicRequest(
+            Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
+    ) {
+        protoConsumer->set_name(consumer.Name().StringValue());
+        auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
+        for (const auto& setting : settings) {
+            auto name = setting.Name().Value();
+            if (name == "important") {
+                protoConsumer->set_important(FromString<bool>(
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                ));
+            } else if (name == "setReadFromTs") {
+                ui64 tsValue = 0;
+                if(setting.Value().Maybe<TCoDatetime>()) {
+                    tsValue = FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
+                } else if (setting.Value().Maybe<TCoTimestamp>()) {
+                    tsValue = static_cast<ui64>(
+                            FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000
+                    );
+                } else {
+                    try {
+                        tsValue = FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                    } catch (const yexception& e) {
+                        return TStringBuilder() <<  "Failed to parse read_from setting value for consumer"
+                                                << consumer.Name().StringValue()
+                                                << ". Datetime(), Timestamp or integer value is supported";
+                    }
+                }
+                protoConsumer->mutable_read_from()->set_seconds(tsValue);
+
+            } else if (name == "setSupportedCodecs") {
+                auto codecs = GetTopicCodecsFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+
+                auto* protoCodecs = protoConsumer->mutable_supported_codecs();
+                for (auto codec : codecs) {
+                    protoCodecs->add_codecs(codec);
+                }
+            }
+        }
+        return {};
+    }
+
+    [[nodiscard]] TString AddAlterConsumerToTopicRequest(
+            Ydb::Topic::AlterConsumer* protoConsumer, const TCoTopicConsumer& consumer
+    ) {
+        protoConsumer->set_name(consumer.Name().StringValue());
+        auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
+        for (const auto& setting : settings) {
+            //ToDo[RESET]: Add reset when supported
+            auto name = setting.Name().Value();
+            if (name == "important") {
+                protoConsumer->set_set_important(FromString<bool>(
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                ));
+            } else if (name == "setReadFromTs") {
+                ui64 tsValue = 0;
+                if(setting.Value().Maybe<TCoDatetime>()) {
+                    tsValue = FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
+                } else if (setting.Value().Maybe<TCoTimestamp>()) {
+                    tsValue = static_cast<ui64>(
+                            FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000
+                    );
+                } else {
+                    try {
+                        tsValue = FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                    } catch (const yexception& e) {
+                        return TStringBuilder() <<  "Failed to parse read_from setting value for consumer"
+                                                << consumer.Name().StringValue()
+                                                << ". Datetime(), Timestamp or integer value is supported";
+                    }
+                }
+                protoConsumer->mutable_set_read_from()->set_seconds(tsValue);
+            } else if (name == "setSupportedCodecs") {
+                auto codecs = GetTopicCodecsFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+                auto* protoCodecs = protoConsumer->mutable_set_supported_codecs();
+                for (auto codec : codecs) {
+                    protoCodecs->add_codecs(codec);
+                }
+            }
+        }
+        return {};
+    }
+
+    void AddTopicSettingsToRequest(Ydb::Topic::CreateTopicRequest* request, const TCoNameValueTupleList& topicSettings) {
+        for (const auto& setting : topicSettings) {
+            auto name = setting.Name().Value();
+            if (name == "setMinPartitions") {
+                request->mutable_partitioning_settings()->set_min_active_partitions(
+                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setPartitionsLimit") {
+                request->mutable_partitioning_settings()->set_partition_count_limit(
+                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setRetentionPeriod") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_retention_period()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setPartitionWriteSpeed") {
+                request->set_partition_write_speed_bytes_per_second(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setPartitionWriteBurstSpeed") {
+                request->set_partition_write_burst_bytes(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            }  else if (name == "setMeteringMode") {
+                Ydb::Topic::MeteringMode meteringMode;
+                auto result = GetTopicMeteringModeFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        meteringMode
+                );
+                YQL_ENSURE(result);
+                request->set_metering_mode(meteringMode);
+            } else if (name == "setSupportedCodecs") {
+                auto codecs = GetTopicCodecsFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+                auto* protoCodecs = request->mutable_supported_codecs();
+                for (auto codec : codecs) {
+                    protoCodecs->add_codecs(codec);
+                }
+            }
+        }
+    }
+
+    void AddAlterTopicSettingsToRequest(Ydb::Topic::AlterTopicRequest* request, const TCoNameValueTupleList& topicSettings) {
+    //ToDo [RESET]: Add reset options once supported.
+        for (const auto& setting : topicSettings) {
+            auto name = setting.Name().Value();
+            if (name == "setMinPartitions") {
+                request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(
+                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setPartitionsLimit") {
+                request->mutable_alter_partitioning_settings()->set_set_partition_count_limit(
+                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setRetentionPeriod") {
+                auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
+                request->mutable_set_retention_period()->set_seconds(
+                        static_cast<ui64>(microValue / 1'000'000)
+                );
+            } else if (name == "setPartitionWriteSpeed") {
+                request->set_set_partition_write_speed_bytes_per_second(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            } else if (name == "setPartitionWriteBurstSpeed") {
+                request->set_set_partition_write_burst_bytes(
+                        FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+            }  else if (name == "setMeteringMode") {
+                Ydb::Topic::MeteringMode meteringMode;
+                auto result = GetTopicMeteringModeFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        meteringMode
+                );
+                YQL_ENSURE(result);
+                request->set_set_metering_mode(meteringMode);
+            } else if (name == "setSupportedCodecs") {
+                auto codecs = GetTopicCodecsFromString(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
+                );
+                auto* protoCodecs = request->mutable_set_supported_codecs();
+                for (auto codec : codecs) {
+                    protoCodecs->add_codecs(codec);
+                }
+            }
+        }
     }
 }
 
@@ -1215,6 +1394,117 @@ public:
                     return resultNode;
                 });
 
+        }
+
+        if (auto maybeCreate = TMaybeNode<TKiCreateTopic>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto cluster = TString(maybeCreate.Cast().DataSink().Cluster());
+            TString topicName = TString(maybeCreate.Cast().Topic());
+            Ydb::Topic::CreateTopicRequest createReq;
+            createReq.set_path(topicName);
+            for (const auto& consumer : maybeCreate.Cast().Consumers()) {
+                auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
+                if (!error.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    return SyncError();
+                }
+            }
+            AddTopicSettingsToRequest(&createReq,maybeCreate.Cast().TopicSettings());
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            // DEBUG
+            // Cerr << "Create topic request proto: " << createReq.DebugString() << Endl;
+            auto future = prepareOnly ? CreateDummySuccess() : (
+                    Gateway->CreateTopic(cluster, std::move(createReq))
+            );
+
+            return WrapFuture(future,
+                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                                  Y_UNUSED(res);
+                                  auto resultNode = ctx.NewWorld(input->Pos());
+                                  return resultNode;
+                              }, "Executing CREATE TOPIC");
+
+            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetResult(ctx.NewWorld(input->Pos()));
+            return SyncOk();
+        }
+        if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto cluster = TString(maybeAlter.Cast().DataSink().Cluster());
+            TString topicName = TString(maybeAlter.Cast().Topic());
+            Ydb::Topic::AlterTopicRequest alterReq;
+            alterReq.set_path(topicName);
+            for (const auto& consumer : maybeAlter.Cast().AddConsumers()) {
+                auto error = AddConsumerToTopicRequest(alterReq.add_add_consumers(), consumer);
+                if (!error.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    return SyncError();
+                }
+            }
+            for (const auto& consumer : maybeAlter.Cast().AlterConsumers()) {
+                auto error = AddAlterConsumerToTopicRequest(alterReq.add_alter_consumers(), consumer);
+                if (!error.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    return SyncError();
+                }
+            }
+            for (const auto& consumer : maybeAlter.Cast().DropConsumers()) {
+                auto name = consumer.Cast<TCoAtom>().StringValue();
+                alterReq.add_drop_consumers(name);
+            }
+            AddAlterTopicSettingsToRequest(&alterReq, maybeAlter.Cast().TopicSettings());
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+	    // DEBUG
+            // Cerr << "Alter topic request proto:\n" << alterReq.DebugString() << Endl;
+            auto future = prepareOnly ? CreateDummySuccess() : (
+                    Gateway->AlterTopic(cluster, std::move(alterReq))
+            );
+
+            return WrapFuture(future,
+                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                                  Y_UNUSED(res);
+                                  auto resultNode = ctx.NewWorld(input->Pos());
+                                  return resultNode;
+                              }, "Executing ALTER TOPIC");
+
+            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetResult(ctx.NewWorld(input->Pos()));
+            return SyncOk();
+        }
+
+        if (auto maybeDrop = TMaybeNode<TKiDropTopic>(input)) {
+            if (!EnsureNotPrepare("DROP TOPIC", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto cluster = TString(maybeDrop.Cast().DataSink().Cluster());
+            TString topicName = TString(maybeDrop.Cast().Topic());
+
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : (
+                    Gateway->DropTopic(cluster, topicName)
+            );
+
+            return WrapFuture(future,
+                              [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                                  Y_UNUSED(res);
+                                  auto resultNode = ctx.NewWorld(input->Pos());
+                                  return resultNode;
+                              }, "Executing DROP TOPIC");
+
+            input->SetState(TExprNode::EState::ExecutionComplete);
+            input->SetResult(ctx.NewWorld(input->Pos()));
+            return SyncOk();
         }
 
         if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) {

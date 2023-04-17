@@ -1781,7 +1781,7 @@ public:
             return;
         }
         TAutoPtr<::NActors::IEventHandle> ev(WaitForEvent().Release());
-        StateFunc(ev, GetActorContext());
+        StateFunc(ev);
     }
 
     void ExtractDataPart(TEvPrivate::TEvDataPart& event, bool deferred = false) {
@@ -2017,7 +2017,7 @@ private:
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
-        return StateFunc(ev, GetActorContext());
+        return StateFunc(ev);
     }
 
     TString GetLastDataAsText() {

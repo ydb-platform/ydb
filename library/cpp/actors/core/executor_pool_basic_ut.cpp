@@ -63,7 +63,6 @@ public:
 private:
     STFUNC(Execute)
     {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvMsg, Handle);
         }

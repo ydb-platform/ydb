@@ -110,8 +110,6 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
 TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx);
 
 bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx);
-IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
 
 std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lambda, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
 

@@ -119,7 +119,7 @@ private:
             hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
             hFunc(NKikimr::TEvQuota::TEvClearance, OnCpuQuotaGiven);
             default:
-                TBase::BaseStateFuncBody(ev, ctx);
+                TBase::BaseStateFuncBody(ev);
         };
     };
 
@@ -779,7 +779,7 @@ private:
     template <class TEvPtr>
     void ForwardToCheckpoints(TEvPtr&& ev) {
         auto* x = reinterpret_cast<TAutoPtr<NActors::IEventHandle>*>(&ev);
-        Checkpoints->Receive(*x, TActivationContext::AsActorContext());
+        Checkpoints->Receive(*x);
         ev = nullptr;
     }
 

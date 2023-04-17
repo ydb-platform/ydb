@@ -47,6 +47,9 @@ namespace NActors {
         if (Socket) {
             Socket->Shutdown(SHUT_RDWR);
         }
+        if (XdcSocket) {
+            XdcSocket->Shutdown(SHUT_RDWR);
+        }
     }
 
     void TInterconnectSessionTCP::Init() {
@@ -224,6 +227,7 @@ namespace NActors {
 
         SendBufferSize = ev->Get()->Socket->GetSendBufferSize();
         Socket = std::move(ev->Get()->Socket);
+        XdcSocket = std::move(ev->Get()->XdcSocket);
 
         // there may be a race
         const ui64 nextPacket = Max(LastConfirmed, ev->Get()->NextPacket);
@@ -237,7 +241,7 @@ namespace NActors {
         LOG_INFO_IC_SESSION("ICS10", "traffic start");
 
         // create input session actor
-        auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, ReceiveContext, Proxy->Common,
+        auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
             Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
         ReceiveContext->UnlockLastProcessedPacketSerial();
         ReceiverId = Params.Encryption ? RegisterWithSameMailbox(actor.Release()) : Register(actor.Release(), TMailboxType::ReadAsFilled);
@@ -246,6 +250,10 @@ namespace NActors {
         LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
         const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
         Y_VERIFY(success);
+        if (XdcSocket) {
+            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+            Y_VERIFY(success);
+        }
         ReceiveContext->WriteBlockedByFullSendBuffer = false;
 
         LostConnectionWatchdog.Disarm();
@@ -292,8 +300,7 @@ namespace NActors {
 
         BytesUnwritten = 0;
         for (const auto& packet : SendQueue) {
-            BytesUnwritten += (Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1)) +
-                packet.GetDataSize();
+            BytesUnwritten += sizeof(TTcpPacketHeader_v2) + packet.GetDataSize();
         }
 
         SwitchStuckPeriod();
@@ -499,6 +506,10 @@ namespace NActors {
             Proxy->Metrics->SetConnected(0);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
         }
+        if (XdcSocket) {
+            XdcSocket->Shutdown(SHUT_RDWR);
+            XdcSocket.Reset();
+        }
     }
 
     void TInterconnectSessionTCP::ReestablishConnectionExecute() {
@@ -531,7 +542,13 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
-        PollerToken = std::move(ev->Get()->PollerToken);
+        const auto& sk = ev->Get()->Socket;
+        if (auto *token = sk == Socket ? &PollerToken : sk == XdcSocket ? &XdcPollerToken : nullptr) {
+            *token = std::move(ev->Get()->PollerToken);
+        } else {
+            return;
+        }
+
         if (ReceiveContext->WriteBlockedByFullSendBuffer) {
             if (Params.Encryption) {
                 auto *secure = static_cast<NInterconnect::TSecureSocket*>(Socket.Get());
@@ -563,11 +580,6 @@ namespace NActors {
 
             LOG_DEBUG_IC_SESSION("ICS30", "WriteData WriteBlockedByFullSendBuffer# %s SendQueue.size# %zu",
                 ReceiveContext->WriteBlockedByFullSendBuffer ? "true" : "false", SendQueue.size());
-
-            // update last confirmed packet number if it has changed
-            if (SendQueuePos != SendQueue.end()) {
-                SendQueuePos->UpdateConfirmIfPossible(ReceiveContext->GetLastProcessedPacketSerial());
-            }
 
             while (SendQueuePos != SendQueue.end() && !ReceiveContext->WriteBlockedByFullSendBuffer) {
                 for (auto it = SendQueuePos; it != SendQueue.end() && wbuffers.size() < maxElementsInIOV; ++it) {
@@ -787,7 +799,7 @@ namespace NActors {
         packet->Sign();
 
         // count number of bytes pending for write
-        ui64 packetSize = (Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1)) + packet->GetDataSize();
+        ui64 packetSize = sizeof(TTcpPacketHeader_v2) + packet->GetDataSize();
         BytesUnwritten += packetSize;
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %zu"
@@ -1126,7 +1138,7 @@ namespace NActors {
                             }
                             TABLER() {
                                 TABLED() { str << "Frame version/Checksum"; }
-                                TABLED() { str << (!Params.UseModernFrame ? "v1/crc32c" : Params.Encryption ? "v2/none" : "v2/crc32c"); }
+                                TABLED() { str << (Params.Encryption ? "v2/none" : "v2/crc32c"); }
                             }
 #define MON_VAR(NAME)     \
     TABLER() {            \
@@ -1173,6 +1185,14 @@ namespace NActors {
                                 }
                                 TABLED() {
                                     str << (Socket ? i64(*Socket) : -1);
+                                }
+                            }
+                            TABLER() {
+                                TABLED() {
+                                    str << "XDC socket";
+                                }
+                                TABLED() {
+                                    str << (XdcSocket ? i64(*XdcSocket) : -1);
                                 }
                             }
 

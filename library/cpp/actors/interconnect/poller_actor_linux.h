@@ -30,7 +30,7 @@ namespace NActors {
             close(EpollDescriptor);
         }
 
-        void ProcessEventsInLoop() {
+        bool ProcessEventsInLoop() {
             // preallocated array for events
             std::array<epoll_event, 256> events;
 
@@ -42,11 +42,13 @@ namespace NActors {
             // check return status for any errors
             if (numReady == -1) {
                 if (errno == EINTR) {
-                    return; // restart the call a bit later
+                    return false; // restart the call a bit later
                 } else {
                     Y_FAIL("epoll_wait() failed with %s", strerror(errno));
                 }
             }
+
+            bool res = false;
 
             for (int i = 0; i < numReady; ++i) {
                 const epoll_event& ev = events[i];
@@ -73,8 +75,12 @@ namespace NActors {
 
                     // issue notifications
                     Notify(record, read, write);
+                } else {
+                    res = true;
                 }
             }
+
+            return res;
         }
 
         void UnregisterSocketInLoop(const TIntrusivePtr<TSharedDescriptor>& socket) {
@@ -110,5 +116,5 @@ namespace NActors {
     };
 
     using TPollerThread = TEpollThread;
-    
+
 } // namespace NActors

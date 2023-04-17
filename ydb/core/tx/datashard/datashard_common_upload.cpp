@@ -2,8 +2,7 @@
 #include "datashard_common_upload.h"
 #include "datashard_user_db.h"
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 template <typename TEvRequest, typename TEvResponse>
 TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges)
@@ -307,7 +306,6 @@ void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(ui32 status, const TStr
 }
 
 template class TCommonUploadOps<TEvDataShard::TEvUploadRowsRequest, TEvDataShard::TEvUploadRowsResponse>;
-template class TCommonUploadOps<TEvDataShard::TEvUnsafeUploadRowsRequest, TEvDataShard::TEvUnsafeUploadRowsResponse>;
+template class TCommonUploadOps<TEvDataShard::TEvS3UploadRowsRequest, TEvDataShard::TEvS3UploadRowsResponse>;
 
-} // NDataShard
-} // NKikimr
+}

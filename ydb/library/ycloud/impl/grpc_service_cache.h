@@ -136,13 +136,13 @@ public:
         ErrorLifeTime = grpcCacheErrorLifeTime;
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEventRequestType, Handle);
             hFunc(TEventResponseType, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
             default:
-                ctx.Forward(ev, GetUnderlyingActor());
+                this->Forward(ev, GetUnderlyingActor());
                 break;
         }
     }

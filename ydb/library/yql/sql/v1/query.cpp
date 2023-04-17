@@ -90,6 +90,41 @@ TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAto
     return new TUniqueTableKey(pos, service, cluster, name, view);
 }
 
+class TTopicKey: public ITableKeys {
+public:
+    TTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name)
+        : ITableKeys(pos)
+        , Cluster(cluster)
+        , Name(name)
+        , Full(name.GetRepr())
+    {
+    }
+
+    const TString* GetTableName() const override {
+        return Name.GetLiteral() ? &Full : nullptr;
+    }
+
+    TNodePtr BuildKeys(TContext&, ITableKeys::EBuildKeysMode) override {
+        auto path = Name.Build(); // ToDo Need some prefix here?
+        if (!path) {
+            return nullptr;
+        }
+        auto key = Y("Key", Q(Y(Q("topic"), Y("String", path))));
+        return key;
+    }
+
+private:
+    TString Service;
+    TDeferredAtom Cluster;
+    TDeferredAtom Name;
+    TString View;
+    TString Full;
+};
+
+TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name) {
+    return new TTopicKey(pos, cluster, name);
+}
+
 static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
     switch (type) {
         case TIndexDescription::EType::GlobalSync:
@@ -1224,6 +1259,285 @@ private:
 
 TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, ETableType tableType, TScopedStatePtr scoped) {
     return new TDropTableNode(pos, tr, tableType, scoped);
+}
+
+
+static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+    auto settings = node.Y();
+    if (desc.Settings.Important) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("important"), desc.Settings.Important)));
+    }
+    if (const auto& readFromTs = desc.Settings.ReadFromTs) {
+        if (readFromTs.IsSet()) {
+            settings = node.L(settings, node.Q(node.Y(node.Q("setReadFromTs"), readFromTs.GetValueSet())));
+        } else if (alter) {
+            settings = node.L(settings, node.Q(node.Y(node.Q("resetReadFromTs"), node.Q(node.Y()))));
+        } else {
+            YQL_ENSURE(false, "Cannot reset on create");
+        }
+    }
+    if (const auto& readFromTs = desc.Settings.SupportedCodecs) {
+        if (readFromTs.IsSet()) {
+            settings = node.L(settings, node.Q(node.Y(node.Q("setSupportedCodecs"), readFromTs.GetValueSet())));
+        } else if (alter) {
+            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
+        } else {
+            YQL_ENSURE(false, "Cannot reset on create");
+        }
+    }
+    return node.Y(
+            node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
+            node.Q(node.Y(node.Q("settings"), node.Q(settings)))
+    );
+}
+
+class TCreateTopicNode final: public TAstListNode {
+public:
+    TCreateTopicNode(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Topic(tr)
+        , Params(params)
+        , Scoped(scoped)
+    {
+        scoped->UseCluster(TString(KikimrProviderName), Topic.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        auto keys = Topic.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
+        if (!keys || !keys->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!Params.Consumers.empty())
+        {
+            THashSet<TString> consumerNames;
+            for (const auto& consumer : Params.Consumers) {
+                if (!consumerNames.insert(consumer.Name.Name).second) {
+                    ctx.Error(consumer.Name.Pos) << "Consumer " << consumer.Name.Name << " defined more than once";
+                    return false;
+                }
+            }
+        }
+
+        auto opts = Y();
+        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+
+        for (const auto& consumer : Params.Consumers) {
+            const auto& desc = CreateConsumerDesc(consumer, *this, false);
+            opts = L(opts, Q(Y(Q("consumer"), Q(desc))));
+        }
+
+        if (Params.TopicSettings.IsSet()) {
+            auto settings = Y();
+
+#define INSERT_TOPIC_SETTING(NAME)                                                                      \
+    if (const auto& NAME##Val = Params.TopicSettings.NAME) {                                            \
+        if (NAME##Val.IsSet()) {                                                                        \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet())));           \
+        } else {                                                                                        \
+            YQL_ENSURE(false, "Can't reset on create");                                                 \
+        }                                                                                               \
+    }
+
+            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MinPartitions)
+            INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(SupportedCodecs)
+            INSERT_TOPIC_SETTING(PartitionWriteSpeed)
+            INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
+            INSERT_TOPIC_SETTING(MeteringMode)
+
+#undef INSERT_TOPIC_SETTING
+
+            opts = L(opts, Q(Y(Q("topicSettings"), Q(settings))));
+        }
+
+
+        Add("block", Q(Y(
+                Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, TString(KikimrProviderName)),
+                                   Scoped->WrapCluster(Topic.Cluster, ctx))),
+                Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+                Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    const TTopicRef Topic;
+    const TCreateTopicParameters Params;
+    TScopedStatePtr Scoped;
+};
+
+TNodePtr BuildCreateTopic(
+        TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params, TScopedStatePtr scoped
+){
+    return new TCreateTopicNode(pos, tr, params, scoped);
+}
+
+class TAlterTopicNode final: public TAstListNode {
+public:
+    TAlterTopicNode(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Topic(tr)
+        , Params(params)
+        , Scoped(scoped)
+    {
+        scoped->UseCluster(TString(KikimrProviderName), Topic.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        auto keys = Topic.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
+        if (!keys || !keys->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!Params.AddConsumers.empty())
+        {
+            THashSet<TString> consumerNames;
+            for (const auto& consumer : Params.AddConsumers) {
+                if (!consumerNames.insert(consumer.Name.Name).second) {
+                    ctx.Error(consumer.Name.Pos) << "Consumer " << consumer.Name.Name << " defined more than once";
+                    return false;
+                }
+            }
+        }
+        if (!Params.AlterConsumers.empty())
+        {
+            THashSet<TString> consumerNames;
+            for (const auto& [_, consumer] : Params.AlterConsumers) {
+                if (!consumerNames.insert(consumer.Name.Name).second) {
+                    ctx.Error(consumer.Name.Pos) << "Consumer " << consumer.Name.Name << " altered more than once";
+                    return false;
+                }
+            }
+        }
+        if (!Params.DropConsumers.empty())
+        {
+            THashSet<TString> consumerNames;
+            for (const auto& consumer : Params.DropConsumers) {
+                if (!consumerNames.insert(consumer.Name).second) {
+                    ctx.Error(consumer.Pos) << "Consumer " << consumer.Name << " dropped more than once";
+                    return false;
+                }
+            }
+        }
+
+        auto opts = Y();
+        opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
+
+        for (const auto& consumer : Params.AddConsumers) {
+            const auto& desc = CreateConsumerDesc(consumer, *this, false);
+            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc))));
+        }
+
+        for (const auto& [_, consumer] : Params.AlterConsumers) {
+            const auto& desc = CreateConsumerDesc(consumer, *this, true);
+            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc))));
+        }
+
+        for (const auto& consumer : Params.DropConsumers) {
+            const auto name = BuildQuotedAtom(consumer.Pos, consumer.Name);
+            opts = L(opts, Q(Y(Q("dropConsumer"), name)));
+        }
+
+        if (Params.TopicSettings.IsSet()) {
+            auto settings = Y();
+
+#define INSERT_TOPIC_SETTING(NAME)                                                                      \
+    if (const auto& NAME##Val = Params.TopicSettings.NAME) {                                            \
+        if (NAME##Val.IsSet()) {                                                                        \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet())));           \
+        } else {                                                                                        \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Y())));           \
+        }                                                                                               \
+    }
+
+            INSERT_TOPIC_SETTING(PartitionsLimit)
+            INSERT_TOPIC_SETTING(MinPartitions)
+            INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(SupportedCodecs)
+            INSERT_TOPIC_SETTING(PartitionWriteSpeed)
+            INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
+            INSERT_TOPIC_SETTING(MeteringMode)
+
+#undef INSERT_TOPIC_SETTING
+
+            opts = L(opts, Q(Y(Q("topicSettings"), Q(settings))));
+        }
+
+
+        Add("block", Q(Y(
+                Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, TString(KikimrProviderName)),
+                                   Scoped->WrapCluster(Topic.Cluster, ctx))),
+                Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+                Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    const TTopicRef Topic;
+    const TAlterTopicParameters Params;
+    TScopedStatePtr Scoped;
+};
+
+TNodePtr BuildAlterTopic(
+        TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params, TScopedStatePtr scoped
+){
+    return new TAlterTopicNode(pos, tr, params, scoped);
+}
+
+class TDropTopicNode final: public TAstListNode {
+public:
+    TDropTopicNode(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Topic(tr)
+        , Scoped(scoped)
+    {
+        scoped->UseCluster(TString(KikimrProviderName), Topic.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        auto keys = Topic.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP);
+        if (!keys || !keys->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        auto opts = Y();
+
+        opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
+
+
+        Add("block", Q(Y(
+                Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, TString(KikimrProviderName)),
+                                   Scoped->WrapCluster(Topic.Cluster, ctx))),
+                Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
+                Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+        )));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    TTopicRef Topic;
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, tr, scoped);
 }
 
 class TCreateRole final: public TAstListNode {

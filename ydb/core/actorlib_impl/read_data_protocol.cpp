@@ -7,8 +7,7 @@
 namespace NActors {
 
 void TReadDataProtocolImpl::ProtocolFunc(
-        TAutoPtr<NActors::IEventHandle>& ev,
-        const TActorContext& ctx) noexcept
+        TAutoPtr<NActors::IEventHandle>& ev) noexcept
 {
     if (Cancelled) {
         return;
@@ -16,7 +15,7 @@ void TReadDataProtocolImpl::ProtocolFunc(
 
     switch (ev->GetTypeRewrite()) {
     case TEvSocketReadyRead::EventType:
-        TryAgain(ctx);
+        TryAgain(TlsActivationContext->AsActorContext());
         break;
 
     default:

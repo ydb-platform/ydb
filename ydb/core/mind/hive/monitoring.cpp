@@ -792,6 +792,11 @@ public:
         UpdateConfig(db, "MinPeriodBetweenReassign");
         UpdateConfig(db, "NodeSelectStrategy");
         UpdateConfig(db, "CheckMoveExpediency");
+        UpdateConfig(db, "SpaceUsagePenaltyThreshold");
+        UpdateConfig(db, "SpaceUsagePenalty");
+        UpdateConfig(db, "WarmUpBootWaitingPeriod");
+        UpdateConfig(db, "MaxWarmUpPeriod");
+        UpdateConfig(db, "WarmUpEnabled");
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             TVector<TString> tabletTypeNames = SplitString(params.Get("BalancerIgnoreTabletTypes"), ";");
@@ -1061,6 +1066,11 @@ public:
         ShowConfig(out, "MaxMovementsOnAutoBalancer");
         ShowConfig(out, "ContinueAutoBalancer");
         ShowConfig(out, "CheckMoveExpediency");
+        ShowConfig(out, "SpaceUsagePenaltyThreshold");
+        ShowConfig(out, "SpaceUsagePenalty");
+        ShowConfig(out, "WarmUpBootWaitingPeriod");
+        ShowConfig(out, "MaxWarmUpPeriod");
+        ShowConfig(out, "WarmUpEnabled");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";

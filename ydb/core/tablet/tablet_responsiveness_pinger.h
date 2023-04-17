@@ -25,7 +25,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx);
 
-    void OnAnyEvent(const TActorContext &ctx);
+    void OnAnyEvent();
     void Detach(const TActorContext &ctx);
 };
 

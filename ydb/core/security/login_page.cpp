@@ -179,11 +179,25 @@ public:
         PassAway();
     }
 
+    TString GetCORS() {
+        TStringBuilder res;
+        TString origin = TString(Request.GetHeader("Origin"));
+        if (origin.empty()) {
+            origin = "*";
+        }
+        res << "Access-Control-Allow-Origin: " << origin << "\r\n";
+        res << "Access-Control-Allow-Credentials: true\r\n";
+        res << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+        res << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        return res;
+    }
+
     void ReplyCookieAndPassAway(const TString& cookie) {
         TStringStream response;
         TDuration maxAge = (ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now());
         response << "HTTP/1.1 200 OK\r\n";
         response << "Set-Cookie: ydb_session_id=" << cookie << "; Max-Age=" << maxAge.Seconds() << "\r\n";
+        response << GetCORS();
         response << "\r\n";
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
@@ -197,6 +211,7 @@ public:
         response << "HTTP/1.1 " << status << "\r\n";
         response << "Content-Type: application/json\r\n";
         response << "Content-Length: " << responseBody.Size() << "\r\n";
+        response << GetCORS();
         response << "\r\n";
         response << responseBody;
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

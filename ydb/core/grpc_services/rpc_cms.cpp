@@ -124,14 +124,14 @@ private:
             Undelivered(ctx);
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TCmsResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvConsole::TEvOperationCompletionNotification, Handle);
             HFunc(TEvConsole::TEvNotifyOperationCompletionResponse, Handle);
-            default: TBase::StateFuncBase(ev, ctx);
+            default: TBase::StateFuncBase(ev);
         }
     }
 

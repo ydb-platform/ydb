@@ -34,9 +34,7 @@ public:
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlLookupTable::Match, HNDL(BuildLookupTableStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
-        AddHandler(0, [](const TExprNode* node) { return TCoSort::Match(node) || TCoTopSort::Match(node); },
-            HNDL(RemoveRedundantSortByPk));
-        AddHandler(0, &TDqStage::Match, HNDL(RemoveRedundantSortByPkOverSource));
+        AddHandler(0, [](auto) { return true; }, HNDL(RemoveRedundantSortByPk));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
@@ -80,7 +78,6 @@ public:
         AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
         AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));
-        AddHandler(0, &TDqStage::Match, HNDL(ApplyLimitToReadTableSource));
 
         AddHandler(0, &TDqCnHashShuffle::Match, HNDL(BuildHashShuffleByKeyStage));
 
@@ -116,7 +113,7 @@ public:
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
         AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
 
-        AddHandler(2, &TDqStage::Match, HNDL(ExpandNullMembersForReadTableSource));
+        AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
 #undef HNDL
 
         SetGlobal(1u);
@@ -148,27 +145,15 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RemoveRedundantSortByPkOverSource(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRemoveRedundantSortByPkOverSource(node, ctx, KqpCtx);
-        DumpAppliedRule("RemoveRedundantSortByPkOverSource", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
     TMaybeNode<TExprBase> RemoveRedundantSortByPk(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx);
         DumpAppliedRule("RemoveRedundantSortByPk", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> ExpandNullMembersForReadTableSource(TExprBase node, TExprContext& ctx) {
-        TExprBase output = ExpandSkipNullMembersForReadTableSource(node, ctx, KqpCtx);
-        DumpAppliedRule("ExpandSkipNullMembersForReadTableSource", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> ApplyLimitToReadTableSource(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpApplyLimitToReadTableSource(node, ctx, KqpCtx);
-        DumpAppliedRule("ApplyLimitToReadTableSource", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RewriteKqpReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteReadTable(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteKqpReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

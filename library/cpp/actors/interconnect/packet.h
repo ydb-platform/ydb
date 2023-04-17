@@ -30,27 +30,6 @@ Y_FORCE_INLINE ui32 Crc32cExtendMSanCompatible(ui32 checksum, const void *data, 
     return Crc32cExtend(checksum, data, len);
 }
 
-struct TTcpPacketHeader_v1 {
-    ui32 HeaderCRC32;
-    ui32 PayloadCRC32;
-    ui64 Confirm;
-    ui64 Serial;
-    ui64 DataSize;
-
-    inline bool Check() const {
-        ui32 actual = Crc32cExtendMSanCompatible(0, &PayloadCRC32, sizeof(TTcpPacketHeader_v1) - sizeof(HeaderCRC32));
-        return actual == HeaderCRC32;
-    }
-
-    inline void Sign() {
-        HeaderCRC32 = Crc32cExtendMSanCompatible(0, &PayloadCRC32, sizeof(TTcpPacketHeader_v1) - sizeof(HeaderCRC32));
-    }
-
-    TString ToString() const {
-        return Sprintf("{Confirm# %" PRIu64 " Serial# %" PRIu64 " DataSize# %" PRIu64 "}", Confirm, Serial, DataSize);
-    }
-};
-
 #pragma pack(push, 1)
 struct TTcpPacketHeader_v2 {
     ui64 Confirm;
@@ -60,20 +39,15 @@ struct TTcpPacketHeader_v2 {
 };
 #pragma pack(pop)
 
-union TTcpPacketBuf {
+struct TTcpPacketBuf {
     static constexpr ui64 PingRequestMask = 0x8000000000000000ULL;
     static constexpr ui64 PingResponseMask = 0x4000000000000000ULL;
     static constexpr ui64 ClockMask = 0x2000000000000000ULL;
 
-    static constexpr size_t PacketDataLen = 4096 * 2 - 96 - Max(sizeof(TTcpPacketHeader_v1), sizeof(TTcpPacketHeader_v2));
-    struct {
-        TTcpPacketHeader_v1 Header;
-        char Data[PacketDataLen];
-    } v1;
-    struct {
-        TTcpPacketHeader_v2 Header;
-        char Data[PacketDataLen];
-    } v2;
+    static constexpr size_t PacketDataLen = 4096 * 2 - 96 - sizeof(TTcpPacketHeader_v2);
+
+    TTcpPacketHeader_v2 Header;
+    char Data[PacketDataLen];
 };
 
 struct TEventData {
@@ -87,16 +61,6 @@ struct TEventData {
 };
 
 #pragma pack(push, 1)
-struct TEventDescr1 {
-    ui32 Type;
-    ui32 Flags;
-    TActorId Recipient;
-    TActorId Sender;
-    ui64 Cookie;
-    char TraceId[16]; // obsolete trace id format
-    ui32 Checksum;
-};
-
 struct TEventDescr2 {
     ui32 Type;
     ui32 Flags;
@@ -125,8 +89,8 @@ struct TEventHolder : TNonCopyable {
         Descr.Checksum = 0;
     }
 
-    void UpdateChecksum(const TSessionParams& params, const void *buffer, size_t len) {
-        if (FORCE_EVENT_CHECKSUM || !params.UseModernFrame) {
+    void UpdateChecksum(const void *buffer, size_t len) {
+        if (FORCE_EVENT_CHECKSUM) {
             Descr.Checksum = Crc32cExtendMSanCompatible(Descr.Checksum, buffer, len);
         }
     }
@@ -174,16 +138,6 @@ public:
         Reuse();
     }
 
-    template<typename T>
-    auto ApplyToHeader(T&& callback) {
-        return Params.UseModernFrame ? callback(Packet.v2.Header) : callback(Packet.v1.Header);
-    }
-
-    template<typename T>
-    auto ApplyToHeader(T&& callback) const {
-        return Params.UseModernFrame ? callback(Packet.v2.Header) : callback(Packet.v1.Header);
-    }
-
     bool IsAtBegin() const {
         return !BufferIndex && !FirstBufferOffset && !TriedWriting;
     }
@@ -194,11 +148,11 @@ public:
 
     void Reuse() {
         DataSize = 0;
-        ApplyToHeader([this](auto& header) { Bufs.assign(1, {&header, sizeof(header)}); });
+        Bufs.assign(1, {&Packet.Header, sizeof(Packet.Header)});
         BufferIndex = 0;
         FirstBufferOffset = 0;
         TriedWriting = false;
-        FreeArea = Params.UseModernFrame ? Packet.v2.Data : Packet.v1.Data;
+        FreeArea = Packet.Data;
         End = FreeArea + TTcpPacketBuf::PacketDataLen;
         Orbit.Reset();
     }
@@ -208,28 +162,18 @@ public:
     }
 
     void SetMetadata(ui64 serial, ui64 confirm) {
-        ApplyToHeader([&](auto& header) {
-            header.Serial = serial;
-            header.Confirm = confirm;
-        });
-    }
-
-    void UpdateConfirmIfPossible(ui64 confirm) {
-        // we don't want to recalculate whole packet checksum for single confirmation update on v2
-        if (!Params.UseModernFrame && IsAtBegin() && confirm != Packet.v1.Header.Confirm) {
-            Packet.v1.Header.Confirm = confirm;
-            Packet.v1.Header.Sign();
-        }
+        Packet.Header.Serial = serial;
+        Packet.Header.Confirm = confirm;
     }
 
     size_t GetDataSize() const { return DataSize; }
 
     ui64 GetSerial() const {
-        return ApplyToHeader([](auto& header) { return header.Serial; });
+        return Packet.Header.Serial;
     }
 
     bool Confirmed(ui64 confirm) const {
-        return ApplyToHeader([&](auto& header) { return IsEmpty() || header.Serial <= confirm; });
+        return IsEmpty() || Packet.Header.Serial <= confirm;
     }
 
     void *GetFreeArea() {
@@ -307,29 +251,14 @@ public:
     }
 
     void Sign() {
-        if (Params.UseModernFrame) {
-            Packet.v2.Header.Checksum = 0;
-            Packet.v2.Header.PayloadLength = DataSize;
-            if (!Params.Encryption) {
-                ui32 sum = 0;
-                for (const auto& item : Bufs) {
-                    sum = Crc32cExtendMSanCompatible(sum, item.Data, item.Size);
-                }
-                Packet.v2.Header.Checksum = sum;
+        Packet.Header.Checksum = 0;
+        Packet.Header.PayloadLength = DataSize;
+        if (!Params.Encryption) {
+            ui32 sum = 0;
+            for (const auto& item : Bufs) {
+                sum = Crc32cExtendMSanCompatible(sum, item.Data, item.Size);
             }
-        } else {
-            Y_VERIFY(!Bufs.empty());
-            auto it = Bufs.begin();
-            static constexpr size_t headerLen = sizeof(TTcpPacketHeader_v1);
-            Y_VERIFY(it->Data == &Packet.v1.Header && it->Size >= headerLen);
-            ui32 sum = Crc32cExtendMSanCompatible(0, Packet.v1.Data, it->Size - headerLen);
-            while (++it != Bufs.end()) {
-                sum = Crc32cExtendMSanCompatible(sum, it->Data, it->Size);
-            }
-
-            Packet.v1.Header.PayloadCRC32 = sum;
-            Packet.v1.Header.DataSize = DataSize;
-            Packet.v1.Header.Sign();
+            Packet.Header.Checksum = sum;
         }
     }
 };

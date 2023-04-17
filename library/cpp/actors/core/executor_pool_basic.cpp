@@ -355,6 +355,9 @@ namespace NActors {
         // Save counters from the pool object
         statsCopy[0] = TExecutorThreadStats();
         statsCopy[0].Aggregate(Stats);
+#if defined(ACTORSLIB_COLLECT_EXEC_STATS)
+        RecalculateStuckActors(statsCopy[0]);
+#endif
         // Per-thread stats
         for (size_t i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);

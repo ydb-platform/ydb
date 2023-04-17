@@ -455,7 +455,7 @@ protected:
         if (!PostponedEvents.empty()) {
             TAutoPtr<IEventHandle> event = std::move(PostponedEvents.front());
             PostponedEvents.pop_front();
-            StateConnected(event, TActivationContext::AsActorContext());
+            StateConnected(event);
         }
     }
 

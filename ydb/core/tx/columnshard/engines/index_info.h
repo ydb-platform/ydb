@@ -88,6 +88,12 @@ public:
     const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
     const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
 
+    const std::shared_ptr<arrow::Schema> GetEffectiveKey() const {
+        // TODO: composite key
+        Y_VERIFY(IndexKey->num_fields() == 1);
+        return std::make_shared<arrow::Schema>(arrow::FieldVector{GetIndexKey()->field(0)});
+    }
+
     /// Initializes sorting, replace, index and extended keys.
     void SetAllKeys();
 

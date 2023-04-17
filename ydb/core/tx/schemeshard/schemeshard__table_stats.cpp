@@ -90,6 +90,7 @@ public:
 
     // returns true to continue batching
     bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    void ScheduleNextBatch(const TActorContext& ctx) override;
 };
 
 
@@ -399,6 +400,10 @@ void TTxStoreTableStats::Complete(const TActorContext& ctx) {
     Queue.WriteQueueSizeMetric();
 }
 
+void TTxStoreTableStats::ScheduleNextBatch(const TActorContext& ctx) {
+    Self->ExecuteTableStatsBatch(ctx);
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
 
@@ -448,7 +453,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvPersistTableStats::TPtr&, const TActorC
 void TSchemeShard::ExecuteTableStatsBatch(const TActorContext& ctx) {
     if (!TablePersistStatsPending && !TableStatsQueue.Empty()) {
         TablePersistStatsPending = true;
-        Execute(new TTxStoreTableStats(this, TableStatsQueue, TablePersistStatsPending), ctx);
+        EnqueueExecute(new TTxStoreTableStats(this, TableStatsQueue, TablePersistStatsPending));
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Will execute TTxStoreStats, queue# " << TableStatsQueue.Size());
         ScheduleTableStatsBatch(ctx);

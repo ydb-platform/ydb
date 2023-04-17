@@ -293,7 +293,7 @@ void TColumnShard::SendPeriodicStats() {
         return;
     }
 
-    const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
+    const TActorContext& ctx = ActorContext();
     TInstant now = TAppData::TimeProvider->Now();
     if (LastStatsReport + StatsReportInterval > now) {
         return;

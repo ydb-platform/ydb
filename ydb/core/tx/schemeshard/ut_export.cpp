@@ -978,4 +978,86 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
+
+    Y_UNIT_TEST(ShouldSucceedOnConcurrentTxs) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        THolder<IEventHandle> copyTables;
+        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                    copyTables.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        if (!copyTables) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&copyTables](IEventHandle&) -> bool {
+                return bool(copyTables);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        
+        THolder<IEventHandle> proposeTxResult;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
+                proposeTxResult.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "extra"  Type: "Utf8"}
+        )");
+
+        if (!proposeTxResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&proposeTxResult](IEventHandle&) -> bool {
+                return bool(proposeTxResult);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(origObserver);
+        runtime.Send(copyTables.Release(), 0, true);
+        runtime.Send(proposeTxResult.Release(), 0, true);
+        env.TestWaitNotification(runtime, txId);
+
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
 }

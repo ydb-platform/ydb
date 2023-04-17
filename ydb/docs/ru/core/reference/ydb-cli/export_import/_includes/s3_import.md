@@ -63,7 +63,7 @@
 Загрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе загрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation get "ydb://import/8?id=281474976788395&kind=s3"
+{{ ydb-cli }} -p quickstart operation get "ydb://import/8?id=281474976788395&kind=s3"
 ```
 
 Формат вывода `operation get` также устанавливается опцией `--format`.
@@ -94,7 +94,7 @@
 После выполнения загрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка была удалена из перечня операций:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation forget "ydb://import/8?id=281474976788395&kind=s3"
+{{ ydb-cli }} -p quickstart operation forget "ydb://import/8?id=281474976788395&kind=s3"
 ```
 
 ### Список операций загрузки {#list}
@@ -102,21 +102,21 @@
 Для получения списка операций загрузки воспользуйтесь командой `operation list import/s3`:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation list import/s3
+{{ ydb-cli }} -p quickstart operation list import/s3
 ```
 
 Формат вывода `operation list` также устанавливается опцией `--format`.
 
 ## Примеры {#examples}
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Загрузка в корень базы данных {#example-full-db}
 
 Загрузка в корень базы данных содержимого директории `export1` в бакете `mybucket` с использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`:
 
 ```
-ydb -p db1 import s3 \
+ydb -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --item src=export1,dst=.
 ```
@@ -126,7 +126,7 @@ ydb -p db1 import s3 \
 Загрузка объектов из директорий dir1 и dir2 бакета S3 `mybucket` в одноименные директории базы данных с использованием явно заданных параметров аутентификации в S3:
 
 ```
-ydb -p db1 import s3 \
+ydb -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
@@ -137,7 +137,7 @@ ydb -p db1 import s3 \
 Для получения перечня идентификаторов операций загрузки в удобном для обработки в скриптах bash формате вы можете применить утилиту [jq](https://stedolan.github.io/jq/download/):
 
 ``` bash
-{{ ydb-cli }} -p db1 operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id"
+{{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id"
 ```
 
 Вы получите вывод, где в каждой новой строке находится идентификатор операции, например:
@@ -151,6 +151,6 @@ ydb://import/8?id=281474976788779&kind=s3
 По этим идентификаторам может быть, например, запущен цикл для завершения всех текущих операций:
 
 ``` bash
-{{ ydb-cli }} -p db1 operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p db1 operation forget $line;done
+{{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
 

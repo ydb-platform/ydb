@@ -41,19 +41,19 @@
 
 **Примеры**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-Добавление синхронного индекса по колонке `air_date` в таблицу `episodes` из [статьи про YQL](../../../../getting_started/yql.md) в разделе "Начало работы":
+Добавление синхронного индекса по колонке `air_date` в [созданную ранее]({{ quickstart-path }}) таблицу `episodes`:
 
 ```bash
-{{ ydb-cli }} -p db1 table index add global-sync episodes \
+{{ ydb-cli }} -p quickstart table index add global-sync episodes \
   --index-name idx_aired --columns air_date
 ```
 
-Добавление асинхронного индекса по колонкам `release_date` и `title`, и с копированием в индекс значения колонки `series_info`, для таблицы `series` из [статьи про YQL](../../../../getting_started/yql.md) в разделе "Начало работы":
+Добавление асинхронного индекса по колонкам `release_date` и `title`, и с копированием в индекс значения колонки `series_info`, для [созданной ранее]({{ quickstart-path }}) таблицы `series`:
 
 ```bash
-{{ ydb-cli }} -p db1 table index add global-async series \
+{{ ydb-cli }} -p quickstart table index add global-async series \
   --index-name idx_rel_title --columns release_date,title --cover series_info
 ```
 
@@ -70,7 +70,7 @@
 Получение информации о статусе операции (подставьте фактический id операции):
 
 ```bash
-{{ ydb-cli }} -p db1 operation get ydb://buildindex/7?id=281474976866869
+{{ ydb-cli }} -p quickstart operation get ydb://buildindex/7?id=281474976866869
 ```
 
 Возвращаемое значение:
@@ -85,7 +85,7 @@
 
 Удаление информации о построении индекса (подставьте фактический id операции):
 ```bash
-{{ ydb-cli }} -p db1 operation forget ydb://buildindex/7?id=2814749869
+{{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
 
 ## Удаление вторичного индекса {#drop}
@@ -98,12 +98,12 @@
 
 **Пример**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 Удаление индекса `idx_aired` с таблицы episodes, построенного в примере создания индекса выше:
 
 ```bash
-{{ ydb-cli }} -p db1 table index drop episodes --index-name idx_aired
+{{ ydb-cli }} -p quickstart table index drop episodes --index-name idx_aired
 ```
 
 ## Переименование вторичного индекса {#rename}
@@ -124,7 +124,7 @@
 
 **Пример**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [example_db1.md](../../../../_includes/ydb-cli-profile.md) %}
 
 Переименование индекса `idx_aired` с таблицы episodes, построенного в примере создания индекса выше:
 

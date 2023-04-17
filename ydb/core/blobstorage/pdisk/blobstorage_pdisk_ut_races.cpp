@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <util/system/hp_timer.h>
+#include <util/random/random.h>
 
 namespace NKikimr {
 
@@ -258,6 +259,71 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
     Y_UNIT_TEST(KillOwnerWhileDecommittingWithInflightMock) {
         TestKillOwnerWhileDecommitting(true, 20, 0, 10, 100);
+    }
+
+    void OwnerRecreationRaces(bool usePDiskMock, ui32 timeLimit, ui32 vdisksNum) {
+        TActorTestContext testCtx({ false, usePDiskMock });
+
+        std::vector<TVDiskMock> mocks;
+        enum EMockState {
+            Empty,
+            InitStarted, 
+            InitFinished,
+            KillStarted,
+            KillFinished
+        };
+        std::vector<EMockState> mockState(vdisksNum, EMockState::Empty);
+        for (ui32 i = 0; i < vdisksNum; ++i) {
+            mocks.push_back(TVDiskMock(&testCtx));
+        }
+
+        THPTimer timer;
+        while (timer.Passed() < timeLimit) {
+            ui32 i = RandomNumber(vdisksNum);
+            ui32 action = RandomNumber<ui32>(10);
+            if (action != 0 && mocks[i].PDiskParams) {
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mocks[i].PDiskParams->Owner, mocks[i].PDiskParams->OwnerRound, 0, TRcBuf(PrepareData(1)),
+                        mocks[i].GetLsnSeg(), nullptr);
+                evLog->Signature = TLogSignature::SignatureLogoBlobOpt;
+                testCtx.Send(evLog.Release());
+            } else {
+                switch (mockState[i]) {
+                case EMockState::InitStarted:
+                    {
+                        auto res = testCtx.Recv<NPDisk::TEvYardInitResult>();
+                        UNIT_ASSERT_VALUES_EQUAL(res->Status, NKikimrProto::OK);
+                        mocks[i].PDiskParams.Reset(res->PDiskParams);
+                        mocks[i].OwnerRound = res->PDiskParams->OwnerRound;
+                        mockState[i] = EMockState::InitFinished;
+                    }
+                    break;
+                case EMockState::InitFinished:
+                    {
+                        auto evSlay = MakeHolder<NPDisk::TEvSlay>(mocks[i].VDiskID, mocks[i].OwnerRound++, 0, 0);
+                        testCtx.Send(evSlay.Release());
+                        mockState[i] = EMockState::KillStarted;
+                    }
+                    break;
+                case EMockState::KillStarted:
+                    {
+                        testCtx.Recv<NPDisk::TEvSlayResult>();
+                        mockState[i] = EMockState::KillFinished;
+                    }
+                    break;
+                case EMockState::Empty: case EMockState::KillFinished:
+                    {
+                        auto evInit = MakeHolder<NPDisk::TEvYardInit>(mocks[i].OwnerRound++, mocks[i].VDiskID, testCtx.TestCtx.PDiskGuid);
+                        testCtx.Send(evInit.Release());
+                        mockState[i] = EMockState::InitStarted;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OwnerRecreationRaces) {
+        OwnerRecreationRaces(false, 20, 1);
     }
 }
 

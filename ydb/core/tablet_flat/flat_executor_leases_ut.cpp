@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
 
     private:
         STFUNC(StateInit) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         STFUNC(StateWork) {
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
                 hFunc(TEvLeasesTablet::TEvWrite, Handle);
                 hFunc(TEvLeasesTablet::TEvRead, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
             }
         }
 

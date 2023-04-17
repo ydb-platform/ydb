@@ -2431,7 +2431,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
         default:
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
     }
 

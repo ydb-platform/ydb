@@ -30,6 +30,7 @@ target_link_options(ydb-core-cms-console-yaml_config-ut PRIVATE
   -ldl
 )
 target_sources(ydb-core-cms-console-yaml_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/console_dumper_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config_ut.cpp
 )
 set_property(

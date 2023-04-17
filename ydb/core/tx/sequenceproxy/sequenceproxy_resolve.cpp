@@ -87,7 +87,6 @@ namespace NSequenceProxy {
 
     private:
         STFUNC(StateWork) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             }

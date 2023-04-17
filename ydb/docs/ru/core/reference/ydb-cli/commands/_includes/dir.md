@@ -32,13 +32,13 @@ pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path st
 - Создание директории в корне базы данных
 
   ``` bash
-  {{ ydb-cli }} --profile db1 scheme mkdir dir1
+  {{ ydb-cli }} --profile quickstart scheme mkdir dir1
   ```
 
 - Создание директорий на указанном пути от корня базы данных
 
   ``` bash
-  {{ ydb-cli }} --profile db1 scheme mkdir dir1/dir2/dir3
+  {{ ydb-cli }} --profile quickstart scheme mkdir dir1/dir2/dir3
   ```
 
 ## Удаление директории {#rmdir}
@@ -116,13 +116,13 @@ EPathTypeDir, path state: EPathStateNoChanges, alive children: <count>
 Во всех командах CLI, в которые передается параметром имя объекта, оно может быть указано с директорией, например в [`scheme describe`](../scheme-describe.md):
 
 ``` bash
-{{ ydb-cli }} --profile db1 scheme describe dir1/table_a
+{{ ydb-cli }} --profile quickstart scheme describe dir1/table_a
 ```
 
 Команда [`scheme ls`](../scheme-ls.md) поддерживает передачу пути к директории в качестве параметра:
 
 ``` bash
-{{ ydb-cli }} --profile db1 scheme ls dir1/dir2
+{{ ydb-cli }} --profile quickstart scheme ls dir1/dir2
 ```
 
 ## Использование директорий в YQL {#yql}

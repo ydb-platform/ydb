@@ -84,32 +84,32 @@
 
 * Чтение одного сообщения с выводом в терминал. Если в топике нет новых сообщения для данного читателя, исполнение команды будет завершено без какого-либо вывода:
   ```bash
-  {{ ydb-cli }} -p db1 topic read topic1 -c c1
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1
   ```
 
 * Ожидание появления и чтение одного сообщения с записью его в файл `message.bin`. До тех пор пока в топике нет новых сообщений для данного читателя, команда будет оставаться запущенной, но её можно прервать нажав `Ctrl+C`:
   ```bash
-  {{ ydb-cli }} -p db1 topic read topic1 -c c1 -w -f message.bin
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w -f message.bin
   ```
 
 * Просмотр информации об ожидающих обработки читателем сообщениях без их подтверждения. Будет выведено до 10 первых сообщений:
   ```bash
-  {{ ydb-cli }} -p db1 topic read topic1 -c c1 --format pretty --commit false
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format pretty --commit false
   ```
 
 * Вывод в терминал сообщений по мере их появления в формате разделения символами перевода строки, с конвертацией в кодировку Base64. Команда будет исполняться до прерывания нажатием `Ctrl+C`:
   ```bash
-  {{ ydb-cli }} -p db1 topic read topic1 -c c1 -w --format newline-delimited --transform base64
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w --format newline-delimited --transform base64
   ```
 
 * Отслеживание появления в топике сообщений, содержащих текст `ERROR`, с выводом их в терминал по мере появления:
   ```bash
-  {{ ydb-cli }} -p db1 topic read topic1 -c c1 --format newline-delimited -w | grep ERROR
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | grep ERROR
   ```
 
 * Получение следующего непустого пакета из не более 150 сообщений, преобразованных в base64, с разделением символом перевода строки, и записью в файл `batch.txt`:
   ```bash
-  {{ ydb-cli }} -p db1 topic read topic1 -c c1 \
+  {{ ydb-cli }} -p quickstart topic read topic1 -c c1 \
     --format newline-delimited -w --limit 150 \
     --transform base64 -f batch.txt
   ```

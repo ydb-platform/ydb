@@ -30,6 +30,7 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
         case EKikimrTableKind::SysView:
             break;
         case EKikimrTableKind::Olap:
+        case EKikimrTableKind::External:
         case EKikimrTableKind::Unspecified:
             return {};
     }

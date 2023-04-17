@@ -10,6 +10,12 @@
 
 namespace NKikimr::NArrow {
 
+using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
+template<typename T>
+class TReplaceKeyTemplate;
+using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
+using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
+
 // Arrow inrernally keeps references to Buffer objects with the data
 // This helper class implements arrow::Buffer over TString that owns
 // the actual memory
@@ -104,7 +110,7 @@ std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits);
 std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2);
 std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count);
 TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
-i64 LowerBound(const std::shared_ptr<arrow::Array>& column, const arrow::Scalar& value, i64 offset = 0);
+size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset = 0);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 enum class ECompareType {
     LESS = 1,

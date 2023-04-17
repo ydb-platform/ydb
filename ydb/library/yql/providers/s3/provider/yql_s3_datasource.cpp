@@ -1,8 +1,9 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_dq_integration.h"
 
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
+#include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -27,6 +28,12 @@ public:
         , TypeAnnotationTransformer_(CreateS3DataSourceTypeAnnotationTransformer(State_))
         , DqIntegration_(CreateS3DqIntegration(State_))
     {}
+
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        auto& settings = State_->Configuration->Clusters[name];
+        settings.Url = properties.Value("location", "");
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
+    }
 
     TStringBuf GetName() const override {
         return S3ProviderName;

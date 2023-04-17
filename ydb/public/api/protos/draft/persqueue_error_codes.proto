@@ -25,6 +25,7 @@ enum EErrorCode {
     READ_ERROR_TOO_BIG_OFFSET = 12;
 
     SET_OFFSET_ERROR_COMMIT_TO_FUTURE = 13;
+    SET_OFFSET_ERROR_COMMIT_TO_PAST = 25;
 
     TABLET_IS_DROPPED = 14;
 
@@ -40,7 +41,9 @@ enum EErrorCode {
     CREATE_TIMEOUT = 22; // TODO: move to pqlib codes
     IDLE_TIMEOUT = 23; // TODO: move to pqlib codes
 
-    SET_OFFSET_ERROR_COMMIT_TO_PAST = 25;
+    PREFERRED_CLUSTER_MISMATCHED = 26;
+
+    TABLET_PIPE_DISCONNECTED = 27;
 
     ERROR = 100;
 }

@@ -311,7 +311,7 @@ public:
         return ReplyWithError(MSTATUS_TIMEOUT, "Request timed out", ctx);
     }
 
-    void StateWaitResolve(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateWaitResolve(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
@@ -319,7 +319,7 @@ public:
         }
     }
 
-    void StateWaitExecute(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateWaitExecute(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -749,7 +749,7 @@ public:
             const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters
             );
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle)
@@ -999,7 +999,7 @@ public:
         return ReplyWithError(MSTATUS_TIMEOUT, "Request timed out", ctx);
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvReply, Handle);
         }

@@ -11,7 +11,7 @@ namespace NYql::NDqs {
 template<typename TDerived>
 class TWorkerManagerCommon: public TRichActor<TDerived> {
 public:
-    TWorkerManagerCommon(void (TDerived::*func)(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx))
+    TWorkerManagerCommon(void (TDerived::*func)(TAutoPtr<NActors::IEventHandle>& ev))
         : TRichActor<TDerived>(func)
     { }
 

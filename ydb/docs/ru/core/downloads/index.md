@@ -1,6 +1,6 @@
 # Загрузки
 
-## {{ ydb-short-name }} CLI
+## {{ ydb-short-name }} CLI {#ydb-cli}
 
 [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — утилита командной строки для работы с базами данных {{ ydb-short-name }}.
 
@@ -24,7 +24,7 @@
 
 {% endlist %}
 
-## {{ ydb-short-name }} Server
+## {{ ydb-short-name }} Server {#ydb-server}
 
 {{ ydb-short-name }} Server — сборка для запуска узла [кластера YDB](../concepts/databases.md#cluster).
 

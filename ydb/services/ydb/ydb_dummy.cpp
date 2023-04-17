@@ -50,9 +50,9 @@ public:
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            default: TBase::StateFuncBase(ev, ctx);
+            default: TBase::StateFuncBase(ev);
         }
     }
 };
@@ -101,7 +101,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             HFunc(IContext::TEvReadFinished, Handle);
             HFunc(TGRpcRequestProxy::TEvRefreshTokenResponse, Handle);

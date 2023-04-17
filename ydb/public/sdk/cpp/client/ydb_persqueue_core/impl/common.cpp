@@ -6,12 +6,12 @@ namespace NYdb::NPersQueue {
 
 ERetryErrorClass GetRetryErrorClass(EStatus status) {
     switch (status) {
-    case EStatus::SUCCESS:
-    case EStatus::INTERNAL_ERROR:
+    case EStatus::SUCCESS:          // NoRetry?
+    case EStatus::INTERNAL_ERROR:   // NoRetry?
     case EStatus::ABORTED:
     case EStatus::UNAVAILABLE:
-    case EStatus::GENERIC_ERROR:
-    case EStatus::BAD_SESSION:
+    case EStatus::GENERIC_ERROR:    // NoRetry?
+    case EStatus::BAD_SESSION:      // NoRetry?
     case EStatus::SESSION_EXPIRED:
     case EStatus::CANCELLED:
     case EStatus::UNDETERMINED:

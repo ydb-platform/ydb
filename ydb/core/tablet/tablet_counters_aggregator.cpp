@@ -1444,7 +1444,6 @@ TTabletCountersAggregatorActor::HandleWakeup(const TActorContext &ctx) {
 /// public state functions
 ////////////////////////////////////////////
 STFUNC(TTabletCountersAggregatorActor::StateWork) {
-    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTabletCounters::TEvTabletAddCounters, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletCountersForgetTablet, HandleWork);

@@ -9,6 +9,7 @@
 #include <ydb/core/base/table_index.h>
 
 #include <util/string/split.h>
+#include <util/string/strip.h>
 
 namespace NYql {
 
@@ -321,6 +322,75 @@ ETableType GetTableTypeFromString(const TStringBuf& tableType) {
         return ETableType::ExternalTable;
     }
     return ETableType::Unknown;
+}
+
+
+template<typename TEnumType>
+static std::shared_ptr<THashMap<TString, TEnumType>> MakeEnumMapping(
+        const google::protobuf::EnumDescriptor* descriptor, const TString& prefix
+) {
+    auto result = std::make_shared<THashMap<TString, TEnumType>>();
+    for (auto i = 0; i < descriptor->value_count(); i++) {
+        TString name = to_lower(descriptor->value(i)->name());
+        TStringBuf nameBuf(name);
+        if (!prefix.empty()) {
+            nameBuf.SkipPrefix(prefix);
+            result->insert(std::make_pair(
+                    TString(nameBuf),
+                    static_cast<TEnumType>(descriptor->value(i)->number())
+            ));
+        }
+        result->insert(std::make_pair(
+                name, static_cast<TEnumType>(descriptor->value(i)->number())
+        ));
+    }
+    return result;
+}
+
+static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() {
+    static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> codecsMapping;
+    if (codecsMapping == nullptr) {
+        codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
+    }
+    return codecsMapping;
+}
+
+static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringModesMapping() {
+    static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> metModesMapping;
+    if (metModesMapping == nullptr) {
+        metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
+                Ydb::Topic::MeteringMode_descriptor(), "metering_mode_"
+        );
+    }
+    return metModesMapping;
+}
+
+bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::MeteringMode& result) {
+    auto mapping = GetMeteringModesMapping();
+    auto normMode = to_lower(meteringMode);
+    auto iter = mapping->find(normMode);
+    if (iter.IsEnd()) {
+        return false;
+    } else {
+        result = iter->second;
+        return true;
+    }
+}
+
+TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr) {
+    const TVector<TString> codecsList = StringSplitter(codecsStr).Split(',').SkipEmpty();
+    TVector<Ydb::Topic::Codec> result;
+    auto mapping = GetCodecsMapping();
+    for (const auto& codec : codecsList) {
+        auto normCodec = to_lower(Strip(codec));
+        auto iter = mapping->find(normCodec);
+        if (iter.IsEnd()) {
+            return {};
+        } else {
+            result.push_back(iter->second);
+        }
+    }
+    return result;
 }
 
 } // namespace NYql

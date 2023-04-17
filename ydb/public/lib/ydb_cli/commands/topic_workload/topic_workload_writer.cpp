@@ -26,13 +26,13 @@ TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
 void TTopicWorkloadWriterWorker::CreateWorker() {
     if (!InitSeqNoProcessed) {
         *Params.ErrorFlag = 1;
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING, "WRITER no progress while writing by protocol.\n");
+        WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING, "No progress while writing by protocol.\n");
         return;
     }
 
     MessageGroupId = Params.MessageGroupId;
 
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "WRITER create worker for " << MessageGroupId << ".\n");
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for " << MessageGroupId << ".\n");
 
     if (WriteSession)
         WriteSession->Close();
@@ -65,7 +65,7 @@ TString TTopicWorkloadWriterWorker::GetGeneratedMessage() const {
 TDuration TTopicWorkloadWriterWorker::Process() {
     if (!InitSeqNoProcessed) {
         if (!InitSeqNo.HasValue() && !InitSeqNo.Wait(TDuration::Seconds(1))) {
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING, "WRITER no initial sequence number\n");
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING, "No initial sequence number\n");
             return TDuration::Seconds(1);
         }
         if (InitSeqNo.HasException()) {
@@ -79,7 +79,7 @@ TDuration TTopicWorkloadWriterWorker::Process() {
         }
 
         InitSeqNoProcessed = true;
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "WRITER sequence number initialized " << InitSeqNo.GetValue() << "\n");
+        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Sequence number initialized " << InitSeqNo.GetValue() << "\n");
         if (MessageId != InitSeqNo.GetValue() + 1) {
             MessageId = InitSeqNo.GetValue() + 1;
             AckedMessageId = MessageId - 1;
@@ -91,13 +91,13 @@ TDuration TTopicWorkloadWriterWorker::Process() {
 
     while (true) {
         auto events = WriteSession->GetEvents(false);
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "WRITER Got " << events.size() << " events \n");
+        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got " << events.size() << " events \n");
 
         for (auto& e : events)
             ProcessEvent(e);
 
         if (BytesWritten < bytesMustBeWritten && ContinuationToken.Defined()) {
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "WRITER Writing message " << MessageId << "\n");
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Writing message " << MessageId << "\n");
 
             TString data = GetGeneratedMessage();
             size_t messageSize = data.size();
@@ -144,14 +144,14 @@ bool TTopicWorkloadWriterWorker::ProcessAckEvent(
     //! successfully. Here we just count acked messages to check, that everything
     //! written is confirmed.
     for (const auto& ack : event.Acks) {
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "WRITER Got ack for write " << AckedMessageId << "\n");
+        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got ack for write " << AckedMessageId << "\n");
         AckedMessageId = ack.SeqNo;
 
         auto inflightMessageIter = InflightMessages.find(AckedMessageId);
         if (inflightMessageIter == InflightMessages.end())
         {
             *Params.ErrorFlag = 1;
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_ERR, TStringBuilder() << "WRITER Unknown AckedMessageId " << AckedMessageId << "\n");
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_ERR, TStringBuilder() << "Unknown AckedMessageId " << AckedMessageId << "\n");
             return false;
         }
 
@@ -174,21 +174,21 @@ bool TTopicWorkloadWriterWorker::ProcessReadyToAcceptEvent(
 
     ContinuationToken = std::move(event.ContinuationToken);
 
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, "WRITER Got new continue token\n");
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, "Got new continue token\n");
 
     return true;
 }
 
 bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
     const NYdb::NTopic::TSessionClosedEvent& event) {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "WRITER Got close event: " << event.DebugString() << "\n");
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Got close event: " << event.DebugString() << "\n");
     //! Session is closed, stop any work with it.
     Y_FAIL("session closed");
     return false;
 }
 
 void TTopicWorkloadWriterWorker::CreateTopicWorker() {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, "WRITER Creating worker\n");
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, "Creating writer worker\n");
     Y_VERIFY(Params.Driver);
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
@@ -204,7 +204,7 @@ void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams&& params)
 
     (*params.StartedCount)++;
 
-    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "WRITER started " << Now().ToStringUpToSeconds() << "\n");
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Writer started " << Now().ToStringUpToSeconds() << "\n");
 
     auto endTime = TInstant::Now() + TDuration::Seconds(params.Seconds);
     while (Now() < endTime && !*params.ErrorFlag) {
@@ -215,5 +215,5 @@ void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams&& params)
     }
 
 
-    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "WRITER finished " << Now().ToStringUpToSeconds() << "\n");
+    WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Writer finished " << Now().ToStringUpToSeconds() << "\n");
 }

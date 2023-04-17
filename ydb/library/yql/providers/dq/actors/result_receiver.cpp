@@ -51,7 +51,7 @@ public:
             HFunc(TEvReadyState, OnReadyState);
             hFunc(TEvMessageProcessed, OnMessageProcessed);
             default:
-                TBase::HandlerBase(ev, ctx);
+                TBase::HandlerBase(ev);
         }
     }
 
@@ -59,7 +59,7 @@ public:
         switch (const ui32 etype = ev->GetTypeRewrite()) {
             hFunc(TEvMessageProcessed, OnMessageProcessed);
             default:
-                TBase::ShutdownHandlerBase(ev, ctx);
+                TBase::ShutdownHandlerBase(ev);
         }
     }
 
@@ -124,13 +124,13 @@ private:
 } /* namespace */
 
 THolder<NActors::IActor> MakeResultReceiver(
-    const TVector<TString>& columns, 
-    const NActors::TActorId& executerId, 
-    const TString& traceId, 
-    const TDqConfiguration::TPtr& settings, 
-    const THashMap<TString, TString>& secureParams, 
+    const TVector<TString>& columns,
+    const NActors::TActorId& executerId,
+    const TString& traceId,
+    const TDqConfiguration::TPtr& settings,
+    const THashMap<TString, TString>& secureParams,
     const TString& resultType,
-    const NActors::TActorId& graphExecutionEventsId, 
+    const NActors::TActorId& graphExecutionEventsId,
     bool discard) {
     return MakeHolder<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, graphExecutionEventsId, discard);
 }

@@ -869,6 +869,7 @@ public:
                         PARAMETRIZE(CREATE)
                     }
                 }
+                builder.IsStrict();
             }
 
             if (name == AddValueName) {
@@ -885,6 +886,7 @@ public:
                         PARAMETRIZE(ADD_VALUE)
                     }
                 }
+                builder.IsStrict();
             }
 
             if (name == SerializeName) {
@@ -897,6 +899,7 @@ public:
                         PARAMETRIZE(SERIALIZE)
                     }
                 }
+                builder.IsStrict();
             }
 
             if (name == DeserializeName) {
@@ -921,6 +924,7 @@ public:
                         PARAMETRIZE(MERGE)
                     }
                 }
+                builder.IsStrict();
             }
 
             if (name == GetResultName) {
@@ -935,6 +939,7 @@ public:
                         PARAMETRIZE(GET_RESULT)
                     }
                 }
+                builder.IsStrict();
             }
 
         } catch (const std::exception& e) {

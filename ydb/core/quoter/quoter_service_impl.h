@@ -310,7 +310,6 @@ public:
     void Bootstrap();
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQuota::TEvRequest, Handle);
             hFunc(TEvQuota::TEvCancelRequest, Handle);
@@ -319,7 +318,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTick);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
-            LOG_WARN_S(ctx, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "
                 << ev->GetTypeRewrite()
                 << " event: "
                 << ev->ToString());

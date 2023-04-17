@@ -217,6 +217,7 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
         id.GroupGeneration = -1;  // Clear GroupGeneration in sys log record (for compatibility)
         OwnerData[i].VDiskId = id;
         OwnerData[i].Status = TOwnerData::VDISK_STATUS_HASNT_COME;
+        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[i].OperationLog, "Processing Chunk0, OwnerId# " << i);
         if (id != TVDiskID::InvalidId) {
             VDiskOwners[id] = TOwner(i);
             AtomicIncrement(TotalOwners);
@@ -433,6 +434,7 @@ void TPDisk::ProcessLogReadQueue() {
         {
             TLogRead &logRead = *static_cast<TLogRead*>(req);
             auto& ownerData = OwnerData[logRead.Owner];
+
             ownerData.Status = TOwnerData::VDISK_STATUS_READING_LOG;
             TLogPosition logStartPosition{0, 0};
             if (logRead.Owner < OwnerData.size() && ownerData.VDiskId != TVDiskID::InvalidId) {

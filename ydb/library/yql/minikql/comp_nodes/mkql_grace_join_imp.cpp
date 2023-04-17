@@ -40,8 +40,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
         }
 
         for ( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
-
-            TStringBuf val = (ColInterfaces + i)->Packer.Pack(*(iColumns+i));
+            TStringBuf val = (ColInterfaces + i)->Packer->Pack(*(iColumns+i));
             IColumnsVals[i].clear();
             IColumnsVals[i].insert(IColumnsVals[i].begin(), val.cbegin(), val.end());
             totalBytesForStrings += val.size();
@@ -113,7 +112,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
         if ( NumberOfIColumns ) {
             for ( ui64 i = NumberOfKeyIColumns; i < NumberOfIColumns; i++) {
-                TStringBuf val = (ColInterfaces + i)->Packer.Pack(*(iColumns+i));
+                TStringBuf val = (ColInterfaces + i)->Packer->Pack(*(iColumns+i));
                 IColumnsVals[i].clear();
                 IColumnsVals[i].insert(IColumnsVals[i].begin(), val.cbegin(), val.end());
             }
@@ -228,9 +227,9 @@ inline bool CompareIColumns(    const ui32* stringSizes1, const char * vals1,
         currSize1 = *(stringSizes1 + nStringColumns + i );
         currSize2 = *(stringSizes2 + nStringColumns + i );
         str1 = TStringBuf(vals1 + currOffset1, currSize1);
-        val1 = (colInterfaces + i)->Packer.Unpack(str1, colInterfaces->HolderFactory);
+        val1 = (colInterfaces + i)->Packer->Unpack(str1, colInterfaces->HolderFactory);
         str2 = TStringBuf(vals2 + currOffset2, currSize2 );
-        val2 = (colInterfaces + i)->Packer.Unpack(str2, colInterfaces->HolderFactory);
+        val2 = (colInterfaces + i)->Packer->Unpack(str2, colInterfaces->HolderFactory);
         if ( ! ((colInterfaces + i)->EquateI->Equals(val1,val2)) ) {
             return false;
         }
@@ -540,7 +539,7 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
 
         for ( ui64 i = 0; i < NumberOfKeyIColumns; i++) {
             ui32 currSize = tb.StringsOffsets[stringsOffsetsIdx + 2 + NumberOfKeyStringColumns + i];
-            *(td.IColumns + i) = (ColInterfaces + i)->Packer.Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
+            *(td.IColumns + i) = (ColInterfaces + i)->Packer->Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
             strPtr += currSize;
         }
 
@@ -567,7 +566,7 @@ inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
         ui32 currIdx = NumberOfStringColumns + NumberOfKeyIColumns + i;
         ui32 currSize = tb.StringsOffsets[stringsOffsetsIdx + 2 + currIdx];
 
-         *(td.IColumns + NumberOfKeyIColumns + i) = (ColInterfaces + NumberOfKeyIColumns + i)->Packer.Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
+         *(td.IColumns + NumberOfKeyIColumns + i) = (ColInterfaces + NumberOfKeyIColumns + i)->Packer->Unpack(TStringBuf(strPtr, currSize), ColInterfaces->HolderFactory);
 
          strPtr += currSize;
     }

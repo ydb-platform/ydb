@@ -79,8 +79,6 @@ struct TKqpComputeEvents {
         EvScanInitActor,
         EvRemoteScanData,
         EvRemoteScanDataAck,
-        EvRemoteCostData,
-        EvCostData,
     };
 
     static_assert(Unused0 == EventSpaceBegin(TKikimrEvents::ES_KQP) + 200);

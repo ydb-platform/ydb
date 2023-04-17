@@ -44,6 +44,7 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/encryption.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/extra_block_checks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/gc_quorum_3dc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/group_reconfiguration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/incorrect_queries.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/mirror3of4.cpp

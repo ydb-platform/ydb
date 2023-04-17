@@ -7,11 +7,12 @@ namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
-                                       TIntrusivePtr<TReceiveContext> context, TInterconnectProxyCommon::TPtr common,
-                                       std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
-                                       TDuration deadPeerTimeout, TSessionParams params)
+            TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
+            TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
+            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params)
         : SessionId(sessionId)
         , Socket(std::move(socket))
+        , XdcSocket(std::move(xdcSocket))
         , Context(std::move(context))
         , Common(std::move(common))
         , NodeId(nodeId)
@@ -62,7 +63,12 @@ namespace NActors {
     }
 
     void TInputSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
-        PollerToken = std::move(ev->Get()->PollerToken);
+        const auto& sk = ev->Get()->Socket;
+        if (auto *token = sk == Socket ? &PollerToken : sk == XdcSocket ? &XdcPollerToken : nullptr) {
+            *token = std::move(ev->Get()->PollerToken);
+        } else {
+            return;
+        }
         ReceiveData();
     }
 
@@ -73,7 +79,6 @@ namespace NActors {
     void TInputSessionTCP::ReceiveData() {
         TTimeLimit limit(GetMaxCyclesPerEvent());
         ui64 numDataBytes = 0;
-        const size_t headerLen = Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1);
 
         LOG_DEBUG_IC_SESSION("ICIS02", "ReceiveData called");
 
@@ -88,10 +93,10 @@ namespace NActors {
 
             switch (State) {
                 case EState::HEADER:
-                    if (IncomingData.GetSize() < headerLen) {
+                    if (IncomingData.GetSize() < sizeof(Header)) {
                         break;
                     } else {
-                        ProcessHeader(headerLen);
+                        ProcessHeader();
                     }
                     continue;
 
@@ -166,30 +171,19 @@ namespace NActors {
         }
     }
 
-    void TInputSessionTCP::ProcessHeader(size_t headerLen) {
-        const bool success = IncomingData.ExtractFrontPlain(Header.Data, headerLen);
+    void TInputSessionTCP::ProcessHeader() {
+        const bool success = IncomingData.ExtractFrontPlain(&Header, sizeof(Header));
         Y_VERIFY(success);
-        if (Params.UseModernFrame) {
-            PayloadSize = Header.v2.PayloadLength;
-            HeaderSerial = Header.v2.Serial;
-            HeaderConfirm = Header.v2.Confirm;
-            if (!Params.Encryption) {
-                ChecksumExpected = std::exchange(Header.v2.Checksum, 0);
-                Checksum = Crc32cExtendMSanCompatible(0, &Header.v2, sizeof(Header.v2)); // start calculating checksum now
-                if (!PayloadSize && Checksum != ChecksumExpected) {
-                    LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
-                    return ReestablishConnection(TDisconnectReason::ChecksumError());
-                }
+        PayloadSize = Header.PayloadLength;
+        HeaderSerial = Header.Serial;
+        HeaderConfirm = Header.Confirm;
+        if (!Params.Encryption) {
+            ChecksumExpected = std::exchange(Header.Checksum, 0);
+            Checksum = Crc32cExtendMSanCompatible(0, &Header, sizeof(Header)); // start calculating checksum now
+            if (!PayloadSize && Checksum != ChecksumExpected) {
+                LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
+                return ReestablishConnection(TDisconnectReason::ChecksumError());
             }
-        } else if (!Header.v1.Check()) {
-            LOG_ERROR_IC_SESSION("ICIS03", "header checksum error");
-            return ReestablishConnection(TDisconnectReason::ChecksumError());
-        } else {
-            PayloadSize = Header.v1.DataSize;
-            HeaderSerial = Header.v1.Serial;
-            HeaderConfirm = Header.v1.Confirm;
-            ChecksumExpected = Header.v1.PayloadCRC32;
-            Checksum = 0;
         }
         if (PayloadSize >= 65536) {
             LOG_CRIT_IC_SESSION("ICIS07", "payload is way too big");
@@ -237,7 +231,7 @@ namespace NActors {
             return; // there is still some data to receive in the Payload rope
         }
         State = EState::HEADER; // we'll continue with header next time
-        if (!Params.UseModernFrame || !Params.Encryption) { // see if we are checksumming packet body
+        if (!Params.Encryption) { // see if we are checksumming packet body
             for (const auto&& [data, size] : Payload) {
                 Checksum = Crc32cExtendMSanCompatible(Checksum, data, size);
             }
@@ -274,42 +268,22 @@ namespace NActors {
 
             Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
 
-            char buffer[Max(sizeof(TEventDescr1), sizeof(TEventDescr2))];
-            auto& v1 = reinterpret_cast<TEventDescr1&>(buffer);
-            auto& v2 = reinterpret_cast<TEventDescr2&>(buffer);
+            TEventDescr2 v2;
             if (~part.Channel & TChannelPart::LastPartFlag) {
                 Payload.ExtractFront(part.Size, eventData);
-            } else if (part.Size != sizeof(v1) && part.Size != sizeof(v2)) {
+            } else if (part.Size != sizeof(v2)) {
                 LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
                 return DestroySession(TDisconnectReason::FormatError());
-            } else if (Payload.ExtractFrontPlain(buffer, part.Size)) {
-                TEventData descr;
-
-                switch (part.Size) {
-                    case sizeof(TEventDescr1):
-                        descr = {
-                            v1.Type,
-                            v1.Flags,
-                            v1.Recipient,
-                            v1.Sender,
-                            v1.Cookie,
-                            NWilson::TTraceId(), // do not accept traces with old format
-                            v1.Checksum
-                        };
-                        break;
-
-                    case sizeof(TEventDescr2):
-                        descr = {
-                            v2.Type,
-                            v2.Flags,
-                            v2.Recipient,
-                            v2.Sender,
-                            v2.Cookie,
-                            NWilson::TTraceId(v2.TraceId),
-                            v2.Checksum
-                        };
-                        break;
-                }
+            } else if (Payload.ExtractFrontPlain(&v2, part.Size)) {
+                TEventData descr = {
+                    v2.Type,
+                    v2.Flags,
+                    v2.Recipient,
+                    v2.Sender,
+                    v2.Cookie,
+                    NWilson::TTraceId(v2.TraceId),
+                    v2.Checksum
+                };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);
                 ProcessEvent(*eventData, descr);
@@ -321,7 +295,7 @@ namespace NActors {
     }
 
     void TInputSessionTCP::ProcessEvent(TRope& data, TEventData& descr) {
-        if (!Params.UseModernFrame || descr.Checksum) {
+        if (descr.Checksum) {
             ui32 checksum = 0;
             for (const auto&& [data, size] : data) {
                 checksum = Crc32cExtendMSanCompatible(checksum, data, size);

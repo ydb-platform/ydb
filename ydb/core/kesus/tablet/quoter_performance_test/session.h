@@ -24,7 +24,6 @@ public:
     }
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKesus::TEvSubscribeOnResourcesResult, Handle);
             hFunc(TEvKesus::TEvResourcesAllocated, Handle);

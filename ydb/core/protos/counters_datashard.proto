@@ -428,7 +428,7 @@ enum ETxTypes {
     TXTYPE_STOP_GUARD = 50                                [(TxTypeOpts) = {Name: "TxStopGuard"}];
     TXTYPE_GET_S3_DOWNLOAD_INFO = 51                      [(TxTypeOpts) = {Name: "TxGetS3DownloadInfo"}];
     TXTYPE_STORE_S3_DOWNLOAD_INFO = 52                    [(TxTypeOpts) = {Name: "TxStoreS3DownloadInfo"}];
-    TXTYPE_UNSAFE_UPLOAD_ROWS = 53                        [(TxTypeOpts) = {Name: "TxUnsafeUploadRows"}];
+    TXTYPE_S3_UPLOAD_ROWS = 53                            [(TxTypeOpts) = {Name: "TxS3UploadRows"}];
     TXTYPE_PERSIST_SUBDOMAIN_PATH_ID = 54                 [(TxTypeOpts) = {Name: "TxPersistSubDomainPathId"}];
     TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE = 55            [(TxTypeOpts) = {Name: "TxPersistSubDomainOutOfSpace"}];
     TXTYPE_REQUEST_CHANGE_RECORDS = 56                    [(TxTypeOpts) = {Name: "TxRequestChangeRecords"}];

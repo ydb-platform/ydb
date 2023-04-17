@@ -194,7 +194,7 @@ public:
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
 
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -407,7 +407,7 @@ public:
             hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
 
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 

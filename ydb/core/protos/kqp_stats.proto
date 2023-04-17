@@ -41,6 +41,7 @@ message TKqpComputeActorExtraStats {
 // extra for NYql.NDqProto.TDqStageStats
 message TKqpStageExtraStats {
     repeated NYql.NDqProto.TDqTaskStats DatashardTasks = 1;
+    repeated TNodeExecutionStats NodeStats = 4;
 }
 
 message TKqpScanTaskExtraStats {
@@ -50,6 +51,11 @@ message TKqpScanTaskExtraStats {
 // extra for NYql.NDqProto.TDqTaskStats
 message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
+}
+
+message TNodeExecutionStats {
+    optional uint32 NodeId = 1;
+    optional uint32 ShardsCount = 2;
 }
 
 // extra for NYql.NDqProto.TDqExecutionStats

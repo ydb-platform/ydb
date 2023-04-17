@@ -1681,16 +1681,12 @@ private:
                     }
                 }
 
-                for (auto& op : stage.GetTableOps()) {
-                    if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange
-                        && tx.Body->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA)
-                    {
-                        auto error = TStringBuilder() << "Data query read does not support column shard tables.";
-                        LOG_E(error);
-                        ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
-                        return;
-                    }
+                if (stageInfo.Meta.IsOlap() && tx.Body->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA) {
+                    auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
+                    LOG_E(error);
+                    ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
+                    return;
                 }
 
                 LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
@@ -1905,7 +1901,7 @@ private:
             return;
         }
 
-        TasksGraph.GetMeta().Snapshot = TKqpSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+        SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
         ImmediateTx = true;
 
         ContinueExecute();
@@ -2063,6 +2059,7 @@ private:
                             // Tx with uncommitted changes can be aborted due to conflicts,
                             // so shards with write locks should receive readsets
                             receivingShardsSet.insert(shardId);
+                            YQL_ENSURE(!ReadOnlyTx);
                         }
                     }
                 }
@@ -2132,26 +2129,26 @@ private:
             ExecuteDataComputeTask(std::move(taskDesc), shareMailbox);
         }
 
-        size_t remoteComputeTasksCnt = 0;
-        THashMap<ui64, TVector<NDqProto::TDqTask>> tasksPerNode;
+        THashMap<ui64, TVector<ui64>> tasksPerNode;
         for (auto& [shardId, tasks] : RemoteComputeTasks) {
             auto it = ShardIdToNodeId.find(shardId);
             YQL_ENSURE(it != ShardIdToNodeId.end());
-
             for (ui64 taskId : tasks) {
-                const auto& task = TasksGraph.GetTask(taskId);
-                remoteComputeTasksCnt += 1;
                 PendingComputeTasks.insert(taskId);
-                auto taskDesc = SerializeTaskToProto(TasksGraph, task);
-                tasksPerNode[it->second].emplace_back(std::move(taskDesc));
+                tasksPerNode[it->second].emplace_back(taskId);
             }
         }
 
-        Planner = CreateKqpPlanner(TxId, SelfId(), {}, std::move(tasksPerNode), GetSnapshot(),
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, std::move(tasksPerNode), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
             Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(),
-            ExecuterSpan, {}, ExecuterRetriesConfig);
-        Planner->ProcessTasksForDataExecuter();
+            ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */);
+        auto err = Planner->PlanExecution();
+        if (err) {
+            TlsActivationContext->Send(err.release());
+            return;
+        }
+        Planner->Submit();
 
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
@@ -2217,7 +2214,7 @@ private:
             << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
-            << ", remote tasks" << remoteComputeTasksCnt
+            << ", pending compute tasks" << PendingComputeTasks.size()
             << ", useFollowers: " << UseFollowers);
 
         LOG_T("Updating channels after the creation of compute actors");

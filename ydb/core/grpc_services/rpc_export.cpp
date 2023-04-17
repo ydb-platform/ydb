@@ -212,7 +212,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExport::TEvCreateExportResponse, Handle);
         default:
-            return this->StateBase(ev, TlsActivationContext->AsActorContext());
+            return this->StateBase(ev);
         }
     }
 

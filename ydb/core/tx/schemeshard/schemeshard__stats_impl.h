@@ -135,6 +135,10 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
 
     Self->TabletCounters->Cumulative()[Queue.WrittenCounter].Increment(batchSize);
 
+    if (READY == Queue.Status()) {
+        ScheduleNextBatch(ctx);
+    }
+
     return true;
 }
 

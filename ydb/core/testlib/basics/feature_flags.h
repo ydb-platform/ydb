@@ -44,6 +44,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
     FEATURE_FLAG_SETTER(EnableTopicServiceTx)
     FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
+    FEATURE_FLAG_SETTER(EnablePQConfigTransactionsAtSchemeShard)
 
     #undef FEATURE_FLAG_SETTER
 };

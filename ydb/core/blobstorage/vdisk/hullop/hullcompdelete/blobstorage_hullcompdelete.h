@@ -89,11 +89,12 @@ namespace NKikimr {
         // this function is called every time when compaction is about to commit new entrypoint containing at least
         // one removed huge blob; recordLsn is allocated LSN of this entrypoint
         void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TVector<TChunkIdx> chunksToForget, TLogSignature signature,
-                const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId, const TPDiskCtxPtr& pdiskCtx) {
+                const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId, const TPDiskCtxPtr& pdiskCtx,
+                const TVDiskContextPtr& vctx) {
             Y_VERIFY(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
             ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(chunksToForget), signature);
-            ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx);
+            ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);
         }
 
         void RenderState(IOutputStream &str) {
@@ -197,17 +198,17 @@ namespace NKikimr {
         friend class TDelayedCompactionDeleterActor;
 
         void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
-                const TPDiskCtxPtr& pdiskCtx) {
+                const TPDiskCtxPtr& pdiskCtx, const TVDiskContextPtr& vctx) {
             auto it = CurrentSnapshots.find(cookie);
             Y_VERIFY(it != CurrentSnapshots.end() && it->second > 0);
             if (!--it->second) {
                 CurrentSnapshots.erase(it);
-                ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx);
+                ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);
             }
         }
 
         void ProcessReleaseQueue(const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
-                const TPDiskCtxPtr& pdiskCtx) {
+                const TPDiskCtxPtr& pdiskCtx, const TVDiskContextPtr& vctx) {
             // if we have no snapshots, we can safely process all messages; otherwise we can process only those messages
             // which do not have snapshots created before the point of compaction
             while (ReleaseQueue) {
@@ -217,6 +218,9 @@ namespace NKikimr {
                     ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
                         item.RecordLsn, item.Signature));
                     if (item.ChunksToForget) {
+                        LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(vctx->VDiskLogPrefix,
+                            "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(),
+                            FormatList(item.ChunksToForget).data()));
                         TActivationContext::Send(new IEventHandle(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
                             pdiskCtx->Dsk->Owner, pdiskCtx->Dsk->OwnerRound, std::move(item.ChunksToForget))));
                     }
@@ -247,6 +251,6 @@ namespace NKikimr {
     };
 
     IActor *CreateDelayedCompactionDeleterActor(const TActorId hugeKeeperId, const TActorId skeletonId,
-        TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TDelayedCompactionDeleterInfo> info);
+        TPDiskCtxPtr pdiskCtx, TVDiskContextPtr vctx, TIntrusivePtr<TDelayedCompactionDeleterInfo> info);
 
 } // NKikimr

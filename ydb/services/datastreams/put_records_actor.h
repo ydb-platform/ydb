@@ -255,7 +255,7 @@ namespace NKikimr::NDataStreams::V1 {
             switch (ev->GetTypeRewrite()) {
                 HFunc(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult, Handle);
                 HFunc(TEvents::TEvWakeup, Handle);
-                default: TBase::StateWork(ev, ctx);
+                default: TBase::StateWork(ev);
             };
         }
     };

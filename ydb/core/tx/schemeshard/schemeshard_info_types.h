@@ -2514,6 +2514,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TPathId ExportPathId = InvalidPathId;
     EState State = EState::Invalid;
     TTxId WaitTxId = InvalidTxId;
+    THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
     TString Issue;
 
     TDeque<ui32> PendingItems;

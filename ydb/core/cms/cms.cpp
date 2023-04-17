@@ -67,9 +67,8 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
     Die(ctx);
 }
 
-void TCms::Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
+void TCms::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    Y_UNUSED(ctx);
     InitQueue.push(ev);
 }
 
@@ -84,10 +83,7 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem}, ctx.SelfID);
 }
 
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
@@ -979,6 +975,8 @@ void TCms::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::Cleanup");
 
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
+
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvents::TEvPoisonPill);
 }
@@ -1258,15 +1256,15 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
     TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Add(1);
 }
 
-void TCms::StartCollecting(const TActorContext &ctx)
+void TCms::StartCollecting()
 {
     Y_VERIFY(Queue.empty());
     std::swap(NextQueue, Queue);
 
-    InfoCollectorStartTime = ctx.Now();
+    InfoCollectorStartTime = TActivationContext::Now();
 
     auto collector = CreateInfoCollector(SelfId(), State->Config.InfoCollectionTimeout);
-    ctx.ExecutorThread.RegisterActor(collector);
+    Register(collector);
 }
 
 void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx)
@@ -1338,29 +1336,29 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
     }
 }
 
-void TCms::ProcessQueue(const TActorContext &ctx)
+void TCms::ProcessQueue()
 {
     // To avoid getting stuck in the processing queue for too long,
     // we'll process queue by one.
     if (!Queue.empty()) {
-        TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((ctx.Now() - Queue.front().ArrivedTime).MilliSeconds());
+        TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((TActivationContext::Now() - Queue.front().ArrivedTime).MilliSeconds());
         TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Sub(1);
 
-        ProcessRequest(Queue.front().Request, ctx);
+        ProcessRequest(Queue.front().Request);
         Queue.pop();
     }
 
     // Process events received while collecting and processing queue
     if (Queue.empty() && !NextQueue.empty()) {
-        StartCollecting(ctx);
+        StartCollecting();
     }
 
     if (!Queue.empty()) {
-        ctx.Send(SelfId(), new TEvPrivate::TEvProcessQueue);
+        Send(SelfId(), new TEvPrivate::TEvProcessQueue);
     }
 }
 
-void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
+void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
 {
     TRACE_EVENT(NKikimrServices::CMS);
     switch (ev->GetTypeRewrite()) {
@@ -1412,7 +1410,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
         }
 
         ClusterInfo->SetOutdated(true);
-        ProcessQueue(ctx);
+        ProcessQueue();
         return;
     }
 
@@ -1455,7 +1453,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
 
     TabletCounters->Simple()[COUNTER_BOOTSTRAP_DIFFERS].Set(ClusterInfo->IsLocalBootConfDiffersFromConsole);
 
-    ProcessQueue(ctx);
+    ProcessQueue();
 }
 
 void TCms::Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx)
@@ -1976,7 +1974,14 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
 {
-    Execute(CreateTxUpdateConfig(ev), ctx);
+    if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
+        Execute(CreateTxUpdateConfig(ev), ctx);
+    } else {
+        // ignore and immediately ack messages from old persistent console subscriptions
+        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

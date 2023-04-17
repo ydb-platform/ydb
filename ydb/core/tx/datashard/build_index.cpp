@@ -430,7 +430,7 @@ private:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
                 default:
-                LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
+                LOG_ERROR(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                           "TBuildIndexScan: StateWork unexpected event type: %" PRIx32 " event: %s",
                           ev->GetTypeRewrite(), ev->ToString().data());
         }

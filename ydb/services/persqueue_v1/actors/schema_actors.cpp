@@ -14,6 +14,10 @@ TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvDropTopicRequest* req
     : TBase(request, request->GetProtoRequest()->path())
 {
 }
+TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+    : TBase(request)
+{
+}
 
 void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 {
@@ -50,9 +54,9 @@ TPQDescribeTopicActor::TPQDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescrib
 {
 }
 
-void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
+        default: TBase::StateWork(ev);
     }
 }
 
@@ -305,6 +309,12 @@ TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvCreateTopicReques
     Y_ASSERT(request);
 }
 
+TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+    : TBase(request)
+{
+    Y_ASSERT(request);
+}
+
 void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 {
     TBase::Bootstrap(ctx);
@@ -408,9 +418,13 @@ void TPQAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransactio
 }
 
 
-
 TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
+{
+}
+
+TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+    : TBase(request)
 {
 }
 
@@ -474,24 +488,24 @@ TDescribeTopicActorImpl::TDescribeTopicActorImpl(const TString& consumer)
 
 bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
     switch (ev->GetTypeRewrite()) {
-        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-        HFunc(NKikimr::TEvPersQueue::TEvStatusResponse, Handle);
-        HFunc(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
+        HFuncCtx(TEvTabletPipe::TEvClientDestroyed, Handle, ctx);
+        HFuncCtx(TEvTabletPipe::TEvClientConnected, Handle, ctx);
+        HFuncCtx(NKikimr::TEvPersQueue::TEvStatusResponse, Handle, ctx);
+        HFuncCtx(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle, ctx);
         default: return false;
     }
     return true;
 }
 
-void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-    if (!TDescribeTopicActorImpl::StateWork(ev, ctx)) {
-        TBase::StateWork(ev, ctx);
+void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
+    if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
+        TBase::StateWork(ev);
     }
 }
 
-void TDescribeConsumerActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-    if (!TDescribeTopicActorImpl::StateWork(ev, ctx)) {
-        TBase::StateWork(ev, ctx);
+void TDescribeConsumerActor::StateWork(TAutoPtr<IEventHandle>& ev) {
+    if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
+        TBase::StateWork(ev);
     }
 }
 
@@ -953,7 +967,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 
         if (GetProtoRequest()->include_stats()) {
             if (Consumer && !found) {
-                Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::ERROR));
+                Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::BAD_REQUEST));
                 return ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
 
@@ -1006,7 +1020,7 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
             break;
         }
         if (!found) {
-            Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::ERROR));
+            Request_->RaiseIssue(FillIssue(TStringBuilder() << "no consumer '" << Consumer << "' in topic", Ydb::PersQueue::ErrorCode::BAD_REQUEST));
             return ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
 

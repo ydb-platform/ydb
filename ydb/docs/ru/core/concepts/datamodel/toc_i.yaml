@@ -2,4 +2,5 @@ items:
 - { name: Обзор,                                  href: index.md }
 - { name: Директория,                             href: dir.md }
 - { name: Таблица,                                href: table.md }
+- { name: Колоночная таблица,                     href: ../column-table.md }
 - { name: Топик,                                  href: ../topic.md }

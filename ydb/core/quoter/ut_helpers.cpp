@@ -430,7 +430,6 @@ TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::TTestTabletPipe(T
 }
 
 STFUNC(TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::StateFunc) {
-    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         FFunc(TEvTabletPipe::EvSend, HandleSend);
         cFunc(TEvents::TEvPoisonPill::EventType, HandlePoisonPill);

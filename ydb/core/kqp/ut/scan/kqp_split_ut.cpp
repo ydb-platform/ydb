@@ -211,8 +211,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             SetupCapture(std::numeric_limits<i64>::max(), 0);
         }
 
-        void State(TAutoPtr<::NActors::IEventHandle> &ev, const ::NActors::TActorContext &ctx) {
-            Y_UNUSED(ctx);
+        void State(TAutoPtr<::NActors::IEventHandle> &ev) {
             if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
                 auto* forw = reinterpret_cast<TEvPipeCache::TEvForward::TPtr*>(&ev);
                 auto readtype = TEvDataShard::TEvRead::EventType;
@@ -489,7 +488,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             or (Key >= 601 and Key <= 603) \
             or (Key >= 702 and Key <= 801) \
             ";
-    
+
     Y_UNIT_TEST_SORT(AfterResultMultiRange, Order) {
         TTestSetup s;
         NKikimrTxDataShard::TEvRead evread;

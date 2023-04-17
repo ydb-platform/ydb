@@ -160,7 +160,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -198,7 +198,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
             hFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -269,7 +269,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
             hFunc(TEvPersQueue::TEvResponse, HandleRegisterMessageGroup);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -292,7 +292,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
             hFunc(TEvPartitionWriter::TEvWriteRequest, Handle);
             hFunc(TEvPersQueue::TEvResponse, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 

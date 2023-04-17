@@ -888,7 +888,6 @@ public:
     }
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             hFunc(TEvQuota::TEvProxyRequest, Handle);

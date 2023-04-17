@@ -54,7 +54,6 @@ public:
 
     STFUNC(StateFunc)
     {
-        Y_UNUSED(ctx);
         TGuard<TMutex> lock(Mutex);
         if (!Futures.empty()) {
             auto front = Futures.front();

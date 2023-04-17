@@ -84,6 +84,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
   * `JSON` — структура записи приведена на странице [описания changefeed](../../../../concepts/cdc#record-structure).
 * `VIRTUAL_TIMESTAMPS` — включение-выключение [виртуальных меток времени](../../../../concepts/cdc#virtual-timestamps). По умолчанию выключено.
 * `RETENTION_PERIOD` — [время хранения записей](../../../../concepts/cdc#retention-period). Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
+* `INITIAL_SCAN` — включение-выключение [первоначального сканирования](../../../../concepts/cdc#initial-scan) таблицы. По умолчанию выключено.
 
 Приведенный ниже код добавит поток изменений с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
 
@@ -111,6 +112,16 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     VIRTUAL_TIMESTAMPS = TRUE
+);
+```
+
+Пример создания потока изменений с первоначальным сканированием:
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    INITIAL_SCAN = TRUE
 );
 ```
 

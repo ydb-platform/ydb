@@ -133,7 +133,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             default:
-                return StateFuncBase(ev, ctx);
+                return StateFuncBase(ev);
         }
     }
 
@@ -270,7 +270,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             default:
-                return StateFuncBase(ev, ctx);
+                return StateFuncBase(ev);
         }
     }
 
@@ -411,7 +411,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             default:
-                return StateFuncBase(ev, ctx);
+                return StateFuncBase(ev);
         }
     }
 

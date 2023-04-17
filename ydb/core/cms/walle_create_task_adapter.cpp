@@ -62,7 +62,7 @@ private:
             CFunc(TEvCms::EvWalleTaskStored, Finish);
             HFunc(TEvCms::TEvStoreWalleTaskFailed, Handle);
         default:
-            LOG_DEBUG(ctx, NKikimrServices::CMS,
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS,
                       "TWalleCreateTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
                       ev->GetTypeRewrite(), ev->ToString().data());
         }

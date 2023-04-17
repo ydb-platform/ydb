@@ -55,9 +55,9 @@ void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContex
     Die(ctx);
 }
 
-void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
+void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS,
+    LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS,
               "TConsole::Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
               TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
     InitQueue.push_back(ev);

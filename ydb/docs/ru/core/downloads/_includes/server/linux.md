@@ -1,9 +1,9 @@
-Версия |  Дата выпуска | Скачать
-:--- | :--- | :---
+Версия |  Дата выпуска | Скачать | Список изменений
+:--- | :--- | :--- | :---
 **v22.5**
-v.22.5.10 | 09.02.23 | [Бинарный файл](https://binaries.ydb.tech/release/22.5.10/ydbd-22.5.10-linux-amd64.tar.gz)
+v.22.5.10 | 09.02.23 | [Бинарный файл](https://binaries.ydb.tech/release/22.5.10/ydbd-22.5.10-linux-amd64.tar.gz) | [См. список](../../../changelog-server.md#22-5)
 **v22.4**
-v.22.4.44 | 28.11.22 | [Бинарный файл](https://binaries.ydb.tech/release/22.4.44/ydbd-22.4.44-linux-amd64.tar.gz)
+v.22.4.44 | 28.11.22 | [Бинарный файл](https://binaries.ydb.tech/release/22.4.44/ydbd-22.4.44-linux-amd64.tar.gz) | [См. список](../../../changelog-server.md#22-4)
 v.22.4.31 | 23.10.22 | [Бинарный файл](https://binaries.ydb.tech/release/22.4.31/ydbd-22.4.31-linux-amd64.tar.gz)
 v.22.4.30 | 09.10.22 | [Бинарный файл](https://binaries.ydb.tech/release/22.4.30/ydbd-22.4.30-linux-amd64.tar.gz)
 v.22.4.21 | 03.10.22 | [Бинарный файл](https://binaries.ydb.tech/release/22.4.21/ydbd-22.4.21-linux-amd64.tar.gz)

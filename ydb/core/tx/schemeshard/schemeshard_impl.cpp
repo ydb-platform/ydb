@@ -1170,10 +1170,8 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
         // check lock is free
         if (LockedPaths.contains(pathId)) {
             auto explain = TStringBuilder()
-                << "fail user constraint in CheckLocks section:"
-                << " checking path locks fails, path with id " << pathId
-                << " has been locked by txId: " << LockedPaths.at(pathId)
-                << " but ApplyIf declare that it should be free";
+                << "path '" << pathId << "'"
+                << " has been locked by tx: " << LockedPaths.at(pathId);
             errStr.append(explain);
             return false;
         }
@@ -1185,20 +1183,18 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
 
     if (!LockedPaths.contains(pathId)) {
         auto explain = TStringBuilder()
-            << "fail user constraint in CheckLocks section:"
-            << " checking path locks fails, path with id " << pathId
+            << "path '" << pathId << "'"
             << " hasn't been locked at all"
-            << " but ApplyIf declare that it should be locked by: " << lockTxId;
+            << " but it is declared that it should be locked by tx: " << lockTxId;
         errStr.append(explain);
         return false;
     }
 
     if (LockedPaths.at(pathId) != lockTxId) {
         auto explain = TStringBuilder()
-            << "fail user constraint in CheckLocks section:"
-            << " checking path locks fails, path with id " << pathId
-            << " has been locked by txId: " << LockedPaths.at(pathId)
-            << " but ApplyIf declare that it should be locked by: " << lockTxId;
+            << "path '" << pathId << "'"
+            << " has been locked by tx: " << LockedPaths.at(pathId)
+            << " but it is declared that it should be locked by: " << lockTxId;
         errStr.append(explain);
         return false;
     }
@@ -3974,7 +3970,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , CompactionStarter(this)
     , BorrowedCompactionStarter(this)
     , ShardDeleter(info->TabletID)
-    , TableStatsQueue(this, 
+    , TableStatsQueue(this,
             COUNTER_STATS_QUEUE_SIZE,
             COUNTER_STATS_WRITTEN,
             COUNTER_STATS_BATCH_LATENCY)
@@ -4105,6 +4101,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableBorrowedSplitCompaction = appData->FeatureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
+    EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4151,7 +4148,6 @@ void TSchemeShard::Cleanup(const TActorContext &ctx) {
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
-    Y_UNUSED(ctx);
     Y_FAIL_S("No enqueue method implemented."
               << " unhandled event type: " << ev->GetTypeRewrite()
              << " event: " << ev->ToString());
@@ -4170,12 +4166,12 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
     default:
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 }
 
 void TSchemeShard::StateConfigure(STFUNC_SIG) {
-    SelfPinger->OnAnyEvent(ctx);
+    SelfPinger->OnAnyEvent(this->ActorContext());
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
@@ -4208,8 +4204,8 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateConfigure:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
@@ -4218,7 +4214,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
 }
 
 void TSchemeShard::StateWork(STFUNC_SIG) {
-    SelfPinger->OnAnyEvent(ctx);
+    SelfPinger->OnAnyEvent(this->ActorContext());
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
@@ -4307,6 +4303,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NKesus::TEvKesus::TEvSetConfigResult, Handle);
         HFuncTraced(TEvPersQueue::TEvDropTabletReply, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfigResponse, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
         //pipes mgs
@@ -4375,9 +4372,11 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
+        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
+
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "StateWork:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
@@ -4391,8 +4390,8 @@ void TSchemeShard::BrokenState(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
     default:
-        if (!HandleDefaultEvents(ev, ctx)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "BrokenState:"
                            << " unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
@@ -4941,6 +4940,42 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
+void TSchemeShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
+{
+    auto sendReadSetAck = [&]() {
+        auto ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID()); 
+        ctx.Send(ev->Sender, ack.release());
+    };
+
+    const auto txId = TTxId(ev->Get()->Record.GetTxId());
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvTxProcessing::TEvReadSet"
+                   << " for unknown txId " << txId
+                   << " message " << ev->Get()->Record.ShortDebugString());
+
+        sendReadSetAck();
+
+        return;
+    }
+
+    const TTabletId tabletId(ev->Get()->Record.GetTabletSource());
+    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvProposeTransactionResult but partId is unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+
+        sendReadSetAck();
+
+        return;
+    }
+
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
     const auto tabletId = TTabletId(ev->Get()->TabletId);
     const TActorId clientId = ev->Get()->ClientId;
@@ -5225,8 +5260,9 @@ void TSchemeShard::Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TAct
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx) {
-    const auto txId = TTxId(ev->Get()->Record.GetTxId());
+void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx)
+{
+    const TTxId txId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "Got TEvPersQueue::TEvUpdateConfigResponse"
@@ -5235,11 +5271,36 @@ void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const
         return;
     }
 
-    auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
-    TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    const TTabletId tabletId(ev->Get()->Record.GetOrigin());
+    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "Got TEvUpdateConfigResponse but partId is unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx)
+{
+    const TTxId txId(ev->Get()->Record.GetTxId());
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvPersQueue::TEvProposeTransactionResult"
+                   << " for unknown txId " << txId
+                   << " message " << ev->Get()->Record.ShortDebugString());
+        return;
+    }
+
+    const TTabletId tabletId(ev->Get()->Record.GetOrigin());
+    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvProposeTransactionResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());
@@ -6421,6 +6482,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableBorrowedSplitCompaction = featureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
+    EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

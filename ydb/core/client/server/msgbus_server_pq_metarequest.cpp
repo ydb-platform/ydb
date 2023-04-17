@@ -568,20 +568,21 @@ THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
 }
 
 STFUNC(TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEventsStateFunc) {
+    auto ctx(this->ActorContext());
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
     case TEvTabletPipe::TEvClientDestroyed::EventType:
         if (!HandleDestroy(ev->Get<TEvTabletPipe::TEvClientDestroyed>(), ctx)) {
-            TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev, ctx);
+            TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev);
         }
         break;
     case TEvTabletPipe::TEvClientConnected::EventType:
         if (!HandleConnect(ev->Get<TEvTabletPipe::TEvClientConnected>(), ctx)) {
-            TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev, ctx);
+            TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev);
         }
         break;
     default:
-        TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev, ctx);
+        TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev);
     }
 }
 

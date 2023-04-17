@@ -1471,6 +1471,12 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->SetSchema(schema);
     Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
 
+    //NOTE: Stats building is bound to table id, but move-table changes table id,
+    // so already built stats couldn't be inherited by moved table
+    // and have to be rebuilt from the ground up
+    newTableInfo->StatsUpdateInProgress = false;
+    newTableInfo->StatsNeedUpdate = true;
+
     RemoveUserTable(prevId);
     AddUserTable(newId, newTableInfo);
 
@@ -3189,14 +3195,14 @@ bool TDataShard::AddExpectation(ui64 target, ui64 step, ui64 txId) {
 bool TDataShard::RemoveExpectation(ui64 target, ui64 txId) {
     bool removed = OutReadSets.RemoveExpectation(target, txId);
     if (removed && !OutReadSets.HasExpectations(target)) {
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = ActorContext();
         ResendReadSetPipeTracker.DetachTablet(Max<ui64>(), target, 0, ctx);
     }
 
     // progress one more tx to force delayed schema operations
     if (removed && OutReadSets.Empty() && Pipeline.HasSchemaOperation()) {
         // TODO: wait for empty OutRS in a separate unit?
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = ActorContext();
         Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         PlanQueue.Progress(ctx);
     }
@@ -3735,13 +3741,13 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx)
+void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
 {
     const float rejectProbabilty = Executor()->GetRejectProbability();
     if (rejectProbabilty > 0) {
         const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
         if (rnd < rejectProbabilty) {
-            auto response = MakeHolder<TEvDataShard::TEvUnsafeUploadRowsResponse>(
+            auto response = MakeHolder<TEvDataShard::TEvS3UploadRowsResponse>(
                 TabletID(), NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
             response->Record.SetErrorDescription("Reject due to given RejectProbability");
             ctx.Send(ev->Sender, std::move(response));
@@ -3751,7 +3757,7 @@ void TDataShard::Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, cons
         }
     }
 
-    Execute(new TTxUnsafeUploadRows(this, ev), ctx);
+    Execute(new TTxS3UploadRows(this, ev), ctx);
 }
 
 void TDataShard::ScanComplete(NTable::EAbort,

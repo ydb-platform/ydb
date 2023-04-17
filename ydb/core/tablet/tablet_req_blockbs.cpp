@@ -47,7 +47,6 @@ public:
     }
 
     STFUNC(StateWait) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvBlockResult, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -162,7 +161,6 @@ public:
     }
 
     STFUNC(StateWait) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTabletBase::TEvBlockBlobStorageResult, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);

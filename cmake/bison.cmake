@@ -13,7 +13,7 @@ function(target_bison_parser Tgt Scope)
     add_custom_command(
       OUTPUT ${OutputDir}/${OutputBase}.cpp ${OutputDir}/${OutputBase}.h
       COMMAND ${CMAKE_COMMAND} -E make_directory ${OutputDir}
-      COMMAND ${CMAKE_BINARY_DIR}/bin/bison/bin/bison ${BISON_FLAGS} -v --defines=${OutputDir}/${OutputBase}.h -o ${OutputDir}/${OutputBase}.cpp ${arg}
+      COMMAND ${CMAKE_COMMAND} -E env M4=${CMAKE_BINARY_DIR}/bin/m4/bin/m4 ${CMAKE_BINARY_DIR}/bin/bison/bin/bison ${BISON_FLAGS} -v --defines=${OutputDir}/${OutputBase}.h -o ${OutputDir}/${OutputBase}.cpp ${arg}
       DEPENDS ${arg}
     )
     target_sources(${Tgt} ${Scope} ${OutputDir}/${OutputBase}.cpp ${OutputDir}/${OutputBase}.h)

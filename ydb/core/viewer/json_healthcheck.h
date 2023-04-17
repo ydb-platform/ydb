@@ -42,8 +42,17 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
+        const auto& params(Event->Get()->Request.GetParams());
+
         Format = HealthCheckResponseFormat::JSON;
-        if (const auto *header = Event->Get()->Request.GetHeaders().FindHeader("Accept")) {
+        if (params.Has("format")) {
+            auto& format = params.Get("format");
+            if (format == "json") {
+                Format = HealthCheckResponseFormat::JSON;
+            } else if (format == "prometheus") {
+                Format = HealthCheckResponseFormat::PROMETHEUS;
+            }
+        } else if (const auto *header = Event->Get()->Request.GetHeaders().FindHeader("Accept")) {
             THashSet<TString> accept;
             StringSplitter(header->Value()).SplitBySet(", ").SkipEmpty().Collect(&accept);
             if (accept.contains("*/*") || accept.contains("application/json")) {
@@ -54,7 +63,6 @@ public:
                 Format = HealthCheckResponseFormat::JSON;
             }
         }
-        const auto& params(Event->Get()->Request.GetParams());
         if (Format == HealthCheckResponseFormat::JSON) {
             JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
             JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -201,7 +209,8 @@ struct TJsonRequestParameters<TJsonHealthCheck> {
                       {"name":"tenant","in":"query","description":"path to database","required":false,"type":"string"},
                       {"name":"verbose","in":"query","description":"return verbose status","required":false,"type":"boolean"},
                       {"name":"max_level","in":"query","description":"max depth of issues to return","required":false,"type":"integer"},
-                      {"name":"min_status","in":"query","description":"min status of issues to return","required":false,"type":"string"}])___";
+                      {"name":"min_status","in":"query","description":"min status of issues to return","required":false,"type":"string"},
+                      {"name":"format","in":"query","description":"format of reply","required":false,"type":"string"}])___";
     }
 };
 

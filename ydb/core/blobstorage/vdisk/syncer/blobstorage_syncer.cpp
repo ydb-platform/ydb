@@ -235,11 +235,14 @@ namespace NKikimr {
                 case EDecision::FirstRun:
                 case EDecision::Good:
                     StandardMode(ctx);
+                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Good", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     break;
                 case EDecision::LostData:
+                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s LostData", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     RecoverLostData(ctx);
                     break;
                 case EDecision::Inconsistency:
+                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Inconsistency", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     InconsistentState(ctx);
                     break;
                 default:

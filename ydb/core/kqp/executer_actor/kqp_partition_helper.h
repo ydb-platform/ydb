@@ -26,6 +26,17 @@ struct TShardInfo {
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
 
+class TShardInfoWithId: public TShardInfo {
+public:
+    ui64 ShardId;
+    TShardInfoWithId(const ui64 shardId, TShardInfo&& base)
+        : TShardInfo(std::move(base))
+        , ShardId(shardId)
+    {
+
+    }
+};
+
 struct TPhysicalShardReadSettings {
     bool Sorted = true;
     bool Reverse = false;

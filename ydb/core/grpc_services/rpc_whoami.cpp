@@ -42,7 +42,6 @@ public:
     }
 
     STFUNC(StateWaitForTicket) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);

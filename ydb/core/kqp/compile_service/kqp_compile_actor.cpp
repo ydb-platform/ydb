@@ -154,12 +154,12 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvContinueProcess, Handle);
-                CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+                cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
             default:
-                UnexpectedEvent("CompileState", ev->GetTypeRewrite(), ctx);
+                UnexpectedEvent("CompileState", ev->GetTypeRewrite());
             }
         } catch (const yexception& e) {
-            InternalError(e.what(), ctx);
+            InternalError(e.what());
         }
     }
 
@@ -201,9 +201,9 @@ private:
         ReplayMessage = std::move(message);
     }
 
-    void Reply(const TKqpCompileResult::TConstPtr& compileResult, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
-            << ", self: " << ctx.SelfID
+    void Reply(const TKqpCompileResult::TConstPtr& compileResult) {
+        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
+            << ", self: " << SelfId()
             << ", owner: " << Owner
             << ", status: " << compileResult->Status
             << ", issues: " << compileResult->Issues.ToString()
@@ -217,7 +217,7 @@ private:
         stats.SetFromCache(false);
         stats.SetDurationUs((TInstant::Now() - StartTime).MicroSeconds());
         stats.SetCpuTimeUs(CompileCpuTime.MicroSeconds());
-        ctx.Send(Owner, responseEv.Release());
+        Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
 
@@ -225,28 +225,28 @@ private:
             CompileActorSpan.End();
         }
 
-        Die(ctx);
+        PassAway();
     }
 
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues, const TActorContext& ctx) {
-        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues, ETableReadType::Other), ctx);
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
+        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues, ETableReadType::Other));
     }
 
-    void InternalError(const TString message, const TActorContext &ctx) {
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
-            << ", self: " << ctx.SelfID
+    void InternalError(const TString message) {
+        ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
+            << ", self: " << SelfId()
             << ", message: " << message);
 
 
         NYql::TIssue issue(NYql::TPosition(), "Internal error while compiling query.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(NYql::TPosition(), message));
 
-        ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue}, ctx);
+        ReplyError(Ydb::StatusIds::INTERNAL_ERROR, {issue});
     }
 
-    void UnexpectedEvent(const TString& state, ui32 eventType, const TActorContext &ctx) {
+    void UnexpectedEvent(const TString& state, ui32 eventType) {
         InternalError(TStringBuilder() << "TKqpCompileActor, unexpected event: " << eventType
-            << ", at state:" << state, ctx);
+            << ", at state:" << state);
     }
 
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
@@ -299,19 +299,19 @@ private:
             Counters->ReportCompileError(DbCounters);
         }
 
-        Reply(KqpCompileResult, ctx);
+        Reply(KqpCompileResult);
     }
 
-    void HandleTimeout(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
-            << ", self: " << ctx.SelfID
+    void HandleTimeout() {
+        ALOG_NOTICE(NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
+            << ", self: " << SelfId()
             << ", cluster: " << Query.Cluster
             << ", database: " << Query.Database
             << ", text: \"" << EscapeC(Query.Text) << "\""
             << ", startTime: " << StartTime);
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
-        return ReplyError(Ydb::StatusIds::TIMEOUT, {issue}, ctx);
+        return ReplyError(Ydb::StatusIds::TIMEOUT, {issue});
     }
 
 private:

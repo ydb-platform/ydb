@@ -198,8 +198,8 @@ public:
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
         default:
             {
-                 Req->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
-                 Die(ctx);
+                Req->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                PassAway();
             }
         }
     }

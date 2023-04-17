@@ -1,5 +1,6 @@
 #pragma once
 #include "db_wrapper.h"
+#include <ydb/core/formats/replace_key.h>
 
 namespace NKikimr::NOlap {
 
@@ -7,19 +8,19 @@ struct TGranuleRecord {
     ui64 PathId;
     ui64 Granule;
     TSnapshot CreatedAt;
-    std::shared_ptr<arrow::Scalar> Mark;
+    NArrow::TReplaceKey Mark;
 
-    TGranuleRecord(ui64 pathId, ui64 granule, const TSnapshot& createdAt, const std::shared_ptr<arrow::Scalar>& mark)
+    TGranuleRecord(ui64 pathId, ui64 granule, const TSnapshot& createdAt, const NArrow::TReplaceKey& mark)
         : PathId(pathId)
         , Granule(granule)
         , CreatedAt(createdAt)
         , Mark(mark)
     {
-        Y_VERIFY(Mark);
+        Y_VERIFY(Mark.Size());
     }
 
     bool operator == (const TGranuleRecord& rec) const {
-        return (PathId == rec.PathId) && (Mark->Equals(*rec.Mark));
+        return (PathId == rec.PathId) && (Mark == rec.Mark);
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TGranuleRecord& rec) {

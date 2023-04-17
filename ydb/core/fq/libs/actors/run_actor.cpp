@@ -344,7 +344,7 @@ private:
     template <void (TRunActor::* DelegatedStateFunc)(STFUNC_SIG)>
     STFUNC(StateFuncWrapper) {
         try {
-            (this->*DelegatedStateFunc)(ev, ctx);
+            (this->*DelegatedStateFunc)(ev);
         } catch (...) {
             FailOnException();
         }

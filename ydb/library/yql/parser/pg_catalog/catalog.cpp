@@ -1342,6 +1342,13 @@ const TProcDesc& LookupProc(ui32 procId) {
     return *procPtr;
 }
 
+void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& x : catalog.Procs) {
+        f(x.first, x.second);
+    }
+}
+
 bool HasReturnSetProc(const TStringBuf& name) {
     const auto& catalog = TCatalog::Instance();
     auto procIdPtr = catalog.ProcByName.FindPtr(name);

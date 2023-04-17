@@ -262,7 +262,7 @@ protected:
             static_assert(std::is_member_function_pointer_v<decltype(FuncBody)>);
             using TComputeActorClass = typename NDetails::TComputeActorStateFuncHelper<decltype(FuncBody)>::TComputeActorClass;
             TComputeActorClass* self = static_cast<TComputeActorClass*>(this);
-            (self->*FuncBody)(ev, ctx);
+            (self->*FuncBody)(ev);
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
@@ -285,14 +285,14 @@ protected:
             hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
             hFunc(NActors::TEvents::TEvWakeup, HandleExecuteBase);
             hFunc(NActors::TEvents::TEvUndelivered, HandleExecuteBase);
-            FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
-            FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
+            fFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
+            fFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
             hFunc(TEvDqCompute::TEvRun, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase);
-            FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
-            FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
-            FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
+            fFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
+            fFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
+            fFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleExecuteBase);
             hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
             hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
@@ -499,13 +499,13 @@ protected:
         if (Channels) {
             TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Channels->SelfId(), this->SelfId(),
                 new NActors::TEvents::TEvPoison);
-            Channels->Receive(handle, NActors::TActivationContext::AsActorContext());
+            Channels->Receive(handle);
         }
 
         if (Checkpoints) {
             TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), this->SelfId(),
                 new NActors::TEvents::TEvPoison);
-            Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
+            Checkpoints->Receive(handle);
         }
 
         {
@@ -1197,7 +1197,7 @@ protected:
         // Event from coordinator should be processed to confirm seq no.
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
-            Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
+            Checkpoints->Receive(iev);
         }
     }
 
@@ -1223,7 +1223,7 @@ protected:
             Channels->SetCheckpointsSupport();
         }
         TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
-        Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
+        Checkpoints->Receive(handle);
     }
 
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
@@ -1255,14 +1255,14 @@ protected:
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
-            Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
+            Checkpoints->Receive(iev);
         }
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         TAutoPtr<NActors::IEventHandle> iev(ev.Release());
         if (Checkpoints) {
-            Checkpoints->Receive(iev, NActors::TActivationContext::AsActorContext());
+            Checkpoints->Receive(iev);
         }
     }
 

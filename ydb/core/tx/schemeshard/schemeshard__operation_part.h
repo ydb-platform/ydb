@@ -68,11 +68,14 @@
     action(NKesus::TEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
     action(TEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
     action(TEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
+    action(TEvPersQueue::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_RESULT) \
     action(TEvBlobDepot::TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
 \
     action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
     action(TEvPrivate::TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
     action(TEvPrivate::TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
+\
+    action(TEvTxProcessing::TEvReadSet, NSchemeShard::TXTYPE_READSETDATA)
 
 
 namespace NKikimr {

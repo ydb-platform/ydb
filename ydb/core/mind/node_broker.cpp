@@ -68,8 +68,7 @@ void TNodeBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
     Die(ctx);
 }
 
-void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
-                          const TActorContext &ctx)
+void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
     switch (ev->GetTypeRewrite()) {
     case TEvNodeBroker::EvListNodes:
@@ -78,7 +77,7 @@ void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
         EnqueuedEvents.push_back(ev);
         break;
     default:
-        TTabletExecutedFlat::Enqueue(ev, ctx);
+        TTabletExecutedFlat::Enqueue(ev);
     }
 }
 
@@ -131,6 +130,8 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 void TNodeBroker::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::Cleanup");
+
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
     TxProcessor->Clear();
 }
@@ -284,10 +285,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     }
 }
 
-void TNodeBroker::ProcessEnqueuedEvents(const TActorContext& ctx)
+void TNodeBroker::ProcessEnqueuedEvents(const TActorContext&)
 {
     for (auto &ev : EnqueuedEvents)
-        Receive(ev, ctx);
+        Receive(ev);
     EnqueuedEvents.clear();
 }
 
@@ -392,14 +393,8 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
-    if (ConfigSubscriptionId)
-        return;
-
     ui32 item = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {item},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {item}, ctx.SelfID);
 }
 
 void TNodeBroker::ProcessTx(ITransaction *tx,
@@ -762,7 +757,14 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
+        ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    } else {
+        // ignore and immediately ack messages from old persistent console subscriptions
+        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

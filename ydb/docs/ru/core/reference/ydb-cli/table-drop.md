@@ -31,5 +31,5 @@
 Удалите таблицу `series`:
 
 ```bash
-{{ ydb-cli }} -p db1 table drop series
+{{ ydb-cli }} -p quickstart table drop series
 ```

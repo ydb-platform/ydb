@@ -97,8 +97,6 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     Y_VERIFY(TopicAndTablets.size() == 1);
     auto& [topic, topicInitInfo] = *TopicAndTablets.begin();
 
-    // AnswerError("test auth ok", Ydb::PersQueue::ErrorCode::ERROR, ctx);
-
     if (topicInitInfo.PartitionIdToTabletId.find(PartitionId) == topicInitInfo.PartitionIdToTabletId.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
     }
@@ -142,7 +140,8 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
 
 void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-        return AnswerError(ev->Get()->Record.GetErrorReason(), PersQueue::ErrorCode::ERROR, ctx);
+        auto errorCode = ConvertOldCode(ev->Get()->Record.GetErrorCode());
+        return AnswerError(ev->Get()->Record.GetErrorReason(), errorCode, ctx);
     }
 
     // Convert to correct response.

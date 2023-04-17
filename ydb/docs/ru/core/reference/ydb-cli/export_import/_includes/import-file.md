@@ -34,9 +34,9 @@
 
 ## Примеры {#examples}
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-Перед выполнением примеров [создайте таблицу](../../../../getting_started/yql.md#create-table) `series`.
+Перед выполнением примеров [создайте таблицу]({{ quickstart-path }}) `series`.
 
 ### Импортировать файл {#simple}
 

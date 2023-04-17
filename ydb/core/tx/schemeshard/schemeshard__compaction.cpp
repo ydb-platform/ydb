@@ -5,7 +5,7 @@ namespace NKikimr::NSchemeShard {
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardCompactionInfo& info) {
     UpdateBackgroundCompactionQueueMetrics();
 
-    auto ctx = TActivationContext::ActorContextFor(SelfId());
+    auto ctx = ActorContext();
 
     const auto& shardIdx = info.ShardIdx;
     auto it = ShardInfos.find(shardIdx);
@@ -47,7 +47,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     UpdateBackgroundCompactionQueueMetrics();
     TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_TIMEOUT].Increment(1);
 
-    auto ctx = TActivationContext::ActorContextFor(SelfId());
+    auto ctx = ActorContext();
 
     const auto& shardIdx = info.ShardIdx;
     auto it = ShardInfos.find(shardIdx);
@@ -144,7 +144,7 @@ void TSchemeShard::EnqueueBackgroundCompaction(
     if (!CompactionQueue)
         return;
 
-    auto ctx = TActivationContext::ActorContextFor(SelfId());
+    auto ctx = ActorContext();
 
     if (stats.HasBorrowedData) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -179,7 +179,7 @@ void TSchemeShard::UpdateBackgroundCompaction(
     if (!CompactionQueue)
         return;
 
-    auto ctx = TActivationContext::ActorContextFor(SelfId());
+    auto ctx = ActorContext();
 
     if (newStats.HasBorrowedData) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

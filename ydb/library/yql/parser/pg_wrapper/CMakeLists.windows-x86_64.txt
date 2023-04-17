@@ -144,10 +144,15 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(yql-parser-pg_wrapper PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/thread_inits.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/type_cache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.0.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.1.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.2.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.3.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pg_crc32c_sse42.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pg_crc32c_sse42_choose.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/brin/brin.c

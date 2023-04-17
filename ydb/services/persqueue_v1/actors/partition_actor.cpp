@@ -204,7 +204,8 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
         ++PipeGeneration;
 
     if (PipeGeneration == MAX_PIPE_RESTARTS) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("too much attempts to restart pipe", PersQueue::ErrorCode::ERROR));
+        // ???
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("too much attempts to restart pipe", PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED));
         return;
     }
 
@@ -454,6 +455,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     if (ev->Get()->Record.GetStatus() != NKikimr::NMsgBusProxy::MSTATUS_OK) { //this is incorrect answer, die
         Y_VERIFY(!ev->Get()->Record.HasErrorCode());
         Counters.Errors.Inc();
+        // map NMsgBusProxy::EResponseStatus to PersQueue::ErrorCode???
         ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + ev->Get()->Record.GetErrorReason(), PersQueue::ErrorCode::ERROR));
         return;
     }
@@ -651,13 +653,13 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const 
                             << " pipe restart attempt " << PipeGeneration << " pipe creation result: " << msg->Status);
 
     if (msg->Status != NKikimrProto::OK) {
-        RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, NPersQueue::NErrorCode::ERROR);
+        RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, NPersQueue::NErrorCode::TABLET_PIPE_DISCONNECTED);
         return;
     }
 }
 
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-    RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, NPersQueue::NErrorCode::ERROR);
+    RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << ev->Get()->TabletId, NPersQueue::NErrorCode::TABLET_PIPE_DISCONNECTED);
 }
 
 

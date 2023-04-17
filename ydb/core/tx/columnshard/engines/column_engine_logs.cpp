@@ -12,12 +12,13 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-using TMark = TColumnEngineForLogs::TMark;
-
-std::shared_ptr<arrow::Array> GetFirstPKColumn(const TIndexInfo& indexInfo,
-                                               const std::shared_ptr<arrow::RecordBatch>& batch) {
-    TString columnName = indexInfo.GetPrimaryKey()[0].first;
-    return batch->GetColumnByName(std::string(columnName.data(), columnName.size()));
+std::shared_ptr<arrow::RecordBatch> GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                    const TIndexInfo& indexInfo) {
+    // TODO: composite effective key
+    auto columnName = indexInfo.GetPrimaryKey()[0].first;
+    auto resBatch = NArrow::ExtractColumns(batch, {std::string(columnName.data(), columnName.size())});
+    Y_VERIFY_S(resBatch, "No column '" << columnName << "' in batch " << batch->schema()->ToString());
+    return resBatch;
 }
 
 arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
@@ -41,16 +42,11 @@ arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
     return options;
 }
 
-std::shared_ptr<arrow::Scalar> ExtractFirstKey(const std::shared_ptr<TPredicate>& pkPredicate,
-                                               const std::shared_ptr<arrow::Schema>& key) {
+std::optional<NArrow::TReplaceKey> ExtractKey(const std::shared_ptr<TPredicate>& pkPredicate,
+                                              const std::shared_ptr<arrow::Schema>& key) {
     if (pkPredicate) {
         Y_VERIFY(pkPredicate->Good());
-        Y_VERIFY(key->num_fields() == 1);
-        Y_VERIFY(key->field(0)->Equals(pkPredicate->Batch->schema()->field(0)));
-
-        auto array = pkPredicate->Batch->column(0);
-        Y_VERIFY(array && array->length() == 1);
-        return *array->GetScalar(0);
+        return NArrow::TReplaceKey::FromBatch(pkPredicate->Batch, key, 0);
     }
     return {};
 }
@@ -213,7 +209,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
     THashSet<ui64> goodCompacted;
     THashSet<ui64> nextToGood;
     {
-        TMap<TMark, TVector<const TPortionInfo*>> points;
+        TMap<NArrow::TReplaceKey, TVector<const TPortionInfo*>> points;
 
         for (auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
@@ -225,12 +221,11 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
                 goodCompacted.insert(portionInfo.Portion());
             }
 
-            auto start = portionInfo.PkStart();
-            auto end = portionInfo.PkEnd();
-            Y_VERIFY(start && end);
+            NArrow::TReplaceKey start = portionInfo.EffKeyStart();
+            NArrow::TReplaceKey end = portionInfo.EffKeyEnd();
 
-            points[TMark(start)].push_back(&portionInfo);
-            points[TMark(end)].push_back(nullptr);
+            points[start].push_back(&portionInfo);
+            points[end].push_back(nullptr);
         }
 
         ui32 countInBucket = 0;
@@ -295,15 +290,13 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
 
         // Prevent merge of compacted portions with no intersections
         if (filtered.contains(curPortion)) {
-            auto start = portionInfo.PkStart();
-            Y_VERIFY(start);
+            auto start = portionInfo.EffKeyStart();
             borders.emplace_back(TMark(start));
         } else {
             // nextToGood borders potentially split good compacted portions into 2 parts:
             // the first one without intersections and the second with them
             if (goodCompacted.contains(curPortion) || nextToGood.contains(curPortion)) {
-                auto start = portionInfo.PkStart();
-                Y_VERIFY(start);
+                auto start = portionInfo.EffKeyStart();
                 borders.emplace_back(TMark(start));
             }
 
@@ -337,21 +330,35 @@ SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
                   const std::vector<std::pair<TMark, ui64>>& granules,
                   const TIndexInfo& indexInfo)
 {
+    Y_VERIFY(batch);
+    if (batch->num_rows() == 0) {
+        return {};
+    }
+
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> out;
 
     if (granules.size() == 1) {
         out.emplace(granules[0].second, batch);
     } else {
-        const auto keyColumn = GetFirstPKColumn(indexInfo, batch);
-        Y_VERIFY(keyColumn && keyColumn->length() > 0);
+        const auto effKey = GetEffectiveKey(batch, indexInfo);
+        Y_VERIFY(effKey->num_columns() && effKey->num_rows());
+
+        std::vector<NArrow::TRawReplaceKey> keys;
+        {
+            const auto& columns = effKey->columns();
+            keys.reserve(effKey->num_rows());
+            for (i64 i = 0; i < effKey->num_rows(); ++i) {
+                keys.emplace_back(NArrow::TRawReplaceKey(&columns, i));
+            }
+        }
 
         i64 offset = 0;
-        for (size_t i = 0; i < granules.size(); ++i) {
+        for (size_t i = 0; i < granules.size() && offset < effKey->num_rows(); ++i) {
             const i64 end = (i + 1 == granules.size())
                 // Just take the number of elements in the key column for the last granule.
-                ? keyColumn->length()
+                ? effKey->num_rows()
                 // Locate position of the next granule in the key.
-                : NArrow::LowerBound(keyColumn, *granules[i + 1].first.ToScalar(), offset); // TODO: avoid ToScalar()
+                : NArrow::LowerBound(keys, granules[i + 1].first.Border, offset);
 
             if (const i64 size = end - offset) {
                 Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
@@ -396,7 +403,7 @@ TColumnEngineForLogs::TMarksGranules::TMarksGranules(const TSelectInfo& selectIn
 
 bool TColumnEngineForLogs::TMarksGranules::MakePrecedingMark(const TIndexInfo& indexInfo) {
     ui64 minGranule = 0;
-    TMark minMark(indexInfo.GetIndexKey()->field(0)->type());
+    TMark minMark(indexInfo.GetEffectiveKey());
     if (Marks.empty()) {
         Marks.emplace_back(std::move(minMark), minGranule);
         return true;
@@ -434,10 +441,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, con
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
     IndexInfo.SetAllKeys();
-
-    auto& indexKey = IndexInfo.GetIndexKey();
-    Y_VERIFY(indexKey->num_fields() == 1);
-    MarkType = indexKey->field(0)->type();
+    MarkSchema = IndexInfo.GetEffectiveKey();
 
     ui32 indexId = IndexInfo.GetId();
     GranulesTable = std::make_shared<TGranulesTable>(*this, indexId);
@@ -1108,7 +1112,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
     for (auto& [granule, p] : changes.NewGranules) {
         ui64 pathId = p.first;
         TMark mark = p.second;
-        TGranuleRecord rec(pathId, granule, snapshot, mark.ToScalar());
+        TGranuleRecord rec(pathId, granule, snapshot, mark.Border);
 
         if (!SetGranule(rec, apply)) {
             LOG_S_ERROR("Cannot insert granule " << rec << " at tablet " << TabletId);
@@ -1135,12 +1139,11 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             auto& granuleStart = Granules[granule]->Record.Mark;
 
             if (!apply) { // granule vs portion minPK
-                auto portionStart = portionInfo.PkStart();
-                Y_VERIFY(portionStart);
-                if (TMark(portionStart) < TMark(granuleStart)) {
+                auto portionStart = portionInfo.EffKeyStart();
+                if (portionStart < granuleStart) {
                     LOG_S_ERROR("Cannot update invalid portion " << portionInfo
-                        << " start: " << portionStart->ToString()
-                        << " granule start: " << granuleStart->ToString() << " at tablet " << TabletId);
+                        << " start: " << TMark(portionStart).ToString()
+                        << " granule start: " << TMark(granuleStart).ToString() << " at tablet " << TabletId);
                     return false;
                 }
             }
@@ -1249,17 +1252,15 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             }
 
             // granule vs portion minPK
-            std::shared_ptr<arrow::Scalar> granuleStart;
-            if (Granules.contains(granule)) {
-                granuleStart = Granules[granule]->Record.Mark;
-            } else {
-                granuleStart = changes.NewGranules.find(granule)->second.second.ToScalar();
-            }
-            auto portionStart = portionInfo.PkStart();
-            Y_VERIFY(portionStart);
-            if (TMark(portionStart) < TMark(granuleStart)) {
-                LOG_S_ERROR("Cannot insert invalid portion " << portionInfo << " start: " << portionStart->ToString()
-                    << " granule start: " << granuleStart->ToString() << " at tablet " << TabletId);
+            NArrow::TReplaceKey granuleStart = Granules.contains(granule)
+                ? Granules[granule]->Record.Mark
+                : changes.NewGranules.find(granule)->second.second.Border;
+
+            auto portionStart = portionInfo.EffKeyStart();
+            if (portionStart < granuleStart) {
+                LOG_S_ERROR("Cannot insert invalid portion " << portionInfo
+                    << " start: " << TMark(portionStart).ToString()
+                    << " granule start: " << TMark(granuleStart).ToString() << " at tablet " << TabletId);
                 return false;
             }
         }
@@ -1469,13 +1470,13 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
 
-    auto keyFrom = ExtractFirstKey(from, GetIndexKey());
-    auto keyTo = ExtractFirstKey(to, GetIndexKey());
+    std::optional<NArrow::TReplaceKey> keyFrom = ExtractKey(from, GetIndexKey());
+    std::optional<NArrow::TReplaceKey> keyTo = ExtractKey(to, GetIndexKey());
 
     // Apply FROM
     auto it = pathGranules.begin();
     if (keyFrom) {
-        it = pathGranules.upper_bound(TMark(keyFrom));
+        it = pathGranules.upper_bound(TMark(*keyFrom));
         --it;
     }
     for (; it != pathGranules.end(); ++it) {
@@ -1483,7 +1484,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         ui64 granule = it->second;
 
         // Apply TO
-        if (keyTo && TMark(keyTo) < mark) {
+        if (keyTo && *keyTo < mark.Border) {
             break;
         }
 
@@ -1728,25 +1729,30 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
                     const TMark& ts0) {
     TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>> out;
 
-    // Extract unique effective key (timestamp) and their counts
+    // Extract unique effective keys and their counts
     i64 numRows = 0;
-    TMap<TMark, ui32> uniqKeyCount;
+    TMap<NArrow::TReplaceKey, ui32> uniqKeyCount;
     for (auto& batch : batches) {
+        Y_VERIFY(batch);
+        if (batch->num_rows() == 0) {
+            continue;
+        }
+
         numRows += batch->num_rows();
 
-        auto keyColumn = GetFirstPKColumn(indexInfo, batch);
-        Y_VERIFY(keyColumn && keyColumn->length() > 0);
+        const auto effKey = GetEffectiveKey(batch, indexInfo);
+        Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
-        for (int pos = 0; pos < keyColumn->length(); ++pos) {
-            TMark ts(*keyColumn->GetScalar(pos));
-            ++uniqKeyCount[ts];
+        auto effColumns = std::make_shared<NArrow::TArrayVec>(effKey->columns());
+        for (int row = 0; row < effKey->num_rows(); ++row) {
+            ++uniqKeyCount[NArrow::TReplaceKey(effColumns, row)];
         }
     }
 
     Y_VERIFY(uniqKeyCount.size());
     auto minTs = uniqKeyCount.begin()->first;
     auto maxTs = uniqKeyCount.rbegin()->first;
-    Y_VERIFY(minTs >= ts0);
+    Y_VERIFY(minTs >= ts0.Border);
 
     // It's an estimation of needed count cause numRows calculated before key replaces
     ui32 numSplitInto = changes.NumSplitInto(numRows);
@@ -1765,7 +1771,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
     }
 
     // Make split borders from uniq keys
-    TVector<TMark> borders;
+    TVector<NArrow::TReplaceKey> borders;
     borders.reserve(numRows / rowsInGranule);
     {
         ui32 sumRows = 0;
@@ -1789,12 +1795,21 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
         auto& batchOffsets = offsets[i];
         batchOffsets.reserve(borders.size() + 1);
 
-        auto keyColumn = GetFirstPKColumn(indexInfo, batch);
-        Y_VERIFY(keyColumn && keyColumn->length() > 0);
+        const auto effKey = GetEffectiveKey(batch, indexInfo);
+        Y_VERIFY(effKey->num_columns() && effKey->num_rows());
+
+        std::vector<NArrow::TRawReplaceKey> keys;
+        {
+            const auto& columns = effKey->columns();
+            keys.reserve(effKey->num_rows());
+            for (i64 i = 0; i < effKey->num_rows(); ++i) {
+                keys.emplace_back(NArrow::TRawReplaceKey(&columns, i));
+            }
+        }
 
         batchOffsets.push_back(0);
-        for (auto& border : borders) {
-            int offset = NArrow::LowerBound(keyColumn, *border.ToScalar(), batchOffsets.back());
+        for (const auto& border : borders) {
+            int offset = NArrow::LowerBound(keys, border, batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
             batchOffsets.push_back(offset);
         }
@@ -1826,17 +1841,18 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
                 Y_VERIFY(slice->num_rows());
                 granuleNumRows += slice->num_rows();
 #if 1 // Check correctness
-                auto keyColumn = GetFirstPKColumn(indexInfo, slice);
-                Y_VERIFY(keyColumn && keyColumn->length() > 0);
+                const auto effKey = GetEffectiveKey(slice, indexInfo);
+                Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
                 auto startKey = granuleNo ? borders[granuleNo - 1] : minTs;
-                Y_VERIFY(TMark(*keyColumn->GetScalar(0)) >= startKey);
+                Y_VERIFY(NArrow::TReplaceKey::FromBatch(effKey, 0) >= startKey);
 
+                NArrow::TReplaceKey lastSliceKey = NArrow::TReplaceKey::FromBatch(effKey, effKey->num_rows() - 1);
                 if (granuleNo < borders.size() - 1) {
-                    auto endKey = borders[granuleNo];
-                    Y_VERIFY(TMark(*keyColumn->GetScalar(keyColumn->length() - 1)) < endKey);
+                    const auto& endKey = borders[granuleNo];
+                    Y_VERIFY(lastSliceKey < endKey);
                 } else {
-                    Y_VERIFY(TMark(*keyColumn->GetScalar(keyColumn->length() - 1)) <= maxTs);
+                    Y_VERIFY(lastSliceKey <= maxTs);
                 }
 #endif
                 Y_VERIFY_DEBUG(NArrow::IsSorted(slice, indexInfo.GetReplaceKey()));
@@ -1852,16 +1868,17 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
         for (auto& batch : merged) {
             Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey()));
 
-            auto startKey = ts0;
+            auto startKey = ts0.Border;
             if (granuleNo) {
                 startKey = borders[granuleNo - 1];
             }
 #if 1 // Check correctness
-            auto keyColumn = GetFirstPKColumn(indexInfo, batch);
-            Y_VERIFY(keyColumn && keyColumn->length() > 0);
-            Y_VERIFY(TMark(*keyColumn->GetScalar(0)) >= startKey);
+            const auto effKey = GetEffectiveKey(batch, indexInfo);
+            Y_VERIFY(effKey->num_columns() && effKey->num_rows());
+
+            Y_VERIFY(NArrow::TReplaceKey::FromBatch(effKey, 0) >= startKey);
 #endif
-            out.emplace_back(startKey, batch);
+            out.emplace_back(TMark(startKey), batch);
         }
     }
 
@@ -1897,11 +1914,11 @@ static ui64 TryMovePortions(const TMark& ts0,
     }
     // Order compacted portions by primary key.
     std::sort(compacted.begin(), compacted.end(), [](const TPortionInfo* a, const TPortionInfo* b) {
-        return NArrow::ScalarLess(*a->PkStart(), *b->PkStart());
+        return a->EffKeyStart() < b->EffKeyStart();
     });
     // Check that there are no gaps between two adjacent portions in term of primary key range.
     for (size_t i = 0; i < compacted.size() - 1; ++i) {
-        if (!NArrow::ScalarLess(*compacted[i]->PkEnd(), *compacted[i + 1]->PkStart())) {
+        if (compacted[i]->EffKeyEnd() >= compacted[i + 1]->EffKeyStart()) {
             return 0;
         }
     }
@@ -1913,7 +1930,7 @@ static ui64 TryMovePortions(const TMark& ts0,
         ui32 rows = portionInfo->NumRows();
         Y_VERIFY(rows);
         numRows += rows;
-        tsIds.emplace_back((counter ? TMark(portionInfo->PkStart()) : ts0), counter + 1);
+        tsIds.emplace_back((counter ? TMark(portionInfo->EffKeyStart()) : ts0), counter + 1);
         toMove.emplace_back(std::move(*portionInfo), counter);
         ++counter;
         // Ensure that std::move will take an effect.

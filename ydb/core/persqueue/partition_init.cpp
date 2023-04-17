@@ -6,6 +6,8 @@ namespace NKikimr::NPQ {
 static const ui32 LEVEL0 = 32;
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
 bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
 //
@@ -35,7 +37,7 @@ void TInitializer::Execute(const TActorContext& ctx) {
 
 bool TInitializer::Handle(STFUNC_SIG) {
     Y_VERIFY(InProgress, "Initialization is not started");
-    return CurrentStep->Get()->Handle(ev,ctx);
+    return CurrentStep->Get()->Handle(ev);
 }
 
 void TInitializer::Next(const TActorContext& ctx) {
@@ -44,8 +46,8 @@ void TInitializer::Next(const TActorContext& ctx) {
 }
 
 void TInitializer::Done(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName() 
-                                                << "' partition " << Partition->Partition 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName()
+                                                << "' partition " << Partition->Partition
                                                 << ". Completed.");
     InProgress = false;
     Partition->InitComplete(ctx);
@@ -66,8 +68,8 @@ void TInitializer::DoNext(const TActorContext& ctx) {
         }
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName() 
-                                                << "' partition " << Partition->Partition 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName()
+                                                << "' partition " << Partition->Partition
                                                 << ". Step " << CurrentStep->Get()->Name);
     CurrentStep->Get()->Execute(ctx);
 }
@@ -77,7 +79,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
 // TInitializerStep
 //
 
-TInitializerStep::TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition) 
+TInitializerStep::TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition)
     : Name(name)
     , SkipNewPartition(skipNewPartition)
     , Initializer(initializer) {
@@ -89,7 +91,6 @@ void TInitializerStep::Done(const TActorContext& ctx) {
 
 bool TInitializerStep::Handle(STFUNC_SIG) {
     Y_UNUSED(ev);
-    Y_UNUSED(ctx);
 
     return false;
 }
@@ -122,7 +123,7 @@ TBaseKVStep::TBaseKVStep(TInitializer* initializer, TString name, bool skipNewPa
 bool TBaseKVStep::Handle(STFUNC_SIG) {
     switch(ev->GetTypeRewrite())
     {
-        HFunc(TEvKeyValue::TEvResponse, Handle);
+        HFuncCtx(TEvKeyValue::TEvResponse, Handle, TActivationContext::AsActorContext());
         default:
             return false;
     }
@@ -406,7 +407,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         default:
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_FAIL("bad status");
-    };    
+    };
 }
 
 
@@ -495,7 +496,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                     << " offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
                     << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
         );
-        dataKeysBody.push_back({k, pair.GetValueSize(), 
+        dataKeysBody.push_back({k, pair.GetValueSize(),
                         TInstant::Seconds(pair.GetCreationUnixTime()),
                         dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size});
     }
@@ -938,6 +939,46 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
         diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
     }
     return !diskIsOk;
+}
+
+static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 partition,
+                         TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    auto read = request->Record.AddCmdReadRange();
+    auto range = read->MutableRange();
+    TKeyPrefix from(c, partition);
+    if (!key.empty()) {
+        Y_VERIFY(key.StartsWith(TStringBuf(from.Data(), from.Size())));
+        from.Clear();
+        from.Append(key.data(), key.size());
+    }
+    range->SetFrom(from.Data(), from.Size());
+
+    TKeyPrefix to(c, partition + 1);
+    range->SetTo(to.Data(), to.Size());
+
+    if(includeData)
+        read->SetIncludeData(true);
+
+    if (dropTmp) {
+        auto del = request->Record.AddCmdDeleteRange();
+        auto range = del->MutableRange();
+        TKeyPrefix from(TKeyPrefix::TypeTmpData, partition);
+        range->SetFrom(from.Data(), from.Size());
+
+        TKeyPrefix to(TKeyPrefix::TypeTmpData, partition + 1);
+        range->SetTo(to.Data(), to.Size());
+    }
+
+    ctx.Send(dst, request.Release());
+}
+
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeInfo, true, key, key == "");
+}
+
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) {
+    RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
 }
 
 } // namespace NKikimr::NPQ

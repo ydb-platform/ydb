@@ -824,6 +824,23 @@ protected:
     bool StoreDataSourceSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
 
+    TIdentifier GetTopicConsumerId(const TRule_topic_consumer_ref& node);
+    bool CreateConsumerSettings(const TRule_topic_consumer_settings& settingsNode, TTopicConsumerSettings& settings);
+    bool CreateTopicSettings(const TRule_topic_settings& node, TTopicSettings& params);
+    bool CreateTopicConsumer(const TRule_topic_create_consumer_entry& node,
+                             TVector<TTopicConsumerDescription>& consumers);
+    bool CreateTopicEntry(const TRule_create_topic_entry& node, TCreateTopicParameters& params);
+
+    bool AlterTopicConsumer(const TRule_alter_topic_alter_consumer& node,
+                            THashMap<TString, TTopicConsumerDescription>& alterConsumers);
+
+    bool AlterTopicConsumerEntry(const TRule_alter_topic_alter_consumer_entry& node,
+                                 TTopicConsumerDescription& alterConsumer);
+
+
+    bool AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params);
+
+
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
     TNodePtr AddOptionals(const TNodePtr& node, size_t optionalCount);
@@ -842,6 +859,7 @@ protected:
     TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node);
     bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints);
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
+    bool TopicRefImpl(const TRule_topic_ref& node, TTopicRef& result);
     TWindowSpecificationPtr WindowSpecification(const TRule_window_specification_details& rule);
     bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
@@ -1109,7 +1127,12 @@ public:
     TNodePtr BuildUdf(bool forReduce) {
         auto result = Node ? Node : BuildCallable(Pos, Module, Func, Args, forReduce);
         if (to_lower(Module) == "tensorflow" && Func == "RunBatch") {
-            Args.erase(Args.begin() + 2);
+            if (Args.size() > 2) {
+                Args.erase(Args.begin() + 2);
+            } else {
+                Ctx.Error(Pos) << "Excepted >= 3 arguments, but got: " << Args.size();
+                return nullptr;
+            }
         }
         return result;
     }
@@ -2463,6 +2486,366 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
     return true;
 }
 
+bool StoreConsumerSettingsEntry(
+        const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
+        TTopicConsumerSettings& settings,
+        bool reset
+) {
+    YQL_ENSURE(value || reset);
+    TNodePtr valueExprNode;
+    if (value) {
+        valueExprNode = ctx.Build(value->GetRule_expr1());
+        if (!valueExprNode) {
+            ctx.Error() << "invalid value for setting: " << id.Name;
+            return false;
+        }
+    }
+    if (to_lower(id.Name) == "important") {
+        if (settings.Important) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
+            ctx.Error() << to_upper(id.Name) << " value should be boolean";
+            return false;
+        }
+        settings.Important = valueExprNode;
+
+    } else if (to_lower(id.Name) == "read_from") {
+        if (settings.ReadFromTs) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            return false;
+        }
+        if (reset) {
+            settings.ReadFromTs.Reset();
+        } else {
+            //ToDo: !! validate
+            settings.ReadFromTs.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "supported_codecs") {
+        if (settings.SupportedCodecs) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            return false;
+        }
+        if (reset) {
+            settings.SupportedCodecs.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+                ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            settings.SupportedCodecs.Set(valueExprNode);
+        }
+    } else {
+        ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
+        return false;
+    }
+    return true;
+}
+
+TIdentifier TSqlTranslation::GetTopicConsumerId(const TRule_topic_consumer_ref& node) {
+    return IdEx(node.GetRule_an_id_pure1(), *this);
+}
+
+bool TSqlTranslation::CreateConsumerSettings(
+        const TRule_topic_consumer_settings& node, TTopicConsumerSettings& settings
+) {
+    const auto& firstEntry = node.GetRule_topic_consumer_settings_entry1();
+    TSqlExpression expr(Ctx, Mode);
+    if (!StoreConsumerSettingsEntry(
+            IdEx(firstEntry.GetRule_an_id1(), *this),
+            &firstEntry.GetRule_topic_consumer_setting_value3(),
+            expr, settings, false
+    )) {
+        return false;
+    }
+    for (auto& block : node.GetBlock2()) {
+        const auto& entry = block.GetRule_topic_consumer_settings_entry2();
+        if (!StoreConsumerSettingsEntry(
+                IdEx(entry.GetRule_an_id1(), *this),
+                &entry.GetRule_topic_consumer_setting_value3(),
+                expr, settings, false
+        )) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlTranslation::CreateTopicConsumer(
+        const TRule_topic_create_consumer_entry& node,
+        TVector<TTopicConsumerDescription>& consumers
+) {
+    consumers.emplace_back(IdEx(node.GetRule_an_id2(), *this));
+
+    if (node.HasBlock3()) {
+        auto& settings = node.GetBlock3().GetRule_topic_consumer_with_settings1().GetRule_topic_consumer_settings3();
+        if (!CreateConsumerSettings(settings, consumers.back().Settings)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::AlterTopicConsumerEntry(
+        const TRule_alter_topic_alter_consumer_entry& node, TTopicConsumerDescription& alterConsumer
+) {
+    switch (node.Alt_case()) {
+        case TRule_alter_topic_alter_consumer_entry::kAltAlterTopicAlterConsumerEntry1:
+            return CreateConsumerSettings(
+                    node.GetAlt_alter_topic_alter_consumer_entry1().GetRule_topic_alter_consumer_set1()
+                            .GetRule_topic_consumer_settings3(),
+                    alterConsumer.Settings
+            );
+        //case TRule_alter_topic_alter_consumer_entry::ALT_NOT_SET:
+        case TRule_alter_topic_alter_consumer_entry::kAltAlterTopicAlterConsumerEntry2: {
+            auto& resetNode = node.GetAlt_alter_topic_alter_consumer_entry2().GetRule_topic_alter_consumer_reset1();
+            TSqlExpression expr(Ctx, Mode);
+            if (!StoreConsumerSettingsEntry(
+                    IdEx(resetNode.GetRule_an_id3(), *this),
+                    nullptr,
+                    expr, alterConsumer.Settings, true
+            )) {
+                return false;
+            }
+
+            for (auto& resetItem: resetNode.GetBlock4()) {
+                if (!StoreConsumerSettingsEntry(
+                        IdEx(resetItem.GetRule_an_id2(), *this),
+                        nullptr,
+                        expr, alterConsumer.Settings, true
+                )) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        default:
+            Ctx.Error() << "unknown alter consumer action";
+            return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::AlterTopicConsumer(
+        const TRule_alter_topic_alter_consumer& node,
+        THashMap<TString, TTopicConsumerDescription>& alterConsumers
+) {
+    auto consumerId = GetTopicConsumerId(node.GetRule_topic_consumer_ref3());
+    TString name = to_lower(consumerId.Name);
+    auto iter = alterConsumers.insert(std::make_pair(
+            name, TTopicConsumerDescription(std::move(consumerId))
+    )).first;
+    if (!AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second)) {
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCreateTopicParameters& params) {
+    // Will need a switch() here if (ever) create_topic_entry gets more than 1 type of statement
+    auto& consumer = node.GetRule_topic_create_consumer_entry1();
+    if (!CreateTopicConsumer(consumer, params.Consumers)) {
+        return false;
+    }
+    return true;
+}
+
+static bool StoreTopicSettingsEntry(
+        const TIdentifier& id, const TRule_topic_setting_value* value, TSqlExpression& ctx,
+        TTopicSettings& settings, bool reset
+) {
+    YQL_ENSURE(value || reset);
+    TNodePtr valueExprNode;
+    if (value) {
+        valueExprNode = ctx.Build(value->GetRule_expr1());
+        if (!valueExprNode) {
+            ctx.Error() << "invalid value for setting: " << id.Name;
+            return false;
+        }
+    }
+
+    if (to_lower(id.Name) == "min_active_partitions") {
+        if (reset) {
+            settings.MinPartitions.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.MinPartitions.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "partition_count_limit") {
+        if (reset) {
+            settings.PartitionsLimit.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.PartitionsLimit.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "retention_period") {
+        if (reset) {
+            settings.RetentionPeriod.Reset();
+        } else {
+            if (valueExprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for retention";
+                return false;
+            }
+            settings.RetentionPeriod.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "retention_storage_mb") {
+        if (reset) {
+            settings.RetentionStorage.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.RetentionStorage.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "partition_write_speed_bytes_per_second") {
+        if (reset) {
+            settings.PartitionWriteSpeed.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.PartitionWriteSpeed.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "partition_write_burst_bytes") {
+        if (reset) {
+            settings.PartitionWriteBurstSpeed.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.PartitionWriteBurstSpeed.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "metering_mode") {
+        if (reset) {
+            settings.MeteringMode.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+                ctx.Error() << to_upper(id.Name) << " value should be string";
+                return false;
+            }
+            settings.MeteringMode.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "supported_codecs") {
+        if (reset) {
+            settings.SupportedCodecs.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+                ctx.Error() << to_upper(id.Name) << " value should be string";
+                return false;
+            }
+            settings.SupportedCodecs.Set(valueExprNode);
+        }
+    } else {
+        ctx.Error() << "unknown topic setting: " << id.Name;
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params) {
+//    alter_topic_action:
+//    alter_topic_add_consumer
+//    | alter_topic_alter_consumer
+//    | alter_topic_drop_consumer
+//    | alter_topic_set_settings
+//    | alter_topic_reset_settings
+
+    switch (node.Alt_case()) {
+        case TRule_alter_topic_action::kAltAlterTopicAction1: // alter_topic_add_consumer
+            return CreateTopicConsumer(
+                    node.GetAlt_alter_topic_action1().GetRule_alter_topic_add_consumer1()
+                                                     .GetRule_topic_create_consumer_entry2(),
+                    params.AddConsumers
+           );
+
+        case TRule_alter_topic_action::kAltAlterTopicAction2: // alter_topic_alter_consumer
+            return AlterTopicConsumer(
+                    node.GetAlt_alter_topic_action2().GetRule_alter_topic_alter_consumer1(),
+                    params.AlterConsumers
+            );
+
+        case TRule_alter_topic_action::kAltAlterTopicAction3: // drop_consumer
+            params.DropConsumers.emplace_back(GetTopicConsumerId(
+                    node.GetAlt_alter_topic_action3().GetRule_alter_topic_drop_consumer1()
+                                                     .GetRule_topic_consumer_ref3()
+            ));
+            return true;
+
+        case TRule_alter_topic_action::kAltAlterTopicAction4: // set_settings
+            return CreateTopicSettings(
+                    node.GetAlt_alter_topic_action4().GetRule_alter_topic_set_settings1()
+                                                     .GetRule_topic_settings3(),
+                    params.TopicSettings
+            );
+
+        case TRule_alter_topic_action::kAltAlterTopicAction5: { // reset_settings
+            auto& resetNode = node.GetAlt_alter_topic_action5().GetRule_alter_topic_reset_settings1();
+            TSqlExpression expr(Ctx, Mode);
+            if (!StoreTopicSettingsEntry(
+                    IdEx(resetNode.GetRule_an_id3(), *this),
+                    nullptr, expr,
+                    params.TopicSettings, true
+            )) {
+                return false;
+            }
+
+            for (auto& resetItem: resetNode.GetBlock4()) {
+                if (!StoreTopicSettingsEntry(
+                        IdEx(resetItem.GetRule_an_id_pure2(), *this),
+                        nullptr, expr,
+                        params.TopicSettings, true
+                )) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        default:
+            Ctx.Error() << "unknown alter topic action";
+            return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTopicSettings& settings) {
+    const auto& firstEntry = node.GetRule_topic_settings_entry1();
+    TSqlExpression expr(Ctx, Mode);
+
+    if (!StoreTopicSettingsEntry(
+            IdEx(firstEntry.GetRule_an_id1(), *this),
+            &firstEntry.GetRule_topic_setting_value3(),
+            expr, settings, false
+    )) {
+        return false;
+    }
+    for (auto& block : node.GetBlock2()) {
+        const auto& entry = block.GetRule_topic_settings_entry2();
+        if (!StoreTopicSettingsEntry(
+                IdEx(entry.GetRule_an_id1(), *this),
+                &entry.GetRule_topic_setting_value3(),
+                expr, settings, false
+        )) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
 
 TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
@@ -3344,6 +3727,32 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     }
 
     return result.Keys != nullptr;
+}
+
+bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& result) {
+    TString service = Context().Scoped->CurrService;
+    TDeferredAtom cluster = Context().Scoped->CurrCluster;
+    if (node.HasBlock1()) {
+        if (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) {
+            Error() << "Cluster should not be used in limited view";
+            return false;
+        }
+
+        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+            return false;
+        }
+    }
+
+    if (cluster.Empty()) {
+        Error() << "No cluster name given and no default cluster is selected";
+        return false;
+    }
+
+    result = TTopicRef(Context().MakeName("topic"), cluster, nullptr);
+    auto topic = Id(node.GetRule_an_id2(), *this);
+    result.Keys = BuildTopicKey(Context().Pos(), result.Cluster, TDeferredAtom(Context().Pos(), topic));
+
+    return true;
 }
 
 bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
@@ -9415,6 +9824,75 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx.Pos(), id, node.HasBlock5(), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore33: {
+            Ctx.BodyPart();
+            // create_topic_stmt: CREATE TOPIC topic1 (CONSUMER ...)? [WITH (opt1 = val1, ...]?
+            auto& rule = core.GetAlt_sql_stmt_core33().GetRule_create_topic_stmt1();
+            TTopicRef tr;
+            if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
+                return false;
+            }
+
+            TCreateTopicParameters params;
+            if (rule.HasBlock4()) { //create_topic_entry (consumers)
+                auto& entries = rule.GetBlock4().GetRule_create_topic_entries1();
+                auto& firstEntry = entries.GetRule_create_topic_entry2();
+                if (!CreateTopicEntry(firstEntry, params)) {
+                    return false;
+                }
+                const auto& list = entries.GetBlock3();
+                for (auto& node : list) {
+                    if (!CreateTopicEntry(node.GetRule_create_topic_entry2(), params)) {
+                        return false;
+                    }
+                }
+
+            }
+            if (rule.HasBlock5()) { // with_topic_settings
+                auto& topic_settings_node = rule.GetBlock5().GetRule_with_topic_settings1().GetRule_topic_settings3();
+                CreateTopicSettings(topic_settings_node, params.TopicSettings);
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateTopic(Ctx.Pos(), tr, params, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore34: {
+//            alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
+
+            Ctx.BodyPart();
+            auto& rule = core.GetAlt_sql_stmt_core34().GetRule_alter_topic_stmt1();
+            TTopicRef tr;
+            if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
+                return false;
+            }
+
+            TAlterTopicParameters params;
+            auto& firstEntry = rule.GetRule_alter_topic_action4();
+            if (!AlterTopicAction(firstEntry, params)) {
+                return false;
+            }
+            const auto& list = rule.GetBlock5();
+            for (auto& node : list) {
+                if (!AlterTopicAction(node.GetRule_alter_topic_action2(), params)) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterTopic(Ctx.Pos(), tr, params, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore35: {
+            // drop_topic_stmt: DROP TOPIC
+            Ctx.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core35().GetRule_drop_topic_stmt1();
+
+            TTopicRef tr;
+            if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
+                return false;
+            }
+            AddStatementToBlocks(blocks, BuildDropTopic(Ctx.Pos(), tr, Ctx.Scoped));
             break;
         }
         default:

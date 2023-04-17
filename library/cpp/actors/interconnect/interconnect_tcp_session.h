@@ -180,6 +180,7 @@ namespace NActors {
 
         TInputSessionTCP(const TActorId& sessionId,
                          TIntrusivePtr<NInterconnect::TStreamSocket> socket,
+                         TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
                          TIntrusivePtr<TReceiveContext> context,
                          TInterconnectProxyCommon::TPtr common,
                          std::shared_ptr<IInterconnectMetrics> metrics,
@@ -208,18 +209,16 @@ namespace NActors {
 
         const TActorId SessionId;
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         TPollerToken::TPtr PollerToken;
+        TPollerToken::TPtr XdcPollerToken;
         TIntrusivePtr<TReceiveContext> Context;
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
 
         // header we are currently processing (parsed from the stream)
-        union {
-            TTcpPacketHeader_v1 v1;
-            TTcpPacketHeader_v2 v2;
-            char Data[1];
-        } Header;
+        TTcpPacketHeader_v2 Header;
         ui64 HeaderConfirm, HeaderSerial;
 
         size_t PayloadSize;
@@ -247,7 +246,7 @@ namespace NActors {
         void HandleResumeReceiveData();
         void HandleConfirmUpdate();
         void ReceiveData();
-        void ProcessHeader(size_t headerLen);
+        void ProcessHeader();
         void ProcessPayload(ui64& numDataBytes);
         void ProcessEvent(TRope& data, TEventData& descr);
         bool ReadMore();
@@ -473,7 +472,9 @@ namespace NActors {
         TInstant LastHandshakeDone;
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         TPollerToken::TPtr PollerToken;
+        TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
         ui64 InflightDataAmount = 0;
 

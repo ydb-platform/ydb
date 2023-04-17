@@ -1,5 +1,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 
+#include <ydb/library/yql/minikql/mkql_buffer.h>
+
 namespace NSQLTranslationPG {
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
@@ -158,6 +160,14 @@ void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& 
    throw yexception() << "PG types are not supported";
 }
 
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPagedBuffer& buf) {
+   Y_UNUSED(stable);
+   Y_UNUSED(type);
+   Y_UNUSED(value);
+   Y_UNUSED(buf);
+   throw yexception() << "PG types are not supported";
+}
+
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
    Y_UNUSED(type);
    Y_UNUSED(buf);
@@ -264,6 +274,14 @@ public:
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
     return std::make_unique<TPgDummyBuilder>();
+}
+
+bool HasPgKernel(ui32 procOid) {
+    Y_UNUSED(procOid);
+    return false;
+}
+
+void RegisterPgKernels() {
 }
 
 std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,

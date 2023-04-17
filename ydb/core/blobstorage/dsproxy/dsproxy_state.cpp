@@ -276,7 +276,7 @@ namespace NKikimr {
         UnconfiguredBufferSize = 0;
         for (std::unique_ptr<IEventHandle>& ev : std::exchange(InitQueue, {})) {
             TAutoPtr<IEventHandle> x(ev.release());
-            Receive(x, TActivationContext::ActorContextFor(SelfId()));
+            Receive(x);
         }
     }
 

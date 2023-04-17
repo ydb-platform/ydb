@@ -170,7 +170,7 @@ namespace NKikimr {
 
             auto *msg = ev->Get();
             TReadCmd *cmd = static_cast<TReadCmd*>(msg->Cookie);
-            if (msg->Status == NKikimrProto::OK) {
+            if (msg->Status == NKikimrProto::OK && msg->Data.IsReadable()) {
                 auto& item = *cmd->Item;
                 TRope rope(msg->Data.ToString());
                 TDiskBlob blob(&rope, cmd->Parts, Info->Type, item.BlobId);

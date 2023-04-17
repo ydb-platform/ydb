@@ -57,7 +57,7 @@ public:
         const NYql::NCommon::TServiceCounters& serviceCounters,
         const TDuration& pingPeriod,
         const TDuration& aggrPeriod,
-        void (TDerived::*func)(TAutoPtr<NActors::IEventHandle>&, const NActors::TActorContext&)
+        void (TDerived::*func)(TAutoPtr<NActors::IEventHandle>&)
     )
         : NActors::TActor<TDerived>(func)
         , ExecuterId(executerId)

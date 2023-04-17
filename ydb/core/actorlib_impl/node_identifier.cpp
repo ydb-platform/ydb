@@ -144,7 +144,7 @@ class TNodeIdentifier : public TActorBootstrapped<TNodeIdentifier> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::NODE_IDENTIFIER; }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvUpdateNodeInfo, Handle);
             CFunc(TEvents::TSystem::PoisonPill, Die);

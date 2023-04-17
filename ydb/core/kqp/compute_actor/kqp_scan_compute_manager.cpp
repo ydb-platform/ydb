@@ -2,7 +2,7 @@
 #include <ydb/core/base/wilson.h>
 #include <util/string/builder.h>
 
-namespace NKikimr::NKqp::NComputeActor {
+namespace NKikimr::NKqp::NScanPrivate {
 
 TString TInFlightShards::TraceToString() const {
     TStringBuilder sb;
@@ -88,55 +88,9 @@ ui32 TInFlightShards::GetScansCount() const {
 }
 
 void TInFlightShards::ClearAll() {
-    CostRequestsByScanId.clear();
-    CostRequestsByShardId.clear();
     Shards.clear();
     AllocatedGenerations.clear();
     StatesByIndex.clear();
     NeedAckStates.clear();
-    if (CostsDataSpan) {
-        CostsDataSpan->End();
-        CostsDataSpan.Destroy();
-    }
 }
-
-bool TInFlightShards::ProcessCostReply(TEvKqpCompute::TEvCostData::TPtr ev, const TShardCostsState::TReadData*& readData, TSmallVec<TSerializedTableRange>& result) {
-    auto it = CostRequestsByScanId.find(ev->Get()->GetScanId());
-    Y_VERIFY(it != CostRequestsByScanId.end(), "incorrect generation from cost data event: %u", ev->Get()->GetScanId());
-    readData = &it->second->GetReadData();
-    if (!ev->Get()->GetTableRanges().ColumnsCount()) {
-        result = TShardCostsState::BuildSerializedTableRanges(*readData);
-    } else {
-        result = ev->Get()->GetSerializedTableRanges(ScanningPolicy.GetShardSplitFactor());
-    }
-    CostRequestsByShardId.erase(it->second->GetShardId());
-    CostRequestsByScanId.erase(it);
-    if (CostRequestsByScanId.empty()) {
-        Y_VERIFY(CostsDataSpan);
-        CostsDataSpan->End();
-        CostsDataSpan.Destroy();
-    }
-    return true;
-}
-
-TShardCostsState::TPtr TInFlightShards::PrepareCostRequest(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& read) {
-    if (!CostsDataSpan) {
-        CostsDataSpan = MakeHolder<NWilson::TSpan>(NKikimr::TWilsonKqp::ComputeActor, KqpProfileSpan.GetTraceId(), "Costs");
-    }
-    const ui32 scanId = CostRequestsByScanId.size() + 1;
-    auto costsState = std::make_shared<TShardCostsState>(scanId, &read);
-    Y_VERIFY(CostRequestsByScanId.emplace(scanId, costsState).second);
-    Y_VERIFY(CostRequestsByShardId.emplace(costsState->GetShardId(), costsState).second);
-    return costsState;
-}
-
-TShardCostsState::TPtr TInFlightShards::GetCostsState(const ui64 shardId) const {
-    auto it = CostRequestsByShardId.find(shardId);
-    if (it == CostRequestsByShardId.end()) {
-        return nullptr;
-    } else {
-        return it->second;
-    }
-}
-
 }

@@ -240,7 +240,7 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -299,7 +299,7 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -379,7 +379,7 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
             hFunc(TEvChangeExchange::TEvSplitAck, Handle);
             hFunc(TEvents::TEvGone, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 

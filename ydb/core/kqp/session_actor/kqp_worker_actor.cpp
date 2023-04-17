@@ -225,7 +225,7 @@ public:
         QueryState->QueryDeadlines.TimeoutAt = now + timeoutMs;
 
         auto onError = [this, &ctx] (Ydb::StatusIds::StatusCode status, const TString& message) {
-            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, status, message, ctx);
+            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, status, message);
 
             if (Settings.LongSession) {
                 QueryState.Reset();
@@ -346,13 +346,13 @@ public:
 
         Y_VERIFY(CleanupState);
         if (CleanupState->Final) {
-            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed", ctx);
+            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed");
         } else {
             auto busyStatus = Settings.Service.GetUseSessionBusyStatus()
                 ? Ydb::StatusIds::SESSION_BUSY
                 : Ydb::StatusIds::PRECONDITION_FAILED;
 
-            ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion", ctx);
+            ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion");
         }
     }
 
@@ -394,10 +394,10 @@ public:
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvContinueProcess, HandleReady);
             default:
-                UnexpectedEvent("ReadyState", ev, ctx);
+                UnexpectedEvent("ReadyState", ev);
             }
         } catch (const yexception& ex) {
-            InternalError(ex.what(), ctx);
+            InternalError(ex.what());
         }
     }
 
@@ -408,10 +408,10 @@ public:
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
             default:
-                UnexpectedEvent("PerformQueryState", ev, ctx);
+                UnexpectedEvent("PerformQueryState", ev);
             }
         } catch (const yexception& ex) {
-            InternalError(ex.what(), ctx);
+            InternalError(ex.what());
         }
     }
 
@@ -422,10 +422,10 @@ public:
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
             default:
-                UnexpectedEvent("PerformCleanupState", ev, ctx);
+                UnexpectedEvent("PerformCleanupState", ev);
             }
         } catch (const yexception& ex) {
-            InternalError(ex.what(), ctx);
+            InternalError(ex.what());
         }
     }
 
@@ -468,7 +468,7 @@ private:
 
         auto onError = [this, &ctx]
             (Ydb::StatusIds::StatusCode status, const TString& message) {
-                ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, status, message, ctx);
+                ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, status, message);
 
                 if (Settings.LongSession) {
                     QueryState.Reset();
@@ -854,22 +854,22 @@ private:
     }
 
     bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId,
-        Ydb::StatusIds::StatusCode ydbStatus, const TString& message, const TActorContext& ctx)
+        Ydb::StatusIds::StatusCode ydbStatus, const TString& message)
     {
         LOG_W(message);
 
         auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
 
         AddTrailingInfo(response->Record);
-        return ctx.Send(sender, response.Release(), 0, proxyRequestId);
+        return Send(sender, response.Release(), 0, proxyRequestId);
     }
 
-    bool CheckRequest(const TString& eventSessionId, const TActorId& sender, ui64 proxyRequestId, const TActorContext& ctx)
+    bool CheckRequest(const TString& eventSessionId, const TActorId& sender, ui64 proxyRequestId, const TActorContext&)
     {
         if (eventSessionId != SessionId) {
             TString error = TStringBuilder() << "Invalid session, got: " << eventSessionId
                 << " expected: " << SessionId << ", request ignored";
-            ReplyProcessError(sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, error, ctx);
+            ReplyProcessError(sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, error);
             return false;
         }
 
@@ -887,7 +887,7 @@ private:
             : Ydb::StatusIds::PRECONDITION_FAILED;
 
         ReplyProcessError(ev->Sender, proxyRequestId, busyStatus,
-            "Pending previous query completion", ctx);
+            "Pending previous query completion");
     }
 
     void CollectSystemViewQueryStats(const TActorContext& ctx,
@@ -1035,18 +1035,18 @@ private:
     }
 
 private:
-    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
+    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
         TString message = TStringBuilder() << "TKqpWorkerActor in state "
             << state << " received unexpected event "
             << ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite());
 
-        InternalError(message, ctx);
+        InternalError(message);
     }
 
-    void InternalError(const TString& message, const TActorContext& ctx) {
+    void InternalError(const TString& message) {
         LOG_E("Internal error, message: " << message);
         if (QueryState) {
-            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::INTERNAL_ERROR, message, ctx);
+            ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::INTERNAL_ERROR, message);
         }
 
         auto lifeSpan = TInstant::Now() - CreationTime;
@@ -1056,9 +1056,9 @@ private:
         closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         closeEv->Record.MutableResponse()->SetSessionId(SessionId);
         closeEv->Record.MutableResponse()->SetClosed(true);
-        ctx.Send(Owner, closeEv.Release());
+        Send(Owner, closeEv.Release());
 
-        Die(ctx);
+        PassAway();
     }
 
 private:

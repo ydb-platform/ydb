@@ -16,7 +16,7 @@ namespace NYdb {
 
             void PrintWindowStatsLoop();
 
-            void PrintHeader() const;
+            void PrintHeader(bool total = false) const;
             void PrintTotalStats() const;
 
             void AddWriterEvent(ui64 messageSize, ui64 writeTime, ui64 inflightMessages);

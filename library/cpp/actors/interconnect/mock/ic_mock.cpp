@@ -252,7 +252,7 @@ namespace NActors {
                     while (!WaitingConnections.empty()) {
                         TAutoPtr<IEventHandle> tmp(WaitingConnections.front().release());
                         WaitingConnections.pop_front();
-                        Receive(tmp, TActivationContext::AsActorContext());
+                        Receive(tmp);
                     }
                 }
             };
@@ -322,8 +322,7 @@ namespace NActors {
 
             void HandleSessionEvent(TAutoPtr<IEventHandle> ev) {
                 auto *session = GetSession();
-                InvokeOtherActor(*session, &TSessionMockActor::Receive, ev,
-                    TActivationContext::ActorContextFor(session->SelfId()));
+                InvokeOtherActor(*session, &TSessionMockActor::Receive, ev);
             }
 
             void Disconnect() {

@@ -57,6 +57,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                         "Using default config");
         }
+        state->ConfigProto = config;
         state->Config.Deserialize(config);
 
         if (!logRowset.EndOfSet())

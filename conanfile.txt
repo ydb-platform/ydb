@@ -1,11 +1,12 @@
 [requires]
-bison/3.5.3
 c-ares/1.18.1
 libiconv/1.15
 openssl/1.1.1s
 zlib/1.2.13
 
 [tool_requires]
+bison/3.5.3
+m4/1.4.19
 ragel/6.10
 yasm/1.3.0
 
@@ -15,6 +16,7 @@ libiconv:shared=True
 [imports]
 bin, *yasm* -> ./bin
 bin, bison* -> ./bin/bison/bin
+bin, m4* -> ./bin/m4/bin
 bin, ragel* -> ./bin
 bin, ytasm* -> ./bin
 res, * -> ./bin/bison/res

@@ -703,7 +703,10 @@ protected:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasReadRangesSource());
-        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1, "multiple sources or sources mixed with connections");
+        YQL_ENSURE(stage.GetSources(0).GetInputIndex() == 0 && stage.SourcesSize() == 1);
+        for (auto& input : stage.inputs()) {
+            YQL_ENSURE(input.HasBroadcast());
+        }
 
         auto& source = stage.GetSources(0).GetReadRangesSource();
 
@@ -950,6 +953,10 @@ protected:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
+    }
+
+    void SetSnapshot(ui64 step, ui64 txId) {
+        TasksGraph.GetMeta().SetSnapshot(step, txId);
     }
 
     IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {

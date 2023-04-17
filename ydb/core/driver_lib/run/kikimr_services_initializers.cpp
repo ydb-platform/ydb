@@ -839,6 +839,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->NodeId = NodeId;
     setup->MaxActivityType = GetActivityTypeCount();
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType, appData);
+    setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
 
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
         const auto &execConfig = systemConfig.GetExecutor(poolId);

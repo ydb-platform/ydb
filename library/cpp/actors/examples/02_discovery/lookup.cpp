@@ -49,11 +49,10 @@ public:
     {}
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExample::TEvReplicaInfo, Handle);
-            cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleUndelivered);
+            sFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            sFunc(TEvInterconnect::TEvNodeDisconnected, HandleUndelivered);
         default:
             break;
         }
@@ -120,7 +119,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExample::TEvReplicaInfo, Handle);
         default:

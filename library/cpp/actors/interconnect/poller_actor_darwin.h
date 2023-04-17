@@ -45,17 +45,19 @@ namespace NActors {
             close(KqDescriptor);
         }
 
-        void ProcessEventsInLoop() {
+        bool ProcessEventsInLoop() {
             std::array<struct kevent, 256> events;
 
             int numReady = kevent(KqDescriptor, nullptr, 0, events.data(), events.size(), nullptr);
             if (numReady == -1) {
                 if (errno == EINTR) {
-                    return;
+                    return false;
                 } else {
                     Y_FAIL("kevent() failed with %s", strerror(errno));
                 }
             }
+
+            bool res = false;
 
             for (int i = 0; i < numReady; ++i) {
                 const struct kevent& ev = events[i];
@@ -65,8 +67,12 @@ namespace NActors {
                     const bool read = error || ev.filter == EVFILT_READ;
                     const bool write = error || ev.filter == EVFILT_WRITE;
                     Notify(it, read, write);
+                } else {
+                    res = true;
                 }
             }
+
+            return res;
         }
 
         void UnregisterSocketInLoop(const TIntrusivePtr<TSharedDescriptor>& socket) {

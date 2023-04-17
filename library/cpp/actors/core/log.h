@@ -84,6 +84,16 @@
 #define LOG_DEBUG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
 #define LOG_TRACE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, stream)
 
+#define ALOG_EMERG(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_EMERG, component, stream)
+#define ALOG_ALERT(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_ALERT, component, stream)
+#define ALOG_CRIT(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_CRIT, component, stream)
+#define ALOG_ERROR(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_ERROR, component, stream)
+#define ALOG_WARN(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_WARN, component, stream)
+#define ALOG_NOTICE(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_NOTICE, component, stream)
+#define ALOG_INFO(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_INFO, component, stream)
+#define ALOG_DEBUG(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_DEBUG, component, stream)
+#define ALOG_TRACE(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, component, stream)
+
 #define LOG_EMERG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, __VA_ARGS__)
 #define LOG_ALERT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, __VA_ARGS__)
 #define LOG_CRIT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, sampleBy, __VA_ARGS__)
@@ -205,7 +215,7 @@ namespace NActors {
                      std::shared_ptr<NMonitoring::TMetricRegistry> metrics);
         ~TLoggerActor();
 
-        void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void StateFunc(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TFlushLogBuffer, FlushLogBufferMessageEvent);
                 HFunc(NLog::TEvLog, HandleLogEvent);
@@ -378,7 +388,39 @@ namespace NActors {
         }
     };
 
+    class TFormattedRecordWriter {
+    private:
+        const TActorContext& ActorContext;
+        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
+        ::NActors::NLog::EComponent Component = 0;
+        TStringBuilder Builder;
+    public:
+
+        TFormattedRecordWriter(const TActorContext& actorContext, ::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
+            : ActorContext(actorContext)
+            , Priority(priority)
+            , Component(component) {
+
+        }
+
+        template <class TKey, class TValue>
+        TFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            Builder << pName << "=" << pValue << ";";
+            return *this;
+        }
+
+        ~TFormattedRecordWriter() {
+            ::NActors::MemLogAdapter(ActorContext, Priority, Component, Builder);
+        }
+    };
+
 }
+
+#define ACTORS_FORMATTED_LOG(actorCtxOrSystem, mPriority, mComponent) \
+    if (!IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, mPriority, mComponent));\
+        else NActors::TFormattedRecordWriter(\
+            actorCtxOrSystem, static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
+            )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #define ACTORS_LOG_STREAM(actorCtxOrSystem, mPriority, mComponent) \
     if (!IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, mPriority, mComponent));\
@@ -405,4 +447,24 @@ namespace NActors {
 #define ALS_CRIT(component) ACTORS_LOG_STREAM_CRIT(NActors::TActivationContext::AsActorContext(), component)
 #define ALS_ALERT(component) ACTORS_LOG_STREAM_ALERT(NActors::TActivationContext::AsActorContext(), component)
 #define ALS_EMERG(component) ACTORS_LOG_STREAM_EMERG(NActors::TActivationContext::AsActorContext(), component)
+
+#define ACTORS_FORMATTED_LOG_TRACE(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component)
+#define ACTORS_FORMATTED_LOG_DEBUG(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component)
+#define ACTORS_FORMATTED_LOG_INFO(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_INFO, component)
+#define ACTORS_FORMATTED_LOG_NOTICE(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component)
+#define ACTORS_FORMATTED_LOG_WARN(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_WARN, component)
+#define ACTORS_FORMATTED_LOG_ERROR(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_ERROR, component)
+#define ACTORS_FORMATTED_LOG_CRIT(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component)
+#define ACTORS_FORMATTED_LOG_ALERT(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component)
+#define ACTORS_FORMATTED_LOG_EMERG(actorCtxOrSystem, component) ACTORS_FORMATTED_LOG(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component)
+
+#define AFL_TRACE(component) ACTORS_FORMATTED_LOG_TRACE(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_DEBUG(component) ACTORS_FORMATTED_LOG_DEBUG(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_INFO(component) ACTORS_FORMATTED_LOG_INFO(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_NOTICE(component) ACTORS_FORMATTED_LOG_NOTICE(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_WARN(component) ACTORS_FORMATTED_LOG_WARN(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_ERROR(component) ACTORS_FORMATTED_LOG_ERROR(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_CRIT(component) ACTORS_FORMATTED_LOG_CRIT(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_ALERT(component) ACTORS_FORMATTED_LOG_ALERT(NActors::TActivationContext::AsActorContext(), component)
+#define AFL_EMERG(component) ACTORS_FORMATTED_LOG_EMERG(NActors::TActivationContext::AsActorContext(), component)
 

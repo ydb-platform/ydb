@@ -6,6 +6,7 @@
 #include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_buffer.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -2329,36 +2330,8 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret) {
     return true;
 }
 
-} // NYql
-
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-using namespace NYql;
-
-ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
-    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
-
-    if (typeDesc.TypeLen >= 0) {
-        return typeDesc.TypeLen;
-    }
-    Y_ENSURE(typeDesc.TypeLen == -1 || typeDesc.TypeLen == -2);
-    auto datum = PointerDatumFromPod(value);
-    if (typeDesc.TypeLen == -1) {
-        const auto x = (const text*)PointerDatumFromPod(value);
-        return GetCleanVarSize(x);
-    } else {
-        const auto x = (const char*)PointerDatumFromPod(value);
-        return strlen(x);
-    }
-}
-
-ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
-    return PgValueSize(type->GetTypeId(), value);
-}
-
-void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+template<typename TBuf>
+void DoPGPack(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuf& buf) {
     switch (type->GetTypeId()) {
     case BOOLOID: {
         const auto x = DatumGetBool(ScalarDatumFromPod(value)) != 0;
@@ -2420,6 +2393,43 @@ void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& 
             buf.Append(b.Data(), b.Size());
         });
     }
+}
+
+} // NYql
+
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+using namespace NYql;
+
+ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
+    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
+
+    if (typeDesc.TypeLen >= 0) {
+        return typeDesc.TypeLen;
+    }
+    Y_ENSURE(typeDesc.TypeLen == -1 || typeDesc.TypeLen == -2);
+    auto datum = PointerDatumFromPod(value);
+    if (typeDesc.TypeLen == -1) {
+        const auto x = (const text*)PointerDatumFromPod(value);
+        return GetCleanVarSize(x);
+    } else {
+        const auto x = (const char*)PointerDatumFromPod(value);
+        return strlen(x);
+    }
+}
+
+ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
+    return PgValueSize(type->GetTypeId(), value);
+}
+
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+    DoPGPack(stable, type, value, buf);
+}
+
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TPagedBuffer& buf) {
+    DoPGPack(stable, type, value, buf);
 }
 
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {

@@ -12,6 +12,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
@@ -160,6 +161,7 @@ private:
     }
 
     void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+        TaskResultsCounter.Inc();
         auto g = Stats.MakeGuard("task_result");
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck" << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
@@ -182,18 +184,15 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-            << " freeSpace: " << ev->Get()->FreeSpace << " prevFreeSpace: " << PeerFreeSpace);
-
-        --InFlightScanDataMessages;
+            << " freeSpace: " << ev->Get()->FreeSpace << " " << ChunksLimiter.DebugString());
 
         if (!ComputeActorId) {
             ComputeActorId = ev->Sender;
-            InFlightScanDataMessages = 0;
         }
 
         Y_VERIFY(ev->Get()->Generation == ScanGen);
 
-        PeerFreeSpace = ev->Get()->FreeSpace;
+        ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
 
         ContinueProcessing();
     }
@@ -228,8 +227,8 @@ private:
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got TEvReadBlobRangeResult"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-            << " blob: " << ev->Get()->BlobRange
-            << " prevFreeSpace: " << PeerFreeSpace);
+            << " blob: " << ev->Get()->BlobRange << ";"
+            << ChunksLimiter.DebugString());
 
         if (ScanIterator) {
             {
@@ -248,6 +247,13 @@ private:
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         Y_VERIFY(!Finished);
         Y_VERIFY(ScanIterator);
+
+        if (!ChunksLimiter.HasMore()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " producing result: bytes limit exhausted"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+            return false;
+        }
 
         if (ScanIterator->Finished()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
@@ -332,21 +338,8 @@ private:
             return;
         }
 
-        if (PeerFreeSpace == 0) {
-            // Throttle down until the compute actor is ready to receive more rows
-
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-                "Scan " << ScanActorId << " waiting for peer free space"
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
-            return;
-        }
-
         // Send new results if there is available capacity
-        i64 MAX_SCANDATA_MESSAGES_IN_FLIGHT = 2;
-        while (InFlightScanDataMessages < MAX_SCANDATA_MESSAGES_IN_FLIGHT) {
-            if (!ScanIterator || !ProduceResults()) {
-                break;
-            }
+        while (ScanIterator && ProduceResults()) {
         }
 
         // Switch to the next range if the current one is finished
@@ -369,12 +362,12 @@ private:
             // Only exist the loop if either:
             // * we have finished scanning ALL the ranges
             // * or there is an in-flight blob read or ScanData message for which
-            //   we will get a reply and will be able to proceed futher
-            if  (!ScanIterator || InFlightScanDataMessages != 0 || InFlightReads != 0) {
+            //   we will get a reply and will be able to proceed further
+            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads != 0 || (DataTasksProcessor && DataTasksProcessor->GetDataCounter() > TaskResultsCounter.Val())) {
                 return;
             }
         }
-
+        Y_VERIFY_DEBUG(false);
         // The loop has finished without any progress!
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
@@ -507,11 +500,8 @@ private:
             << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
             << " arrow schema:\n" << (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : ""));
 
-        if (PeerFreeSpace < Bytes) {
-            PeerFreeSpace = 0;
-        } else {
-            PeerFreeSpace -= Bytes;
-        }
+        Y_VERIFY(ChunksLimiter.Take(Bytes));
+        Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
 
         Finished = Result->Finished;
         if (Finished) {
@@ -525,7 +515,6 @@ private:
         }
 
         Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
-        ++InFlightScanDataMessages;
 
         ReportStats();
 
@@ -602,13 +591,13 @@ private:
     TActorId TimeoutActorId;
     TMaybe<TString> AbortReason;
 
-    ui64 PeerFreeSpace = 0;
+    TChunksLimiter ChunksLimiter;
     THolder<TEvKqpCompute::TEvScanData> Result;
     i64 InFlightReads = 0;
     i64 InFlightReadBytes = 0;
-    i64 InFlightScanDataMessages = 0;
     bool Finished = false;
 
+    TAtomicCounter TaskResultsCounter = 0;
     IDataTasksProcessor::TPtr DataTasksProcessor;
 
     class TBlobStats {
@@ -986,17 +975,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
         detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
     }
     TVector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
-    if (request.GetCostDataOnly()) {
-        for (auto&& i : ReadMetadataRanges) {
-            NOlap::TReadMetadata::TConstPtr rMetadata = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(i);
-            if (!rMetadata || !rMetadata->SelectInfo) {
-                auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(NOlap::NCosts::TKeyRanges(), scanId);
-                ctx.Send(scanComputeActor, ev.Release());
-                return;
-            }
-            rMetadataRanges.emplace_back(rMetadata);
-        }
-    }
 
     if (ReadMetadataRanges.empty()) {
         LOG_S_DEBUG("TTxScan failed "
@@ -1017,26 +995,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
             << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
-        ctx.Send(scanComputeActor, ev.Release());
-        return;
-    }
-
-    if (request.GetCostDataOnly()) {
-        if (request.GetReverse()) {
-            std::reverse(rMetadataRanges.begin(), rMetadataRanges.end());
-        }
-        NOlap::NCosts::TKeyRangesBuilder krBuilder(Self->TablesManager.GetIndexInfo());
-        {
-            ui32 recordsCount = 0;
-            for (auto&& i : rMetadataRanges) {
-                recordsCount += i->SelectInfo->Granules.size() + 2;
-            }
-            krBuilder.Reserve(recordsCount);
-        }
-        for (auto&& i : rMetadataRanges) {
-            krBuilder.FillRangeMarks(i->GreaterPredicate, i->SelectInfo->Granules, i->LessPredicate);
-        }
-        auto ev = MakeHolder<TEvKqpCompute::TEvCostData>(krBuilder.Build(), scanId);
         ctx.Send(scanComputeActor, ev.Release());
         return;
     }

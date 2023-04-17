@@ -1179,7 +1179,7 @@ namespace NKikimr {
 //                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
 //                   NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
-            TExtQueueClass &extQueue = GetExtQueue(extQueueId);
+            TExtQueueClass &extQueue = GetExtQueue(NKikimrCapnProtoUtil::convertToProtobuf(extQueueId));
             NBackpressure::TQueueClientId clientId(msgQoS);
             std::unique_ptr<IEventHandle> event = extQueue.Enqueue(ctx, std::unique_ptr<IEventHandle>(
                 ev->Forward(SkeletonId).Release()), msgId, cost, *this, clientId);

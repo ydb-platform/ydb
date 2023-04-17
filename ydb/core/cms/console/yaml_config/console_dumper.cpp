@@ -17,8 +17,9 @@ using TDomainKey = std::tuple<ui32, TId, TGeneration>;
 using TDomainItemsContainer = TMap<TDomainKey, NKikimrConsole::TConfigItem>;
 
 // Use config hash to clue items with same body
+using TCookieHash = ui64;
 using TConfigHash = ui64;
-using TSelectorKey = std::tuple<TUsageScope, TConfigHash>;
+using TSelectorKey = std::tuple<TUsageScope, TCookieHash, TConfigHash>;
 using TSelectorItemsContainer = TMap<TSelectorKey, TVector<NKikimrConsole::TConfigItem>>;
 
 struct TSelectorData {
@@ -138,7 +139,7 @@ std::pair<TDomainItemsContainer, TSelectorItemsContainer> ExtractSuitableItems(
                 item);
         } else {
             TUsageScope scope(item.GetUsageScope(), item.GetOrder());
-            TSelectorKey key{scope, THash<TString>{}(item.GetConfig().ShortDebugString())};
+            TSelectorKey key{scope, THash<TString>{}(item.GetCookie()), THash<TString>{}(item.GetConfig().ShortDebugString())};
             if (auto it = selectorItemsByOrder.find(key); it != selectorItemsByOrder.end()) {
                 Y_VERIFY(it->second.back().GetMergeStrategy() == item.GetMergeStrategy());
                 it->second.emplace_back(item);
@@ -155,6 +156,7 @@ NKikimrConfig::TAppConfig BundleDomainConfig(const TDomainItemsContainer &items)
     NKikimrConfig::TAppConfig config;
 
     for (auto &[_, item] : items) {
+        Y_VERIFY(item.GetKind() != 0, "Tool doesn't support items with kind Auto");
         if (item.GetMergeStrategy() == NKikimrConsole::TConfigItem::MERGE) {
             config.MergeFrom(item.GetConfig());
         } else if (item.GetMergeStrategy() == NKikimrConsole::TConfigItem::OVERWRITE) {

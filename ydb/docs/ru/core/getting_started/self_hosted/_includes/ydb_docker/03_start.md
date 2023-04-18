@@ -13,6 +13,38 @@ docker run -d --rm --name ydb-local -h localhost \
   {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
 ```
 
+{% list tabs %}
+
+- Хранение данных на диске
+
+    ```bash
+    docker run -d --rm --name ydb-local -h localhost \
+      -p 2135:2135 -p 8765:8765 -p 2136:2136 \
+      -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
+      -e YDB_DEFAULT_LOG_LEVEL=NOTICE \
+      -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+      {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    ```
+
+    {% note warning %}
+    На данный момент хранение данных на диске не поддерживается на Apple Silicon (M1 or M2). Используйте команду с вкладки "Хранение данных в памяти", если хотите попробовать {{ ydb-short-name }} на данном процессоре.
+    {% endnote %}
+
+- Хранение данных в памяти
+
+    ```bash
+    docker run -d --rm --name ydb-local -h localhost \
+      -p 2135:2135 -p 8765:8765 -p 2136:2136 \
+      -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
+      -e YDB_DEFAULT_LOG_LEVEL=NOTICE \
+      -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+      -e YDB_USE_IN_MEMORY_PDISKS=true \
+      {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    ```
+
+{% endlist %}
+
+
 При успешном запуске будет выведен идентификатор созданного контейнера.
 
 ### Параметры запуска {#start-pars}
@@ -35,7 +67,7 @@ docker run -d --rm --name ydb-local -h localhost \
 - `GRPC_TLS_PORT`: Порт для соединений с использованием TLS. По умолчанию 2135.
 - `MON_PORT`: Порт для встроенного web-ui со средствами [мониторинга и интроспекции](../../../../maintenance/embedded_monitoring/ydb_monitoring.md). По умолчанию 8765.
 - `YDB_PDISK_SIZE`: Размер диска для хранения данных в формате `<NUM>GB` (например, `YDB_PDISK_SIZE=128GB`). Допустимые значения: от `80GB` и выше. По умолчанию 80GB.
-- `YDB_USE_IN_MEMORY_PDISKS`: Использование дисков в памяти. Допустимые значения `true`, `false`, по умолчанию `false`. Во включенном состоянии не использует файловую систему контейнера для работы с данными, все данные хранятся только в памяти процесса, и теряются при его остановке. В настоящее время запуск контейнера на процессоре Apple M1 возможен только в этом режиме.
+- `YDB_USE_IN_MEMORY_PDISKS`: Использование дисков в памяти. Допустимые значения `true`, `false`, по умолчанию `false`. Во включенном состоянии не использует файловую систему контейнера для работы с данными, все данные хранятся только в памяти процесса, и теряются при его остановке. В настоящее время запуск контейнера на процессоре Apple Silicon (M1 или M2) возможен только в этом режиме.
 
 {% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}
 

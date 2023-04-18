@@ -36,6 +36,7 @@ public:
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, [](auto) { return true; }, HNDL(RemoveRedundantSortByPk));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
+        AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
@@ -160,6 +161,12 @@ protected:
     TMaybeNode<TExprBase> ApplyLimitToReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpApplyLimitToReadTable(node, ctx, KqpCtx);
         DumpAppliedRule("ApplyLimitToReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpApplyLimitToOlapReadTable(node, ctx, KqpCtx);
+        DumpAppliedRule("ApplyLimitToOlapReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

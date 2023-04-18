@@ -1134,12 +1134,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cerr << result.QueryStats->query_plan() << Endl;
         Cerr << result.QueryStats->query_ast() << Endl;
 
-        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "false");
         UNIT_ASSERT(!reverse.IsDefined());
         pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
         UNIT_ASSERT(pushedLimit.IsDefined());
+        limit = FindPlanNodeByKv(node, "Limit", "4");
+        UNIT_ASSERT(limit.IsDefined());
 
         // Check that Reverse flag is set in query plan
         it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync();
@@ -1151,7 +1153,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cerr << result.QueryStats->query_plan() << Endl;
         Cerr << result.QueryStats->query_ast() << Endl;
 
-        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "true");
         UNIT_ASSERT(reverse.IsDefined());

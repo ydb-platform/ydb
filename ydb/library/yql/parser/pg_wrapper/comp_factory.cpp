@@ -2403,21 +2403,24 @@ namespace NMiniKQL {
 
 using namespace NYql;
 
-ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
-    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
-
-    if (typeDesc.TypeLen >= 0) {
-        return typeDesc.TypeLen;
+ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
+    if (typeLen >= 0) {
+        return typeLen;
     }
-    Y_ENSURE(typeDesc.TypeLen == -1 || typeDesc.TypeLen == -2);
+    Y_ENSURE(typeLen == -1 || typeLen == -2);
     auto datum = PointerDatumFromPod(value);
-    if (typeDesc.TypeLen == -1) {
+    if (typeLen == -1) {
         const auto x = (const text*)PointerDatumFromPod(value);
         return GetCleanVarSize(x);
     } else {
         const auto x = (const char*)PointerDatumFromPod(value);
         return strlen(x);
     }
+}
+
+ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
+    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
+    return PgValueSize(value, typeDesc.TypeLen);
 }
 
 ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
@@ -3549,6 +3552,13 @@ bool TypeDescIsComparable(void* typeDesc) {
         return false;
     }
     return static_cast<TPgTypeDescriptor*>(typeDesc)->CompareProcId != 0;
+}
+
+i32 TypeDescGetTypeLen(void* typeDesc) {
+    if (!typeDesc) {
+        return 0;
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->TypeLen;
 }
 
 ui32 TypeDescGetStoredSize(void* typeDesc) {

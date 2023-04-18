@@ -140,6 +140,12 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
+    Y_UNUSED(typeLen);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
     Y_UNUSED(type);
     Y_UNUSED(value);
@@ -328,6 +334,11 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
 }
 
 bool TypeDescIsComparable(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+i32 TypeDescGetTypeLen(void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }

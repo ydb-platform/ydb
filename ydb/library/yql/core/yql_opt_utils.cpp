@@ -1421,7 +1421,7 @@ ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
             return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
         case ETypeAnnotationKind::Pg: {
             const auto& typeDesc = NPg::LookupType(type.Cast<TPgExprType>()->GetId());
-            if (typeDesc.TypeLen > 0 && typeDesc.PassByValue) {
+            if (typeDesc.PassByValue) {
                 return typeDesc.TypeLen;
             }
             return UnknownWeight;

@@ -1488,7 +1488,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
 bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
-    if (unpacked->IsOptional()) {
+    if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
         // at least 2 levels of optionals
         ui32 nestLevel = 0;
         auto currentType = itemType;
@@ -1530,6 +1530,18 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
         }
 
         type = std::make_shared<arrow::StructType>(fields);
+        return true;
+    }
+
+    if (unpacked->IsPg()) {
+        auto pgType = AS_TYPE(TPgType, unpacked);
+        const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
+        if (desc.PassByValue) {
+            type = arrow::uint64();
+        } else {
+            type = arrow::binary();
+        }
+
         return true;
     }
 
@@ -2332,6 +2344,16 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             result = std::max(result, CalcMaxBlockItemSize(tupleType->GetElementType(i)));
         }
         return result;
+    }
+
+    if (type->IsPg()) {
+        auto pgType = AS_TYPE(TPgType, type);
+        const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
+        if (desc.PassByValue) {
+            return 8;
+        } else {
+            return sizeof(arrow::BinaryType::offset_type);
+        }
     }
 
     if (type->IsData()) {

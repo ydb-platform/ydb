@@ -430,6 +430,7 @@ public:
 
     void OnFinish() override {
         Y_ENSURE(!LastType.Name.empty());
+        Y_ENSURE(LastType.TypeLen != 0);
         if (LastType.TypeLen < 0 || LastType.TypeLen > 8) {
             Y_ENSURE(!LastType.PassByValue);
         }

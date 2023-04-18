@@ -276,6 +276,16 @@ public:
         Y_UNUSED(data);
         ythrow yexception() << "TPgDummyBuilder::NewString does nothing";
     }
+
+    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsCStringBuffer does nothing";
+    }
+
+    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsTextBuffer does nothing";
+    }
 };
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {

@@ -2889,6 +2889,16 @@ public:
     NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
         return CreatePgString(typeLen, targetTypeId, data);
     }
+
+    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        return { x, strlen(x) };
+    }
+
+    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+        auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+        return GetVarBuf(x);
+    }
 };
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {

@@ -126,9 +126,15 @@ public:
     }
 };
 
-template <typename TStringType, bool Nullable>
-class TStringBlockItemComparator : public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
+template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
+class TStringBlockItemComparator : public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable, PgString>, Nullable> {
 public:
+    void SetPgBuilder(const IPgBuilder* pgBuilder, i32 typeLen, ui32 pgTypeId) {
+        Y_UNUSED(pgBuilder);
+        Y_UNUSED(typeLen);
+        Y_UNUSED(pgTypeId);
+    }
+
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef().Compare(rhs.AsStringRef());
     }
@@ -218,13 +224,13 @@ struct TComparatorTraits {
     using TTuple = TTupleBlockItemComparator<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockItemComparator<T, Nullable>;
-    template <typename TStringType, bool Nullable>
-    using TStrings = TStringBlockItemComparator<TStringType, Nullable>;
+    template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
+    using TStrings = TStringBlockItemComparator<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemComparator;
 };
 
 inline std::unique_ptr<IBlockItemComparator> MakeBlockItemComparator(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    return MakeBlockReaderImpl<TComparatorTraits>(typeInfoHelper, type);
+    return MakeBlockReaderImpl<TComparatorTraits>(typeInfoHelper, type, nullptr);
 }
 
 }

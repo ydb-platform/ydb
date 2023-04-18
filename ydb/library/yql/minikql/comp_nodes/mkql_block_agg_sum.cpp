@@ -71,7 +71,7 @@ class TAvgStateColumnBuilder : public IAggColumnBuilder {
 public:
     TAvgStateColumnBuilder(ui64 size, TType* outputType, TComputationContext& ctx)
         : Ctx_(ctx)
-        , Builder_(MakeArrayBuilder(TTypeInfoHelper(), outputType, ctx.ArrowMemoryPool, size))
+        , Builder_(MakeArrayBuilder(TTypeInfoHelper(), outputType, ctx.ArrowMemoryPool, size, &ctx.Builder->GetPgBuilder()))
 {
     }
 

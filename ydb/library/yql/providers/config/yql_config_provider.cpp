@@ -725,10 +725,8 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                     return false;
                 }
-                Types.UserDataStorageCrutches
-                    .emplace(
-                        TUserDataKey::File(TStringBuf("/home/geodata6.bin")),
-                        TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}}).first->second.Usage.Set(EUserDataBlockUsage::Path);
+                auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
+                userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
             }
             else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
                 if (args.size() != 0) {

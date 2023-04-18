@@ -188,7 +188,6 @@ public:
         Functions["PartitionByKey"] = &TCallableConstraintTransformer::ShuffleByKeysWrap<true>;
         Functions["PartitionsByKeys"] = &TCallableConstraintTransformer::ShuffleByKeysWrap<true>;
         Functions["ShuffleByKeys"] = &TCallableConstraintTransformer::ShuffleByKeysWrap<false>;
-        Functions["GroupByKey"] = &TCallableConstraintTransformer::GroupByKeyWrap;
         Functions["Switch"] = &TCallableConstraintTransformer::SwitchWrap;
         Functions["Visit"] = &TCallableConstraintTransformer::VisitWrap;
         Functions["VariantItem"] = &TCallableConstraintTransformer::VariantItemWrap;
@@ -971,9 +970,6 @@ private:
                     }
 
                     if constexpr (Ordered) {
-                        if (const auto groupBy = node.Head().GetConstraint<TGroupByConstraintNode>()) {
-                            argsConstraints.front().emplace_back(groupBy);
-                        }
                         if (auto mapping = TPartOfSortedConstraintNode::GetCommonMapping(node.Head().GetConstraint<TSortedConstraintNode>(), node.Head().GetConstraint<TPartOfSortedConstraintNode>()); !mapping.empty()) {
                             argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(mapping)));
                         }
@@ -1789,9 +1785,6 @@ private:
                 }
 
                 if constexpr (Ordered) {
-                    if (const auto groupBy = node.Head().GetConstraint<TGroupByConstraintNode>()) {
-                        argsConstraints.front().emplace_back(groupBy);
-                    }
                     if (auto mapping = TPartOfSortedConstraintNode::GetCommonMapping(node.Head().GetConstraint<TSortedConstraintNode>(), node.Head().GetConstraint<TPartOfSortedConstraintNode>()); !mapping.empty()) {
                         argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(mapping)));
                     }
@@ -2588,22 +2581,13 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus IsKeySwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& /*ctx*/) const {
-        if (const auto status = UpdateLambdaConstraints(*input->Child(TCoIsKeySwitch::idx_ItemKeyExtractor))
-            .Combine(UpdateLambdaConstraints(*input->Child(TCoIsKeySwitch::idx_StateKeyExtractor))); status != TStatus::Ok) {
-            return status;
-        }
-
-        if (const auto groupBy = input->Head().GetConstraint<TGroupByConstraintNode>()) {
-            TVector<TStringBuf> keys;
-            ExtractKeys(*input->Child(2), keys);
-            if (!keys.empty()) {
-                if (AllOf(keys, [groupBy] (TStringBuf key) { return groupBy->GetColumns().find(key) != groupBy->GetColumns().end(); })) {
-                    input->AddConstraint(groupBy);
-                }
-            }
-        }
-        return TStatus::Ok;
+    TStatus IsKeySwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        const TCoIsKeySwitch keySwitch(input);
+        TSmallVec<TConstraintNode::TListType> itemConstraints, stateConstraints;
+        itemConstraints.emplace_back(keySwitch.Item().Ref().GetAllConstraints());
+        stateConstraints.emplace_back(keySwitch.State().Ref().GetAllConstraints());
+        return UpdateLambdaConstraints(input->ChildRef(TCoIsKeySwitch::idx_ItemKeyExtractor), ctx, itemConstraints)
+            .Combine(UpdateLambdaConstraints(input->ChildRef(TCoIsKeySwitch::idx_StateKeyExtractor), ctx, stateConstraints));
     }
 
    static const TExprNode& GetLiteralStructMember(const TExprNode& literal, const TExprNode& member) {
@@ -2879,57 +2863,6 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    TStatus GroupByKeyWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        const TStructExprType* inItemType = GetNonEmptyStructItemType(*input->Head().GetTypeAnn());
-        const TStructExprType* outItemType = GetNonEmptyStructItemType(*input->GetTypeAnn());
-        if (inItemType && outItemType) {
-            const auto keySelector = input->Child(TCoGroupByKey::idx_KeySelectorLambda);
-            if (const auto status = UpdateLambdaConstraints(*keySelector); status != TStatus::Ok) {
-                return status;
-            }
-            TConstraintNode::TListType argConstraints;
-            if (const auto inputPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>())
-                argConstraints.emplace_back(inputPassthrough);
-            if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoGroupByKey::idx_HandlerLambda), ctx, {TConstraintNode::TListType{}, argConstraints}); status != TStatus::Ok) {
-                return status;
-            }
-
-            if (const auto handlerLambda = input->Child(TCoGroupByKey::idx_HandlerLambda); handlerLambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-                TVector<TStringBuf> groupKeys;
-                ExtractKeys(*keySelector, groupKeys);
-                if (!groupKeys.empty()) {
-                    if (const auto passthrough = handlerLambda->GetConstraint<TPassthroughConstraintNode>()) {
-                        const auto mapping = passthrough->GetReverseMapping();
-                        std::vector<std::string_view> uniqColumns;
-                        for (auto key: groupKeys) {
-                            auto range = mapping.equal_range(key);
-                            if (range.first != range.second) {
-                                for (auto i = range.first; i != range.second; ++i) {
-                                    uniqColumns.emplace_back(i->second);
-                                }
-                            } else {
-                                uniqColumns.clear();
-                                break;
-                            }
-                        }
-                        if (!uniqColumns.empty()) {
-                            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(uniqColumns));
-                            input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(uniqColumns));
-                        }
-                    }
-                }
-            }
-        } else {
-            auto status = UpdateAllChildLambdasConstraints(*input);
-            if (status != TStatus::Ok) {
-                return status;
-            }
-        }
-
-        TApplyConstraintFromInput<TCoGroupByKey::idx_HandlerLambda, TMultiConstraintNode, TEmptyConstraintNode>::Do(input);
-        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
-    }
-
     template<bool Partitions>
     TStatus ShuffleByKeysWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         using TCoBase = std::conditional_t<Partitions, TCoPartitionByKeyBase, TCoShuffleByKeys>;
@@ -2958,14 +2891,13 @@ private:
                 argConstraints.emplace_back(filtered);
 
         if constexpr (Partitions) {
-            TVector<TStringBuf> partitionKeys;
+            TVector<TStringBuf> partitionKeys; // TODO: Replace on TSetType
             ExtractKeys(*input->Child(TCoBase::idx_KeySelectorLambda), partitionKeys);
             if (!partitionKeys.empty()) {
                 TChoppedConstraintNode::TFullSetType sets;
                 sets.reserve(partitionKeys.size());
                 std::transform(partitionKeys.cbegin(), partitionKeys.cend(), std::back_inserter(sets), [](const TStringBuf& column) { return TConstraintNode::TSetType{TConstraintNode::TPathType(1U, column)}; });
                 argConstraints.emplace_back(ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets)));
-                argConstraints.emplace_back(ctx.MakeConstraint<TGroupByConstraintNode>(std::move(partitionKeys)));
             }
         }
 

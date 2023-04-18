@@ -126,105 +126,6 @@ bool TConstraintSet::FilterConstraints(const TPredicate& predicate) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TColumnSetConstraintNodeBase::TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const TSetType& columns)
-    : TConstraintNode(ctx, name)
-{
-    YQL_ENSURE(!columns.empty());
-    for (auto& c: columns) {
-        Hash_ = MurmurHash<ui64>(c.data(), c.size(), Hash_);
-        Columns_.push_back(ctx.AppendString(c));
-    }
-}
-
-TColumnSetConstraintNodeBase::TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const std::vector<TStringBuf>& columns)
-    : TConstraintNode(ctx, name)
-{
-    YQL_ENSURE(!columns.empty());
-    for (auto& c: columns) {
-        YQL_ENSURE(Columns_.insert_unique(ctx.AppendString(c)).second, "Duplicate Unique constraint column: " << c);
-    }
-    for (auto& c: Columns_) {
-        Hash_ = MurmurHash<ui64>(c.data(), c.size(), Hash_);
-    }
-}
-
-TColumnSetConstraintNodeBase::TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const std::vector<TString>& columns)
-    : TConstraintNode(ctx, name)
-{
-    YQL_ENSURE(!columns.empty());
-    for (auto& c: columns) {
-        YQL_ENSURE(Columns_.insert_unique(ctx.AppendString(c)).second, "Duplicate Unique constraint column: " << c);
-    }
-    for (auto& c: Columns_) {
-        Hash_ = MurmurHash<ui64>(c.data(), c.size(), Hash_);
-    }
-}
-
-TColumnSetConstraintNodeBase::TColumnSetConstraintNodeBase(TColumnSetConstraintNodeBase&& constr)
-    : TConstraintNode(std::move(static_cast<TConstraintNode&>(constr)))
-    , Columns_(std::move(constr.Columns_))
-{
-}
-
-bool TColumnSetConstraintNodeBase::Equals(const TConstraintNode& node) const {
-    if (this == &node) {
-        return true;
-    }
-    if (GetHash() != node.GetHash()) {
-        return false;
-    }
-    if (GetName() != node.GetName()) {
-        return false;
-    }
-    if (auto c = dynamic_cast<const TColumnSetConstraintNodeBase*>(&node)) {
-        return Columns_ == c->Columns_;
-    }
-    return false;
-}
-
-bool TColumnSetConstraintNodeBase::Includes(const TConstraintNode& node) const {
-    if (this == &node) {
-        return true;
-    }
-    if (GetName() != node.GetName()) {
-        return false;
-    }
-    if (auto c = dynamic_cast<const TColumnSetConstraintNodeBase*>(&node)) {
-        for (auto& col: c->Columns_) {
-            if (!Columns_.has(col)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return false;
-}
-
-void TColumnSetConstraintNodeBase::Out(IOutputStream& out) const {
-    TConstraintNode::Out(out);
-    out.Write('(');
-
-    bool first = true;
-    for (auto& col: Columns_) {
-        if (!first) {
-            out.Write(',');
-        }
-        out.Write(col);
-        first = false;
-    }
-    out.Write(')');
-}
-
-void TColumnSetConstraintNodeBase::ToJson(NJson::TJsonWriter& out) const {
-    out.OpenArray();
-    for (const auto& column : Columns_) {
-        out.Write(column);
-    }
-    out.CloseArray();
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
     : TConstraintNode(ctx, Name()), Content_(std::move(content))
 {
@@ -474,67 +375,6 @@ bool TSortedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) 
 
 const TConstraintNode* TSortedConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
     return FilterFields(ctx, std::bind(std::equal_to<TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-TGroupByConstraintNode::TGroupByConstraintNode(TExprContext& ctx, const std::vector<TStringBuf>& columns)
-    : TColumnSetConstraintNodeBase(ctx, Name(), columns)
-{
-    YQL_ENSURE(!Columns_.empty());
-}
-
-TGroupByConstraintNode::TGroupByConstraintNode(TExprContext& ctx, const std::vector<TString>& columns)
-    : TColumnSetConstraintNodeBase(ctx, Name(), columns)
-{
-    YQL_ENSURE(!Columns_.empty());
-}
-
-TGroupByConstraintNode::TGroupByConstraintNode(TExprContext& ctx, const TGroupByConstraintNode& constr, size_t prefixLength)
-    : TColumnSetConstraintNodeBase(ctx, Name(), std::vector<TStringBuf>(constr.GetColumns().begin(), constr.GetColumns().begin() + Min<size_t>(prefixLength, constr.GetColumns().size())))
-{
-    YQL_ENSURE(!Columns_.empty());
-    YQL_ENSURE(Columns_.size() == prefixLength);
-}
-
-TGroupByConstraintNode::TGroupByConstraintNode(TGroupByConstraintNode&& constr)
-    : TColumnSetConstraintNodeBase(std::move(static_cast<TColumnSetConstraintNodeBase&>(constr)))
-{
-}
-
-size_t TGroupByConstraintNode::GetCommonPrefixLength(const TGroupByConstraintNode& node) const {
-    const size_t minSize = Min(Columns_.size(), node.Columns_.size());
-    for (size_t i = 0; i < minSize; ++i) {
-        if (*(Columns_.begin() + i) != *(node.Columns_.begin() +i)) {
-            return i;
-        }
-    }
-    return minSize;
-}
-
-const TGroupByConstraintNode* TGroupByConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
-    if (constraints.empty()) {
-        return nullptr;
-    }
-
-    auto groupBy = constraints.front()->GetConstraint<TGroupByConstraintNode>();
-    if (constraints.size() == 1 || !groupBy) {
-        return groupBy;
-    }
-
-    size_t commonPrefixLength = groupBy->GetColumns().size();
-    for (size_t i = 1; i < constraints.size() && commonPrefixLength > 0; ++i) {
-        if (auto nextGroupBy = constraints[i]->GetConstraint<TGroupByConstraintNode>()) {
-            commonPrefixLength = Min(commonPrefixLength, nextGroupBy->GetCommonPrefixLength(*groupBy));
-        } else {
-            commonPrefixLength = 0;
-        }
-    }
-    if (commonPrefixLength) {
-        return ctx.MakeConstraint<TGroupByConstraintNode>(*groupBy, commonPrefixLength);
-    }
-
-    return nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2131,11 +1971,6 @@ void Out<NYql::TSortedConstraintNode>(IOutputStream& out, const NYql::TSortedCon
 
 template<>
 void Out<NYql::TChoppedConstraintNode>(IOutputStream& out, const NYql::TChoppedConstraintNode& c) {
-    c.Out(out);
-}
-
-template<>
-void Out<NYql::TGroupByConstraintNode>(IOutputStream& out, const NYql::TGroupByConstraintNode& c) {
     c.Out(out);
 }
 

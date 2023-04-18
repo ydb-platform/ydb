@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # set -v
+YDBD_PATH=${YDBD_PATH:-`pwd`/ydbd/bin/ydbd}
+BASE_PATH=$(dirname -- "${BASH_SOURCE[0]}")
+CONFIG_PATH="${BASE_PATH}/config"
 if [[ $1 != "disk" && $1 != "ram" ]]; then
   echo Please specify 'disk' or 'ram' as the parameter
   exit
@@ -24,9 +27,10 @@ else
 fi
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:`pwd`/ydbd/lib"
 echo Starting storage process...
-`pwd`/ydbd/bin/ydbd server --yaml-config config/$cfg --node 1 --grpc-port 2136 --ic-port 19001 --mon-port 8765 --log-file-name logs/storage_start.log > logs/storage_start_output.log 2>logs/storage_start_err.log &
+mkdir -p logs
+${YDBD_PATH} server --yaml-config ${CONFIG_PATH}/$cfg --node 1 --grpc-port 2136 --ic-port 19001 --mon-port 8765 --log-file-name logs/storage_start.log > logs/storage_start_output.log 2>logs/storage_start_err.log &
 sleep 3
-grep logs/storage_start_err.log -v -f config/exclude_err.txt
+grep logs/storage_start_err.log -v -f ${CONFIG_PATH}/exclude_err.txt
 if [[ $? -eq 0 ]]; then
   echo Errors found when starting storage process, cancelling start script
   if [ $need_init -eq 1 ]; then
@@ -36,7 +40,7 @@ if [[ $? -eq 0 ]]; then
 fi
 if [ $need_init -eq 1 ] || [ $cfg = "ram.yaml" ]; then
   echo Initializing storage ...
-  `pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin blobstorage config init --yaml-file config/$cfg > logs/init_storage.log 2>&1
+  ${YDBD_PATH} -s grpc://localhost:2136 admin blobstorage config init --yaml-file ${CONFIG_PATH}/$cfg > logs/init_storage.log 2>&1
   if [[ $? -ge 1 ]]; then
     echo Errors found when initializing storage, cancelling start script, check logs/init_storage.log
     if [ $need_init -eq 1 ]; then
@@ -46,15 +50,15 @@ if [ $need_init -eq 1 ] || [ $cfg = "ram.yaml" ]; then
   fi
 fi
 echo Registering database ...
-`pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin database /Root/test create ssd:1 > logs/db_reg.log 2>&1
+${YDBD_PATH} -s grpc://localhost:2136 admin database /Root/test create ssd:1 > logs/db_reg.log 2>&1
 if [[ $? -ge 1 ]]; then
   echo Errors found when registering database, cancelling start script, check logs/db_reg.log
   exit
 fi
 echo Starting database process...
-`pwd`/ydbd/bin/ydbd server --yaml-config config/$cfg --tenant /Root/test --node-broker localhost:2136 --grpc-port 31001 --ic-port 31003 --mon-port 31002 --log-file-name logs/db_start.log > logs/db_start_output.log 2>logs/db_start_err.log &
+${YDBD_PATH} server --yaml-config ${CONFIG_PATH}/$cfg --tenant /Root/test --node-broker localhost:2136 --grpc-port 31001 --ic-port 31003 --mon-port 31002 --log-file-name logs/db_start.log > logs/db_start_output.log 2>logs/db_start_err.log &
 sleep 3
-grep logs/db_start_err.log -v -f config/exclude_err.txt
+grep logs/db_start_err.log -v -f ${CONFIG_PATH}/exclude_err.txt
 if [[ $? -eq 0 ]]; then
   echo Errors found when starting database process, cancelling start script
   exit

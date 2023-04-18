@@ -55,7 +55,7 @@
     mkdir build
     ```
 
- 1. Clone the ydb repository.
+ 1. Clone the ydb repository
     ```
     git clone https://github.com/ydb-platform/ydb.git
     ```
@@ -86,4 +86,32 @@
     A YDB CLI binary can be found at:
     ```
     ydb/apps/ydb/ydb
+    ```
+
+#### How to Run
+
+1. Start server
+
+    ```
+    YDBD_PATH=ydb/apps/ydbd/ydbd ../ydb/ydb/deploy/local_binary/linux/start.sh ram
+    ```
+
+    or
+
+    ```
+    YDBD_PATH=ydb/apps/ydbd/ydbd ../ydb/ydb/deploy/local_binary/linux/start.sh disk
+    ```
+
+2. Test connection with client
+
+    ```
+    ydb/apps/ydb/ydb -e grpc://localhost:2136 -d /Root scheme ls # should return "test .sys"
+    ```
+
+3. Enjoy!
+
+4. Stop server
+
+    ```
+    YDBD_PATH=ydb/apps/ydbd/ydbd ../ydb/ydb/deploy/local_binary/linux/stop.sh
     ```

@@ -556,8 +556,11 @@ const char* const InternalGetQueueAttributesQuery = R"__(
             'VisibilityTimeout
             'ShowDetailedCountersDeadline))
 
+        (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
+
         (return (AsList
-            (SetResult 'attrs (SelectRow attrsTable attrsRow attrsSelect))))
+            (SetResult 'queueExists (Exists attrsRead))
+            (SetResult 'attrs attrsRead)))
     )
 )__";
 

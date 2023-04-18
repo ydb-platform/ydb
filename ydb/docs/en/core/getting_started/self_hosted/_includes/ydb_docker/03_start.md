@@ -18,7 +18,9 @@ The YDB Docker container stores data in its file system whose sections are refle
     ```
 
     {% note warning %}
-    Currently, disk storage is not supported on Apple Silicon (M1 or M2). Use the command from "In-memory storage" tab if you want to try {{ ydb_short_name }} on this CPU.
+
+    Currently, disk storage is not supported on Apple Silicon (M1 or M2). Use the command from "In-memory storage" tab if you want to try {{ ydb-short-name }} on this CPU.
+
     {% endnote %}
 
 - In-memory storage
@@ -34,8 +36,6 @@ The YDB Docker container stores data in its file system whose sections are refle
     ```
 
 {% endlist %}
-
-
 
 If started successfully, you'll see the ID of the created container.
 

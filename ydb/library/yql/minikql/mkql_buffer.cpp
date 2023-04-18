@@ -31,6 +31,7 @@ void TPagedBuffer::AppendPage() {
             tailPage->Next_ = page;
         }
         tailPage->Size_ = TailSize_;
+        ClosedPagesSize_ += TailSize_;
     } else {
         Y_VERIFY_DEBUG(Head_ == nullptr);
         page = TBufferPage::Allocate();

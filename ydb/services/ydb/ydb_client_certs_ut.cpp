@@ -10,7 +10,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
-#include <ydb/core/client/server/dynamic_node_auth_processor.h>
+#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
@@ -30,6 +30,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -236,61 +237,153 @@ Y_UNIT_TEST(TestClientCertAuthorizationParamsMatch) {
     }
 }
 
-Y_UNIT_TEST(TestAllCertIsOk) {
+NDiscovery::TNodeRegistrationSettings GetNodeRegistrationSettings() {
+    NDiscovery::TNodeRegistrationSettings settings;
+    settings.Host("localhost");
+    settings.Port(GetRandomPort());
+    settings.ResolveHost("localhost");
+    settings.Address("localhost");
+    settings.DomainPath("Root");
+    settings.FixedNodeId(false);
+
+    NYdb::NDiscovery::TNodeLocation loc;
+    loc.DataCenterNum = DataCenterFromString("DataCenter");
+    loc.RoomNum = 0;
+    loc.RackNum = RackFromString("Rack");
+    loc.BodyNum = 2;
+    loc.DataCenter = "DataCenter";
+    loc.Rack = "Rack";
+    loc.Unit = "Body";
+
+    settings.Location(loc);
+    return settings;
+}
+
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientWithCorrectCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
     const NTest::TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
-    const NTest::TCertAndKey& clientServerCert = NTest::GenerateSignedCert(caCert, NTest::TProps::AsClientServer());
+    NTest::TCertAndKey clientServerCert = NTest::GenerateSignedCert(caCert, NTest::TProps::AsClientServer());
 
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(!sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-            UNIT_ASSERT_EQUAL(sessionValue.GetStatus(), EStatus::SUCCESS);
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(!result.IsTransportError(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestWrongCertIndentity) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
+    TKikimrServerWithCertVerification server;
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const NTest::TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    NTest::TCertAndKey noCert;
+
+    auto connection = NYdb::TDriver(
+        TDriverConfig()
+            .UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetEndpoint(location));
+
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
+    connection.Stop(true);
+
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_STRINGS_EQUAL(result.GetIssues().ToOneLineString(), "{ <main>: Error: Cannot authorize node. Node has not provided certificate }");
+}
+
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
+    TKikimrServerWithOutCertVerification server;
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const NTest::TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    NTest::TCertAndKey clientServerCert = NTest::GenerateSignedCert(caCert, NTest::TProps::AsClientServer());
+
+    auto connection = NYdb::TDriver(
+        TDriverConfig()
+            .UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
+            .SetEndpoint(location));
+
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
+    connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
+
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
+    TKikimrServerWithOutCertVerification server;
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    const NTest::TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
+    NTest::TCertAndKey noCert;
+
+    auto connection = NYdb::TDriver(
+        TDriverConfig()
+            .UseSecureConnection(caCert.Certificate.c_str())
+            .UseClientCertificate(noCert.Certificate.c_str(),noCert.PrivateKey.c_str())
+            .SetEndpoint(location));
+
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
+    connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
+
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
     TKikimrServerWithCertVerificationAndWrongIndentity server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
     const NTest::TCertAndKey& caCert = TKikimrTestWithServerCert::GetCACertAndKey();
-    const NTest::TCertAndKey& clientServerCert = NTest::GenerateSignedCert(caCert, NTest::TProps::AsClientServer());
+    NTest::TCertAndKey clientServerCert = NTest::GenerateSignedCert(caCert, NTest::TProps::AsClientServer());
 
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+            .UseClientCertificate(clientServerCert.Certificate.c_str(),clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(!sessionValue.IsTransportError(), sessionValue.GetIssues().ToString()); // do not authorize table service through cert
-            UNIT_ASSERT_EQUAL(sessionValue.GetStatus(), EStatus::SUCCESS);
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_STRINGS_EQUAL(result.GetIssues().ToOneLineString(), "{ <main>: Error: Cannot authorize node by certificate }");
 }
 
-Y_UNIT_TEST(TestIncorrectUsageClientCertFails) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNotProvideAnyCerts) {
+    TKikimrServerWithCertVerification server;
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+
+    auto connection = NYdb::TDriver(
+        TDriverConfig()
+            .SetEndpoint(location));
+
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
+    connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
+}
+
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesServerCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -300,23 +393,18 @@ Y_UNIT_TEST(TestIncorrectUsageClientCertFails) {
 
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
-            .UseClientCertificate(serverCert.Certificate.c_str(), serverCert.PrivateKey.c_str())
+            .UseClientCertificate(serverCert.Certificate.c_str(),serverCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestCorruptedCertFails) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesCorruptedCert) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -330,23 +418,18 @@ Y_UNIT_TEST(TestCorruptedCertFails) {
     }
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestCorruptedKeyFails) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesCorruptedPrivatekey) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -360,23 +443,18 @@ Y_UNIT_TEST(TestCorruptedKeyFails) {
     }
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestExpiredCertFails) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientProvidesExpiredCert) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -389,23 +467,18 @@ Y_UNIT_TEST(TestExpiredCertFails) {
 
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsTransportError(), result.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestServerWithoutCertVerificationAndExpiredCertWorks) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithOutCertVerification_ClientProvidesExpiredCert) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -418,24 +491,18 @@ Y_UNIT_TEST(TestServerWithoutCertVerificationAndExpiredCertWorks) {
 
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
             .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(!sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-            UNIT_ASSERT_EQUAL(sessionValue.GetStatus(), EStatus::SUCCESS);
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
 }
 
-Y_UNIT_TEST(TestClientWithoutCertPassed) {
+Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNotProvideClientCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -444,20 +511,15 @@ Y_UNIT_TEST(TestClientWithoutCertPassed) {
 
     auto connection = NYdb::TDriver(
         TDriverConfig()
-            .SetAuthToken("test_user@builtin")
             .UseSecureConnection(caCert.Certificate.c_str())
             .SetEndpoint(location));
 
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(!sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-            UNIT_ASSERT_EQUAL(sessionValue.GetStatus(), EStatus::SUCCESS);
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
+    NYdb::NDiscovery::TDiscoveryClient discoveryClient = NYdb::NDiscovery::TDiscoveryClient(connection);
+    const auto result = discoveryClient.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync();
     connection.Stop(true);
+
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_STRINGS_EQUAL(result.GetIssues().ToOneLineString(), "{ <main>: Error: Cannot authorize node. Node has not provided certificate }");
 }
 
 NClient::TKikimr GetKikimr(const TString& addr, const NTest::TCertAndKey& caCert, const NTest::TCertAndKey& clientServerCert) {
@@ -504,7 +566,7 @@ THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
                                      false));
 }
 
-Y_UNIT_TEST(TestServerWithCertVerificationClientWithCertCallsRegisterNode) {
+Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientWithCorrectCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -522,7 +584,7 @@ Y_UNIT_TEST(TestServerWithCertVerificationClientWithCertCallsRegisterNode) {
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestServerWithCertVerificationClientWithoutCertCallsRegisterNodeFails) {
+Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerWithCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -541,7 +603,7 @@ Y_UNIT_TEST(TestServerWithCertVerificationClientWithoutCertCallsRegisterNodeFail
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestServerWithoutCertVerificationClientWithCertCallsRegisterNode) {
+Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithoutCertVerification_ClientProvidesCorrectCerts) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -559,7 +621,7 @@ Y_UNIT_TEST(TestServerWithoutCertVerificationClientWithCertCallsRegisterNode) {
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestServerWithoutCertVerificationClientWithoutCertCallsRegisterNode) {
+Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithoutCertVerification_ClientProvidesEmptyClientCerts) {
     TKikimrServerWithOutCertVerification server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -577,7 +639,7 @@ Y_UNIT_TEST(TestServerWithoutCertVerificationClientWithoutCertCallsRegisterNode)
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
 }
 
-Y_UNIT_TEST(TestServerWithWrongIndentityClientWithCertCallsRegisterNodeFails) {
+Y_UNIT_TEST(TestRegisterNodeViaLegacy_ServerWithCertVerification_ClientDoesNotProvideCorrectCerts) {
     TKikimrServerWithCertVerificationAndWrongIndentity server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
@@ -594,28 +656,6 @@ Y_UNIT_TEST(TestServerWithWrongIndentityClientWithCertCallsRegisterNodeFails) {
     UNIT_ASSERT_STRINGS_EQUAL(resp->GetErrorMessage(), "Cannot authorize node by certificate");
 
     Cerr << "Register node result " << resp->Record().ShortUtf8DebugString() << Endl;
-}
-
-Y_UNIT_TEST(TestInsecureClient) {
-    TKikimrServerWithCertVerification server;
-    ui16 grpc = server.GetPort();
-    TString location = TStringBuilder() << "localhost:" << grpc;
-
-    auto connection = NYdb::TDriver(
-        TDriverConfig()
-            .SetAuthToken("test_user@builtin")
-            .SetEndpoint(location));
-
-    auto client = NYdb::NTable::TTableClient(connection);
-    std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-        [client] (const TAsyncCreateSessionResult& future) mutable {
-            const auto& sessionValue = future.GetValue();
-            UNIT_ASSERT_C(sessionValue.IsTransportError(), sessionValue.GetIssues().ToString());
-        };
-
-    client.CreateSession().Apply(createSessionHandler).Wait();
-
-    connection.Stop(true);
 }
 
 }

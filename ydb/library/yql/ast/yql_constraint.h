@@ -201,6 +201,7 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     bool IsPrefixOf(const TSortedConstraintNode& node) const;
+    bool StartsWith(const TSetType& prefix) const;
 
     const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const;
 
@@ -214,8 +215,45 @@ public:
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
-protected:
+private:
     TContainerType Content_;
+};
+
+class TChoppedConstraintNode final: public TConstraintNode {
+public:
+    using TFullSetType = NSorted::TSimpleSet<TSetType>;
+private:
+    friend struct TExprContext;
+
+    TChoppedConstraintNode(TExprContext& ctx, TFullSetType&& sets);
+    TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys);
+    TChoppedConstraintNode(TChoppedConstraintNode&& constr);
+public:
+    static constexpr std::string_view Name() {
+        return "Chopped";
+    }
+
+    const TFullSetType& GetAllSets() const { return Sets_; }
+
+    bool Equals(const TConstraintNode& node) const override;
+    bool Includes(const TConstraintNode& node) const override;
+    void Out(IOutputStream& out) const override;
+    void ToJson(NJson::TJsonWriter& out) const override;
+
+    bool Equals(const TSetType& prefix) const;
+
+    void FilterUncompleteReferences(TSetType& references) const;
+
+    static const TChoppedConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+    const TChoppedConstraintNode* MakeCommon(const TChoppedConstraintNode* other, TExprContext& ctx) const;
+
+    const TChoppedConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
+    const TChoppedConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
+
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
+private:
+    TFullSetType Sets_;
 };
 
 template<bool Distinct>
@@ -325,12 +363,18 @@ private:
 };
 
 using TPartOfSortedConstraintNode = TPartOfConstraintNode<TSortedConstraintNode>;
+using TPartOfChoppedConstraintNode = TPartOfConstraintNode<TChoppedConstraintNode>;
 using TPartOfUniqueConstraintNode = TPartOfConstraintNode<TUniqueConstraintNode>;
 using TPartOfDistinctConstraintNode = TPartOfConstraintNode<TDistinctConstraintNode>;
 
 template<>
 constexpr std::string_view TPartOfSortedConstraintNode::Name() {
     return "PartOfSorted";
+}
+
+template<>
+constexpr std::string_view TPartOfChoppedConstraintNode::Name() {
+    return "PartOfChopped";
 }
 
 template<>

@@ -302,6 +302,24 @@ bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const 
     return node.Includes(*this);
 }
 
+bool TSortedConstraintNode::StartsWith(const TSetType& prefix) const {
+    auto set = prefix;
+    for (const auto& key : Content_) {
+        bool found = false;
+        std::for_each(key.first.cbegin(), key.first.cend(), [&set, &found] (const TPathType& path) {
+            if (const auto it = set.find(path); set.cend() != it) {
+                set.erase(it);
+                found = true;
+            }
+        });
+
+        if (!found)
+            break;
+    }
+
+    return set.empty();
+}
+
 TSortedConstraintNode::TFullSetType TSortedConstraintNode::GetAllSets() const {
     TFullSetType sets;
     for (const auto& key : Content_)
@@ -517,6 +535,226 @@ const TGroupByConstraintNode* TGroupByConstraintNode::MakeCommon(const std::vect
     }
 
     return nullptr;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+TChoppedConstraintNode::TFullSetType MakeFullSet(const TConstraintNode::TSetType& keys) {
+    TChoppedConstraintNode::TFullSetType sets;
+    sets.reserve(sets.size());
+    for (const auto& key : keys)
+        sets.insert_unique(TConstraintNode::TSetType{key});
+    return sets;
+}
+
+}
+
+TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, TFullSetType&& sets)
+    : TConstraintNode(ctx, Name()), Sets_(std::move(sets))
+{
+    YQL_ENSURE(!Sets_.empty());
+    const auto size = Sets_.size();
+    Hash_ = MurmurHash<ui64>(&size, sizeof(size), Hash_);
+    for (const auto& set : Sets_) {
+        YQL_ENSURE(!set.empty());
+        for (const auto& path : set)
+            Hash_ = std::accumulate(path.cbegin(), path.cend(), Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
+    }
+}
+
+TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys)
+    : TChoppedConstraintNode(ctx, MakeFullSet(keys))
+{}
+
+TChoppedConstraintNode::TChoppedConstraintNode(TChoppedConstraintNode&& constr) = default;
+
+bool TChoppedConstraintNode::Equals(const TConstraintNode& node) const {
+    if (this == &node) {
+        return true;
+    }
+    if (GetHash() != node.GetHash()) {
+        return false;
+    }
+    if (const auto c = dynamic_cast<const TChoppedConstraintNode*>(&node)) {
+        return Sets_ == c->Sets_;
+    }
+    return false;
+}
+
+bool TChoppedConstraintNode::Includes(const TConstraintNode& node) const {
+    if (this == &node) {
+        return true;
+    }
+    if (const auto c = dynamic_cast<const TChoppedConstraintNode*>(&node)) {
+        return std::includes(Sets_.cbegin(), Sets_.cend(), c->Sets_.cbegin(), c->Sets_.cend());
+    }
+    return false;
+}
+
+void TChoppedConstraintNode::Out(IOutputStream& out) const {
+    TConstraintNode::Out(out);
+    out.Write('(');
+
+    for (const auto& set : Sets_) {
+        out.Write('(');
+        bool first = true;
+        for (const auto& path : set) {
+            if (first)
+                first = false;
+            else
+                out.Write(',');
+            out << path;
+        }
+        out.Write(')');
+    }
+    out.Write(')');
+}
+
+void TChoppedConstraintNode::ToJson(NJson::TJsonWriter& out) const {
+    out.OpenArray();
+    for (const auto& set : Sets_) {
+        out.OpenArray();
+        for (const auto& path : set) {
+            out.Write(JoinSeq(';', path));
+        }
+        out.CloseArray();
+    }
+    out.CloseArray();
+}
+
+bool TChoppedConstraintNode::Equals(const TSetType& prefix) const {
+    auto set = prefix;
+    for (const auto& key : Sets_) {
+        bool found = false;
+        std::for_each(key.cbegin(), key.cend(), [&set, &found] (const TPathType& path) {
+            if (const auto it = set.find(path); set.cend() != it) {
+                set.erase(it);
+                found = true;
+            }
+        });
+
+        if (!found)
+            return false;
+    }
+
+    return set.empty();
+}
+
+
+void TChoppedConstraintNode::FilterUncompleteReferences(TSetType& references) const {
+    TSetType complete;
+    complete.reserve(references.size());
+
+    for (const auto& item : Sets_) {
+        bool found = false;
+        for (const auto& path : item) {
+            if (references.contains(path)) {
+                found = true;
+                complete.insert_unique(path);
+            }
+        }
+
+        if (!found)
+            break;
+    }
+
+    references = std::move(complete);
+}
+
+const TChoppedConstraintNode* TChoppedConstraintNode::MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx) {
+    if (constraints.empty()) {
+        return nullptr;
+    }
+    if (constraints.size() == 1) {
+        return constraints.front()->GetConstraint<TChoppedConstraintNode>();
+    }
+
+    TFullSetType sets;
+    for (auto c: constraints) {
+        if (const auto uniq = c->GetConstraint<TChoppedConstraintNode>()) {
+            if (sets.empty())
+                sets = uniq->GetAllSets();
+            else {
+                TFullSetType both;
+                both.reserve(std::min(sets.size(), uniq->GetAllSets().size()));
+                std::set_intersection(sets.cbegin(), sets.cend(), uniq->GetAllSets().cbegin(), uniq->GetAllSets().cend(), std::back_inserter(both));
+                if (both.empty()) {
+                    if (!c->GetConstraint<TEmptyConstraintNode>())
+                        return nullptr;
+                } else
+                    sets = std::move(both);
+            }
+        } else if (!c->GetConstraint<TEmptyConstraintNode>()) {
+            return nullptr;
+        }
+    }
+
+    return sets.empty() ? nullptr : ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+}
+
+const TChoppedConstraintNode*
+TChoppedConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    auto sets = Sets_;
+    for (auto it = sets.cbegin(); sets.cend() != it;) {
+        if (std::all_of(it->cbegin(), it->cend(), predicate))
+            ++it;
+        else
+            it = sets.erase(it);
+    }
+    return sets.empty() ? nullptr : ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+}
+
+const TChoppedConstraintNode*
+TChoppedConstraintNode::RenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    TFullSetType sets;
+    sets.reserve(Sets_.size());
+    for (const auto& set : Sets_) {
+        std::vector<TSetType> newSets(1U);
+        newSets.front().reserve(set.size());
+        for (const auto& path : set) {
+            auto newPaths = reduce(path);
+            if (newPaths.empty())
+                break;
+            auto tmpSets(std::move(newSets));
+            for (const auto& newPath : newPaths) {
+                for (const auto& oldSet : tmpSets) {
+                    newSets.emplace_back(oldSet);
+                    newSets.back().insert_unique(newPath);
+                }
+            }
+        }
+        if (set.size() == newSets.front().size())
+            sets.insert_unique(newSets.cbegin(), newSets.cend());
+    }
+    return sets.empty() ? nullptr : ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+}
+
+const TChoppedConstraintNode*
+TChoppedConstraintNode::MakeCommon(const TChoppedConstraintNode* other, TExprContext& ctx) const {
+    if (!other) {
+        return nullptr;
+    }
+    if (this == other) {
+        return this;
+    }
+
+    TFullSetType both;
+    both.reserve(std::min(Sets_.size(), other->Sets_.size()));
+    std::set_intersection(Sets_.cbegin(), Sets_.cend(), other->Sets_.cbegin(), other->Sets_.cend(), std::back_inserter(both));
+    return both.empty() ? nullptr : ctx.MakeConstraint<TChoppedConstraintNode>(std::move(both));
+}
+
+bool TChoppedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    const auto& itemType = GetSeqItemType(type);
+    return std::all_of(Sets_.cbegin(), Sets_.cend(), [&itemType](const TSetType& set) {
+        return std::all_of(set.cbegin(), set.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
+    });
+}
+
+const TConstraintNode* TChoppedConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
+    return FilterFields(ctx, std::bind(std::equal_to<typename TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1163,6 +1401,7 @@ bool TPartOfConstraintNode<TOriginalConstraintNode>::IsApplicableToType(const TT
 }
 
 template class TPartOfConstraintNode<TSortedConstraintNode>;
+template class TPartOfConstraintNode<TChoppedConstraintNode>;
 template class TPartOfConstraintNode<TUniqueConstraintNode>;
 template class TPartOfConstraintNode<TDistinctConstraintNode>;
 
@@ -1887,6 +2126,11 @@ void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& s
 
 template<>
 void Out<NYql::TSortedConstraintNode>(IOutputStream& out, const NYql::TSortedConstraintNode& c) {
+    c.Out(out);
+}
+
+template<>
+void Out<NYql::TChoppedConstraintNode>(IOutputStream& out, const NYql::TChoppedConstraintNode& c) {
     c.Out(out);
 }
 

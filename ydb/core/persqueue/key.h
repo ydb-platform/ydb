@@ -246,6 +246,11 @@ private:
     ui16 InternalPartsCount;
 };
 
+inline
+TString GetTxKey(ui64 txId)
+{
+    return Sprintf("tx_%" PRIu64, txId);
+}
 
 }// NPQ
 }// NKikimr

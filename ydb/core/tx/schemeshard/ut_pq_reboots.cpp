@@ -20,7 +20,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(Create) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
                             "Name: \"PQGroup_2\""
                             "TotalGroupCount: 10 "
@@ -51,7 +55,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateMultiplePqTablets) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
                             "Name: \"PQGroup_2\""
                             "TotalGroupCount: 2 "
@@ -140,7 +148,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(AlterWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             TPathVersion pqVer;
             {
                 TInactiveZone inactive(activeZone);
@@ -201,7 +213,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateAlter) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
 
             AsyncCreatePQGroup(runtime, t.TxId++, "/MyRoot/DirA",
@@ -250,7 +266,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateDrop) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
 
             TestCreatePQGroup(runtime, t.TxId++, "/MyRoot/DirA", GroupConfig);
@@ -284,7 +304,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateDropAbort) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
             ui64& txId = t.TxId;
 
@@ -310,7 +334,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     //Handle(): requirement std::make_pair(msg->CollectGeneration, msg->CollectStep) >= barrier.MakeCollectPair() failed
     /*Y_UNIT_TEST(CreateAlterAlterDrop) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
             ui64& txId = t.TxId;
 
@@ -337,7 +365,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateAlterDropPqGroupWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
+            t.Runtime->SetScheduledLimit(400);
+
             using ESts = NKikimrScheme::EStatus;
 
             t.RestoreLogging();

@@ -327,6 +327,9 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
     auto result = MakeHolder<TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             Read->ChunkIdx, Read->Offset, Read->Cookie,
             PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), error.Str());
+
+    result->Data.SetDebugInfoGenerator(PDisk->DebugInfoGenerator);
+
     LOG_WARN_S(*actorSystem, NKikimrServices::BS_PDISK, error.Str());
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;

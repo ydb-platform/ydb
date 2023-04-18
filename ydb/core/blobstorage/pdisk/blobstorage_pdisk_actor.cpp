@@ -682,6 +682,8 @@ public:
         PDisk->Mon.GetReadCounter(evChunkRead.PriorityClass)->CountRequest(0);
         THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             evChunkRead.ChunkIdx, evChunkRead.Offset, evChunkRead.Cookie, 0, "PDisk is in error state");
+        result->Data.SetDebugInfoGenerator(PDisk->DebugInfoGenerator);
+
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s To: %" PRIu64 " Marker# BSY02",
             (ui32)PDisk->PDiskId, result->ToString().c_str(), (ui64)ev->Sender.LocalId());
         Send(ev->Sender, result.Release());
@@ -801,6 +803,7 @@ public:
     void Handle(NPDisk::TEvChunkRead::TPtr &ev) {
         double burstMs;
         TChunkRead* request = PDisk->ReqCreator.CreateChunkRead(*ev->Get(), ev->Sender, burstMs, std::move(ev->TraceId));
+        request->DebugInfoGenerator = PDisk->DebugInfoGenerator;
         CheckBurst(request->IsSensitive, burstMs);
         PDisk->InputRequest(request);
     }

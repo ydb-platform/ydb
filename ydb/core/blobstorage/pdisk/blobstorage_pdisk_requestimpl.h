@@ -366,6 +366,8 @@ public:
 
     const ui64 DoubleFreeCanary;
 
+    std::function<TString()> DebugInfoGenerator;
+
     TChunkRead(const NPDisk::TEvChunkRead &ev, const TActorId &sender, TReqId reqId, NWilson::TTraceId traceId)
         : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(traceId))
         , ChunkIdx(ev.ChunkIdx)

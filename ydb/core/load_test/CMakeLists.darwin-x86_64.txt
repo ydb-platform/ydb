@@ -38,6 +38,7 @@ target_link_libraries(ydb-core-load_test PUBLIC
 target_sources(ydb-core-load_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/aggregated_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/archive.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/config_examples.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/keyvalue_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/kqp.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test/memory.cpp

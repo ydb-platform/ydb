@@ -2,6 +2,7 @@
 
 #include "aggregated_result.h"
 #include "archive.h"
+#include "config_examples.h"
 #include "yql_single_query.h"
 
 #include <ydb/core/base/appdata.h>
@@ -30,27 +31,6 @@ namespace NKikimr {
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
-
-namespace NKqpConstants {
-    const char* DEFAULT_PROTO = R"_(
-KqpLoad: {
-    DurationSeconds: 30
-    WindowDuration: 1
-    WorkingDir: "%s"
-    NumOfSessions: 64
-    UniformPartitionsCount: 1000
-    DeleteTableOnFinish: 1
-    WorkloadType: 0
-    Kv: {
-        InitRowCount: 1000
-        PartitionsByLoad: true
-        MaxFirstKey: 18446744073709551615
-        StringLen: 8
-        ColumnsCnt: 2
-        RowsCnt: 1
-    }
-})_";
-}
 
 namespace {
 
@@ -210,6 +190,8 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         THashMap<ui32, TEvNodeFinishResponse> NodeResponses;  // key is node id
     };
 
+    TVector<TConfigExample> ConfigExamples;
+
     // info about finished actors
     TVector<TFinishedTestInfo> FinishedTests;
 
@@ -247,6 +229,16 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     TVector<TAggregatedResult> ArchivedResults;
 
 private:
+    TConstArrayRef<TConfigExample> GetConfigExamples() {
+        if (ConfigExamples.empty()) {
+            const TString tenantName = AppData()->TenantName;
+            for (const auto& templ : GetConfigTemplates()) {
+                ConfigExamples.push_back(ApplyTemplateParams(templ, tenantName));
+            }
+        }
+        return ConfigExamples;
+    }
+
     ui64 GetTag(const TEvLoadTestRequest& origRequest, bool legacyRequest) {
         if (legacyRequest) {
             ui64 tag = ExtractTagFromCommand(origRequest);
@@ -1021,6 +1013,100 @@ public:
         InfoRequests.erase(it);
     }
 
+    void RenderStartForm(IOutputStream& str) {
+        str << R"___(
+            <script>
+                function updateStatus(new_class, new_text) {
+                    let line = $("#start-status-line");
+                    line.removeClass();
+                    if (new_class) {
+                        line.addClass(new_class);
+                    }
+                    line.text(new_text);
+                }
+                function sendStartRequest(button, run_all) {
+                    updateStatus("", "Starting..");
+                    $.ajax({
+                        url: "",
+                        data: {
+                            mode: "start",
+                            all_nodes: run_all,
+                            config: $("#config").val()
+                        },
+                        method: "POST",
+                        contentType: "application/x-protobuf-text",
+                        success: function(result) {
+                            if (result.status == "ok") {
+                                updateStatus(
+                                    "text-success",
+                                    "Started: UUID# " + result.uuid + ", node tag# " + result.tag + ", status# " + result.status
+                                );
+                            } else {
+                                updateStatus(
+                                    "text-danger",
+                                    "Status# " + result.status
+                                );
+                            }
+                        }
+                    });
+                })___";
+
+            str << "let kPresetConfigs=[";
+            bool first = true;
+            for (const auto& example : GetConfigExamples()) {
+                if (first) {
+                    first = false;
+                } else {
+                    str << ", ";
+                }
+                str << '"' << example.Escaped << '"';
+            }
+            str << "];";
+            str << R"___(
+                function loadConfigExample() {
+                    let selectValue = $("#example-select").get(0).value;
+                    let pos = Number(selectValue);
+                    $("#config").val(kPresetConfigs[pos]);
+                }
+            </script>
+        )___";
+
+        HTML(str) {
+            FORM() {
+                DIV_CLASS("form-group") {
+                    LABEL_CLASS_FOR("", "example-select") {
+                        str << "Load example:";
+                    }
+                    str << "<select name='examples' id='example-select' onChange='loadConfigExample()'>\n";
+                    ui32 pos = 0;
+                    for (const auto& example : GetConfigExamples()) {
+                        str << "<option value='" << ToString(pos) << "'>" << example.LoadName << "</option>\n";
+                        ++pos;
+                    }
+                    str << "</select>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<textarea id='config' name='config' rows='20' cols='50'>";
+                    str << GetConfigExamples()[0].Text;
+                    str << "</textarea>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<button type='button' onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>\n";
+                    str << "Start new load on current node\n";
+                    str << "</button>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<button type='button' onClick='sendStartRequest(this, true)' name='startNewLoadAllNodes' class='btn btn-default'>\n";
+                    str << "Start new load on all tenant nodes\n";
+                    str << "</button>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<p id='start-status-line'></p>";
+                }
+            }
+        }
+    }
+
     void GenerateHttpInfoRes(const TString& mode, ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
@@ -1041,36 +1127,7 @@ public:
 
             str << "<div>";
             if (mode == "start") {
-                str << R"___(
-                    <script>
-                        function sendStartRequest(button, run_all) {
-                            $.ajax({
-                                url: "",
-                                data: {
-                                    mode: "start",
-                                    all_nodes: run_all,
-                                    config: $('#config').val()
-                                },
-                                method: "POST",
-                                contentType: "application/x-protobuf-text",
-                                success: function(result) {
-                                    $(button).prop('disabled', true);
-                                    $(button).text('started');
-                                    $('#config').val('uuid: ' + result.uuid + ', tag: ' + result.tag + ', status: ' + result.status);
-                                }
-                            });
-                        }
-                    </script>
-                )___";
-                str << R"_(
-                    <textarea id="config" name="config" rows="20" cols="50">)_" << Sprintf(NKqpConstants::DEFAULT_PROTO, AppData()->TenantName.data())
-                    << R"_(
-                    </textarea>
-                    <br><br>
-                    <button onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>Start new load on current node</button>
-                    <br>
-                    <button onClick='sendStartRequest(this, true)' name='startNewLoadAllNodes' class='btn btn-default'>Start new load on all tenant nodes</button>
-                )_";
+                RenderStartForm(str);
             } else if (mode == "stop") {
                 str << R"___(
                     <script>

@@ -93,7 +93,7 @@ namespace NActors {
 
             switch (State) {
                 case EState::HEADER:
-                    if (IncomingData.GetSize() < sizeof(Header)) {
+                    if (IncomingData.GetSize() < sizeof(TTcpPacketHeader_v2)) {
                         break;
                     } else {
                         ProcessHeader();
@@ -172,14 +172,15 @@ namespace NActors {
     }
 
     void TInputSessionTCP::ProcessHeader() {
-        const bool success = IncomingData.ExtractFrontPlain(&Header, sizeof(Header));
+        TTcpPacketHeader_v2 header;
+        const bool success = IncomingData.ExtractFrontPlain(&header, sizeof(header));
         Y_VERIFY(success);
-        PayloadSize = Header.PayloadLength;
-        HeaderSerial = Header.Serial;
-        HeaderConfirm = Header.Confirm;
+        PayloadSize = header.PayloadLength;
+        const ui64 serial = header.Serial;
+        const ui64 confirm = header.Confirm;
         if (!Params.Encryption) {
-            ChecksumExpected = std::exchange(Header.Checksum, 0);
-            Checksum = Crc32cExtendMSanCompatible(0, &Header, sizeof(Header)); // start calculating checksum now
+            ChecksumExpected = std::exchange(header.Checksum, 0);
+            Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
             if (!PayloadSize && Checksum != ChecksumExpected) {
                 LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
                 return ReestablishConnection(TDisconnectReason::ChecksumError());
@@ -189,9 +190,9 @@ namespace NActors {
             LOG_CRIT_IC_SESSION("ICIS07", "payload is way too big");
             return DestroySession(TDisconnectReason::FormatError());
         }
-        if (ConfirmedByInput < HeaderConfirm) {
-            ConfirmedByInput = HeaderConfirm;
-            if (AtomicGet(Context->ControlPacketId) <= HeaderConfirm && !NewPingProtocol) {
+        if (ConfirmedByInput < confirm) {
+            ConfirmedByInput = confirm;
+            if (AtomicGet(Context->ControlPacketId) <= confirm && !NewPingProtocol) {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
                 const auto durationUs = duration.MicroSeconds();
@@ -205,20 +206,20 @@ namespace NActors {
         }
         if (PayloadSize) {
             const ui64 expected = Context->GetLastProcessedPacketSerial() + 1;
-            if (HeaderSerial == 0 || HeaderSerial > expected) {
-                LOG_CRIT_IC_SESSION("ICIS06", "packet serial %" PRIu64 ", but %" PRIu64 " expected", HeaderSerial, expected);
+            if (serial == 0 || serial > expected) {
+                LOG_CRIT_IC_SESSION("ICIS06", "packet serial %" PRIu64 ", but %" PRIu64 " expected", serial, expected);
                 return DestroySession(TDisconnectReason::FormatError());
             }
-            IgnorePayload = HeaderSerial != expected;
+            IgnorePayload = serial != expected;
             State = EState::PAYLOAD;
-        } else if (HeaderSerial & TTcpPacketBuf::PingRequestMask) {
-            Send(SessionId, new TEvProcessPingRequest(HeaderSerial & ~TTcpPacketBuf::PingRequestMask));
-        } else if (HeaderSerial & TTcpPacketBuf::PingResponseMask) {
-            const ui64 sent = HeaderSerial & ~TTcpPacketBuf::PingResponseMask;
+        } else if (serial & TTcpPacketBuf::PingRequestMask) {
+            Send(SessionId, new TEvProcessPingRequest(serial & ~TTcpPacketBuf::PingRequestMask));
+        } else if (serial & TTcpPacketBuf::PingResponseMask) {
+            const ui64 sent = serial & ~TTcpPacketBuf::PingResponseMask;
             const ui64 received = GetCycleCountFast();
             HandlePingResponse(CyclesToDuration(received - sent));
-        } else if (HeaderSerial & TTcpPacketBuf::ClockMask) {
-            HandleClock(TInstant::MicroSeconds(HeaderSerial & ~TTcpPacketBuf::ClockMask));
+        } else if (serial & TTcpPacketBuf::ClockMask) {
+            HandleClock(TInstant::MicroSeconds(serial & ~TTcpPacketBuf::ClockMask));
         }
     }
 

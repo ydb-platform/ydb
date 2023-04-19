@@ -14,6 +14,7 @@
 #include <util/generic/list.h>
 
 #include "types.h"
+#include "outgoing_stream.h"
 
 #ifndef FORCE_EVENT_CHECKSUM
 #define FORCE_EVENT_CHECKSUM 0
@@ -45,9 +46,6 @@ struct TTcpPacketBuf {
     static constexpr ui64 ClockMask = 0x2000000000000000ULL;
 
     static constexpr size_t PacketDataLen = 4096 * 2 - 96 - sizeof(TTcpPacketHeader_v2);
-
-    TTcpPacketHeader_v2 Header;
-    char Data[PacketDataLen];
 };
 
 struct TEventData {
@@ -121,144 +119,83 @@ namespace NActors {
 
 struct TTcpPacketOutTask : TNonCopyable {
     const TSessionParams& Params;
-    TTcpPacketBuf Packet;
-    size_t DataSize;
-    TStackVec<TConstIoVec, 32> Bufs;
-    size_t BufferIndex;
-    size_t FirstBufferOffset;
-    bool TriedWriting;
-    char *FreeArea;
-    char *End;
+    NInterconnect::TOutgoingStream& OutgoingStream;
+    NInterconnect::TOutgoingStream::TBookmark HeaderBookmark;
+    size_t DataSize = 0;
     mutable NLWTrace::TOrbit Orbit;
 
-public:
-    TTcpPacketOutTask(const TSessionParams& params)
+    TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream)
         : Params(params)
-    {
-        Reuse();
+        , OutgoingStream(outgoingStream)
+        , HeaderBookmark(OutgoingStream.Bookmark(sizeof(TTcpPacketHeader_v2)))
+    {}
+
+    // Preallocate some space to fill it later.
+    NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {
+        Y_VERIFY_DEBUG(len <= GetVirtualFreeAmount());
+        DataSize += len;
+        return OutgoingStream.Bookmark(len);
     }
 
-    bool IsAtBegin() const {
-        return !BufferIndex && !FirstBufferOffset && !TriedWriting;
+    // Write previously bookmarked space.
+    void WriteBookmark(NInterconnect::TOutgoingStream::TBookmark&& bookmark, const void *buffer, size_t len) {
+        OutgoingStream.WriteBookmark(std::move(bookmark), {static_cast<const char*>(buffer), len});
     }
 
-    void MarkTriedWriting() {
-        TriedWriting = true;
+    // Acquire raw pointer to write some data.
+    TMutableContiguousSpan AcquireSpanForWriting() {
+        return OutgoingStream.AcquireSpanForWriting(GetVirtualFreeAmount());
     }
 
-    void Reuse() {
-        DataSize = 0;
-        Bufs.assign(1, {&Packet.Header, sizeof(Packet.Header)});
-        BufferIndex = 0;
-        FirstBufferOffset = 0;
-        TriedWriting = false;
-        FreeArea = Packet.Data;
-        End = FreeArea + TTcpPacketBuf::PacketDataLen;
-        Orbit.Reset();
+    // Append reference to some data (acquired previously or external pointer).
+    void Append(const void *buffer, size_t len) {
+        Y_VERIFY_DEBUG(len <= GetVirtualFreeAmount());
+        DataSize += len;
+        OutgoingStream.Append({static_cast<const char*>(buffer), len});
     }
 
-    bool IsEmpty() const {
-        return !DataSize;
+    // Write some data with copying.
+    void Write(const void *buffer, size_t len) {
+        Y_VERIFY_DEBUG(len <= GetVirtualFreeAmount());
+        DataSize += len;
+        OutgoingStream.Write({static_cast<const char*>(buffer), len});
     }
 
-    void SetMetadata(ui64 serial, ui64 confirm) {
-        Packet.Header.Serial = serial;
-        Packet.Header.Confirm = confirm;
+    void Finish(ui64 serial, ui64 confirm) {
+        Y_VERIFY(DataSize <= Max<ui16>());
+
+        TTcpPacketHeader_v2 header{
+            confirm,
+            serial,
+            0,
+            static_cast<ui16>(DataSize)
+        };
+
+        if (Checksumming()) {
+            // pre-write header without checksum for correct checksum calculation
+            WriteBookmark(NInterconnect::TOutgoingStream::TBookmark(HeaderBookmark), &header, sizeof(header));
+
+            size_t total = 0;
+            ui32 checksum = 0;
+            OutgoingStream.ScanLastBytes(GetFullSize(), [&](TContiguousSpan span) {
+                checksum = Crc32cExtendMSanCompatible(checksum, span.data(), span.size());
+                total += span.size();
+            });
+            header.Checksum = checksum;
+            Y_VERIFY(total == sizeof(header) + DataSize, "total# %zu DataSize# %zu GetFullSize# %zu", total, DataSize,
+                GetFullSize());
+        }
+
+        WriteBookmark(std::exchange(HeaderBookmark, {}), &header, sizeof(header));
     }
 
+    bool Checksumming() const {
+        return !Params.Encryption;
+    }
+
+    bool IsFull() const { return GetVirtualFreeAmount() == 0; }
+    bool IsEmpty() const { return GetDataSize() == 0; }
     size_t GetDataSize() const { return DataSize; }
-
-    ui64 GetSerial() const {
-        return Packet.Header.Serial;
-    }
-
-    bool Confirmed(ui64 confirm) const {
-        return IsEmpty() || Packet.Header.Serial <= confirm;
-    }
-
-    void *GetFreeArea() {
-        return FreeArea;
-    }
-
-    size_t GetVirtualFreeAmount() const {
-        return TTcpPacketBuf::PacketDataLen - DataSize;
-    }
-
-    void AppendBuf(const void *buf, size_t size) {
-        DataSize += size;
-        Y_VERIFY_DEBUG(DataSize <= TTcpPacketBuf::PacketDataLen, "DataSize# %zu AppendBuf buf# %p size# %zu"
-            " FreeArea# %p End# %p", DataSize, buf, size, FreeArea, End);
-
-        if (Bufs && static_cast<const char*>(Bufs.back().Data) + Bufs.back().Size == buf) {
-            Bufs.back().Size += size;
-        } else {
-            Bufs.push_back({buf, size});
-        }
-
-        if (buf >= FreeArea && buf < End) {
-            Y_VERIFY_DEBUG(buf == FreeArea);
-            FreeArea = const_cast<char*>(static_cast<const char*>(buf)) + size;
-            Y_VERIFY_DEBUG(FreeArea <= End);
-        }
-    }
-
-    void Undo(size_t size) {
-        Y_VERIFY(Bufs);
-        auto& buf = Bufs.back();
-        Y_VERIFY(buf.Data == FreeArea - buf.Size);
-        buf.Size -= size;
-        if (!buf.Size) {
-            Bufs.pop_back();
-        }
-        FreeArea -= size;
-        DataSize -= size;
-    }
-
-    bool DropBufs(size_t& amount) {
-        while (BufferIndex != Bufs.size()) {
-            TConstIoVec& item = Bufs[BufferIndex];
-            // calculate number of bytes to the end in current buffer
-            const size_t remain = item.Size - FirstBufferOffset;
-            if (amount >= remain) {
-                // vector item completely fits into the received amount, drop it out and switch to next buffer
-                amount -= remain;
-                ++BufferIndex;
-                FirstBufferOffset = 0;
-            } else {
-                // adjust first buffer by "amount" bytes forward and reset amount to zero
-                FirstBufferOffset += amount;
-                amount = 0;
-                // return false meaning that we have some more data to send
-                return false;
-            }
-        }
-        return true;
-    }
-
-    void ResetBufs() {
-        BufferIndex = FirstBufferOffset = 0;
-        TriedWriting = false;
-    }
-
-    template <typename TVectorType>
-    void AppendToIoVector(TVectorType& vector, size_t max) {
-        for (size_t k = BufferIndex, offset = FirstBufferOffset; k != Bufs.size() && vector.size() < max; ++k, offset = 0) {
-            TConstIoVec v = Bufs[k];
-            v.Data = static_cast<const char*>(v.Data) + offset;
-            v.Size -= offset;
-            vector.push_back(v);
-        }
-    }
-
-    void Sign() {
-        Packet.Header.Checksum = 0;
-        Packet.Header.PayloadLength = DataSize;
-        if (!Params.Encryption) {
-            ui32 sum = 0;
-            for (const auto& item : Bufs) {
-                sum = Crc32cExtendMSanCompatible(sum, item.Data, item.Size);
-            }
-            Packet.Header.Checksum = sum;
-        }
-    }
+    size_t GetFullSize() const { return sizeof(TTcpPacketHeader_v2) + GetDataSize(); }
+    size_t GetVirtualFreeAmount() const { return TTcpPacketBuf::PacketDataLen - DataSize; }
 };

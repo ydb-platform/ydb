@@ -134,4 +134,7 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
 bool IsStrict(const TExprNode::TPtr& node);
 bool HasDependsOn(const TExprNode::TPtr& node, const TExprNode::TPtr& arg);
 
+TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, TExprContext& ctx);
+TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
+
 }

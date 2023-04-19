@@ -2376,8 +2376,8 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
 
     auto settings = ctx.Builder(node->Pos())
         .List()
-            .Atom(0, "Auto")
-            .Atom(1, "Many")
+            .Atom(0, "Auto", TNodeFlags::Default)
+            .Atom(1, "Many", TNodeFlags::Default)
         .Seal()
         .Build();
 
@@ -2411,22 +2411,22 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Callable("OrderedFlatMap")
                     .Callable(0, "SqueezeToDict")
                         .Add(0, node->HeadPtr())
-                        .Add(1, keyExtractor)
-                        .Add(2, idLambda)
-                        .Add(3, settings)
+                        .Add(1, std::move(keyExtractor))
+                        .Add(2, std::move(idLambda))
+                        .Add(3, std::move(settings))
                     .Seal()
-                    .Add(1, flatten)
+                    .Add(1, std::move(flatten))
                 .Seal()
                 .Build();
         } else {
             sort = ctx.Builder(node->Pos())
-                .Apply(flatten)
+                .Apply(*flatten)
                     .With(0)
                         .Callable("ToDict")
                             .Add(0, node->HeadPtr())
-                            .Add(1, keyExtractor)
-                            .Add(2, idLambda)
-                            .Add(3, settings)
+                            .Add(1, std::move(keyExtractor))
+                            .Add(2, std::move(idLambda))
+                            .Add(3, std::move(settings))
                         .Seal()
                     .Done()
                 .Seal()
@@ -2434,7 +2434,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         }
     }
 
-    return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
+    return KeepConstraints(ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort)), *node, ctx);
 }
 
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {

@@ -30,11 +30,12 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit-TableFullScan",
+                                                "Node Type": "TopSort-TableFullScan",
                                                 "Operators": [
                                                     {
                                                         "Limit": "10",
-                                                        "Name": "Limit"
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": "$4.EventTime"
                                                     },
                                                     {
                                                         "Name": "TableFullScan",

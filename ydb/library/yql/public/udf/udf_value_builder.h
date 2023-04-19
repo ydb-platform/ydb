@@ -110,9 +110,9 @@ UDF_ASSERT_TYPE_SIZE(IDateBuilder, 8);
 ///////////////////////////////////////////////////////////////////////////////
 // IPgBuilder
 ///////////////////////////////////////////////////////////////////////////////
-class IPgBuilder {
+class IPgBuilder1 {
 public:
-    virtual ~IPgBuilder() {}
+    virtual ~IPgBuilder1() = default;
     // returns Null in case of text format parsing error, error message passed via 'error' arg
     virtual TUnboxedValue ValueFromText(ui32 typeId, const TStringRef& value, TStringValue& error) const = 0;
 
@@ -128,6 +128,23 @@ public:
     // targetTypeId is required for diagnostic only in debug mode
     virtual TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, TStringRef data) const = 0;
 };
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 31)
+class IPgBuilder2: public IPgBuilder1
+{
+public:
+    virtual TStringRef AsCStringBuffer(const TUnboxedValue& value) const = 0;
+    virtual TStringRef AsTextBuffer(const TUnboxedValue& value) const = 0;
+};
+#endif
+
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 31)
+class IPgBuilder: public IPgBuilder2 {};
+#else
+class IPgBuilder: public IPgBuilder1 {};
+#endif
+
 UDF_ASSERT_TYPE_SIZE(IPgBuilder, 8);
 
 ///////////////////////////////////////////////////////////////////////////////

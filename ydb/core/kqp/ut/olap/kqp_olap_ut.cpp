@@ -1134,12 +1134,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cerr << result.QueryStats->query_plan() << Endl;
         Cerr << result.QueryStats->query_ast() << Endl;
 
-        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "false");
         UNIT_ASSERT(!reverse.IsDefined());
         pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
         UNIT_ASSERT(pushedLimit.IsDefined());
+        limit = FindPlanNodeByKv(node, "Limit", "4");
+        UNIT_ASSERT(limit.IsDefined());
 
         // Check that Reverse flag is set in query plan
         it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync();
@@ -1151,7 +1153,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cerr << result.QueryStats->query_plan() << Endl;
         Cerr << result.QueryStats->query_ast() << Endl;
 
-        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "true");
         UNIT_ASSERT(reverse.IsDefined());
@@ -3943,6 +3945,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         settings.AppConfig.MutableColumnShardConfig()->MutableTablesStorageLayoutPolicy()->MutableIdentityGroups();
         Y_VERIFY(settings.AppConfig.GetColumnShardConfig().GetTablesStorageLayoutPolicy().HasIdentityGroups());
         TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore1", 20, 4);
+        UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_1", 5));
+        UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_2", 5));
+        UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_3", 5));
+        UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_4", 5));
+
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 16, 4);
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_1", 4));
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_2", 4));

@@ -6,6 +6,7 @@
 #include "block_item.h"
 
 #include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 
 #include <arrow/datum.h>
@@ -431,7 +432,7 @@ private:
     std::unique_ptr<TTypedBufferBuilder<T>> DataBuilder;
 };
 
-template<typename TStringType, bool Nullable>
+template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
 class TStringArrayBuilder final : public TArrayBuilderBase {
 public:
     using TOffset = typename TStringType::offset_type;
@@ -447,6 +448,11 @@ public:
         Reserve();
     }
 
+    void SetPgBuilder(const NUdf::IPgBuilder* pgBuilder) {
+        Y_ENSURE(PgString != EPgStringType::None);
+        PgBuilder = pgBuilder;
+    }
+
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
@@ -454,7 +460,15 @@ public:
             }
         }
 
-        DoAdd(TBlockItem(value.AsStringRef()));
+        if constexpr (PgString == EPgStringType::CString) {
+            static_assert(Nullable);
+            DoAdd(TBlockItem(PgBuilder->AsCStringBuffer(value)));
+        } else if constexpr (PgString == EPgStringType::Text) {
+            static_assert(Nullable);
+            DoAdd(TBlockItem(PgBuilder->AsTextBuffer(value)));
+        } else {
+            DoAdd(TBlockItem(value.AsStringRef()));
+        }
     }
 
     void DoAdd(TBlockItem value) final {
@@ -719,6 +733,8 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> DataBuilder;
 
     std::deque<std::shared_ptr<arrow::ArrayData>> Chunks;
+
+    const IPgBuilder* PgBuilder = nullptr;
 };
 
 template<bool Nullable>
@@ -997,10 +1013,14 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
 };
 
-std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxBlockLength);
+std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
+    size_t maxBlockLength, const IPgBuilder* pgBuilder);
 
 template<bool Nullable>
-inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen) {
+inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
+    size_t maxLen, const IPgBuilder* pgBuilder) {
     if constexpr (Nullable) {
         TOptionalTypeInspector typeOpt(typeInfoHelper, type);
         type = typeOpt.GetItemType();
@@ -1011,7 +1031,7 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(const ITypeInfoHe
         TVector<std::unique_ptr<TArrayBuilderBase>> children;
         for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {
             const TType* childType = typeTuple.GetElementType(i);
-            auto childBuilder = MakeArrayBuilderBase(typeInfoHelper, childType, pool, maxLen);
+            auto childBuilder = MakeArrayBuilderBase(typeInfoHelper, childType, pool, maxLen, pgBuilder);
             children.push_back(std::move(childBuilder));
         }
 
@@ -1056,10 +1076,30 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(const ITypeInfoHe
         }
     }
 
+    TPgTypeInspector typePg(typeInfoHelper, type);
+    if (typePg) {
+        auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
+        if (desc->PassByValue) {
+            return std::make_unique<TFixedSizeArrayBuilder<ui64, true>>(typeInfoHelper, type, pool, maxLen);
+        } else {
+            if (desc->Typelen == -1) {
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Text>>(typeInfoHelper, type, pool, maxLen);
+                ret->SetPgBuilder(pgBuilder);
+                return ret;
+            } else {
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::CString>>(typeInfoHelper, type, pool, maxLen);
+                ret->SetPgBuilder(pgBuilder);
+                return ret;
+            }
+        }
+    }
+
     Y_ENSURE(false, "Unsupported type");
 }
 
-inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxBlockLength) {
+inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
+    size_t maxBlockLength, const IPgBuilder* pgBuilder) {
     const TType* unpacked = type;
     TOptionalTypeInspector typeOpt(typeInfoHelper, type);
     if (typeOpt) {
@@ -1067,7 +1107,8 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(const ITypeInfoHe
     }
 
     TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
-    if (unpackedOpt) {
+    TPgTypeInspector unpackedPg(typeInfoHelper, unpacked);
+    if (unpackedOpt || typeOpt && unpackedPg) {
         // at least 2 levels of optionals
         ui32 nestLevel = 0;
         auto currentType = type;
@@ -1085,7 +1126,7 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(const ITypeInfoHe
             }
         }
 
-        auto builder = MakeArrayBuilderBase(typeInfoHelper, previousType, pool, maxBlockLength);
+        auto builder = MakeArrayBuilderBase(typeInfoHelper, previousType, pool, maxBlockLength, pgBuilder);
         for (ui32 i = 1; i < nestLevel; ++i) {
             builder = std::make_unique<TExternalOptionalArrayBuilder>(typeInfoHelper, types[nestLevel - 1 - i], pool, maxBlockLength, std::move(builder));
         }
@@ -1093,15 +1134,17 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(const ITypeInfoHe
         return builder;
     } else {
         if (typeOpt) {
-            return MakeArrayBuilderImpl<true>(typeInfoHelper, type, pool, maxBlockLength);
+            return MakeArrayBuilderImpl<true>(typeInfoHelper, type, pool, maxBlockLength, pgBuilder);
         } else {
-            return MakeArrayBuilderImpl<false>(typeInfoHelper, type, pool, maxBlockLength);
+            return MakeArrayBuilderImpl<false>(typeInfoHelper, type, pool, maxBlockLength, pgBuilder);
         }
     }
 }
 
-inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxBlockLength) {
-    return MakeArrayBuilderBase(typeInfoHelper, type, pool, maxBlockLength);
+inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, 
+    size_t maxBlockLength, const IPgBuilder* pgBuilder) {
+    return MakeArrayBuilderBase(typeInfoHelper, type, pool, maxBlockLength, pgBuilder);
 }
 
 inline std::unique_ptr<IScalarBuilder> MakeScalarBuilder(const ITypeInfoHelper& typeInfoHelper, const TType* type) {

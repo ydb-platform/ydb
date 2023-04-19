@@ -184,7 +184,7 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
                               const NKikimrPQ::TEvProposeTransaction& event,
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
 {
-    ctx.Send(ActorIdFromProto(event.GetSource()),
+    ctx.Send(ActorIdFromProto(event.GetActor()),
              MakeReplyPropose(event, statusCode).Release());
 }
 
@@ -2722,7 +2722,7 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
                                 const TActorContext& ctx)
 {
     if (PlanStep.Defined() && TxId.Defined()) {
-        if (GetStepAndTxId(event) <= GetStepAndTxId(*PlanStep, *TxId)) {
+        if (GetStepAndTxId(event) < GetStepAndTxId(*PlanStep, *TxId)) {
             ctx.Send(Tablet, MakeCommitDone(event.Step, event.TxId).Release());
             return;
         }
@@ -3246,7 +3246,7 @@ void TPartition::ScheduleReplyError(const ui64 dst,
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                       NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
 {
-    Replies.emplace_back(ActorIdFromProto(event.GetSource()),
+    Replies.emplace_back(ActorIdFromProto(event.GetActor()),
                          MakeReplyPropose(event,
                                           statusCode).Release());
 }

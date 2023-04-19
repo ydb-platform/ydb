@@ -861,7 +861,7 @@ private:
             for (size_t i = 0; i < keys.size(); ++i) {
                 auto itemType = AS_TYPE(TBlockType, keys[i].Type)->GetItemType();
                 Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
-                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, maxBlockLen);
+                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, maxBlockLen, &ctx.Builder->GetPgBuilder());
             }
 
             if constexpr (Many) {

@@ -325,6 +325,15 @@ message TTTLSettings {
     optional string UseTiering = 3;
 }
 
+message TTableReplicationConfig {
+    enum EReplicationMode {
+        REPLICATION_MODE_NONE = 0;
+        REPLICATION_MODE_READ_ONLY = 1;
+    }
+
+    optional EReplicationMode Mode = 1;
+}
+
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -360,6 +369,8 @@ message TTableDescription {
 
     repeated TCdcStreamDescription CdcStreams = 38;
     repeated TSequenceDescription Sequences = 39;
+
+    optional TTableReplicationConfig ReplicationConfig = 40;
 }
 
 message TCompressionOptions {

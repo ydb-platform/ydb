@@ -686,7 +686,8 @@ public:
                                                      databaseId,
                                                      databasePath,
                                                      txState->TxType,
-                                                     ssId);
+                                                     ssId,
+                                                     context);
                 } else {
                     event = MakeEvUpdateConfig(OperationId.GetTxId(),
                                                *pqGroup,
@@ -697,7 +698,8 @@ public:
                                                folderId,
                                                databaseId,
                                                databasePath,
-                                               txState->TxType);
+                                               txState->TxType,
+                                               context);
                 }
 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -849,7 +851,8 @@ private:
                                  const TString& databaseId,
                                  const TString& databasePath,
                                  TTxState::ETxType txType,
-                                 TTabletId ssId);
+                                 TTabletId ssId,
+                                 const TOperationContext& context);
     static THolder<TEvPersQueue::TEvUpdateConfig>
         MakeEvUpdateConfig(TTxId txId,
                            const TTopicInfo& pqGroup,
@@ -860,7 +863,8 @@ private:
                            const TString& folderId,
                            const TString& databaseId,
                            const TString& databasePath,
-                           TTxState::ETxType txType);
+                           TTxState::ETxType txType,
+                           const TOperationContext& context);
 };
 
 class TPropose: public TSubOperationState {

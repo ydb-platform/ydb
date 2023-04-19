@@ -978,6 +978,9 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, c
     ActorIdToProto(task.Meta.ExecuterId, result.MutableExecuter()->MutableActorId());
     result.SetId(task.Id);
     result.SetStageId(stageInfo.Id.StageId);
+    if (task.HasMetaId()) {
+        result.SetMetaId(task.GetMetaIdUnsafe());
+    }
 
     for (const auto& [paramName, paramValue] : task.Meta.DqTaskParams) {
         (*result.MutableTaskParams())[paramName] = paramValue;

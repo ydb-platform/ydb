@@ -245,7 +245,18 @@ public:
     void Output(NMonitoring::IMonHttpRequest& request) override {
         IOutputStream& out = request.Output();
 
-        out << HTTPOKHTML;
+        out << "HTTP/1.1 200 Ok\r\n"
+            << "Content-Type: text/html\r\n"
+            << "Connection: Close\r\n";
+        TString origin = TString(request.GetHeader("Origin"));
+        if (origin.empty()) {
+            origin = "*";
+        }
+        out << "Access-Control-Allow-Origin: " << origin << "\r\n"
+            << "Access-Control-Allow-Credentials: true\r\n"
+            << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+            << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        out << "\r\n";
 
         out << "<!DOCTYPE html>\n";
         out << "<html>";

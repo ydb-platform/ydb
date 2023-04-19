@@ -38,6 +38,7 @@ struct TTxOperation {
 struct TConfigParams {
     TMaybe<NKikimrPQ::TPQTabletConfig> Tablet;
     TMaybe<NKikimrPQ::TBootstrapConfig> Bootstrap;
+    ui64 SchemeShardId = 0;
 };
 
 struct TProposeTransactionParams {
@@ -215,7 +216,7 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
     THashSet<ui32> partitions;
 
-    ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
+    ActorIdToProto(Ctx->Edge, event->Record.MutableActor());
     event->Record.SetTxId(params.TxId);
 
     if (params.Configs) {
@@ -223,6 +224,9 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
         // TxBody.Config
         //
         auto* body = event->Record.MutableConfig();
+        if (params.Configs->SchemeShardId) {
+            body->SetSchemeShardId(params.Configs->SchemeShardId);
+        }
         if (params.Configs->Tablet.Defined()) {
             *body->MutableTabletConfig() = *params.Configs->Tablet;
         }
@@ -746,6 +750,7 @@ Y_UNIT_TEST_F(DropTablet_Before_Write, TPQTabletFixture)
 
 Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)
 {
+    NHelpers::TPQTabletMock* schemeshard = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=2}, {}, *Ctx);
 
     const ui64 txId = 67890;
@@ -759,7 +764,8 @@ Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)
     SendProposeTransactionRequest({.TxId=txId,
                                   .Configs=NHelpers::TConfigParams{
                                   .Tablet=tabletConfig,
-                                  .Bootstrap=NHelpers::MakeBootstrapConfig()
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  .SchemeShardId = 22222
                                   }});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
@@ -769,12 +775,16 @@ Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)
     WaitPlanStepAck({.Step=100, .TxIds={txId}});
     WaitPlanStepAccepted({.Step=100});
 
+    WaitReadSet(*schemeshard, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    schemeshard->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 }
 
 Y_UNIT_TEST_F(UpdateConfig_2, TPQTabletFixture)
 {
+    NHelpers::TPQTabletMock* schemeshard = CreatePQTabletMock(22222);
     PQTabletPrepare({.partitions=2}, {}, *Ctx);
 
     const ui64 txId_2 = 67891;
@@ -790,7 +800,8 @@ Y_UNIT_TEST_F(UpdateConfig_2, TPQTabletFixture)
     SendProposeTransactionRequest({.TxId=txId_2,
                                   .Configs=NHelpers::TConfigParams{
                                   .Tablet=tabletConfig,
-                                  .Bootstrap=NHelpers::MakeBootstrapConfig()
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  .SchemeShardId = 22222
                                   }});
     SendProposeTransactionRequest({.TxId=txId_3,
                                   .TxOps={
@@ -807,6 +818,9 @@ Y_UNIT_TEST_F(UpdateConfig_2, TPQTabletFixture)
 
     WaitPlanStepAck({.Step=100, .TxIds={txId_2, txId_3}});
     WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSet(*schemeshard, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId, .Target=22222, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    schemeshard->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId});
 
     WaitProposeTransactionResponse({.TxId=txId_2,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});

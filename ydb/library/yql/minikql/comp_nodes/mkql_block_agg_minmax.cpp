@@ -151,7 +151,7 @@ private:
 class TGenericColumnBuilder : public IAggColumnBuilder {
 public:
     TGenericColumnBuilder(ui64 size, TType* columnType, TComputationContext& ctx)
-        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size))
+        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size, &ctx.Builder->GetPgBuilder()))
         , Ctx_(ctx)
     {
     }
@@ -207,7 +207,7 @@ public:
         , ArgColumn_(argColumn)
         , ReaderOne_(MakeBlockReader(TTypeInfoHelper(), type))
         , ReaderTwo_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
         , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
     {
     }
@@ -293,7 +293,7 @@ public:
         , ArgColumn_(argColumn)
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
         , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
     {
     }
@@ -337,7 +337,7 @@ public:
         , ArgColumn_(argColumn)
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
         , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
 
     {

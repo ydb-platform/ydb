@@ -95,6 +95,10 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     JointLogWrites.reserve(16 << 10);
     JointCommits.reserve(16 << 10);
     JointChunkForgets.reserve(16 << 10);
+
+    DebugInfoGenerator = [id = PDiskId, type = PDiskCategory]() {
+        return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
+    };
 }
 
 TString TPDisk::DynamicStateToString(bool isMultiline) {
@@ -3594,7 +3598,6 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     TConfigureScheduler conf(ownerId, 0);
     SchedulerConfigure(conf);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // External interface

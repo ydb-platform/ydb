@@ -99,7 +99,7 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
 }
 
 void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "HandleEvWakeup for " << SelfId();
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "HandleEvWakeup")("self_id", SelfId());
     switch (tag) {
         case RlSendAllowedTag:
             DoExecute();

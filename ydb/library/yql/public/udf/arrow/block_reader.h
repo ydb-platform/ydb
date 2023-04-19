@@ -6,6 +6,7 @@
 #include <arrow/datum.h>
 
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 namespace NYql {
 namespace NUdf {
@@ -73,10 +74,16 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable>
+template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
 class TStringBlockReader final : public IBlockReader {
 public:
     using TOffset = typename TStringType::offset_type;
+
+    void SetPgBuilder(const IPgBuilder* pgBuilder, i32 typeLen, ui32 pgTypeId) {
+        Y_UNUSED(pgBuilder);
+        Y_UNUSED(typeLen);
+        Y_UNUSED(pgTypeId);
+    }
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         Y_VERIFY_DEBUG(data.buffers.size() == 3);
@@ -258,8 +265,8 @@ struct TReaderTraits {
     using TTuple = TTupleBlockReader<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockReader<T, Nullable>;
-    template <typename TStringType, bool Nullable>
-    using TStrings = TStringBlockReader<TStringType, Nullable>;
+    template <typename TStringType, bool Nullable, EPgStringType PgString>
+    using TStrings = TStringBlockReader<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockReader;
 };
 
@@ -281,17 +288,17 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
     }
 }
 
-template <typename TTraits, typename T>
+template <typename TTraits, typename T, EPgStringType PgString>
 std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
     if (isOptional) {
-        return std::make_unique<typename TTraits::template TStrings<T, true>>();
+        return std::make_unique<typename TTraits::template TStrings<T, true, PgString>>();
     } else {
-        return std::make_unique<typename TTraits::template TStrings<T, false>>();
+        return std::make_unique<typename TTraits::template TStrings<T, false, PgString>>();
     }
 }
 
 template <typename TTraits>
-std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder) {
     const TType* unpacked = type;
     TOptionalTypeInspector typeOpt(typeInfoHelper, type);
     bool isOptional = false;
@@ -301,7 +308,8 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
     }
 
     TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
-    if (unpackedOpt) {
+    TPgTypeInspector unpackedPg(typeInfoHelper, unpacked);
+    if (unpackedOpt || typeOpt && unpackedPg) {
         // at least 2 levels of optionals
         ui32 nestLevel = 0;
         auto currentType = type;
@@ -317,7 +325,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             }
         }
 
-        auto reader = MakeBlockReaderImpl<TTraits>(typeInfoHelper, previousType);
+        auto reader = MakeBlockReaderImpl<TTraits>(typeInfoHelper, previousType, pgBuilder);
         for (ui32 i = 1; i < nestLevel; ++i) {
             reader = std::make_unique<typename TTraits::TExtOptional>(std::move(reader));
         }
@@ -332,7 +340,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
     if (typeTuple) {
         TVector<std::unique_ptr<typename TTraits::TResult>> children;
         for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {
-            children.emplace_back(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeTuple.GetElementType(i)));
+            children.emplace_back(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeTuple.GetElementType(i), pgBuilder));
         }
 
         return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(children));
@@ -368,11 +376,29 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         case NUdf::EDataSlot::Double:
             return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
         case NUdf::EDataSlot::String:
-            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType>(isOptional);
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, EPgStringType::None>(isOptional);
         case NUdf::EDataSlot::Utf8:
-            return MakeStringBlockReaderImpl<TTraits, arrow::StringType>(isOptional);
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, EPgStringType::None>(isOptional);
         default:
             Y_ENSURE(false, "Unsupported data slot");
+        }
+    }
+
+    TPgTypeInspector typePg(typeInfoHelper, type);
+    if (typePg) {
+        auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
+        if (desc->PassByValue) {
+            return MakeFixedSizeBlockReaderImpl<TTraits, ui64>(true);
+        } else {
+            if (desc->Typelen == -1) {
+                auto ret = std::make_unique<typename TTraits::template TStrings<arrow::BinaryType, true, EPgStringType::Text>>();
+                ret->SetPgBuilder(pgBuilder, desc->Typelen, typePg.GetTypeId());
+                return ret;
+            } else {
+                auto ret = std::make_unique<typename TTraits::template TStrings<arrow::BinaryType, true, EPgStringType::CString>>();
+                ret->SetPgBuilder(pgBuilder, desc->Typelen, typePg.GetTypeId());
+                return ret;
+            }
         }
     }
 
@@ -380,7 +406,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
 }
 
 inline std::unique_ptr<IBlockReader> MakeBlockReader(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    return MakeBlockReaderImpl<TReaderTraits>(typeInfoHelper, type);
+    return MakeBlockReaderImpl<TReaderTraits>(typeInfoHelper, type, nullptr);
 }
 
 inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper, const TType* type, TBlockItemSerializeProps& props) {

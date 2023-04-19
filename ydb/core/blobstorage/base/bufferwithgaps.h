@@ -6,6 +6,7 @@
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
+#include <ydb/core/util/yverify_stream.h>
 
 namespace NKikimr {
 
@@ -24,6 +25,8 @@ namespace NKikimr {
         TMap<ui32, ui32> Gaps;
         ui32 Offset; // Data's offset in Gaps space
         bool IsCommited;
+
+        std::function<TString()> DebugInfoGenerator;
 
     public:
         TBufferWithGaps()
@@ -66,20 +69,21 @@ namespace NKikimr {
         }
 
         TString ToString() const {
-            Y_VERIFY(IsReadable(), "returned data is corrupt (or was never written) and therefore could not be used safely");
+            Y_VERIFY_S(IsReadable(), "returned data is corrupt (or was never written) and therefore could not be used safely, State# "
+                    << PrintState());
             return Data;
         }
 
         TString Substr(ui32 offset, ui32 len) const {
-            Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32
-                   " len# %" PRIu32 " and therefore could not be used safely", offset, len);
+            Y_VERIFY_S(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" << offset
+                   << " len# " << len << " and therefore could not be used safely, State# " << PrintState());
             return Data.substr(offset, len);
         }
 
         template<typename T>
         const T *DataPtr(ui32 offset, ui32 len = sizeof(T)) const {
-            Y_VERIFY(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" PRIu32
-                   " len# %" PRIu32 " and therefore could not be used safely", offset, len);
+            Y_VERIFY_S(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# " << offset
+                   << " len# " << len << " and therefore could not be used safely, State# " << PrintState());
             return reinterpret_cast<T *>(Data.data() + offset);
         }
 
@@ -172,6 +176,29 @@ namespace NKikimr {
                     REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(DataPtr<const char>(a, size), size);
                 }
             }
+        }
+
+        void SetDebugInfoGenerator(const std::function<TString()>& debugInfoGenerator) {
+            DebugInfoGenerator = debugInfoGenerator;
+        }
+
+        void SetDebugInfoGenerator(std::function<TString()>&& debugInfoGenerator) {
+            DebugInfoGenerator = std::move(debugInfoGenerator);
+        }
+
+        TString PrintState() const {
+            TStringStream str;
+            str << "Offset# " << Offset;
+            str << " Gaps# { ";
+            for (auto [begin, size] : Gaps) {
+                str << "{ Begin# " << begin << " Size# " << size << " } "; 
+            }
+            str << "}";
+            str << " IsCommitted# " << IsCommited;
+            if (DebugInfoGenerator) {
+                str << " DebugInfo# " << DebugInfoGenerator();
+            }
+            return str.Str();
         }
     };
 

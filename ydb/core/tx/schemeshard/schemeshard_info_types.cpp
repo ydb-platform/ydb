@@ -228,6 +228,26 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
+    if (op.HasReplicationConfig()) {
+        const auto& cfg = op.GetReplicationConfig();
+
+        if (source) {
+            errStr = "Cannot alter replication config";
+            return nullptr;
+        }
+
+        switch (cfg.GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            break;
+        default:
+            errStr = "Unknown replication mode";
+            return nullptr;
+        }
+
+        alterData->TableDescriptionFull->MutableReplicationConfig()->CopyFrom(cfg);
+    }
+
     alterData->IsBackup = op.GetIsBackup();
 
     if (source && op.KeyColumnNamesSize() == 0)
@@ -1256,6 +1276,11 @@ void TTableInfo::FinishAlter() {
     // Apply TTL params
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTTLSettings()) {
         MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings());
+    }
+
+    // Apply replication config
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasReplicationConfig()) {
+        MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
     }
 
     // Force FillDescription to regenerate TableDescription

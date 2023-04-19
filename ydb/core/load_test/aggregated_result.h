@@ -18,9 +18,9 @@ namespace NKikimr {
 
 template<typename T>
 struct TAggregatedField {
-    T MinValue;
-    T MaxValue;
-    double AvgValue;
+    T MinValue = 0;
+    T MaxValue = 0;
+    double AvgValue = 0;
 };
 
 template<typename T>

@@ -3,5 +3,5 @@
 #include <grpc/slice.h>
 
 namespace grpc_core {
-    grpc_slice LoadArcadiaRootCerts();
+    grpc_slice AddArcadiaRootCerts(grpc_slice systemCerts);
 }

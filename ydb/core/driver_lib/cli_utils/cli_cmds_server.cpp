@@ -383,6 +383,23 @@ protected:
             ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
 
+        RunConfig.Labels["node_id"] = ToString(NodeId);
+        RunConfig.Labels["node_host"] = FQDNHostName();
+        RunConfig.Labels["tenant"] = RunConfig.TenantName;
+        RunConfig.Labels["node_type"] = NodeType;
+        // will be replaced with proper version info
+        RunConfig.Labels["branch"] = GetBranch();
+        RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
+        RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
+
+        for (const auto& [name, value] : RunConfig.Labels) {
+            auto *label = RunConfig.AppConfig.AddLabels();
+            label->SetName(name);
+            label->SetValue(value);
+        }
+
+        RunConfig.ClusterName = ClusterName;
+
         MaybeRegisterAndLoadConfigs();
 
         LoadYamlConfig();
@@ -689,21 +706,6 @@ protected:
             messageBusConfig->SetStartTracingBusProxy(!!TracePath);
             messageBusConfig->SetTracePath(TracePath);
         }
-
-        RunConfig.Labels["node_id"] = ToString(NodeId);
-        RunConfig.Labels["node_host"] = FQDNHostName();
-        RunConfig.Labels["tenant"] = RunConfig.TenantName;
-        // will be replaced with proper version info
-        RunConfig.Labels["branch"] = GetBranch();
-        RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
-
-        for (const auto& [name, value] : RunConfig.Labels) {
-            auto *label = RunConfig.AppConfig.AddLabels();
-            label->SetName(name);
-            label->SetValue(value);
-        }
-
-        RunConfig.ClusterName = ClusterName;
     }
 
     inline bool LoadConfigFromCMS() {

@@ -271,6 +271,11 @@ namespace NKikimr::NYaml {
         }
 
         auto& config = json["actor_system_config"];
+
+        if (config.Has("use_auto_config") && config["use_auto_config"].GetBooleanSafe()) {
+            return; // do nothing for auto config
+        }
+
         auto& executors = config["executor"];
 
         const std::vector<std::pair<TString, TString>> defaultExecutors = {{"io_executor", "IO"}, {"sys_executor", "SYSTEM"}, {"user_executor", "USER"}, {"batch_executor", "BATCH"}};
@@ -487,7 +492,11 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareSystemTabletsInfo(NJson::TJsonValue& json)  {
+    void PrepareSystemTabletsInfo(NJson::TJsonValue& json, bool relaxed)  {
+        if (relaxed && !json.Has("system_tablets") && (!json.Has("nameservice_config") || !json["nameservice_config"].Has("node"))) {
+            return;
+        }
+
         if (!json.Has("system_tablets")) {
             auto& config = json["system_tablets"];
             config.SetType(NJson::EJsonValueType::JSON_MAP);
@@ -507,8 +516,12 @@ namespace NKikimr::NYaml {
 
     }
 
-    void PrepareBootstrapConfig(NJson::TJsonValue& json) {
+    void PrepareBootstrapConfig(NJson::TJsonValue& json, bool relaxed) {
         if (json.Has("bootstrap_config") && json["bootstrap_config"].Has("tablet")) {
+            return;
+        }
+
+        if (relaxed && !json.Has("system_tablets")) {
             return;
         }
 
@@ -527,7 +540,10 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareDomainsConfig(NJson::TJsonValue& json) {
+    void PrepareDomainsConfig(NJson::TJsonValue& json, bool relaxed) {
+        if (relaxed && !json.Has("domains_config")) {
+            return;
+        }
 
         Y_ENSURE_BT(json.Has("domains_config"));
         Y_ENSURE_BT(json["domains_config"].IsMap());
@@ -591,7 +607,11 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareSecurityConfig(NJson::TJsonValue& json) {
+    void PrepareSecurityConfig(NJson::TJsonValue& json, bool relaxed) {
+        if (relaxed && !json.Has("domains_config")) {
+            return;
+        }
+
         Y_ENSURE_BT(json.Has("domains_config"));
         Y_ENSURE_BT(json["domains_config"].IsMap());
 
@@ -756,7 +776,11 @@ namespace NKikimr::NYaml {
         json.EraseValue("storage_config_generation");
     }
 
-    void PrepareLogConfig(NJson::TJsonValue& json) {
+    void PrepareLogConfig(NJson::TJsonValue& json, bool relaxed) {
+        if (relaxed) {
+            return;
+        }
+
         if (!json.Has("log_config")) {
             json["log_config"].SetType(NJson::EJsonValueType::JSON_MAP);
         }
@@ -766,7 +790,11 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareIcConfig(NJson::TJsonValue& json) {
+    void PrepareIcConfig(NJson::TJsonValue& json, bool relaxed) {
+        if (relaxed) {
+            return;
+        }
+
         if (!json.Has("interconnect_config")) {
             auto& config = json["interconnect_config"];
             config.SetType(NJson::EJsonValueType::JSON_MAP);
@@ -778,16 +806,16 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareJson(NJson::TJsonValue& json){
+    void TransformConfig(NJson::TJsonValue& json, bool relaxed) {
         PrepareNameserviceConfig(json);
         PrepareActorSystemConfig(json);
         PrepareStaticGroup(json);
-        PrepareIcConfig(json);
-        PrepareLogConfig(json);
-        PrepareSystemTabletsInfo(json);
-        PrepareDomainsConfig(json);
-        PrepareSecurityConfig(json);
-        PrepareBootstrapConfig(json);
+        PrepareIcConfig(json, relaxed);
+        PrepareLogConfig(json, relaxed);
+        PrepareSystemTabletsInfo(json, relaxed);
+        PrepareDomainsConfig(json, relaxed);
+        PrepareSecurityConfig(json, relaxed);
+        PrepareBootstrapConfig(json, relaxed);
         ClearFields(json);
     }
 
@@ -831,7 +859,7 @@ namespace NKikimr::NYaml {
     void Parse(const TString& data, NKikimrConfig::TAppConfig& config) {
         auto yamlNode = YAML::Load(data);
         NJson::TJsonValue jsonNode = Yaml2Json(yamlNode, true);
-        PrepareJson(jsonNode);
+        TransformConfig(jsonNode);
         NProtobufJson::MergeJson2Proto(jsonNode, config, GetJsonToProtoConfig());
     }
 }

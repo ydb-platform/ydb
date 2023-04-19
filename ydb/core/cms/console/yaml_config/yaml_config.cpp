@@ -2,6 +2,7 @@
 #include "yaml_config_impl.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
 
@@ -438,6 +439,8 @@ NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUn
 
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
+    NKikimr::NYaml::TransformConfig(json, true);
+
     NKikimrConfig::TAppConfig yamlProtoConfig;
 
     NProtobufJson::TJson2ProtoConfig c;
@@ -687,6 +690,8 @@ void ResolveAndParseYamlConfig(
 
     NJson::TJsonValue json;
     Y_VERIFY(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
+
+    NKikimr::NYaml::TransformConfig(json, true);
 
     NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig());
 }

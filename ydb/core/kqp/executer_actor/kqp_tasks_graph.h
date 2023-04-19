@@ -131,6 +131,9 @@ struct TShardKeyRanges {
 
 
 struct TTaskMeta {
+private:
+    YDB_OPT(bool, EnableShardsSequentialScan);
+public:
     ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
     bool ScanTask = false;

@@ -191,7 +191,6 @@ private:
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
             return;
         }
-
         taskMeta.ReadInfo.ReadType = ReadTypeFromProto(readOlapRange->GetReadType());
         taskMeta.ReadInfo.OlapProgram.Program = readOlapRange->GetOlapProgram();
         for (auto& name: readOlapRange->GetOlapProgramParameterNames()) {
@@ -199,14 +198,14 @@ private:
         }
     };
 
-    ui32 GetTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/, const ui32 shardsCountCompute, const ui32 shardsCountNode) const {
+    ui32 GetTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/) const {
         ui32 result = 0;
         if (isOlapScan) {
             if (AggregationSettings.HasCSScanThreadsPerNode()) {
-                result = AggregationSettings.GetCSScanThreadsPerNode() * 1.0 * shardsCountCompute / shardsCountNode;
+                result = AggregationSettings.GetCSScanThreadsPerNode();
             } else {
                 const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
-                result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {}) * 1.0 * shardsCountCompute / shardsCountNode;
+                result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {});
             }
         } else {
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -249,7 +248,7 @@ private:
 
         auto& tasks = nodeTasks[nodeId];
         auto& cnt = assignedShardsCount[nodeId];
-        const ui32 maxScansPerNode = GetTasksPerNode(stageInfo, isOlapScan, nodeId, 1, 1);
+        const ui32 maxScansPerNode = GetTasksPerNode(stageInfo, isOlapScan, nodeId);
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
@@ -360,7 +359,7 @@ private:
                 }
             }
 
-            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead()) {
+            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() || (!isOlapScan && readSettings.Sorted)) {
                 for (auto&& pair : nodeShards) {
                     auto& shardsInfo = pair.second;
                     for (auto&& shardInfo : shardsInfo) {
@@ -372,11 +371,12 @@ private:
                 for (const auto& pair : nodeTasks) {
                     for (const auto& taskIdx : pair.second) {
                         auto& task = TasksGraph.GetTask(taskIdx);
+                        task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareMetaForUsage(task.Meta, keyTypes);
                     }
                 }
 
-            } else if (!readSettings.Sorted) {
+            } else {
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
@@ -390,36 +390,14 @@ private:
                         LOG_D("Stage " << stageInfo.Id << " create scan task meta for node: " << nodeId
                             << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
                     }
-                    for (ui32 t = 0; t < GetTasksPerNode(stageInfo, isOlapScan, nodeId, shardsInfo.size(), shardsInfo.size()); ++t) {
+                    for (ui32 t = 0; t < GetTasksPerNode(stageInfo, isOlapScan, nodeId); ++t) {
                         auto& task = TasksGraph.AddTask(stageInfo);
                         task.Meta = meta;
+                        task.Meta.SetEnableShardsSequentialScan(false);
                         task.Meta.ExecuterId = SelfId();
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
                         task.SetMetaId(metaGlueingId);
-                    }
-                }
-            } else {
-                for (auto&& pair : nodeShards) {
-                    const auto nodeId = pair.first;
-                    auto& shardsInfo = pair.second;
-                    for (auto&& shardInfo : shardsInfo) {
-                        YQL_ENSURE(!shardInfo.KeyWriteRanges);
-                        TTaskMeta meta;
-                        const ui32 metaGlueingId = ++metaId;
-                        MergeToTaskMeta(meta, shardInfo, readSettings, columns, op);
-                        PrepareMetaForUsage(meta, keyTypes);
-
-                        LOG_D("Stage " << stageInfo.Id << " create datashard scan task meta for node: " << nodeId
-                            << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
-                        for (ui32 t = 0; t < GetTasksPerNode(stageInfo, isOlapScan, nodeId, 1, shardsInfo.size()); ++t) {
-                            auto& task = TasksGraph.AddTask(stageInfo);
-                            task.Meta = meta;
-                            task.Meta.ExecuterId = SelfId();
-                            task.Meta.NodeId = nodeId;
-                            task.Meta.ScanTask = true;
-                            task.SetMetaId(metaGlueingId);
-                        }
                     }
                 }
             }

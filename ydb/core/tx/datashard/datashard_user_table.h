@@ -359,6 +359,7 @@ struct TUserTable : public TThrRefBase {
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
     bool IsBackup = false;
+    bool IsReplicated = false;
 
     TMap<TPathId, TTableIndex> Indexes;
     TMap<TPathId, TCdcStream> CdcStreams;

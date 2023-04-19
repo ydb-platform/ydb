@@ -214,6 +214,26 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         DoSplitMergeChanges(true);
     }
 
+    Y_UNIT_TEST(ReplicatedTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
+
+        ExecSQL(server, sender, "SELECT * FROM `/Root/table-1`");
+        ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
+            Ydb::StatusIds::GENERIC_ERROR);
+    }
+
 }
 
 } // namespace NKikimr

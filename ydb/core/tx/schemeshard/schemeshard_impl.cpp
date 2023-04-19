@@ -6198,6 +6198,10 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tableDescr->SetIsBackup(true);
     }
 
+    if (tinfo->HasReplicationConfig()) {
+        tableDescr->MutableReplicationConfig()->CopyFrom(tinfo->ReplicationConfig());
+    }
+
     // Fill indexes & cdc streams (if any)
     for (const auto& child : pinfo->GetChildren()) {
         const auto& childName = child.first;

@@ -726,6 +726,24 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe), extra = (empty maybe)\n");
     }
 
+    Y_UNIT_TEST(UploadRowsToReplicatedTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
+
+        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
+    }
+
 }
 
 } // namespace NKikimr

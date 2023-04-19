@@ -268,6 +268,14 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
 
+    switch (descr.GetReplicationConfig().GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            break;
+        default:
+            IsReplicated = true;
+            break;
+    }
+
     CheckSpecialColumns();
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {

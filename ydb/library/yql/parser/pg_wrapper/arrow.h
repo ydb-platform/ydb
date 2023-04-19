@@ -184,7 +184,7 @@ void GenericExecImpl2(bool hasScalars, bool hasNulls, arrow::compute::KernelCont
                 GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, true, TArgsPolicy>(batch, length, state, builder, fcinfo);
                 *res = builder.Build(true);
             } else {
-                NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
                 GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, true, TArgsPolicy>(batch, length, state, builder, fcinfo);
                 *res = builder.Build(true);
             }
@@ -194,7 +194,7 @@ void GenericExecImpl2(bool hasScalars, bool hasNulls, arrow::compute::KernelCont
                 GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, false, TArgsPolicy>(batch, length, state, builder, fcinfo);
                 *res = builder.Build(true);
             } else {
-                NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
                 GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, false, TArgsPolicy>(batch, length, state, builder, fcinfo);
                 *res = builder.Build(true);
             }

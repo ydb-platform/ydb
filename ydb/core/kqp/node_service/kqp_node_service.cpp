@@ -148,34 +148,33 @@ private:
 
     class TComputeStageInfo {
     private:
-        YDB_ACCESSOR_DEF(std::optional<TMetaScan>, MetaNonSorted);
-        YDB_ACCESSOR_DEF(std::deque<TMetaScan>, MetaSorted);
-        std::map<ui64, TMetaScan*> SortedReadyShardIds;
+        YDB_ACCESSOR_DEF(std::deque<TMetaScan>, MetaInfo);
+        std::map<ui32, TMetaScan*> MetaWithIds;
     public:
         TComputeStageInfo() = default;
 
-        TMetaScan& MergeMetaReads(const NYql::NDqProto::TDqTask& task, const bool forceOneToMany) {
-            NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
-            YQL_ENSURE(task.GetMeta().UnpackTo(&meta), "Invalid task meta for merge: " << task.GetMeta().DebugString());
+        bool GetMetaById(const ui32 metaId, NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& result) const {
+            auto it = MetaWithIds.find(metaId);
+            if (it == MetaWithIds.end()) {
+                return false;
+            }
+            result = it->second->GetMeta();
+            return true;
+        }
+
+        TMetaScan& MergeMetaReads(const NYql::NDqProto::TDqTask& task, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const bool forceOneToMany) {
             YQL_ENSURE(meta.ReadsSize(), "unexpected merge with no reads");
-            if (forceOneToMany) {
-                MetaSorted.emplace_back(TMetaScan(meta));
-                return MetaSorted.back();
-            } else if (meta.GetSorted()) {
-                Y_VERIFY(meta.GetReads().size() == 1);
-                auto it = SortedReadyShardIds.find(meta.GetReads()[0].GetShardId());
-                if (it == SortedReadyShardIds.end()) {
-                    MetaSorted.emplace_back(TMetaScan(meta));
-                    it = SortedReadyShardIds.emplace(meta.GetReads()[0].GetShardId(), &MetaSorted.back()).first;
-                }
-                return *it->second;
+            if (forceOneToMany || !task.HasMetaId()) {
+                MetaInfo.emplace_back(TMetaScan(meta));
+                return MetaInfo.back();
             } else {
-                if (!MetaNonSorted) {
-                    MetaNonSorted = TMetaScan(meta);
+                auto it = MetaWithIds.find(task.GetMetaId());
+                if (it == MetaWithIds.end()) {
+                    MetaInfo.emplace_back(TMetaScan(meta));
+                    return *MetaWithIds.emplace(task.GetMetaId(), &MetaInfo.back()).first->second;
                 } else {
-                    Y_VERIFY(meta.GetReads().size() == MetaNonSorted->GetMeta().GetReads().size());
+                    return *it->second;
                 }
-                return *MetaNonSorted;
             }
         }
     };
@@ -192,12 +191,24 @@ private:
             return Stages.end();
         }
 
-        TMetaScan& UpsertTaskWithScan(const NYql::NDqProto::TDqTask& dqTask, const bool forceOneToMany) {
+        bool GetMetaById(const NYql::NDqProto::TDqTask& dqTask, NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& result) const {
+            if (!dqTask.HasMetaId()) {
+                return false;
+            }
+            auto it = Stages.find(dqTask.GetStageId());
+            if (it == Stages.end()) {
+                return false;
+            } else {
+                return it->second.GetMetaById(dqTask.GetMetaId(), result);
+            }
+        }
+
+        TMetaScan& UpsertTaskWithScan(const NYql::NDqProto::TDqTask& dqTask, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const bool forceOneToMany) {
             auto it = Stages.find(dqTask.GetStageId());
             if (it == Stages.end()) {
                 it = Stages.emplace(dqTask.GetStageId(), TComputeStageInfo()).first;
             }
-            return it->second.MergeMetaReads(dqTask, forceOneToMany);
+            return it->second.MergeMetaReads(dqTask, meta, forceOneToMany);
         }
     };
 
@@ -380,21 +391,26 @@ private:
                     FinishKqpTask(txId, taskId, success, issues, bucket);
                 };
 
-            ETableKind tableKind = ETableKind::Unknown;
-            {
-                NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
-                if (dqTask.GetMeta().UnpackTo(&meta)) {
-                    tableKind = (ETableKind)meta.GetTable().GetTableKind();
-                    if (tableKind == ETableKind::Unknown) {
-                        // For backward compatibility
-                        tableKind = meta.GetTable().GetSysViewInfo().empty() ? ETableKind::Datashard : ETableKind::SysView;
-                    }
+            NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
+            const auto tableKindExtract = [](const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
+                ETableKind result = (ETableKind)meta.GetTable().GetTableKind();
+                if (result == ETableKind::Unknown) {
+                    // For backward compatibility
+                    result = meta.GetTable().GetSysViewInfo().empty() ? ETableKind::Datashard : ETableKind::SysView;
                 }
+                return result;
+            };
+            ETableKind tableKind = ETableKind::Unknown;
+            if (dqTask.HasMetaId()) {
+                YQL_ENSURE(computesByStage.GetMetaById(dqTask, meta) || dqTask.GetMeta().UnpackTo(&meta), "cannot take meta on MetaId exists in tasks");
+                tableKind = tableKindExtract(meta);
+            } else if (dqTask.GetMeta().UnpackTo(&meta)) {
+                tableKind = tableKindExtract(meta);
             }
 
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
-                auto& info = computesByStage.UpsertTaskWithScan(dqTask, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
+                auto& info = computesByStage.UpsertTaskWithScan(dqTask, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
                 computeActor = CreateKqpScanComputeActor(request.Executer, txId, std::move(dqTask),
                     AsyncIoFactory, AppData()->FunctionRegistry, runtimeSettings, memoryLimits,
                     NWilson::TTraceId(ev->TraceId));
@@ -420,12 +436,7 @@ private:
         }
 
         for (auto&& i : computesByStage) {
-            for (auto&& m : i.second.MutableMetaSorted()) {
-                Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), runtimeSettingsBase, txId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
-            }
-            if (i.second.GetMetaNonSorted()) {
-                auto& m = *i.second.MutableMetaNonSorted();
+            for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), runtimeSettingsBase, txId, scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
             }

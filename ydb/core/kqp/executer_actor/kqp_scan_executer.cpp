@@ -333,7 +333,7 @@ private:
 
         const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;
-
+        ui32 metaId = 0;
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
@@ -380,6 +380,7 @@ private:
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
+                    const ui32 metaGlueingId = ++metaId;
                     TTaskMeta meta;
                     {
                         for (auto&& shardInfo : shardsInfo) {
@@ -395,6 +396,7 @@ private:
                         task.Meta.ExecuterId = SelfId();
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
+                        task.SetMetaId(metaGlueingId);
                     }
                 }
             } else {
@@ -404,6 +406,7 @@ private:
                     for (auto&& shardInfo : shardsInfo) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
                         TTaskMeta meta;
+                        const ui32 metaGlueingId = ++metaId;
                         MergeToTaskMeta(meta, shardInfo, readSettings, columns, op);
                         PrepareMetaForUsage(meta, keyTypes);
 
@@ -415,6 +418,7 @@ private:
                             task.Meta.ExecuterId = SelfId();
                             task.Meta.NodeId = nodeId;
                             task.Meta.ScanTask = true;
+                            task.SetMetaId(metaGlueingId);
                         }
                     }
                 }

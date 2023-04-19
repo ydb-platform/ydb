@@ -302,7 +302,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -315,7 +315,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::AlterTable>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::PartitioningVersion>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::TTLSettings>(),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>()
         );
     }
 
@@ -1760,9 +1761,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 tableInfo->PartitioningVersion = std::get<6>(rec);
 
-                TString ttlSettings = std::get<7>(rec);
-                if (ttlSettings) {
+                if (const auto ttlSettings = std::get<7>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableTTLSettings(), ttlSettings);
+                    Y_VERIFY(parseOk);
+                }
+
+                if (const auto replicationConfig = std::get<9>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_VERIFY(parseOk);
                 }
 

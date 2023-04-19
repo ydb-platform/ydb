@@ -2361,6 +2361,11 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
         Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->TTLSettings().SerializeToString(&ttlSettings);
     }
 
+    TString replicationConfig;
+    if (tableInfo->HasReplicationConfig()) {
+        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->ReplicationConfig().SerializeToString(&replicationConfig);
+    }
+
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::NextColId>(tableInfo->NextColumnId),
@@ -2369,7 +2374,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::AlterTable>(TString()),
             NIceDb::TUpdate<Schema::Tables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::Tables::TTLSettings>(ttlSettings),
-            NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup));
+            NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup),
+            NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig));
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -2378,7 +2384,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::AlterTable>(TString()),
             NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::MigratedTables::TTLSettings>(ttlSettings),
-            NIceDb::TUpdate<Schema::MigratedTables::IsBackup>(tableInfo->IsBackup));
+            NIceDb::TUpdate<Schema::MigratedTables::IsBackup>(tableInfo->IsBackup),
+            NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig));
     }
 
     for (auto col : tableInfo->Columns) {

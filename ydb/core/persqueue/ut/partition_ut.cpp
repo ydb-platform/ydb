@@ -731,7 +731,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
 {
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
 
-    ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
+    ActorIdToProto(Ctx->Edge, event->Record.MutableActor());
     auto* body = event->Record.MutableData();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);

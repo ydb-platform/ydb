@@ -100,7 +100,7 @@ private:
     void RemoveCachedRequest(size_t shard, size_t idx);
     void CreateBackgroundActors();
     void AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& req);
-    void AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev);
+    void AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev, bool queueRemoved = false);
     void AskQueueAttributes();
     void OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev);
     void MarkInflyReloading(ui64 shard, i64 invalidatedCount, const TString& invalidationReason);

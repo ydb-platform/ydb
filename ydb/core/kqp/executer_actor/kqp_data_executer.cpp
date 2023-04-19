@@ -2246,7 +2246,7 @@ private:
             }
             transaction.SetImmediate(ImmediateTx);
 
-            ActorIdToProto(SelfId(), ev->Record.MutableSource());
+            ActorIdToProto(SelfId(), ev->Record.MutableActor());
             ev->Record.MutableData()->Swap(&transaction);
             ev->Record.SetTxId(TxId);
 

@@ -368,6 +368,8 @@ public:
             Settings.GetTable().GetTableId().GetSchemaVersion()
         );
 
+        InitResultColumns();
+
         KeyColumnTypes.reserve(Settings.GetKeyColumnTypes().size());
         for (size_t i = 0; i < Settings.KeyColumnTypesSize(); ++i) {
             auto typeId = Settings.GetKeyColumnTypes(i);
@@ -484,12 +486,12 @@ public:
 
         auto range = state->GetBounds(Settings.GetReverse());
         TVector<TKeyDesc::TColumnOp> columns;
-        columns.reserve(Settings.GetColumns().size());
-        for (const auto& column : Settings.GetColumns()) {
+        columns.reserve(ResultColumns.size());
+        for (const auto& column : ResultColumns) {
             TKeyDesc::TColumnOp op;
-            op.Column = column.GetId();
+            op.Column = column.Tag;
             op.Operation = TKeyDesc::EColumnOperation::Read;
-            op.ExpectedType = MakeTypeInfo(column);
+            op.ExpectedType = column.TypeInfo;
             columns.emplace_back(std::move(op));
         }
 
@@ -946,15 +948,15 @@ public:
     NMiniKQL::TBytesStatistics GetRowSize(const NUdf::TUnboxedValue* row) {
         NMiniKQL::TBytesStatistics rowStats{0, 0};
         size_t columnIndex = 0;
-        for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
-            if (IsSystemColumn(Settings.GetColumns(resultColumnIndex).GetId())) {
+        for (const auto& column : ResultColumns) {
+            if (column.IsSystem) {
                 rowStats.AllocatedBytes += sizeof(NUdf::TUnboxedValue);
             } else {
-                rowStats.AddStatistics(NMiniKQL::GetUnboxedValueSize(row[columnIndex], MakeTypeInfo(Settings.GetColumns(resultColumnIndex))));
+                rowStats.AddStatistics(NMiniKQL::GetUnboxedValueSize(row[columnIndex], column.TypeInfo));
                 columnIndex += 1;
             }
         }
-        if (Settings.ColumnsSize() == 0) {
+        if (ResultColumns.empty()) {
             rowStats.AddStatistics({sizeof(ui64), sizeof(ui64)});
         }
         return rowStats;
@@ -986,18 +988,17 @@ public:
             }
 
             size_t columnIndex = 0;
-            for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
-                auto tag = Settings.GetColumns(resultColumnIndex).GetId();
-                auto type = NScheme::TTypeInfo((NScheme::TTypeId)Settings.GetColumns(resultColumnIndex).GetType());
-                if (IsSystemColumn(tag)) {
+            for (size_t resultColumnIndex = 0; resultColumnIndex < ResultColumns.size(); ++resultColumnIndex) {
+                const auto& column = ResultColumns[resultColumnIndex];
+                if (column.IsSystem) {
                     for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
-                        NMiniKQL::FillSystemColumn(editAccessors[rowIndex][resultColumnIndex], shardId, tag, type);
+                        NMiniKQL::FillSystemColumn(editAccessors[rowIndex][resultColumnIndex], shardId, column.Tag, column.TypeInfo);
                         stats.AllocatedBytes += sizeof(NUdf::TUnboxedValue);
                     }
                 } else {
                     hasResultColumns = true;
                     stats.AddStatistics(
-                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, resultColumnIndex, type)
+                        NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
                     columnIndex += 1;
                 }
@@ -1034,6 +1035,7 @@ public:
         auto& [shardId, result, batch, _, packed] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
+
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
             NUdf::TUnboxedValue* rowItems = nullptr;
@@ -1041,9 +1043,8 @@ public:
 
             i64 rowSize = 0;
             size_t columnIndex = 0;
-            for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
-                auto tag = Settings.GetColumns(resultColumnIndex).GetId();
-                if (!IsSystemColumn(tag)) {
+            for (const auto& column : ResultColumns) {
+                if (!column.IsSystem) {
                     rowSize += row[columnIndex].Size();
                     columnIndex += 1;
                 }
@@ -1052,13 +1053,12 @@ public:
             rowSize = std::max(rowSize, (i64)8);
 
             columnIndex = 0;
-            for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
-                auto tag = Settings.GetColumns(resultColumnIndex).GetId();
-                auto type = MakeTypeInfo(Settings.GetColumns(resultColumnIndex));
-                if (IsSystemColumn(tag)) {
-                    NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, tag, type);
+            for (size_t resultColumnIndex = 0; resultColumnIndex < ResultColumns.size(); ++resultColumnIndex) {
+                const auto& column = ResultColumns[resultColumnIndex];
+                if (column.IsSystem) {
+                    NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, column.Tag, column.TypeInfo);
                 } else {
-                    rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], type);
+                    rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], column.TypeInfo);
                     columnIndex += 1;
                 }
             }
@@ -1256,7 +1256,7 @@ public:
         return result;
     }
 
-
+private:
     NScheme::TTypeInfo MakeTypeInfo(const NKikimrTxDataShard::TKqpTransaction_TColumnMeta& info) {
         auto typeId = info.GetType();
         return NScheme::TTypeInfo(
@@ -1267,9 +1267,28 @@ public:
                 ) : nullptr);
     }
 
+    void InitResultColumns() {
+        ResultColumns.reserve(Settings.ColumnsSize());
+        for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
+            const auto& srcColumn = Settings.GetColumns(resultColumnIndex);
+            TResultColumn column;
+            column.Tag = srcColumn.GetId();
+            column.TypeInfo = MakeTypeInfo(srcColumn);
+            column.IsSystem = IsSystemColumn(column.Tag);
+            ResultColumns.push_back(column);
+        }
+    }
+
 private:
+    struct TResultColumn {
+        bool IsSystem = false;
+        ui32 Tag = 0;
+        NScheme::TTypeInfo TypeInfo;
+    };
+
     NKikimrTxDataShard::TKqpReadRangesSourceSettings Settings;
 
+    TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     NMiniKQL::TBytesStatistics BytesStats;

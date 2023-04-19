@@ -33,7 +33,7 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
 class TGenericColumnBuilder : public IAggColumnBuilder {
 public:
     TGenericColumnBuilder(ui64 size, TType* columnType, TComputationContext& ctx)
-        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size))
+        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size, &ctx.Builder->GetPgBuilder()))
         , Ctx_(ctx)
     {
     }
@@ -63,7 +63,7 @@ public:
         : TBase(sizeof(TGenericState), filterColumn, ctx)
         , ArgColumn_(argColumn)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
     {
     }
 
@@ -134,7 +134,7 @@ public:
         , ArgColumn_(argColumn)
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
     {
     }
 
@@ -180,7 +180,7 @@ public:
         , ArgColumn_(argColumn)
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
     {
     }
 

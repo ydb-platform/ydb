@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
+import logging
 
 import pytest
 from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
@@ -230,6 +231,28 @@ class QueuesManagingTest(KikimrSqsTestBase):
         assert_that(
             existing_queues, has_item(to_bytes(url3))
         )
+
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_request_to_deleted_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
+        self._sqs_api.get_queue_attributes(created_queue_url)
+        delete_result = self._sqs_api.delete_queue(created_queue_url)
+        assert_that(
+            delete_result, not_none()
+        )
+
+        while True:
+            try:
+                self._sqs_api.get_queue_attributes(created_queue_url)
+            except Exception as e:
+                logging.info(f'error during getting attributes after deletion: {e}')
+                if 'The specified queue doesn\'t exist.' in str(e):
+                    break
+                else:
+                    assert tables_format != 1   # for tables_format = 0 : can be internal error (failed to resolve table)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)

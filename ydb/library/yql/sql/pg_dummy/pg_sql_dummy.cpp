@@ -140,6 +140,12 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
+    Y_UNUSED(typeLen);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
     Y_UNUSED(type);
     Y_UNUSED(value);
@@ -270,6 +276,16 @@ public:
         Y_UNUSED(data);
         ythrow yexception() << "TPgDummyBuilder::NewString does nothing";
     }
+
+    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsCStringBuffer does nothing";
+    }
+
+    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsTextBuffer does nothing";
+    }
 };
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
@@ -328,6 +344,11 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
 }
 
 bool TypeDescIsComparable(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+i32 TypeDescGetTypeLen(void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }

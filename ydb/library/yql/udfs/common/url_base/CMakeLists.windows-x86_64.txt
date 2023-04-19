@@ -20,7 +20,7 @@ target_link_libraries(url_udf INTERFACE
 add_global_library_for(url_udf.global url_udf)
 target_compile_options(url_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=29
+  -DUDF_ABI_VERSION_MINOR=31
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(url_udf.global PUBLIC

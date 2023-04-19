@@ -1365,15 +1365,21 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     Send(req->Sender, std::move(resp));
 }
 
-void TQueueLeader::AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev) {
+void TQueueLeader::AnswerFailed(TSqsEvents::TEvGetConfiguration::TPtr& ev, bool queueRemoved) {
     auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
     answer->QueueCounters = Counters_;
     answer->UserCounters = UserCounters_;
-    answer->Fail = true;
+    
     answer->SchemeCache = SchemeCache_;
     answer->QuoterResources = QuoterResources_;
+    if (queueRemoved) {
+        answer->UserExists = true;
+        answer->QueueExists = false;
+    } else {
+        answer->Fail = true;
+    }
     Send(ev->Sender, answer.Release());
 }
 
@@ -1512,54 +1518,60 @@ void TQueueLeader::AskQueueAttributes() {
 
 void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev) {
     const ui32 status = ev.GetStatus();
+    bool queueExists = true;
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         using NKikimr::NClient::TValue;
         const TValue val(TValue::Create(ev.GetExecutionEngineEvaluatedResponse()));
-        const TValue& attrs(val["attrs"]);
+        
+        queueExists = val["queueExists"];
+        if (queueExists) {
+            const TValue& attrs(val["attrs"]);
 
-        TSqsEvents::TQueueAttributes attributes;
-        attributes.ContentBasedDeduplication = attrs["ContentBasedDeduplication"];
-        attributes.DelaySeconds = TDuration::MilliSeconds(attrs["DelaySeconds"]);
-        attributes.FifoQueue = attrs["FifoQueue"];
-        attributes.MaximumMessageSize = attrs["MaximumMessageSize"];
-        attributes.MessageRetentionPeriod = TDuration::MilliSeconds(attrs["MessageRetentionPeriod"]);
-        attributes.ReceiveMessageWaitTime = TDuration::MilliSeconds(attrs["ReceiveMessageWaitTime"]);
-        attributes.VisibilityTimeout = TDuration::MilliSeconds(attrs["VisibilityTimeout"]);
+            TSqsEvents::TQueueAttributes attributes;
+            attributes.ContentBasedDeduplication = attrs["ContentBasedDeduplication"];
+            attributes.DelaySeconds = TDuration::MilliSeconds(attrs["DelaySeconds"]);
+            attributes.FifoQueue = attrs["FifoQueue"];
+            attributes.MaximumMessageSize = attrs["MaximumMessageSize"];
+            attributes.MessageRetentionPeriod = TDuration::MilliSeconds(attrs["MessageRetentionPeriod"]);
+            attributes.ReceiveMessageWaitTime = TDuration::MilliSeconds(attrs["ReceiveMessageWaitTime"]);
+            attributes.VisibilityTimeout = TDuration::MilliSeconds(attrs["VisibilityTimeout"]);
 
-        const TValue showDetailedCountersDeadline = attrs["ShowDetailedCountersDeadline"];
-        if (showDetailedCountersDeadline.HaveValue()) {
-            const ui64 ms = showDetailedCountersDeadline;
-            Counters_->ShowDetailedCounters(TInstant::MilliSeconds(ms));
-        }
-
-        // update dead letter queue info
-        const auto& dlqNameVal(attrs["DlqName"]);
-        const auto& maxReceiveCountVal(attrs["MaxReceiveCount"]);
-        if (dlqNameVal.HaveValue() && maxReceiveCountVal.HaveValue()) {
-            TTargetDlqInfo info;
-            info.DlqName = TString(dlqNameVal);
-            info.MaxReceiveCount = ui64(maxReceiveCountVal);
-            if (info.DlqName && info.MaxReceiveCount) {
-                DlqInfo_ = info;
-                // now we have to discover queue id and version
-                Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueId("DLQ", UserName_, info.DlqName, FolderId_));
-            } else {
-                DlqInfo_.Clear();
+            const TValue showDetailedCountersDeadline = attrs["ShowDetailedCountersDeadline"];
+            if (showDetailedCountersDeadline.HaveValue()) {
+                const ui64 ms = showDetailedCountersDeadline;
+                Counters_->ShowDetailedCounters(TInstant::MilliSeconds(ms));
             }
-        }
 
-        QueueAttributes_ = attributes;
-        AttributesUpdateTime_ = TActivationContext::Now();
-        for (auto& req : GetConfigurationRequests_) {
-            AnswerGetConfiguration(req);
+            // update dead letter queue info
+            const auto& dlqNameVal(attrs["DlqName"]);
+            const auto& maxReceiveCountVal(attrs["MaxReceiveCount"]);
+            if (dlqNameVal.HaveValue() && maxReceiveCountVal.HaveValue()) {
+                TTargetDlqInfo info;
+                info.DlqName = TString(dlqNameVal);
+                info.MaxReceiveCount = ui64(maxReceiveCountVal);
+                if (info.DlqName && info.MaxReceiveCount) {
+                    DlqInfo_ = info;
+                    // now we have to discover queue id and version
+                    Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueId("DLQ", UserName_, info.DlqName, FolderId_));
+                } else {
+                    DlqInfo_.Clear();
+                }
+            }
+
+            QueueAttributes_ = attributes;
+            AttributesUpdateTime_ = TActivationContext::Now();
+            for (auto& req : GetConfigurationRequests_) {
+                AnswerGetConfiguration(req);
+            }
+            GetConfigurationRequests_.clear();
+            return;
         }
-        GetConfigurationRequests_.clear();
-    } else {
-        for (auto& req : GetConfigurationRequests_) {
-            AnswerFailed(req);
-        }
-        GetConfigurationRequests_.clear();
     }
+
+    for (auto& req : GetConfigurationRequests_) {
+        AnswerFailed(req, !queueExists);
+    }
+    GetConfigurationRequests_.clear();
 }
 
 void TQueueLeader::HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {

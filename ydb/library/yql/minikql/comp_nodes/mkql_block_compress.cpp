@@ -263,7 +263,7 @@ private:
         bool HaveBlocks_ = false;
 
         TState(TMemoryUsageInfo* memInfo, ui32 width, ui32 bitmapIndex, NUdf::TUnboxedValue*const* output,
-            const TVector<TBlockType*>& types, arrow::MemoryPool& pool)
+            const TVector<TBlockType*>& types, arrow::MemoryPool& pool, const NUdf::IPgBuilder& pgBuilder)
             : TComputationValue(memInfo)
             , ValuePointers_(width)
             , InputValues_(width)
@@ -289,7 +289,7 @@ private:
             for (ui32 i = 0, outIndex = 0; i < width; ++i) {
                 if (i != bitmapIndex) {
                     if (types[i]->GetShape() != TBlockType::EShape::Scalar && output[outIndex] != nullptr) {
-                        Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), pool, maxBlockLen);
+                        Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), types[i]->GetItemType(), pool, maxBlockLen, &pgBuilder);
                     }
                     outIndex++;
                 }
@@ -304,7 +304,7 @@ private:
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Width_, BitmapIndex_, output, Types_, ctx.ArrowMemoryPool);
+            state = ctx.HolderFactory.Create<TState>(Width_, BitmapIndex_, output, Types_, ctx.ArrowMemoryPool, ctx.Builder->GetPgBuilder());
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }

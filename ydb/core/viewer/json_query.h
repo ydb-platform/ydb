@@ -122,6 +122,7 @@ public:
         }
         if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         }
         if (database) {
             request.SetDatabase(database);

@@ -185,6 +185,9 @@ public:
     // Chunk locking
     TMap<TOwner, ui32> OwnerLocks;
 
+    // Debug
+    std::function<TString()> DebugInfoGenerator;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
     TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);

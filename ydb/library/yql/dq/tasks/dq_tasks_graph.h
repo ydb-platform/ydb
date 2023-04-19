@@ -166,6 +166,9 @@ struct TTaskOutput {
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 struct TTask {
+private:
+    std::optional<ui32> MetaId;
+public:
     using TInputType = TTaskInput<TInputMeta>;
     using TOutputType = TTaskOutput<TOutputMeta>;
 
@@ -173,6 +176,19 @@ struct TTask {
         : StageId(stageInfo.Id)
         , Inputs(stageInfo.InputsCount)
         , Outputs(stageInfo.OutputsCount) {
+    }
+
+    bool HasMetaId() const {
+        return !!MetaId;
+    }
+
+    void SetMetaId(const ui32 value) {
+        MetaId = value;
+    }
+
+    ui32 GetMetaIdUnsafe() const {
+        Y_VERIFY(MetaId);
+        return *MetaId;
     }
 
     ui64 Id = 0;

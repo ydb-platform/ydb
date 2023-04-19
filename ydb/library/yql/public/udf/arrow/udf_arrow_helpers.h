@@ -25,11 +25,12 @@ using TExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::comp
 
 class TUdfKernelState : public arrow::compute::KernelState {
 public:
-    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper)
+    TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper, const IPgBuilder& pgBuilder)
         : ArgTypes_(argTypes)
         , OutputType_(outputType)
         , OnlyScalars_(onlyScalars)
         , TypeInfoHelper_(typeInfoHelper)
+        , PgBuilder_(pgBuilder)
     {
         Readers_.resize(ArgTypes_.size());
     }
@@ -45,7 +46,7 @@ public:
     IArrayBuilder& GetArrayBuilder() {
         Y_ENSURE(!OnlyScalars_);
         if (!ArrayBuilder_) {
-            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *arrow::default_memory_pool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_));
+            ArrayBuilder_ = MakeArrayBuilder(*TypeInfoHelper_, OutputType_, *arrow::default_memory_pool(), TypeInfoHelper_->GetMaxBlockLength(OutputType_), &PgBuilder_);
         }
 
         return *ArrayBuilder_;
@@ -65,6 +66,7 @@ private:
     const TType* OutputType_;
     const bool OnlyScalars_;
     const ITypeInfoHelper* TypeInfoHelper_;
+    const IPgBuilder& PgBuilder_;  
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     std::unique_ptr<IArrayBuilder> ArrayBuilder_;
     std::unique_ptr<IScalarBuilder> ScalarBuilder_;
@@ -144,7 +146,7 @@ public:
                 }
             }
 
-            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get());
+            TUdfKernelState kernelState(ArgTypes_, OutputType_, OnlyScalars_, TypeInfoHelper_.Get(), valueBuilder->GetPgBuilder());
             arrow::compute::ExecContext execContext;
             arrow::compute::KernelContext kernelContext(&execContext);
             kernelContext.SetState(&kernelState);

@@ -1,10 +1,10 @@
 #include "ydb_service_scheme.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/string/join.h>
 
@@ -182,6 +182,8 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::PqGroup:
     case NScheme::ESchemeEntryType::Topic:
         return DescribeTopic(driver);
+    case NScheme::ESchemeEntryType::CoordinationNode:
+        return DescribeCoordinationNode(driver);
     default:
         WarnAboutTableOptions();
         PrintEntryVerbose(entry, ShowPermissions);
@@ -364,6 +366,60 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
     ).GetValueSync();
     ThrowOnError(result);
     return PrintTableResponse(result);
+}
+
+int TCommandDescribe::PrintCoordinationNodeResponse(const NYdb::NCoordination::TDescribeNodeResult& result) const {
+    switch (OutputFormat) {
+    case EOutputFormat::Default:
+    case EOutputFormat::Pretty:
+        return PrintCoordinationNodeResponsePretty(result.GetResult());
+    case EOutputFormat::Json:
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+            << "Use \"--format proto-json-base64\" option instead." << Endl;
+        [[fallthrough]];
+    case EOutputFormat::ProtoJsonBase64:
+        return PrintCoordinationNodeResponseProtoJsonBase64(result.GetResult());
+    default:
+        throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
+    }
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const {
+    Cout << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
+    Cout << "ReadConsistencyMode: " << result.GetReadConsistencyMode() << Endl;
+    if (result.GetSessionGracePeriod().Defined()) {
+        Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod() << Endl;
+    }
+    if (result.GetSelfCheckPeriod().Defined()) {
+        Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod() << Endl;
+    }
+    Cout << "RatelimiterCountersMode: " << result.GetRateLimiterCountersMode() << Endl;
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const {
+    TString json;
+    google::protobuf::util::JsonPrintOptions jsonOpts;
+    jsonOpts.preserve_proto_field_names = true;
+    auto convertStatus = google::protobuf::util::MessageToJsonString(
+        NYdb::TProtoAccessor::GetProto(result),
+        &json,
+        jsonOpts
+    );
+    if (convertStatus.ok()) {
+        Cout << json << Endl;
+        return EXIT_SUCCESS;
+    }
+    Cerr << "Error occurred while converting result proto to json: " << TString(convertStatus.message().ToString()) << Endl;
+    return EXIT_FAILURE;
+}
+
+int TCommandDescribe::DescribeCoordinationNode(const TDriver& driver) {
+    NCoordination::TClient client(driver);
+    NCoordination::TDescribeNodeResult description = client.DescribeNode(Path).GetValueSync();
+
+    return PrintCoordinationNodeResponse(description);
 }
 
 namespace {

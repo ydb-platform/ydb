@@ -84,6 +84,7 @@ struct TNodeDescription::TImpl {
         RateLimiterCountersMode_ = static_cast<ERateLimiterCountersMode>(config.rate_limiter_counters_mode());
         Owner_ = desc.self().owner();
         PermissionToSchemeEntry(desc.self().effective_permissions(), &EffectivePermissions_);
+        Proto_ = desc;
     }
 
     TMaybe<TDuration> SelfCheckPeriod_;
@@ -93,6 +94,7 @@ struct TNodeDescription::TImpl {
     ERateLimiterCountersMode RateLimiterCountersMode_;
     TString Owner_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
+    Ydb::Coordination::DescribeNodeResult Proto_;
 };
 
 TNodeDescription::TNodeDescription(
@@ -126,6 +128,10 @@ const TString& TNodeDescription::GetOwner() const {
 
 const TVector<NScheme::TPermissions>& TNodeDescription::GetEffectivePermissions() const {
     return Impl_->EffectivePermissions_;
+}
+
+const Ydb::Coordination::DescribeNodeResult& TNodeDescription::GetProto() const {
+    return Impl_->Proto_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

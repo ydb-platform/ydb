@@ -6,10 +6,12 @@
 #include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr::NSQS {
+    
+TDuration RandomRetentionPeriod();
 
 class TRetentionActor : public TActorBootstrapped<TRetentionActor> {
 public:
-    TRetentionActor(const TQueuePath& queuePath, ui32 tablesFormat, const TActorId& queueLeader);
+    TRetentionActor(const TQueuePath& queuePath, ui32 tablesFormat, const TActorId& queueLeader, bool useCPUOptimization);
 
     void Bootstrap();
 
@@ -18,12 +20,9 @@ public:
     }
 
 private:
-    TDuration RandomRetentionPeriod() const;
-
     void SetRetentionBoundary();
 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
-    void Handle(TSqsEvents::TEvChangeRetentionActiveCheck::TPtr& ev);
     void HandlePoisonPill(TEvPoisonPill::TPtr&);
     void HandleWakeup();
 
@@ -35,7 +34,7 @@ private:
     const ui32 TablesFormat_;
     const TString RequestId_;
     const TActorId QueueLeader_;
-    bool Active = true;
+    const bool UseCPUOptimization_;
 };
 
 } // namespace NKikimr::NSQS

@@ -214,6 +214,7 @@ void TQueueLeader::HandleWakeup(TEvWakeup::TPtr& ev) {
         break;
     }
     case UPDATE_MESSAGES_METRICS_TAG: {
+        PlanningRetentionWakeup();
         ReportOldestTimestampMetricsIfReady();
         ReportMessagesCountMetricsIfReady();
         Schedule(TDuration::Seconds(1), new TEvWakeup(UPDATE_MESSAGES_METRICS_TAG));
@@ -258,6 +259,7 @@ void TQueueLeader::HandleForceReloadState(TSqsEvents::TEvForceReloadState::TPtr&
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
             .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
         .ParentBuilder().Start();
+    AskQueueAttributes();
 }
 
 void TQueueLeader::HandleState(const TSqsEvents::TEvExecuted::TRecord& reply) {
@@ -274,24 +276,22 @@ void TQueueLeader::HandleState(const TSqsEvents::TEvExecuted::TRecord& reply) {
             const auto& state = shardStates[i];
             const ui64 shard = IsFifoQueue_ ? 0 : (TablesFormat_ == 1 ? ui32(state["Shard"]) : ui64(state["State"]));
             auto& shardInfo = Shards_[shard];
-            auto inflyCountVal = state["InflyCount"];
-            Y_VERIFY(i64(inflyCountVal) >= 0);
-            ui64 inflyMessagesCount = static_cast<ui64>(i64(inflyCountVal));
-            ui64 inflyVersion = state["InflyVersion"].IsNull() ? 0 : ui64(state["InflyVersion"]);
-
+            
             SetMessagesCount(shard, state["MessageCount"]);
-            shardInfo.InflyMessagesCount = inflyMessagesCount;
-            shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(state["CreatedTimestamp"]));
-                
-            if (shardInfo.InflyVersion != inflyVersion) {
+            SetInflyMessagesCount(shard, state["InflyCount"]);
+            
+            const TValue createdTimestamp = state["CreatedTimestamp"];
+            if (!createdTimestamp.IsNull()) {
+                shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(createdTimestamp));
+            }
+            
+            const TValue inflyVersion = state["InflyVersion"];
+            if (!inflyVersion.IsNull() && shardInfo.InflyVersion != ui64(inflyVersion)) {
                 shardInfo.NeedInflyReload = true;
             }
 
             if (shardInfo.MessagesCount > 0) {
                 RequestOldestTimestampMetrics(shard);
-            }
-            if (shardInfo.MessagesCount == 0 && !shardInfo.MessagesCountWasGot) {
-                Send(RetentionActor_, new TSqsEvents::TEvChangeRetentionActiveCheck(false));
             }
 
             shardInfo.MessagesCountWasGot = true;
@@ -318,6 +318,7 @@ void TQueueLeader::HandleGetConfigurationWhileWorking(TSqsEvents::TEvGetConfigur
 void TQueueLeader::HandleClearQueueAttributesCache([[maybe_unused]] TSqsEvents::TEvClearQueueAttributesCache::TPtr& ev) {
     AttributesUpdateTime_ = TInstant::Zero();
     QueueAttributes_ = Nothing();
+    AskQueueAttributes();
 }
 
 void TQueueLeader::HandleExecuteWhileIniting(TSqsEvents::TEvExecute::TPtr& ev) {
@@ -1497,6 +1498,10 @@ void TQueueLeader::ScheduleGetConfigurationRetry() {
 }
 
 void TQueueLeader::AskQueueAttributes() {
+    if (AskQueueAttributesInProcess_) {
+        return;
+    }
+    AskQueueAttributesInProcess_ = true;
     const TString reqId = CreateGuidAsString();
     LOG_SQS_DEBUG("Executing queue " << TLogQueueName(UserName_, QueueName_) << " attributes cache request. Req id: " << reqId);
     TExecutorBuilder(SelfId(), reqId)
@@ -1513,16 +1518,17 @@ void TQueueLeader::AskQueueAttributes() {
         .Params()
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
             .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
-        .ParentBuilder().Start();
+        .ParentBuilder().Start();   
 }
 
 void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev) {
+    AskQueueAttributesInProcess_ = false;
     const ui32 status = ev.GetStatus();
     bool queueExists = true;
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         using NKikimr::NClient::TValue;
         const TValue val(TValue::Create(ev.GetExecutionEngineEvaluatedResponse()));
-        
+
         queueExists = val["queueExists"];
         if (queueExists) {
             const TValue& attrs(val["attrs"]);
@@ -1558,6 +1564,9 @@ void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev)
                 }
             }
 
+            if (!QueueAttributes_ || QueueAttributes_->MessageRetentionPeriod > attributes.MessageRetentionPeriod) {
+                RetentionWakeupPlannedAt_ = TInstant::Zero();
+            }
             QueueAttributes_ = attributes;
             AttributesUpdateTime_ = TActivationContext::Now();
             for (auto& req : GetConfigurationRequests_) {
@@ -1700,17 +1709,11 @@ void TQueueLeader::ReceiveMessagesCountMetrics(ui64 shard, const TSqsEvents::TEv
     if (reply.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         using NKikimr::NClient::TValue;
         const TValue val(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
-        const TValue messagesCount = val["messagesCount"];
-        if (!messagesCount.IsNull()) { // can be null in case of parallel queue deletion (SQS-292)
-            SetMessagesCount(shard, messagesCount);
-        }
+        SetMessagesCount(shard, val["messagesCount"]);
+        SetInflyMessagesCount(shard, val["inflyMessagesCount"]);
         const TValue createdTimestamp = val["createdTimestamp"];
         if (!createdTimestamp.IsNull()) {
             Shards_[shard].CreatedTimestamp = TInstant::MilliSeconds(ui64(createdTimestamp));
-        }
-        const TValue inflyMessagesCount = val["inflyMessagesCount"];
-        if (!inflyMessagesCount.IsNull()) { // can be null in case of parallel queue deletion (SQS-292)
-            Shards_[shard].InflyMessagesCount = static_cast<ui64>(i64(inflyMessagesCount)); // InflyCount is Int64 type in database
         }
         ProcessGetRuntimeQueueAttributes(shard);
     } else {
@@ -1719,6 +1722,35 @@ void TQueueLeader::ReceiveMessagesCountMetrics(ui64 shard, const TSqsEvents::TEv
         FailGetRuntimeQueueAttributesForShard(shard);
     }
     ReportMessagesCountMetricsIfReady();
+}
+
+void TQueueLeader::PlanningRetentionWakeup() {
+    TInstant now = TActivationContext::Now();
+    if (!QueueAttributes_ || RetentionWakeupPlannedAt_ >= now || !UseCPUOptimization) {
+        return;
+    }
+    TInstant firstExpiredAt = TInstant::Max();
+    for (ui64 shard = 0; shard < ShardsCount_; ++shard) {
+        auto oldestMessagesTimestampMs = Shards_[shard].OldestMessageTimestampMs;
+        if (oldestMessagesTimestampMs != Max<ui64>()) {
+            TInstant expiredAt = TInstant::MilliSeconds(oldestMessagesTimestampMs) + QueueAttributes_->MessageRetentionPeriod;
+            firstExpiredAt = Min(firstExpiredAt, expiredAt);
+        }
+    }
+    if (firstExpiredAt == TInstant::Max()) {
+        return;
+    }
+
+    TInstant nextWakeupAt = Max(
+        now,
+        Max(RetentionWakeupPlannedAt_, firstExpiredAt) + RandomRetentionPeriod()
+    );
+    
+    CreateBackgroundActors();
+    LOG_SQS_DEBUG("Next retantion wakeup for " << TLogQueueName(UserName_, QueueName_) << " planned at " << nextWakeupAt
+        << " retention period " << QueueAttributes_->MessageRetentionPeriod);
+    RetentionWakeupPlannedAt_ = nextWakeupAt;
+    TActivationContext::Schedule(RetentionWakeupPlannedAt_, new IEventHandle(RetentionActor_, SelfId(), new TEvWakeup()));
 }
 
 void TQueueLeader::ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::TEvExecuted::TRecord& reply) {
@@ -1737,9 +1769,6 @@ void TQueueLeader::ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::T
         if (list.Size()) {
             Shards_[shard].LastSuccessfulOldestMessageTimestampValueMs = Shards_[shard].OldestMessageTimestampMs = list[0]["SentTimestamp"];
             Shards_[shard].OldestMessageOffset = list[0]["Offset"];
-            LOG_SQS_INFO("Got oldest message for " << TLogQueueName(UserName_, QueueName_, shard) 
-                << ": offset=" << Shards_[shard].OldestMessageOffset << " ts=" << TInstant::MilliSeconds(Shards_[shard].OldestMessageTimestampMs));
-            
         } else {
             Shards_[shard].OldestMessageTimestampMs = Max();
         }
@@ -1750,11 +1779,26 @@ void TQueueLeader::ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::T
     ReportOldestTimestampMetricsIfReady();
 }
 
+ui64 GetStateValue(const NKikimr::NClient::TValue& value) {
+    const i64 parsed = value;
+    Y_VERIFY(parsed >= 0);
+    return static_cast<ui64>(parsed);
+}
+
+void TQueueLeader::SetInflyMessagesCount(ui64 shard, const NKikimr::NClient::TValue& value) {
+    if (value.IsNull()) { // can be null in case of parallel queue deletion (SQS-292)
+        return;
+    }
+    ui64 newValue = GetStateValue(value);
+    Shards_[shard].InflyMessagesCount = newValue;
+}
+
 void TQueueLeader::SetMessagesCount(ui64 shard, const NKikimr::NClient::TValue& value) {
-    const i64 newMessagesCountVal = value;
-    Y_VERIFY(newMessagesCountVal >= 0);
-    ui64 newMessagesCount = static_cast<ui64>(newMessagesCountVal);
-    SetMessagesCount(shard, newMessagesCount);
+    if (value.IsNull()) { // can be null in case of parallel queue deletion (SQS-292)
+        return;
+    }
+    ui64 newValue = GetStateValue(value);
+    SetMessagesCount(shard, newValue);
 }
 
 void TQueueLeader::SetMessagesCount(ui64 shard, ui64 newMessagesCount) {
@@ -1762,10 +1806,6 @@ void TQueueLeader::SetMessagesCount(ui64 shard, ui64 newMessagesCount) {
     if (UseCPUOptimization) {
         if (shardInfo.MessagesCount == 0 && newMessagesCount > 0) {
             RequestOldestTimestampMetrics(shard);
-            Send(RetentionActor_, new TSqsEvents::TEvChangeRetentionActiveCheck(true));
-        }
-        if (shardInfo.MessagesCount > 0 && newMessagesCount == 0) {
-            Send(RetentionActor_, new TSqsEvents::TEvChangeRetentionActiveCheck(false));
         }
     }
     shardInfo.MessagesCount = newMessagesCount;
@@ -1848,7 +1888,7 @@ void TQueueLeader::CreateBackgroundActors() {
         }
     }
     if (!RetentionActor_) {
-        RetentionActor_ = Register(new TRetentionActor(GetQueuePath(), TablesFormat_, SelfId()));
+        RetentionActor_ = Register(new TRetentionActor(GetQueuePath(), TablesFormat_, SelfId(), UseCPUOptimization));
         LOG_SQS_DEBUG("Created new retention actor for queue " << TLogQueueName(UserName_, QueueName_) << ". Actor id: " << RetentionActor_);
     }
     if (!PurgeActor_) {
@@ -1949,10 +1989,8 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
         shardInfo.InflyVersion = val["inflyVersion"];
         LOG_SQS_DEBUG("Infly version for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": " << shardInfo.InflyVersion);
 
-        auto inflyCount = val["inflyCount"];
-        Y_VERIFY(i64(inflyCount) >= 0);
         SetMessagesCount(shard, val["messageCount"]);
-        shardInfo.InflyMessagesCount = static_cast<ui64>(i64(inflyCount));
+        SetInflyMessagesCount(shard, val["inflyCount"]);
         shardInfo.ReadOffset = val["readOffset"];
         shardInfo.CreatedTimestamp = TInstant::MilliSeconds(ui64(val["createdTimestamp"]));
         
@@ -2293,14 +2331,17 @@ void TQueueLeader::HandleGetRuntimeQueueAttributesWhileWorking(TSqsEvents::TEvGe
 void TQueueLeader::HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQueueNotification::TPtr&) {
     LatestDlqNotificationTs_ = TActivationContext::Now();
 
-    if (!IsFifoQueue_ && !IsDlqQueue_) {
-        // we need to start the process only once
+    if (!IsDlqQueue_) {
+        bool enablePeriodicMessagesCounting = UseCPUOptimization || !IsFifoQueue_; // we need to start the process only once
+
         IsDlqQueue_ = true;
         UseCPUOptimization = false;
-        LOG_SQS_INFO("Started periodic message counting for queue " << TLogQueueName(UserName_, QueueName_)
-                                                                    << ". Latest dlq notification was at " << LatestDlqNotificationTs_);
 
-        StartGatheringMetrics();
+        if (enablePeriodicMessagesCounting) {
+            LOG_SQS_INFO("Started periodic message counting for queue " << TLogQueueName(UserName_, QueueName_)
+                                                                    << ". Latest dlq notification was at " << LatestDlqNotificationTs_);
+            StartGatheringMetrics();
+        }
     }
 }
 

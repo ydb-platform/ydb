@@ -22,22 +22,18 @@ namespace {
 template<bool Distinct>
 TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     if (const auto uniq = src.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
-        TExprNode::TListType columns;
-        for (const auto& set : uniq->GetAllSets())
+        const auto pos = node->Pos();
+        TExprNode::TListType children(1U, std::move(node));
+        for (const auto& set : uniq->GetAllSets()) {
+            TExprNode::TListType columns;
+            columns.reserve(set.size());
             for (const auto& path : set)
-                if (!path.empty())
-                    columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
-        const auto& name = std::conditional_t<Distinct, TCoAssumeDistinct, TCoAssumeUnique>::CallableName();
-        return columns.empty() ?
-            ctx.NewCallable(node->Pos(), name, {std::move(node)}):
-            ctx.Builder(node->Pos())
-                .Callable(name)
-                    .Add(0, std::move(node))
-                    .List(1)
-                        .Add(std::move(columns))
-                    .Seal()
-                .Seal()
-                .Build();
+                if (1U == path.size())
+                    columns.emplace_back(ctx.NewAtom(pos, path.front()));
+            if (!columns.empty())
+                children.emplace_back(ctx.NewList(pos, std::move(columns)));
+        }
+        return ctx.NewCallable(pos, std::conditional_t<Distinct, TCoAssumeDistinct, TCoAssumeUnique>::CallableName(), std::move(children));
     }
     return node;
 }

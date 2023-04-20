@@ -231,6 +231,8 @@ public:
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockExpandChunked"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap;
+        Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

@@ -7,8 +7,7 @@
 
 #include <variant>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
 
 struct TEvPartitionWriter {
     enum EEv {
@@ -29,11 +28,13 @@ struct TEvPartitionWriter {
         struct TSuccess {
             TString OwnerCookie;
             TSourceIdInfo SourceIdInfo;
+            TString ToString() const;
         };
 
         struct TError {
             TString Reason;
             NKikimrClient::TResponse Response;
+            TString ToString() const;
         };
 
         std::variant<TSuccess, TError> Result;
@@ -100,6 +101,8 @@ struct TEvPartitionWriter {
 
         bool IsSuccess() const { return Result.index() == 0; }
         const TError& GetError() const { return std::get<1>(Result); }
+        TString DumpError() const;
+        TString ToString() const override;
     };
 
     struct TEvDisconnected: public TEventLocal<TEvDisconnected, EvDisconnected> {
@@ -118,5 +121,4 @@ struct TPartitionWriterOpts {
 IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, const TString& sourceId,
     const TPartitionWriterOpts& opts = {});
 
-} // NPQ
-} // NKikimr
+}

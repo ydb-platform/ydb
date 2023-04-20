@@ -13,20 +13,29 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
+
+TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
+    return TStringBuilder() << "Success {"
+        << " OwnerCookie: " << OwnerCookie
+        << " SourceIdInfo: " << SourceIdInfo.ShortDebugString()
+    << " }";
+}
+
+TString TEvPartitionWriter::TEvInitResult::TError::ToString() const {
+    return TStringBuilder() << "Error {"
+        << " Reason: " << Reason
+        << " Response: " << Response.ShortDebugString()
+    << " }";
+}
 
 TString TEvPartitionWriter::TEvInitResult::ToString() const {
     auto out = TStringBuilder() << ToStringHeader() << " {";
 
     if (IsSuccess()) {
-        const auto& result = GetResult();
-        out << " OwnerCookie: " << result.OwnerCookie
-            << " SourceIdInfo: " << result.SourceIdInfo.ShortDebugString();
+        out << " " << GetResult().ToString();
     } else {
-        const auto& error = GetError();
-        out << " Reason: " << error.Reason
-            << " Response: " << error.Response.ShortDebugString();
+        out << " " << GetError().ToString();
     }
 
     out << " }";
@@ -37,6 +46,28 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Cookie: " << Cookie
     << " }";
+}
+
+TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
+    Y_VERIFY(!IsSuccess());
+
+    return TStringBuilder() << "Error {"
+        << " Reason: " << GetError().Reason
+        << " Response: " << Record.ShortDebugString()
+    << " }";
+}
+
+TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
+    auto out = TStringBuilder() << ToStringHeader() << " {";
+
+    if (IsSuccess()) {
+        out << " Success { Response: " << Record.ShortDebugString() << " }";
+    } else {
+        out << " " << DumpError();
+    }
+
+    out << " }";
+    return out;
 }
 
 class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
@@ -489,5 +520,4 @@ IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partit
     return new TPartitionWriter(client, tabletId, partitionId, sourceId, opts);
 }
 
-} // NPQ
-} // NKikimr
+}

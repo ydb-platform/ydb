@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 add_subdirectory(ut)
+add_subdirectory(capnp/tests)
 
 add_library(blobstorage-vdisk-common)
 target_link_libraries(blobstorage-vdisk-common PUBLIC

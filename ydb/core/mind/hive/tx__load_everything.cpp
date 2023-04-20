@@ -230,6 +230,8 @@ public:
             }
         }
 
+        BLOG_D("THive::TTxLoadEverything loaded " << numSequences << " sequences");
+
         auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Select();
         if (!tabletTypeAllowedMetrics.IsReady())
             return false;
@@ -245,10 +247,12 @@ public:
         }
 
         {
+            size_t numSubDomains = 0;
             auto domainRowset = db.Table<Schema::SubDomain>().Range().Select();
             if (!domainRowset.IsReady())
                 return false;
             while (!domainRowset.EndOfSet()) {
+                ++numSubDomains;
                 TSubDomainKey key(domainRowset.GetKey());
                 TDomainInfo& domain = Self->Domains.emplace(key, TDomainInfo()).first->second;
                 domain.Path = domainRowset.GetValueOrDefault<Schema::SubDomain::Path>();
@@ -262,24 +266,30 @@ public:
                 if (!domainRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
         }
 
         {
+            size_t numBlockedOwners = 0;
             auto blockedOwnerRowset = db.Table<Schema::BlockedOwner>().Range().Select();
             if (!blockedOwnerRowset.IsReady())
                 return false;
             while (!blockedOwnerRowset.EndOfSet()) {
+                ++numBlockedOwners;
                 Self->BlockedOwners.emplace(blockedOwnerRowset.GetKey());
                 if (!blockedOwnerRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
         }
 
         {
+            size_t numNodes = 0;
             auto nodeRowset = db.Table<Schema::Node>().Range().Select();
             if (!nodeRowset.IsReady())
                 return false;
             while (!nodeRowset.EndOfSet()) {
+                ++numNodes;
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
@@ -313,13 +323,16 @@ public:
                 if (!nodeRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numNodes << " nodes");
         }
 
         {
+            size_t numTabletCategories = 0;
             auto categoryRowset = db.Table<Schema::TabletCategory>().Range().Select();
             if (!categoryRowset.IsReady())
                 return false;
             while (!categoryRowset.EndOfSet()) {
+                ++numTabletCategories;
                 TTabletCategoryId categoryId = categoryRowset.GetValue<Schema::TabletCategory::ID>();
                 TTabletCategoryInfo& category = Self->TabletCategories.insert(std::make_pair(categoryId, TTabletCategoryInfo(categoryId))).first->second;
                 category.MaxDisconnectTimeout = categoryRowset.GetValueOrDefault<Schema::TabletCategory::MaxDisconnectTimeout>();
@@ -327,6 +340,7 @@ public:
                 if (!categoryRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
         }
 
         if (Self->CurrentConfig.GetSystemTabletCategoryId() != 0 && Self->TabletCategories.empty()) {
@@ -336,10 +350,12 @@ public:
         TTabletId maxTabletId = 0;
 
         {
+            size_t numTablets = 0;
             auto tabletRowset = db.Table<Schema::Tablet>().Range().Select();
             if (!tabletRowset.IsReady())
                 return false;
             while (!tabletRowset.EndOfSet()) {
+                ++numTablets;
                 TTabletId tabletId = tabletRowset.GetValue<Schema::Tablet::ID>();
                 maxTabletId = std::max(maxTabletId, UniqPartFromTabletID(tabletId));
                 TLeaderTabletInfo& tablet = Self->Tablets.emplace(
@@ -429,14 +445,18 @@ public:
                 if (!tabletRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numTablets << " tablets");
         }
 
         {
+            size_t numTabletChannels = 0;
+            size_t numMissingTablets = 0;
             auto tabletChannelRowset = db.Table<Schema::TabletChannel>().Select();
             if (!tabletChannelRowset.IsReady())
                 return false;
 
             while (!tabletChannelRowset.EndOfSet()) {
+                ++numTabletChannels;
                 TTabletId tabletId = tabletChannelRowset.GetValue<Schema::TabletChannel::Tablet>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
@@ -455,18 +475,25 @@ public:
                     if (tabletChannelRowset.GetValue<Schema::TabletChannel::NeedNewGroup>()) {
                         tablet->ChannelProfileNewGroup.set(channelId);
                     }
+                } else {
+                    ++numMissingTablets;
                 }
                 if (!tabletChannelRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         {
+            size_t numTabletChannelHistories = 0;
+            size_t numMissingTablets = 0;
             auto tabletChannelGenRowset = db.Table<Schema::TabletChannelGen>().Select();
             if (!tabletChannelGenRowset.IsReady())
                 return false;
 
             while (!tabletChannelGenRowset.EndOfSet()) {
+                ++numTabletChannelHistories;
                 TTabletId tabletId = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Tablet>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
@@ -480,21 +507,29 @@ public:
                     }
                     TTabletChannelInfo& channel = tablet->TabletStorageInfo->Channels[channelId];
                     channel.History.emplace_back(generationId, groupId, timestamp);
+                } else {
+                    ++numMissingTablets;
                 }
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         for (auto& [tabletId, tabletInfo] : Self->Tablets) {
             tabletInfo.AcquireAllocationUnits();
         }
+        BLOG_D("THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
 
         {
+            size_t numTabletFollowerGroups = 0;
+            size_t numMissingTablets = 0;
             auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Select();
             if (!tabletFollowerGroupRowset.IsReady())
                 return false;
             while (!tabletFollowerGroupRowset.EndOfSet()) {
+                ++numTabletFollowerGroups;
                 TTabletId tabletId = tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::TabletID>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
@@ -519,17 +554,24 @@ public:
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();
+                } else {
+                    ++numMissingTablets;
                 }
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         {
+            size_t numTabletFollowers = 0;
+            size_t numMissingTablets = 0;
             auto tabletFollowerRowset = db.Table<Schema::TabletFollowerTablet>().Select();
             if (!tabletFollowerRowset.IsReady())
                 return false;
             while (!tabletFollowerRowset.EndOfSet()) {
+                ++numTabletFollowers;
                 TTabletId tabletId = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::TabletID>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
@@ -550,17 +592,24 @@ public:
                             follower.BecomeStopped();
                         }
                     }
+                } else {
+                    ++numMissingTablets;
                 }
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         {
+            size_t numMetrics = 0;
+            size_t numMissingTablets = 0;
             auto metricsRowset = db.Table<Schema::Metrics>().Select();
             if (!metricsRowset.IsReady())
                 return false;
             while (!metricsRowset.EndOfSet()) {
+                ++numMetrics;
                 TTabletId tabletId = metricsRowset.GetValue<Schema::Metrics::TabletID>();
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
@@ -573,12 +622,17 @@ public:
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }
+                } else {
+                    ++numMissingTablets;
                 }
                 if (!metricsRowset.Next())
                     return false;
             }
+            BLOG_D("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
+        size_t numDeletedNodes = 0;
         for (auto itNode = Self->Nodes.begin(); itNode != Self->Nodes.end();) {
             if (itNode->second.CanBeDeleted()) {
                 db.Table<Schema::Node>().Key(itNode->first).Delete();
@@ -587,6 +641,7 @@ public:
                 ++itNode;
             }
         }
+        BLOG_D("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes");
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 

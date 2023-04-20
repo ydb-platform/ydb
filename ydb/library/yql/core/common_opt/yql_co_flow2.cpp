@@ -2183,7 +2183,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable({
             "Collect", "LazyList", "ForwardList","Iterator","FromFlow","ToFlow","AssumeUnique","AssumeDistinct",
             "FilterNullMembers","SkipNullMembers","FilterNullElements","SkipNullElements",
-            "ExpandMap","WideMap","WideFilter","NarrowMap","NarrowFlatMap","NarrowMultiMap"
+            "ExpandMap","WideMap","WideFilter","NarrowMap","NarrowFlatMap","NarrowMultiMap",
+            "MapJoinCore"
         })) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
             return ctx.SwapWithHead(*node);

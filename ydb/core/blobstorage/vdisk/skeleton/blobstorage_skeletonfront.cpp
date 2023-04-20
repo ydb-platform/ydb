@@ -1223,32 +1223,6 @@ namespace NKikimr {
             return compatibilityMatrix[extId][intId];
         }
 
-        bool Compatible(NKikimrCapnProto::EVDiskQueueId extId, NKikimrBlobStorage::EVDiskInternalQueueId intId) {
-            // Abbreviations
-            // IU = IntUnknown
-            // IAG = IntAsyncGet
-            // IFG = IntFastGet
-            // IPL = IntPutLog
-            // IPHF = IntPutHugeForeground
-            // IPHB = IntPutHugeBackground
-            // ID  = IntDiscover
-            // IL  = IntLowRead
-            static bool compatibilityMatrix[8][8] = {
-                    //                IU     IAG    IFG    IPL    IPHF    IPHB   ID     IL
-                    /*Unknown*/      {false, false, false, false, false,  false, false, false},
-                    /*PutTabletLog*/ {false, false, false, true,  true,   false, false, false},
-                    /*PutAsyncBlob*/ {false, false, false, true,  false,  true , false, false},
-                    /*PutUserData*/  {false, false, false, true,  true,   false, false, false},
-                    /*GetAsyncRead*/ {false, true,  false, false, false,  false, false, false},
-                    /*GetFastRead*/  {false, false, true,  false, false,  false, false, false},
-                    /*GetDiscover*/  {false, false, false, false, false,  false, true , false},
-                    /*GetLowRead*/   {false, false, false, false, false,  false, false, true}
-            };
-
-            Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
-            return compatibilityMatrix[int(extId)][int(intId)];
-        }
-
         template <typename TEvPtr>
         void HandlePatchEvent(TEvPtr &ev) {
             const ui64 cost = CostModel->GetCost(*ev->Get());

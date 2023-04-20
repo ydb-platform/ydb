@@ -1110,7 +1110,12 @@ TExprNode::TPtr OptimizeToOptional(const TExprNode::TPtr& node, TExprContext& ct
         return ctx.NewCallable(node->Head().Pos(), "Nothing", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
     }
 
-    if constexpr (!OrderAware) {
+    if constexpr (OrderAware) {
+        if (node->Head().IsCallable("Unordered")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.RenameNode(*node, "ToOptional");
+        }
+    } else {
         if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
@@ -2004,7 +2009,12 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
 
 template <bool Ordered>
 TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if constexpr (!Ordered) {
+    if constexpr (Ordered) {
+        if (node->Head().IsCallable("Unordered")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.RenameNode(*node, "FlatMap");
+        }
+    } else {
         if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
@@ -3027,51 +3037,48 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
     return node;
 }
 
-} // namespace
-
-TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const TCoFlatMapBase& flatMap,
-    TShouldConvertSqlInToJoinPredicate shouldConvertSqlInToJoin, TExprContext& ctx, bool prefixOnly)
-{
-    // FlatMap input should be List<Struct<...>> to be accepted as EquiJoin input
-    auto inputType = flatMap.Input().Ref().GetTypeAnn();
-    if (inputType->GetKind() != ETypeAnnotationKind::List ||
-        inputType->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct)
-    {
-        return {};
-    }
-
-    TCoLambda lambda = flatMap.Lambda();
-    if (!lambda.Body().Maybe<TCoConditionalValueBase>()) {
-        return {};
-    }
-
-    TCoConditionalValueBase conditional(lambda.Body().Ptr());
-    TPredicateChain chain;
-    auto lambdaArg = lambda.Ptr()->Head().HeadPtr();
-    auto sqlInTail = SplitPredicateChain(conditional.Predicate().Ptr(), lambdaArg, shouldConvertSqlInToJoin, chain, ctx);
-
-    if (!chain.empty()) {
-        if (chain.front().ConvertibleToJoin) {
-            return ConvertSqlInPredicatesPrefixToJoins(flatMap.Ptr(), chain, sqlInTail, ctx);
+std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin) {
+    std::unordered_map<std::string_view, std::tuple<ui32, const TSortedConstraintNode*, const TChoppedConstraintNode*>> sorteds(equiJoin.ArgCount() - 2U);
+    for (ui32 i = 0U; i + 2U < equiJoin.ArgCount(); ++i) {
+        if (const auto joinInput = equiJoin.Arg(i).Cast<TCoEquiJoinInput>(); joinInput.Scope().Ref().IsAtom()) {
+            const auto sorted = joinInput.List().Ref().GetConstraint<TSortedConstraintNode>();
+            const auto chopped = joinInput.List().Ref().GetConstraint<TChoppedConstraintNode>();
+            if (sorted || chopped)
+                sorteds.emplace(joinInput.Scope().Ref().Content(), std::make_tuple(i, sorted, chopped));
         }
+    }
 
-        if (sqlInTail && !prefixOnly) {
-            YQL_CLOG(DEBUG, Core) << "FlatMapOverNonJoinableSqlInChain of size " << chain.size();
-            TExprNode::TListType predicates;
-            predicates.reserve(chain.size());
-            for (auto& it : chain) {
-                predicates.emplace_back(std::move(it.Pred));
+    for (std::vector<const TExprNode*> joinTreeNodes(1U, equiJoin.Arg(equiJoin.ArgCount() - 2).Raw()); !joinTreeNodes.empty();) {
+        const auto joinTree = joinTreeNodes.back();
+        joinTreeNodes.pop_back();
+
+        if (!joinTree->Child(1)->IsAtom())
+            joinTreeNodes.emplace_back(joinTree->Child(1));
+
+        if (!joinTree->Child(2)->IsAtom())
+            joinTreeNodes.emplace_back(joinTree->Child(2));
+
+        if (!joinTree->Head().IsAtom("Cross")) {
+            std::unordered_map<std::string_view, TConstraintNode::TSetType> tableJoinKeys;
+            for (const auto keys : {joinTree->Child(3), joinTree->Child(4)})
+                for (ui32 i = 0U; i < keys->ChildrenSize(); ++i)
+                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TConstraintNode::TPathType(1U, keys->Child(++i)->Content()));
+
+            for (const auto& [label, joinKeys]: tableJoinKeys) {
+                if (const auto it = sorteds.find(label); sorteds.cend() != it) {
+                    const auto sorted = std::get<const TSortedConstraintNode*>(it->second);
+                    const auto chopped = std::get<const TChoppedConstraintNode*>(it->second);
+                    if (sorted && sorted->StartsWith(joinKeys) || chopped && chopped->Equals(joinKeys))
+                        sorteds.erase(it);
+                }
             }
-            auto prefixPred = ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates));
-
-            auto innerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), flatMap.Input().Ptr(), prefixPred, false, ctx);
-            auto outerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), innerFlatMap, sqlInTail, true, ctx);
-            return ctx.RenameNode(*outerFlatMap,
-                outerFlatMap->Content() == "OrderedFlatMap" ? "OrderedFlatMapToEquiJoin" : "FlatMapToEquiJoin");
         }
     }
 
-    return {};
+    std::unordered_set<ui32> result(sorteds.size());
+    for (const auto& sort : sorteds)
+        result.emplace(std::get<ui32>(sort.second));
+    return result;
 }
 
 TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const THashSet<TStringBuf>& serializeUdfNames) {
@@ -3215,10 +3222,6 @@ TExprNode::TPtr BuildJsonParse(const TExprNode::TPtr& jsonExpr, TExprContext& ct
         .Done().Ptr();
 }
 
-TExprNode::TPtr BuildJsonParse(const TCoJsonQueryBase& jsonExpr, TExprContext& ctx) {
-    return BuildJsonParse(jsonExpr.Json().Ptr(), ctx);
-}
-
 TExprNode::TPtr GetJsonDocumentOrParseJson(const TExprNode::TPtr& jsonExpr, TExprContext& ctx, EDataSlot& argumentDataSlot) {
     const TTypeAnnotationNode* type = jsonExpr->GetTypeAnn();
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
@@ -3299,7 +3302,12 @@ TExprNode::TPtr BuildJsonCompilePath(const TCoJsonQueryBase& jsonExpr, TExprCont
 
 template<bool Ordered>
 TExprNode::TPtr CanonizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if constexpr (!Ordered) {
+    if constexpr (Ordered) {
+        if (node->Head().IsCallable("Unordered")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.RenameNode(*node, "MultiMap");
+        }
+    } else {
         if (const auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << ' ' << node->Head().Content();
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
@@ -3425,6 +3433,8 @@ TExprNode::TPtr OptimizeExtend(const TExprNode::TPtr& node, TExprContext& ctx, T
 
     return node;
 }
+
+} // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
@@ -3671,6 +3681,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["OrderedFilter"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Head().IsCallable("Unordered")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.RenameNode(*node, "Filter");
+        }
+
         YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content();
         return ConvertFilterToFlatmap<TCoOrderedFilter, TCoOrderedFlatMap>(TCoOrderedFilter(node), ctx, optCtx);
     };
@@ -3686,6 +3701,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["OrderedMap"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable("Unordered")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.RenameNode(*node, "Map");
+        }
+
         YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content();
         return ConvertMapToFlatmap<TCoOrderedMap, TCoOrderedFlatMap>(TCoOrderedMap(node), ctx);
     };
@@ -4682,8 +4702,21 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ret;
         }
 
-        ui32 inputsCount = node->ChildrenSize() - 2;
-        for (ui32 i = 0; i < inputsCount; ++i) {
+        if (const auto indexes = GetUselessSortedJoinInputs(TCoEquiJoin(node)); !indexes.empty()) {
+            YQL_CLOG(DEBUG, Core) << "Suppress order on " << indexes.size() << ' ' << node->Content() << " inputs.";
+            auto children = node->ChildrenList();
+            for (const auto idx : indexes)
+                children[idx] = ctx.Builder(children[idx]->Pos())
+                    .List()
+                        .Callable(0, "Unordered")
+                            .Add(0, children[idx]->HeadPtr())
+                        .Seal()
+                        .Add(1, children[idx]->TailPtr())
+                    .Seal().Build();
+            return ctx.ChangeChildren(*node, std::move(children));
+        }
+
+        for (ui32 i = 0U; i < node->ChildrenSize() - 2U; ++i) {
             if (IsListReorder(node->Child(i)->Head())) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Child(i)->Content();
                 return ctx.ChangeChild(*node, i, ctx.ChangeChild(*node->Child(i), 0, node->Child(i)->Head().HeadPtr()));
@@ -4728,12 +4761,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["AggrCountInit"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional || node->Head().IsCallable("Just")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " - 1";
-            return ctx.NewCallable(node->Pos(), "Uint64", { ctx.NewAtom(node->Pos(), "1", TNodeFlags::Default) });
+            return ctx.NewCallable(node->Pos(), "Uint64", { ctx.NewAtom(node->Pos(), 1U) });
         }
 
         if (node->Head().IsCallable("Nothing")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " - 0";
-            return ctx.NewCallable(node->Pos(), "Uint64", { ctx.NewAtom(node->Pos(), "0", TNodeFlags::Default) });
+            return ctx.NewCallable(node->Pos(), "Uint64", { ctx.NewAtom(node->Pos(), 0U) });
         }
 
         return node;
@@ -6706,6 +6739,55 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         return node;
     };
+}
+
+TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const TCoFlatMapBase& flatMap,
+    TShouldConvertSqlInToJoinPredicate shouldConvertSqlInToJoin, TExprContext& ctx, bool prefixOnly)
+{
+    // FlatMap input should be List<Struct<...>> to be accepted as EquiJoin input
+    auto inputType = flatMap.Input().Ref().GetTypeAnn();
+    if (inputType->GetKind() != ETypeAnnotationKind::List ||
+        inputType->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct)
+    {
+        return {};
+    }
+
+    TCoLambda lambda = flatMap.Lambda();
+    if (!lambda.Body().Maybe<TCoConditionalValueBase>()) {
+        return {};
+    }
+
+    TCoConditionalValueBase conditional(lambda.Body().Ptr());
+    TPredicateChain chain;
+    auto lambdaArg = lambda.Ptr()->Head().HeadPtr();
+    auto sqlInTail = SplitPredicateChain(conditional.Predicate().Ptr(), lambdaArg, shouldConvertSqlInToJoin, chain, ctx);
+
+    if (!chain.empty()) {
+        if (chain.front().ConvertibleToJoin) {
+            return ConvertSqlInPredicatesPrefixToJoins(flatMap.Ptr(), chain, sqlInTail, ctx);
+        }
+
+        if (sqlInTail && !prefixOnly) {
+            YQL_CLOG(DEBUG, Core) << "FlatMapOverNonJoinableSqlInChain of size " << chain.size();
+            TExprNode::TListType predicates;
+            predicates.reserve(chain.size());
+            for (auto& it : chain) {
+                predicates.emplace_back(std::move(it.Pred));
+            }
+            auto prefixPred = ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates));
+
+            auto innerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), flatMap.Input().Ptr(), prefixPred, false, ctx);
+            auto outerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), innerFlatMap, sqlInTail, true, ctx);
+            return ctx.RenameNode(*outerFlatMap,
+                outerFlatMap->Content() == "OrderedFlatMap" ? "OrderedFlatMapToEquiJoin" : "FlatMapToEquiJoin");
+        }
+    }
+
+    return {};
+}
+
+TExprNode::TPtr BuildJsonParse(const TCoJsonQueryBase& jsonExpr, TExprContext& ctx) {
+    return BuildJsonParse(jsonExpr.Json().Ptr(), ctx);
 }
 
 } // namespace NYql

@@ -1624,8 +1624,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
-        // Should be fixed in KIKIMR-17007
-        return;
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1648,6 +1646,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             TString query = R"(
                 --!syntax_v1
+                PRAGMA Kikimr.OptUseFinalizeByKey;
                 SELECT
                     level, COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -1663,7 +1662,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             // Check plan
 #if SSA_RUNTIME_VERSION >= 2U
-            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "Aggregate-TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
 #else
             CheckPlanForAggregatePushdown(query, tableClient, { "CombineCore" }, "");

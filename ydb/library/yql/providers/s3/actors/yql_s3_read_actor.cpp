@@ -78,8 +78,8 @@
 #ifdef THROW
 #undef THROW
 #endif
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/xml/document/xml-document.h>
-
 
 #define LOG_E(name, stream) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
@@ -771,7 +771,8 @@ public:
         auto id = index + StartPathIndex;
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
-        Gateway->Download(url,
+        Gateway->Download(
+            UrlEscapeRet(url, true),
             IHTTPGateway::MakeYcHeaders(requestId, Token),
             0U,
             std::min(size, SizeLimit),
@@ -844,7 +845,7 @@ private:
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
         } else {
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::move(result.Issues), requestId, pathInd, path)));
-        }		
+        }
     }
 
     i64 GetAsyncInputData(TUnboxedValueVector& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -1031,7 +1032,7 @@ struct TRetryStuff {
         const TString& requestId,
         const IRetryPolicy<long>::TPtr& retryPolicy
     ) : Gateway(std::move(gateway))
-      , Url(std::move(url))
+      , Url(UrlEscapeRet(url, true))
       , Headers(headers)
       , Offset(0U)
       , SizeLimit(sizeLimit)
@@ -1086,11 +1087,15 @@ void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const T
 }
 
 void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) {
-    retryStuff->CancelHook = retryStuff->Gateway->Download(retryStuff->Url,
-        retryStuff->Headers, retryStuff->Offset, retryStuff->SizeLimit,
+    retryStuff->CancelHook = retryStuff->Gateway->Download(
+        retryStuff->Url,
+        retryStuff->Headers,
+        retryStuff->Offset,
+        retryStuff->SizeLimit,
         std::bind(&OnDownloadStart, actorSystem, self, parent, std::placeholders::_1),
         std::bind(&OnNewData, actorSystem, self, parent, std::placeholders::_1),
-        std::bind(&OnDownloadFinished, actorSystem, self, parent, pathIndex, std::placeholders::_1),
+        std::bind(
+            &OnDownloadFinished, actorSystem, self, parent, pathIndex, std::placeholders::_1),
         inflightCounter);
 }
 

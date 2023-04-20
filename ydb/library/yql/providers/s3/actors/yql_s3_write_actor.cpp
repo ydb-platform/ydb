@@ -25,6 +25,7 @@
 #ifdef THROW
 #undef THROW
 #endif
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/xml/document/xml-document.h>
 
 
@@ -62,10 +63,10 @@ struct TEvPrivate {
 
     // Events
     struct TEvUploadFinished : public TEventLocal<TEvUploadFinished, EvUploadFinished> {
-        TEvUploadFinished(const TString& key, const TString& url, ui64 uploadSize) 
+        TEvUploadFinished(const TString& key, const TString& url, ui64 uploadSize)
             : Key(key), Url(url), UploadSize(uploadSize) {
         }
-        const TString Key, Url;	
+        const TString Key, Url;
         const ui64 UploadSize;
     };
 
@@ -135,7 +136,7 @@ public:
         const IRetryPolicy<long>::TPtr& retryPolicy,
         bool dirtyWrite,
         const TString& token)
-        : TxId(txId)	
+        : TxId(txId)
         , Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
         , RetryPolicy(retryPolicy)
@@ -364,7 +365,7 @@ private:
     }
 
     void FinalizeMultipartCommit() {
-        Become(nullptr);	
+        Become(nullptr);
         if (DirtyWrite) {
             CommitUploadedParts();
         } else {
@@ -502,9 +503,15 @@ private:
             const auto& key = MakePartitionKey(v);
             const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(TxId, Gateway, CredProvider, key, Url + Path + key + MakeOutputName() + Extension,
-                    Compression, RetryPolicy, DirtyWrite, Token);
-                keyIt->second.emplace_back(fileWrite.get());
+            auto fileWrite = std::make_unique<TS3FileWriteActor>(
+                TxId,
+                Gateway,
+                CredProvider,
+                key,
+                UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension, true),
+                Compression,
+                RetryPolicy, DirtyWrite, Token);
+            keyIt->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
 

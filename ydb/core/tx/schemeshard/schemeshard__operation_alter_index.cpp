@@ -140,7 +140,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable();
+                .IsTable()
+                .NotAsyncReplicaTable();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

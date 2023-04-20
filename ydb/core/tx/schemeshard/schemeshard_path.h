@@ -60,6 +60,7 @@ public:
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& NotBackupTable(EStatus status = EStatus::StatusSchemeError) const;
+        const TChecker& NotAsyncReplicaTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& IsBlockStoreVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsFileStore(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsKesus(EStatus status = EStatus::StatusNameConflict) const;
@@ -149,6 +150,7 @@ public:
     bool IsInsideCdcStreamPath() const;
     bool IsTableIndex() const;
     bool IsBackupTable() const;
+    bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;
     bool IsSequence() const;
     bool IsReplication() const;

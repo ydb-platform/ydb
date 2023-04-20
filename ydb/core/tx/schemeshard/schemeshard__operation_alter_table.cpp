@@ -489,6 +489,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .NotUnderOperation();
 
             if (!context.IsAllowedPrivateTables) {

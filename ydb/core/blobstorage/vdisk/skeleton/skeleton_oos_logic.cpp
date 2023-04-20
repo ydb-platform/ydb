@@ -268,7 +268,8 @@ namespace NKikimr {
     ESpaceColor TOutOfSpaceLogic::GetSpaceColor() const {
         auto& oos = VCtx->GetOutOfSpaceState();
         const ESpaceColor global = oos.GetGlobalColor();
-        return global >= TSpaceColor::ORANGE ? global : oos.GetLocalColor();
+        const ESpaceColor log = oos.GetLocalLogColor();
+        return Max(log, global >= TSpaceColor::ORANGE ? global : oos.GetLocalColor());
     }
 
 } // NKikimr

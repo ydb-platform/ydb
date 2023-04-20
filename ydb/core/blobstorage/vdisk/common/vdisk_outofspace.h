@@ -39,9 +39,17 @@ namespace NKikimr {
             return StatusFlagToSpaceColor(GetLocalStatusFlags());
         }
 
+        ESpaceColor GetLocalLogColor() const {
+            return StatusFlagToSpaceColor(GetLocalLogStatusFlags());
+        }
+
         // update state with flags received from local PDisk
         void UpdateLocal(NPDisk::TStatusFlags flags) {
             Update(SelfOrderNum, flags);
+        }
+
+        void UpdateLocalLog(NPDisk::TStatusFlags flags) {
+            AtomicSet(LogFlags, flags);
         }
 
         void UpdateLocalFreeSpaceShare(ui64 freeSpaceShare24bit) {
@@ -54,6 +62,10 @@ namespace NKikimr {
 
         NPDisk::TStatusFlags GetLocalStatusFlags() const {
             return static_cast<NPDisk::TStatusFlags>(AtomicGet(AllVDiskFlags[SelfOrderNum]));
+        }
+
+        NPDisk::TStatusFlags GetLocalLogStatusFlags() const {
+            return static_cast<NPDisk::TStatusFlags>(AtomicGet(LogFlags));
         }
 
         TOutOfSpaceStatus GetGlobalStatusFlags() const {
@@ -70,6 +82,8 @@ namespace NKikimr {
         }
 
     private:
+        // Log space flags.
+        TAtomic LogFlags = 0;
         // Flag for every VDisk in the BlobStorage group
         TAtomic AllVDiskFlags[MaxVDisksInGroup];
         // Cached global flags (obtained by merging AllVDiskFlags)

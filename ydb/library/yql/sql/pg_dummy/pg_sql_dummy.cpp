@@ -219,6 +219,11 @@ NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
     throw yexception() << "PG types are not supported";
 }
 
+NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
+    Y_UNUSED(typeId);
+    throw yexception() << "PG types are not supported";
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr
 

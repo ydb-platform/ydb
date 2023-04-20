@@ -74,16 +74,10 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
+template<typename TStringType, bool Nullable>
 class TStringBlockReader final : public IBlockReader {
 public:
     using TOffset = typename TStringType::offset_type;
-
-    void SetPgBuilder(const IPgBuilder* pgBuilder, i32 typeLen, ui32 pgTypeId) {
-        Y_UNUSED(pgBuilder);
-        Y_UNUSED(typeLen);
-        Y_UNUSED(pgTypeId);
-    }
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         Y_VERIFY_DEBUG(data.buffers.size() == 3);
@@ -265,9 +259,18 @@ struct TReaderTraits {
     using TTuple = TTupleBlockReader<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockReader<T, Nullable>;
-    template <typename TStringType, bool Nullable, EPgStringType PgString>
-    using TStrings = TStringBlockReader<TStringType, Nullable, PgString>;
+    template <typename TStringType, bool Nullable>
+    using TStrings = TStringBlockReader<TStringType, Nullable>;
     using TExtOptional = TExternalOptionalBlockReader;
+
+    static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
+        Y_UNUSED(pgBuilder);
+        if (desc.PassByValue) {
+            return std::make_unique<TFixedSize<ui64, true>>();
+        } else {
+            return std::make_unique<TStrings<arrow::BinaryType, true>>();
+        }        
+    }
 };
 
 template <typename TTraits>
@@ -288,12 +291,12 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
     }
 }
 
-template <typename TTraits, typename T, EPgStringType PgString>
+template <typename TTraits, typename T>
 std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
     if (isOptional) {
-        return std::make_unique<typename TTraits::template TStrings<T, true, PgString>>();
+        return std::make_unique<typename TTraits::template TStrings<T, true>>();
     } else {
-        return std::make_unique<typename TTraits::template TStrings<T, false, PgString>>();
+        return std::make_unique<typename TTraits::template TStrings<T, false>>();
     }
 }
 
@@ -376,9 +379,9 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         case NUdf::EDataSlot::Double:
             return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
         case NUdf::EDataSlot::String:
-            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, EPgStringType::None>(isOptional);
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType>(isOptional);
         case NUdf::EDataSlot::Utf8:
-            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, EPgStringType::None>(isOptional);
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType>(isOptional);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }
@@ -387,19 +390,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
     TPgTypeInspector typePg(typeInfoHelper, type);
     if (typePg) {
         auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
-        if (desc->PassByValue) {
-            return MakeFixedSizeBlockReaderImpl<TTraits, ui64>(true);
-        } else {
-            if (desc->Typelen == -1) {
-                auto ret = std::make_unique<typename TTraits::template TStrings<arrow::BinaryType, true, EPgStringType::Text>>();
-                ret->SetPgBuilder(pgBuilder, desc->Typelen, typePg.GetTypeId());
-                return ret;
-            } else {
-                auto ret = std::make_unique<typename TTraits::template TStrings<arrow::BinaryType, true, EPgStringType::CString>>();
-                ret->SetPgBuilder(pgBuilder, desc->Typelen, typePg.GetTypeId());
-                return ret;
-            }
-        }
+        return TTraits::MakePg(*desc, pgBuilder);        
     }
 
     Y_ENSURE(false, "Unsupported type");

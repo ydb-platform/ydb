@@ -4,11 +4,13 @@
 #include "mkql_alloc.h"
 
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
+#include <ydb/library/yql/public/udf/arrow/block_item_comparator.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/compare.h>
 #include <array>
 
 #include <arrow/c/bridge.h>
@@ -1656,6 +1658,10 @@ NUdf::IFunctionTypeInfoBuilder15& TFunctionTypeInfoBuilder::IsStrict() {
     return *this;
 }
 
+const NUdf::IBlockTypeHelper& TFunctionTypeInfoBuilder::IBlockTypeHelper() const {
+    return BlockTypeHelper;
+}
+
 bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
@@ -2390,6 +2396,26 @@ size_t CalcMaxBlockItemSize(const TType* type) {
     }
 
     MKQL_ENSURE(false, "Unsupported type");
+}
+
+struct TComparatorTraits {
+    using TResult = NUdf::IBlockItemComparator;
+    template <bool Nullable>
+    using TTuple = NUdf::TTupleBlockItemComparator<Nullable>;
+    template <typename T, bool Nullable>
+    using TFixedSize = NUdf::TFixedSizeBlockItemComparator<T, Nullable>;
+    template <typename TStringType, bool Nullable>
+    using TStrings = NUdf::TStringBlockItemComparator<TStringType, Nullable>;
+    using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
+
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+        Y_UNUSED(pgBuilder);
+        return std::unique_ptr<TResult>(MakePgItemComparator(desc.TypeId).Release());
+    }
+};
+
+NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {
+    return NUdf::MakeBlockReaderImpl<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 } // namespace NMiniKQL

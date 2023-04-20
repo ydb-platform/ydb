@@ -1174,10 +1174,10 @@ namespace NKikimr {
             // check queue compatibility: it's a contract between BlobStorage Proxy and VDisk,
             // we don't work if queues are incompatible
 
-            bool compatible = Compatible(extQueueId, intQueueId);
-//            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
-//                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
-//                   NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
+            bool compatible = Compatible(NKikimrCapnProtoUtil::convertToProtobuf(extQueueId), intQueueId);
+            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
+                   VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
+                   NKikimrBlobStorage::EVDiskQueueId_Name(NKikimrCapnProtoUtil::convertToProtobuf(extQueueId)).data());
 
             TExtQueueClass &extQueue = GetExtQueue(NKikimrCapnProtoUtil::convertToProtobuf(extQueueId));
             NBackpressure::TQueueClientId clientId(msgQoS);

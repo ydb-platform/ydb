@@ -2645,7 +2645,7 @@ private:
                         }
                     }
                 }
-            } else if (auto l = GetPathToKey(body.Head(), args), r = GetPathToKey(body.Tail(), args); l && r && *l == *r) {
+            } else if (auto l = GetPathToKey(SkipCallables(body.Head(), {"Length"}), args), r = GetPathToKey(SkipCallables(body.Tail(), {"Length"}), args); l && r && *l == *r) {
                 if constexpr (Wide) {
                     auto path = l->first;
                     path.emplace_front(ctx.GetIndexAsString(l->second));

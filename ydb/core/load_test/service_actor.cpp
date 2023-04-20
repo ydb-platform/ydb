@@ -242,17 +242,20 @@ private:
     ui64 GetTag(const TEvLoadTestRequest& origRequest, bool legacyRequest) {
         if (legacyRequest) {
             ui64 tag = ExtractTagFromCommand(origRequest);
-            LOG_N("Received legacy request with tag# " << tag);
-            Y_ENSURE(tag >= NextTag, "External tag# " << tag << " should not be less than NextTag = " << NextTag);
-            Y_ENSURE(TakenTags.count(tag) == 0, "External tag# " << tag << " should not be taken");
-            TakenTags.insert(tag);
-            return tag;
-        } else {
-            while (TakenTags.count(NextTag)) {
-                ++NextTag;
+            if (tag) {
+                LOG_N("Received legacy request with tag# " << tag);
+                Y_ENSURE(tag >= NextTag, "External tag# " << tag << " should not be less than NextTag = " << NextTag);
+                Y_ENSURE(TakenTags.count(tag) == 0, "External tag# " << tag << " should not be taken");
+                TakenTags.insert(tag);
+                return tag;
+            } else {
+                LOG_N("Received legacy request with tag# 0, assigning it a proper tag in a regular way");
             }
-            return NextTag++;
         }
+        while (TakenTags.count(NextTag)) {
+            ++NextTag;
+        }
+        return NextTag++;
     }
 
     const TEvLoadTestRequest& AddRequestInProcessing(const TEvLoadTestRequest& origRequest, bool legacyRequest) {

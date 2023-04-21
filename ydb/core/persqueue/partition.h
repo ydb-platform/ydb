@@ -30,13 +30,6 @@ using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabel
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 
-void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
-                               bool isLocalDC,
-                               NPersQueue::TTopicConverterPtr topicConverter,
-                               ui64 tabletId,
-                               const TActorContext& ctx,
-                               TString& topicWriteQuoterPath,
-                               TString& topicWriteQuotaResourcePath);
 
 class TKeyLevel;
 struct TMirrorerInfo;

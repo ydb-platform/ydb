@@ -4,7 +4,16 @@
 namespace NKikimr::NPQ {
 
 static const ui32 LEVEL0 = 32;
+static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
 
+
+void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
+                               bool isLocalDC,
+                               NPersQueue::TTopicConverterPtr topicConverter,
+                               ui64 tabletId,
+                               const TActorContext& ctx,
+                               TString& topicWriteQuoterPath,
+                               TString& topicWriteQuotaResourcePath);
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
@@ -925,6 +934,43 @@ bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TP
     }
 
     return true;
+}
+
+void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
+                               bool isLocalDC,
+                               NPersQueue::TTopicConverterPtr topicConverter,
+                               ui64 tabletId,
+                               const TActorContext& ctx,
+                               TString& topicWriteQuoterPath,
+                               TString& topicWriteQuotaResourcePath)
+{
+    if (IsQuotingEnabled(pqConfig, isLocalDC)) { // Mirrored topics are not quoted in local dc.
+        const auto& quotingConfig = pqConfig.GetQuotingConfig();
+
+        Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+
+        // ToDo[migration] - double check
+        auto topicPath = topicConverter->GetFederationPath();
+
+        // ToDo[migration] - separate quoter paths?
+        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
+        if (topicParts.size() < 2) {
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
+                       "tablet " << tabletId << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
+            return;
+        }
+        topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
+
+        topicWriteQuotaResourcePath = JoinPath(topicParts);
+        topicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << topicConverter->GetAccount();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "topicWriteQuutaResourcePath '" << topicWriteQuotaResourcePath
+                    << "' topicWriteQuoterPath '" << topicWriteQuoterPath
+                    << "' account '" << topicConverter->GetAccount()
+                    << "'"
+        );
+    }
 }
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {

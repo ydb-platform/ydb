@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.10)
 # Create a new test executable
 add_executable(ydb_capnp_tests tevvget_test.cpp)
 
+# Add GoogleTest
+enable_testing()
+find_package(GTest REQUIRED)
+
 # Link required libraries
 target_link_libraries(ydb_capnp_tests PUBLIC
         contrib-libs-linux-headers
@@ -13,8 +17,7 @@ target_link_libraries(ydb_capnp_tests PUBLIC
         cpp-testing-unittest_main
         capnp
         kj
-        gtest
-        gtest_main
+        ${GTEST_LIBRARIES}
         )
 
 target_link_directories(ydb_capnp_tests PUBLIC /usr/local/lib)
@@ -24,7 +27,6 @@ find_path(CAPNP_INCLUDE_DIR capnp/message.h)
 target_include_directories(ydb_capnp_tests PRIVATE ${CAPNP_INCLUDE_DIR})
 
 # Add the test to CTest
-enable_testing()
 include(GoogleTest)
 gtest_discover_tests(ydb_capnp_tests
         TEST_PREFIX "ydb_capnp_tests."

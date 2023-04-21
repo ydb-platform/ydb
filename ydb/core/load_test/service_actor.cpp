@@ -398,6 +398,22 @@ private:
         InfoRequests.erase(it);
     }
 
+    void RespondToArchiveRequests() {
+        TVector<ui32> archiveRequestIds;
+        for (const auto& [id, req] : InfoRequests) {
+            if (req.Mode == "archive") {
+                archiveRequestIds.push_back(id);
+            }
+        }
+        for (ui32 id : archiveRequestIds) {
+            if (IsJsonContentType(InfoRequests[id].AcceptFormat)) {
+                GenerateArchiveJsonResponse(id);
+            } else {
+                GenerateHttpInfoRes("archive", id);
+            }
+        }
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
@@ -782,7 +798,11 @@ public:
             ui32 limit = GetCgiParamNumber(params, "limit", 1, 100, 10);
             info.Offset = offset;
             info.Limit = limit;
-            StartReadingResultsFromTable(offset, limit);
+            if (AppData()->TenantName.empty()) {
+                RespondToArchiveRequests();
+            } else {
+                StartReadingResultsFromTable(offset, limit);
+            }
         } else {
             GenerateHttpInfoRes(mode, id);
         }
@@ -895,37 +915,33 @@ public:
 
     void Handle(const TEvLoad::TEvYqlSingleQueryResponse::TPtr& ev) {
         const auto* response = ev->Get();
-        if (response->ErrorMessage.Defined()) {
-            LOG_E("Failed to execute YQL query: " << response->ErrorMessage.GetRef());
-            return;
-        }
         if (response->Result == kTableCreatedResult) {
-            LOG_N("Created test results table");
-            StoreResults();
-        } else if (response->Result == kRecordsInsertedResult) {
-            LOG_N("Inserted records with test results");
-        } else if (response->Result == kRecordsSelectedResult) {
-            LOG_N("Selected records from table");
-            Y_ENSURE(response->Response.Defined());
-            if (!LoadResultFromResponseProto(response->Response.GetRef(), ArchivedResults)) {
-                LOG_E("Failed to parse results from table");
-                ArchivedResults.clear();
+            if (response->ErrorMessage.Defined()) {
+                LOG_E("Failed to create test results table: " << response->ErrorMessage.GetRef());
             } else {
-                LOG_N("Got results from table: " << ArchivedResults.size());
+                LOG_N("Created test results table");
+                StoreResults();
             }
-            TVector<ui32> archiveRequestIds;
-            for (const auto& [id, req] : InfoRequests) {
-                if (req.Mode == "archive") {
-                    archiveRequestIds.push_back(id);
-                }
+        } else if (response->Result == kRecordsInsertedResult) {
+            if (response->ErrorMessage.Defined()) {
+                LOG_E("Failed to save test results into table: " << response->ErrorMessage.GetRef());
+            } else {
+                LOG_N("Inserted records with test results");
             }
-            for (ui32 id : archiveRequestIds) {
-                if (IsJsonContentType(InfoRequests[id].AcceptFormat)) {
-                    GenerateArchiveJsonResponse(id);
+        } else if (response->Result == kRecordsSelectedResult) {
+            if (response->ErrorMessage.Defined()) {
+                LOG_E("Failed to select test results from table: " << response->ErrorMessage.GetRef());
+            } else {
+                LOG_N("Selected records from table");
+                Y_ENSURE(response->Response.Defined());
+                if (!LoadResultFromResponseProto(response->Response.GetRef(), ArchivedResults)) {
+                    LOG_E("Failed to parse results from table");
+                    ArchivedResults.clear();
                 } else {
-                    GenerateHttpInfoRes("archive", id);
+                    LOG_N("Got results from table: " << ArchivedResults.size());
                 }
             }
+            RespondToArchiveRequests();
         } else {
             LOG_E("Unsupported result from YQL query: " << response->Result);
         }
@@ -1195,6 +1211,11 @@ public:
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         str << "Archived load test results";
+                    }
+                    if (AppData()->TenantName.empty()) {
+                        DIV_CLASS("panel-body text-warning") {
+                            str << "Table is not available because TenantName is not set";
+                        }
                     }
                     TABLE_CLASS("table-bordered table-condensed") {
                         TABLEHEAD() {

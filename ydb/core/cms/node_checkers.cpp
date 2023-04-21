@@ -6,10 +6,10 @@
 
 namespace NKikimr::NCms {
 
-#define NCH_LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CMS, "[Checker] " << stream)
-#define NCH_LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CMS, "[Checker] " << stream)
+#define NCH_LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CMS, "[Nodes Counter] " << stream)
+#define NCH_LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CMS, "[Nodes Counter] " << stream)
 
-TNodesStateBase::ENodeState TNodesStateBase::NodeState(NKikimrCms::EState state) {
+TNodesLimitsCounterBase::ENodeState INodesChecker::NodeState(NKikimrCms::EState state) {
     switch (state) {
         case NKikimrCms::UP:
             return NODE_STATE_UP;
@@ -24,14 +24,14 @@ TNodesStateBase::ENodeState TNodesStateBase::NodeState(NKikimrCms::EState state)
     }
 }
 
-void TNodesStateBase::AddNode(ui32 nodeId) {
+void TNodesCounterBase::AddNode(ui32 nodeId) {
     if (NodeToState.contains(nodeId)) {
         return;
     }
     NodeToState[nodeId] = NODE_STATE_UNSPECIFIED;
 }
 
-void TNodesStateBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
+void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
     if (!NodeToState.contains(nodeId)) {
         AddNode(nodeId);
     }
@@ -57,7 +57,7 @@ void TNodesStateBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
     }
 }
 
-void TNodesStateBase::LockNode(ui32 nodeId) {
+void TNodesCounterBase::LockNode(ui32 nodeId) {
     Y_VERIFY(NodeToState.contains(nodeId));
 
     ++LockedNodesCount;
@@ -69,7 +69,7 @@ void TNodesStateBase::LockNode(ui32 nodeId) {
     }
 }
 
-void TNodesStateBase::UnlockNode(ui32 nodeId) {
+void TNodesCounterBase::UnlockNode(ui32 nodeId) {
     Y_VERIFY(NodeToState.contains(nodeId));
 
     --LockedNodesCount;
@@ -81,10 +81,11 @@ void TNodesStateBase::UnlockNode(ui32 nodeId) {
     }
 }
 
-bool TNodesStateBase::TryToLockNode(ui32 nodeId, bool isForceRestart) {
+bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const {
     Y_VERIFY(NodeToState.contains(nodeId));
+    auto nodeState = NodeToState.at(nodeId);
 
-    auto nodeState = NodeToState[nodeId];
+    bool isForceRestart = mode == NKikimrCms::MODE_FORCE_RESTART;
 
     NCH_LOG_D("Checking Node: "
             << nodeId << ", with state: " << ToString(nodeState) 
@@ -123,6 +124,44 @@ bool TNodesStateBase::TryToLockNode(ui32 nodeId, bool isForceRestart) {
         ((LockedNodesCount + DownNodesCount + 1) * 100 >
          (NodeToState.size() * DisabledNodesRatioLimit))) {
         return false;
+    }
+
+    return true;
+}
+
+bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const  {
+    Y_VERIFY(NodeToState.contains(nodeId));
+    auto nodeState = NodeToState.at(nodeId);
+
+    NCH_LOG_D("Checking limits for sys tablet: " << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
+            << ", on node: " << nodeId
+            << ", with state: " << ToString(nodeState) 
+            << ", locked nodes: " << LockedNodesCount
+            << ", down nodes: " << DownNodesCount);
+
+    if (nodeState == NODE_STATE_RESTART ||
+        nodeState == NODE_STATE_LOCKED ||
+        nodeState == NODE_STATE_UNSPECIFIED) {
+
+        return false;
+    }
+
+    ui32 tabletNodes = NodeToState.size();
+    switch (mode) {
+        case NKikimrCms::MODE_MAX_AVAILABILITY:
+            if (tabletNodes > 1 && (DownNodesCount + LockedNodesCount + 1) * 2 > tabletNodes){
+                return false;
+            }
+            break;
+        case NKikimrCms::MODE_KEEP_AVAILABLE:
+            if (tabletNodes > 1 && (DownNodesCount + LockedNodesCount + 1) > tabletNodes - 1) {
+                return false;
+            }
+            break;
+        case NKikimrCms::MODE_FORCE_RESTART:
+            break;
+        default:
+            Y_FAIL("Unknown availability mode");
     }
 
     return true;

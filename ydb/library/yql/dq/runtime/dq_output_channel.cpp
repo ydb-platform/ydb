@@ -150,58 +150,22 @@ public:
         }
 
         bytes = std::min(bytes, MaxChunkBytes);
-        ui64 takeRows = EstimatedRowBytes ? std::max<ui64>(bytes / EstimatedRowBytes, 1) : 1;
-        takeRows = std::min<ui64>(takeRows, Data.size());
-
-        DLOG("About to take " << takeRows << " rows");
-
-        auto last = std::next(Data.begin(), takeRows);
-
+        auto last = Data.begin();
         if (Y_UNLIKELY(ProfileStats)) {
             TInstant startTime = TInstant::Now();
-            data = DataSerializer.Serialize(Data.begin(), last, OutputType);
+            data = DataSerializer.Serialize(last, Data.end(), OutputType, bytes);
             ProfileStats->SerializationTime += (TInstant::Now() - startTime);
         } else {
-            data = DataSerializer.Serialize(Data.begin(), last, OutputType);
+            data = DataSerializer.Serialize(last, Data.end(), OutputType, bytes);
         }
+
+
+        ui64 takeRows = data.GetRows();
+        DLOG("Took " << takeRows << " rows");
 
         if (EstimatedRowBytes) {
             EstimatedRowBytes = EstimatedRowBytes * 0.6 + std::max<ui64>(data.GetRaw().Size() / takeRows, 1) * 0.4;
             DLOG("Recalc estimated row size: " << EstimatedRowBytes);
-        }
-
-        while (data.GetRaw().size() >= ChunkSizeLimit && takeRows > 1) {
-            ui64 newTakeRows = std::max<ui64>(bytes / EstimatedRowBytes, 1);
-            newTakeRows = std::min<ui64>(newTakeRows, Data.size());
-
-            takeRows = newTakeRows < takeRows ? newTakeRows : takeRows / 2;
-
-            DLOG("Too big data, split it. Try to take " << takeRows);
-
-            NMiniKQL::TUnboxedValueVector values;
-            values.reserve(data.GetRows());
-
-            if (Y_UNLIKELY(ProfileStats)) {
-                TInstant startTime = TInstant::Now();
-                DataSerializer.Deserialize(data, OutputType, values);
-                ProfileStats->SerializationTime += (TInstant::Now() - startTime);
-            } else {
-                DataSerializer.Deserialize(data, OutputType, values);
-            }
-
-            for (ui32 i = 0; i < data.GetRows(); ++i) {
-                Data[i] = std::move(values[i]);
-            }
-
-            last = std::next(Data.begin(), takeRows);
-
-            if (Y_UNLIKELY(ProfileStats)) {
-                TInstant startTime = TInstant::Now();
-                data = DataSerializer.Serialize(Data.begin(), last, OutputType);
-                ProfileStats->SerializationTime += (TInstant::Now() - startTime);
-            } else {
-                data = DataSerializer.Serialize(Data.begin(), last, OutputType);
-            }
         }
 
         YQL_ENSURE(data.GetRaw().size() < ChunkSizeLimit);

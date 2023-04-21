@@ -51,7 +51,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnb
     auto& txResult = TxResults[idx];
     auto serializer = NYql::NDq::TDqDataSerializer(
         AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-    auto buffer = serializer.Serialize(rows, txResult.MkqlItemType);
+    auto buffer = serializer.Serialize(rows.begin(), rows.end(), txResult.MkqlItemType);
     {
         auto g = AllocState->TypeEnv.BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueVector emptyVector;

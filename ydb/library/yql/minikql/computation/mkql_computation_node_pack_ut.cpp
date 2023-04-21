@@ -520,6 +520,43 @@ protected:
         TestPackPerformance(type, v);
     }
 
+    void TestIncrementalPacking() {
+        if constexpr (Transport) {
+            auto itemType = PgmBuilder.NewDataType(NUdf::TDataType<char *>::Id);
+            auto listType = PgmBuilder.NewListType(itemType);
+            TValuePackerType packer(false, listType);
+
+            TStringBuf str = "01234567890ABCDEF";
+
+            size_t count = 50000;
+
+            for (size_t i = 0; i < count; ++i) {
+                NUdf::TUnboxedValue item(MakeString(str));
+                packer.AddItem(item);
+            }
+
+            TString serializedStr;
+            packer.Finish().CopyTo(serializedStr);
+
+            auto listObj = packer.Unpack(serializedStr, HolderFactory);
+            UNIT_ASSERT_VALUES_EQUAL(listObj.GetListLength(), count);
+            ui32 i = 0;
+            const auto iter = listObj.GetListIterator();
+            for (NUdf::TUnboxedValue uVal; iter.Next(uVal); ++i) {
+                UNIT_ASSERT(uVal);
+                UNIT_ASSERT_VALUES_EQUAL(std::string_view(uVal.AsStringRef()), str);
+            }
+
+            TUnboxedValueVector items;
+            packer.UnpackBatch(serializedStr, HolderFactory, items);
+            UNIT_ASSERT_VALUES_EQUAL(items.size(), count);
+            for (auto& uVal : items) {
+                UNIT_ASSERT(uVal);
+                UNIT_ASSERT_VALUES_EQUAL(std::string_view(uVal.AsStringRef()), str);
+            }
+        }
+    }
+
 private:
     TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -593,6 +630,7 @@ class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePa
         UNIT_TEST(TestShortStringPackPerformance);
         UNIT_TEST(TestPairPackPerformance);
         UNIT_TEST(TestTuplePackPerformance);
+        UNIT_TEST(TestIncrementalPacking);
     UNIT_TEST_SUITE_END();
 };
 
@@ -615,6 +653,7 @@ class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNo
         UNIT_TEST(TestShortStringPackPerformance);
         UNIT_TEST(TestPairPackPerformance);
         UNIT_TEST(TestTuplePackPerformance);
+        UNIT_TEST(TestIncrementalPacking);
     UNIT_TEST_SUITE_END();
 };
 

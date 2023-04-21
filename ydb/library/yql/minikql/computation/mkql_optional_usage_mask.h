@@ -32,6 +32,16 @@ public:
         }
     }
 
+    ui32 GetOptionalCount() const {
+        return CountOfOptional;
+    }
+
+    void Shrink(ui32 newSize) {
+        Y_VERIFY(newSize <= CountOfOptional, "Invalid shrink size");
+        Mask.Reset(newSize, CountOfOptional);
+        CountOfOptional = newSize;
+    }
+
     void SetNextEmptyOptional(bool empty) {
         if (empty) {
             Mask.Set(CountOfOptional);
@@ -66,6 +76,7 @@ public:
         const size_t usedBits = Mask.ValueBitCount();
         const size_t usedBytes = (usedBits + 7ULL) >> 3ULL;
         buf.Advance(MAX_PACKED64_SIZE);
+        // Note: usage of Pack64() is safe here - it won't overwrite useful data for small values of usedBytes
         buf.EraseBack(MAX_PACKED64_SIZE - Pack64(usedBytes, buf.Pos() - MAX_PACKED64_SIZE));
         buf.Append(reinterpret_cast<const char*>(Mask.GetChunks()), usedBytes);
     }

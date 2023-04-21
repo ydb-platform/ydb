@@ -578,6 +578,7 @@ selector_config: []
         runtime.SetObserverFunc(observer);
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster1");
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetDefaultLevel(5);
 
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeAddAction(ITEM_DOMAIN_LOG_1));
@@ -587,6 +588,7 @@ selector_config: []
         NKikimrConfig::TAppConfig expectedConfig;
         auto *logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster1");
+        logConfig->SetDefaultLevel(5);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
         notifications = 0;
@@ -632,6 +634,7 @@ selector_config: []
         CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
 
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster2");
+        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetDefaultLevel(5);
 
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeAddAction(ITEM_DOMAIN_LOG_2));
@@ -660,6 +663,7 @@ selector_config: []
         expectedConfig = {};
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
         notifications = 0;
@@ -724,6 +728,7 @@ selector_config:
         expectedConfig = {};
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
         auto *entry = logConfig->AddEntry();
         entry->SetComponent("AUDIT_LOG_WRITER");
         entry->SetLevel(7);
@@ -768,6 +773,7 @@ selector_config:
         expectedConfig = {};
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
         notifications = 0;
@@ -801,6 +807,7 @@ selector_config:
         expectedConfig = {};
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster2");
+        logConfig->SetDefaultLevel(5);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
     }

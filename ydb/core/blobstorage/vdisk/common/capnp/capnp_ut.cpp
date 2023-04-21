@@ -11,10 +11,20 @@ namespace NKikimr {
                 originalObject.SetTabletId(1234);
                 originalObject.SetSnapshotId("some_snapshot_id");
 
+                auto originalMsgQoS = originalObject.MutableMsgQoS();
+                originalMsgQoS.SetCost(4242);
+                originalMsgQoS.SetProxyNodeId(91);
+                originalMsgQoS.MutableCostSettings().SetMinREALHugeBlobInBytes(101);
+                originalMsgQoS.MutableCostSettings().SetSeekTimeUs(100500);
+                originalMsgQoS.MutableCostSettings().SetReadSpeedBps(500100);
+
+                originalObject.AddExtremeQueries().SetSize(6767);
+                originalObject.AddExtremeQueries().SetSize(8989);
+
+
                 // Serialize the object into bytes
                 NActors::TAllocChunkSerializer output;
                 UNIT_ASSERT(originalObject.SerializeToZeroCopyStream(&output));
-
                 auto data = output.Release({});
 
                 // Deserialize the bytes into a new object
@@ -27,6 +37,17 @@ namespace NKikimr {
                 UNIT_ASSERT(deserializedObject.GetCookie() == 42);
                 UNIT_ASSERT(deserializedObject.GetTabletId() == 1234);
                 UNIT_ASSERT(deserializedObject.GetSnapshotId() == "some_snapshot_id");
+
+                auto deserializedMsgQoS = originalObject.MutableMsgQoS();
+                UNIT_ASSERT(deserializedMsgQoS.GetCost() == 4242);
+                UNIT_ASSERT(deserializedMsgQoS.GetProxyNodeId() == 91);
+                UNIT_ASSERT(deserializedMsgQoS.GetCostSettings().GetMinREALHugeBlobInBytes() == 101);
+                UNIT_ASSERT(deserializedMsgQoS.GetCostSettings().GetSeekTimeUs() == 100500);
+                UNIT_ASSERT(deserializedMsgQoS.GetCostSettings().GetReadSpeedBps() == 500100);
+
+                UNIT_ASSERT(deserializedObject.ExtremeQueriesSize() == 2);
+                UNIT_ASSERT(deserializedObject.GetExtremeQueries(0).GetSize() == 6767);
+                UNIT_ASSERT(deserializedObject.GetExtremeQueries(1).GetSize() == 8989);
         }
     };
 };

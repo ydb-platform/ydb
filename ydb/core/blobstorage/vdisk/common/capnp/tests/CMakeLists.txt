@@ -17,7 +17,8 @@ target_link_libraries(ydb_capnp_tests PUBLIC
         cpp-testing-unittest_main
         capnp
         kj
-        ${GTEST_LIBRARIES}
+        GTest::GTest
+        GTest::Main
         )
 
 target_link_directories(ydb_capnp_tests PUBLIC /usr/local/lib)

@@ -9,12 +9,12 @@ find_package(GTest REQUIRED)
 
 # Link required libraries
 target_link_libraries(ydb_capnp_tests PUBLIC
-        contrib-libs-linux-headers
-        contrib-libs-cxxsupp
-        yutil
         blobstorage-vdisk-common
-        cpp-testing-unittest
-        cpp-testing-unittest_main
+#        contrib-libs-linux-headers
+#        contrib-libs-cxxsupp
+#        yutil
+#        cpp-testing-unittest
+#        cpp-testing-unittest_main
         capnp
         kj
         GTest::GTest

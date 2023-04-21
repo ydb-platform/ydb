@@ -41,7 +41,7 @@ target_sources(ydb-core-blobstorage-vdisk-common-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/capnp/tevvget_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/capnp/capnp_ut.cpp
 )
 set_property(
   TARGET

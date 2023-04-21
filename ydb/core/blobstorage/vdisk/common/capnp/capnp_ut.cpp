@@ -2,8 +2,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
-    Y_UNIT_TEST_SUITE(TEvVGetTests) {
-        Y_UNIT_TEST(Basic) {
+    Y_UNIT_TEST_SUITE(CapnpTests) {
+        Y_UNIT_TEST(TEvVGetBasic) {
                 // Create a Cap'n Proto object and fill some fields
                 NKikimrCapnProto::TEvVGet::Builder originalObject;
                 originalObject.SetAcquireBlockedGeneration(true);

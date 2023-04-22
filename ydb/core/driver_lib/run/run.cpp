@@ -1570,6 +1570,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TReplicationServiceInitializer(runConfig));
     }
 
+    if (serviceMask.EnableLocalPgWire) {
+        sil->AddServiceInitializer(new TLocalPgWireServiceInitializer(runConfig));
+    }
+
     return sil;
 }
 

@@ -68,6 +68,7 @@ target_link_libraries(run PUBLIC
   ydb-core-kqp
   core-kqp-rm_service
   ydb-core-load_test
+  ydb-core-local_pgwire
   ydb-core-log_backend
   ydb-core-metering
   ydb-core-mind

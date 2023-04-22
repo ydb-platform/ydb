@@ -12,6 +12,8 @@ namespace NGRpcService {
 
 using namespace NSchemeShard;
 
+using TEvLoginRequest = TGRpcRequestWrapperNoAuth<TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
+
 class TLoginRPC : public TRpcRequestActor<TLoginRPC, TEvLoginRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
@@ -121,6 +123,11 @@ public:
 
 void TGRpcRequestProxyHandleMethods::Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TLoginRPC(ev->Release().Release()));
+}
+
+template<>
+IActor* TEvLoginRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TLoginRPC(msg);
 }
 
 } // namespace NGRpcService

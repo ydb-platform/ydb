@@ -1,5 +1,6 @@
 #include <ydb/core/pgproxy/pg_listener.h>
 #include <ydb/core/pgproxy/pg_log.h>
+#include <ydb/core/protos/services.pb.h>
 #include <util/system/mlock.h>
 #include <util/stream/file.h>
 #include <library/cpp/getopt/last_getopt.h>
@@ -111,25 +112,20 @@ TPgWire::TPgWire(int argc, char** argv) {
 
 TIntrusivePtr<NActors::NLog::TSettings> TPgWire::BuildLoggerSettings() {
     const NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
-    TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = new NActors::NLog::TSettings(loggerActorId, NPGW::EService::Logger, NActors::NLog::PRI_WARN);
+    TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_WARN);
     loggerSettings->Append(
         NActorsServices::EServiceCommon_MIN,
         NActorsServices::EServiceCommon_MAX,
         NActorsServices::EServiceCommon_Name
     );
     loggerSettings->Append(
-        NPG::EService::MIN,
-        NPG::EService::MAX,
-        NPG::GetEServiceName
-    );
-    loggerSettings->Append(
-        NPGW::EService::MIN,
-        NPGW::EService::MAX,
-        NPGW::GetEServiceName
+        NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        NKikimrServices::EServiceKikimr_Name
     );
     TString explanation;
-    loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NPG::EService::PGWIRE, explanation);
-    loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NPGW::EService::PGYDB, explanation);
+    loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::PGWIRE, explanation);
+    loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::PGYDB, explanation);
     return loggerSettings;
 }
 

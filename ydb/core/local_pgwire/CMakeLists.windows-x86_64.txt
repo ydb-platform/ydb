@@ -6,20 +6,20 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
-add_library(ydb-core-pgproxy)
-target_link_libraries(ydb-core-pgproxy PUBLIC
+add_library(ydb-core-local_pgwire)
+target_link_libraries(ydb-core-local_pgwire PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
-  cpp-actors-protos
-  ydb-core-base
+  ydb-core-grpc_services
+  core-grpc_services-local_rpc
   ydb-core-protos
+  ydb-core-pgproxy
+  api-grpc
+  lib-operation_id-protos
 )
-target_sources(ydb-core-pgproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_connection.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_listener.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy.cpp
+target_sources(ydb-core-local_pgwire PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_connection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.cpp
 )

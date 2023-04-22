@@ -105,5 +105,10 @@ void DoExecuteYqlScript(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
     f.RegisterActor(new TExecuteYqlScriptRPC(p.release()));
 }
 
+template<>
+IActor* TEvExecuteYqlScriptRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TExecuteYqlScriptRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

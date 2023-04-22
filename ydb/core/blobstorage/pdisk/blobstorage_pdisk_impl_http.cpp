@@ -228,13 +228,16 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                                 }
                             }
                             TABLED() {
+                                ui32 logSize = OwnerData[owner].OperationLog.Size();
                                 str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
                                     data-target='#operationLogCollapse" << owner << 
-                                    "'>Show last " << OwnerData[owner].OperationLog.Size() << " operations</button>";
+                                    "'>Show last " << logSize << " operations</button>";
 
                                 str << "<div id='operationLogCollapse" << owner << "' class='collapse'>";
-                                for (ui32 i = 0; i < OwnerData[owner].OperationLog.Size(); ++i) {
-                                    str << OwnerData[owner].OperationLog[i] << "<br>"; 
+                                for (ui32 i = 0; i < logSize; ++i) {
+                                    auto record = OwnerData[owner].OperationLog.BorrowByIdx(i);
+                                    str << *record << "<br>";
+                                    OwnerData[owner].OperationLog.ReturnBorrowedRecord(record);
                                 }
                                 str << "</div>";
                             }

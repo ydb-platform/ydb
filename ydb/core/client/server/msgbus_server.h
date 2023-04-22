@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
+#include "dynamic_node_auth_processor.h"
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>

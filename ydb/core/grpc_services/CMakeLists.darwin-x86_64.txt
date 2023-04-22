@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(auth_processor)
 add_subdirectory(base)
 add_subdirectory(cancelation)
 add_subdirectory(counters)
@@ -35,7 +34,6 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-grpc_services-counters
   core-grpc_services-local_rpc
   core-grpc_services-cancelation
-  core-grpc_services-auth_processor
   ydb-core-health_check
   ydb-core-io_formats
   core-kesus-tablet
@@ -113,7 +111,6 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_load_rows.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_log_store.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_long_tx.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_node_registration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_make_directory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_modify_permissions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_monitoring.cpp

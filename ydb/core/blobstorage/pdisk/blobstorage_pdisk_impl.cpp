@@ -511,7 +511,9 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
     }
     if (it != LogChunks.end()) {
         if (gapStart) {
-            it->IsEndOfSplice = true;
+            if (!chunksToRelease.empty()) {
+                it->IsEndOfSplice = true;
+            }
         }
         gapEnd = *it;
     }
@@ -1723,7 +1725,6 @@ TOwner TPDisk::FindNextOwnerId() {
     const TOwner start = LastOwnerId;
     do {
         ++LastOwnerId;
-        Mon.OwnerIdsIssued->Inc();
         if (LastOwnerId == OwnerEndUser) {
             LastOwnerId = OwnerBeginUser;
         }
@@ -1732,6 +1733,7 @@ TOwner TPDisk::FindNextOwnerId() {
         }
     } while (OwnerData[LastOwnerId].VDiskId != TVDiskID::InvalidId || OwnerData[LastOwnerId].OnQuarantine);
 
+    Mon.OwnerIdsIssued->Inc();
     *Mon.LastOwnerId = LastOwnerId;
     return LastOwnerId;
 }
@@ -1840,6 +1842,11 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
         return false;
     }
 
+    LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+            << " YardInitStart OwnerId " << owner
+            << " new OwnerRound# " << evYardInit.OwnerRound
+            << " ownerData.HaveRequestsInFlight()# " << ownerData.HaveRequestsInFlight()
+            << " Marker# BPD56");
     // Update round and wait for all pending requests of old owner to finish
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitStart, OwnerId# "
             << owner << ", new OwnerRound# " << evYardInit.OwnerRound);
@@ -2021,7 +2028,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                 if (state.CommitState == TChunkState::DATA_ON_QUARANTINE) {
                     if (!pushedOwnerIntoQuarantine) {
                         pushedOwnerIntoQuarantine = true;
-                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, " 
+                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, "
                                 << "CommitState# DATA_ON_QUARANTINE, OwnerId# " << owner);
                         QuarantineOwners.push_back(owner);
                         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId

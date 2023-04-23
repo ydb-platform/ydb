@@ -146,6 +146,8 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
         , ReadStats(std::make_shared<TReadStats>(info.GetId()))
     {}
 
+    std::set<std::string> GetFilterColumns(const bool early) const;
+
     bool Empty() const {
         Y_VERIFY(SelectInfo);
         return SelectInfo->Portions.empty() && CommittedBlobs.empty();

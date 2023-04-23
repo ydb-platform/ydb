@@ -21,128 +21,6 @@ namespace NKikimr::NArrow {
 
 namespace {
 
-enum class ECompareResult : i8 {
-    LESS = -1,
-    BORDER = 0,
-    GREATER = 1
-};
-
-template <typename T>
-inline void UpdateCompare(const T& value, const T& border, ECompareResult& res) {
-    if (res == ECompareResult::BORDER) {
-        if constexpr (std::is_same_v<T, arrow::util::string_view>) {
-            size_t minSize = (value.size() < border.size()) ? value.size() : border.size();
-            int cmp = memcmp(value.data(), border.data(), minSize);
-            if (cmp < 0) {
-                res = ECompareResult::LESS;
-            } else if (cmp > 0) {
-                res = ECompareResult::GREATER;
-            } else {
-                UpdateCompare(value.size(), border.size(), res);
-            }
-        } else {
-            if (value < border) {
-                res = ECompareResult::LESS;
-            } else if (value > border) {
-                res = ECompareResult::GREATER;
-            }
-        }
-    }
-}
-
-template <typename TArray>
-inline auto GetValue(const std::shared_ptr<TArray>& array, int pos) {
-    return array->GetView(pos);
-}
-
-template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border,
-                 std::vector<NArrow::ECompareResult>& rowsCmp)
-{
-    bool hasBorder = false;
-    ECompareResult* res = &rowsCmp[0];
-    auto array = std::static_pointer_cast<TArray>(column);
-
-    for (int i = 0; i < array->length(); ++i, ++res) {
-        UpdateCompare(GetValue(array, i), border, *res);
-        hasBorder = hasBorder || (*res == ECompareResult::BORDER);
-    }
-    return !hasBorder;
-}
-
-template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& border,
-                 std::vector<NArrow::ECompareResult>& rowsCmp)
-{
-    bool hasBorder = false;
-    ECompareResult* res = &rowsCmp[0];
-
-    for (auto& chunk : column->chunks()) {
-        auto array = std::static_pointer_cast<TArray>(chunk);
-
-        for (int i = 0; i < chunk->length(); ++i, ++res) {
-            UpdateCompare(GetValue(array, i), border, *res);
-            hasBorder = hasBorder || (*res == ECompareResult::BORDER);
-        }
-    }
-    return !hasBorder;
-}
-
-/// @return true in case we have no borders in compare: no need for future keys, allow early exit
-template <typename TArray>
-bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& borderArray,
-             std::vector<NArrow::ECompareResult>& rowsCmp)
-{
-    auto border = GetValue(std::static_pointer_cast<TArray>(borderArray), 0);
-
-    switch (column.kind()) {
-        case arrow::Datum::ARRAY:
-            return CompareImpl<TArray>(column.make_array(), border, rowsCmp);
-        case arrow::Datum::CHUNKED_ARRAY:
-            return CompareImpl<TArray>(column.chunked_array(), border, rowsCmp);
-        default:
-            break;
-    }
-    Y_VERIFY(false);
-    return false;
-}
-
-bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& border,
-                   std::vector<NArrow::ECompareResult>& rowsCmp) {
-    Y_VERIFY(border->length() == 1);
-
-    // first time it's empty
-    if (rowsCmp.empty()) {
-        rowsCmp.resize(column.length(), ECompareResult::BORDER);
-    }
-
-    return SwitchArrayType(column, [&](const auto& type) -> bool {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        return Compare<TArray>(column, border, rowsCmp);
-    });
-}
-
-template <typename T>
-void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch,
-                      std::vector<NArrow::ECompareResult>& rowsCmp) {
-    auto key = borderBatch->schema()->fields();
-    Y_VERIFY(key.size());
-
-    for (size_t i = 0; i < key.size(); ++i) {
-        auto& field = key[i];
-        auto typeId = field->type()->id();
-        auto column = some->GetColumnByName(field->name());
-        std::shared_ptr<arrow::Array> border = borderBatch->GetColumnByName(field->name());
-        Y_VERIFY(column);
-        Y_VERIFY(border);
-        Y_VERIFY(some->schema()->GetFieldByName(field->name())->type()->id() == typeId);
-
-        if (SwitchCompare(column, border, rowsCmp)) {
-            break; // early exit in case we have all rows compared: no borders, can omit key tail
-        }
-    }
-}
 #if 0
 std::shared_ptr<arrow::Array> CastToInt32Array(const std::shared_ptr<arrow::Array>& arr) {
     auto newData = arr->data()->Copy();
@@ -887,111 +765,6 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
     return out;
 }
 
-std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits) {
-    arrow::BooleanBuilder builder;
-    auto res = builder.Resize(bits.size());
-    Y_VERIFY_OK(res);
-    res = builder.AppendValues(bits);
-    Y_VERIFY_OK(res);
-
-    std::shared_ptr<arrow::BooleanArray> out;
-    res = builder.Finish(&out);
-    Y_VERIFY_OK(res);
-    return out;
-}
-
-std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2) {
-    if (f1.empty()) {
-        return f2;
-    } else if (f2.empty()) {
-        return f1;
-    }
-
-    Y_VERIFY(f1.size() == f2.size());
-    for (size_t i = 0; i < f1.size(); ++i) {
-        f1[i] = f1[i] && f2[i];
-    }
-    return f1;
-}
-
-std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count) {
-    count = 0;
-    if (f1.empty() && !f2.empty()) {
-        f1.swap(f2);
-    }
-    if (f1.empty()) {
-        return {};
-    }
-
-    if (f2.empty()) {
-        for (bool bit : f1) {
-            count += bit;
-        }
-        return f1;
-    }
-
-    Y_VERIFY(f1.size() == f2.size());
-    for (size_t i = 0; i < f1.size(); ++i) {
-        f1[i] = f1[i] && f2[i];
-        count += f1[i];
-    }
-    return f1;
-}
-
-std::vector<bool> MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border,
-                                      ECompareType compareType) {
-    std::vector<NArrow::ECompareResult> cmps;
-
-    switch (datum.kind()) {
-        case arrow::Datum::ARRAY:
-            Y_VERIFY(border.kind() == arrow::Datum::ARRAY);
-            SwitchCompare(datum, border.make_array(), cmps);
-            break;
-        case arrow::Datum::CHUNKED_ARRAY:
-            Y_VERIFY(border.kind() == arrow::Datum::ARRAY);
-            SwitchCompare(datum, border.make_array(), cmps);
-            break;
-        case arrow::Datum::RECORD_BATCH:
-            Y_VERIFY(border.kind() == arrow::Datum::RECORD_BATCH);
-            CompositeCompare(datum.record_batch(), border.record_batch(), cmps);
-            break;
-        case arrow::Datum::TABLE:
-            Y_VERIFY(border.kind() == arrow::Datum::RECORD_BATCH);
-            CompositeCompare(datum.table(), border.record_batch(), cmps);
-            break;
-        default:
-            Y_VERIFY(false);
-            break;
-    }
-
-    std::vector<bool> bits(cmps.size());
-
-    switch (compareType) {
-        case ECompareType::LESS:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] < ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::LESS_OR_EQUAL:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] <= ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::GREATER:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] > ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::GREATER_OR_EQUAL:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] >= ECompareResult::BORDER);
-            }
-            break;
-    }
-
-    return bits;
-}
-
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                         const std::shared_ptr<arrow::Schema>& sortingKey) {
     auto keyBatch = ExtractColumns(batch, sortingKey);
@@ -1066,6 +839,52 @@ bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
         arrow::BaseBinaryBuilder<arrow::StringType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::StringType>&>(builder);
         return bBuilder.ReserveData(size).ok();
     }
+    return true;
+}
+
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder) {
+    if (batches.empty()) {
+        result = nullptr;
+        return true;
+    }
+    if (batches.size() == 1) {
+        result = batches.front();
+        return true;
+    }
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::map<std::string, ui32> fieldNames;
+    for (auto&& i : batches) {
+        for (auto&& f : i->schema()->fields()) {
+            if (!fieldNames.emplace(f->name(), fields.size()).second) {
+                return false;
+            }
+            fields.emplace_back(f);
+        }
+        if (i->num_rows() != batches.front()->num_rows()) {
+            return false;
+        }
+        for (auto&& c : i->columns()) {
+            columns.emplace_back(c);
+        }
+    }
+
+    Y_VERIFY(fields.size() == columns.size());
+    if (columnsOrder.empty()) {
+        result = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), columns);
+    } else {
+        std::vector<std::shared_ptr<arrow::Field>> fieldsOrdered;
+        std::vector<std::shared_ptr<arrow::Array>> columnsOrdered;
+        for (auto&& i : columnsOrder) {
+            auto it = fieldNames.find(i);
+            Y_VERIFY(it != fieldNames.end());
+            fieldsOrdered.emplace_back(fields[it->second]);
+            columnsOrdered.emplace_back(columns[it->second]);
+        }
+        std::swap(fieldsOrdered, fields);
+        std::swap(columnsOrdered, columns);
+    }
+    result = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), columns);
     return true;
 }
 

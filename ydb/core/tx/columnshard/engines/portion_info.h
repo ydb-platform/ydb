@@ -198,8 +198,11 @@ struct TPortionInfo {
     private:
         std::shared_ptr<arrow::Field> Field;
         std::vector<TString> Blobs;
-
     public:
+        const std::string& GetName() const {
+            return Field->name();
+        }
+
         TPreparedColumn(const std::shared_ptr<arrow::Field>& field, std::vector<TString>&& blobs)
             : Field(field)
             , Blobs(std::move(blobs))
@@ -207,14 +210,46 @@ struct TPortionInfo {
 
         }
 
-        std::shared_ptr<arrow::ChunkedArray> Assemble() const;
+        std::shared_ptr<arrow::ChunkedArray> Assemble(const ui32 needCount, const bool reverse) const;
     };
 
     class TPreparedBatchData {
     private:
         std::vector<TPreparedColumn> Columns;
         std::shared_ptr<arrow::Schema> Schema;
+
     public:
+
+        class TAssembleOptions {
+        private:
+            YDB_OPT(std::set<std::string>, IncludeColumnNames);
+            YDB_OPT(std::set<std::string>, ExcludeColumnNames);
+            YDB_OPT(ui32, RecordsCountLimit);
+            YDB_FLAG_ACCESSOR(ForwardAssemble, true);
+        public:
+            bool CheckFieldAcceptance(const std::string& fieldName) const {
+                if (!!IncludeColumnNames && !IncludeColumnNames->contains(fieldName)) {
+                    return false;
+                }
+                if (!!ExcludeColumnNames && ExcludeColumnNames->contains(fieldName)) {
+                    return false;
+                }
+                return true;
+            }
+        };
+
+        std::vector<std::string> GetColumnsOrder() const {
+            std::vector<std::string> result;
+            for (auto&& i : Schema->fields()) {
+                result.emplace_back(i->name());
+            }
+            return result;
+        }
+
+        size_t GetColumnsCount() const {
+            return Columns.size();
+        }
+
         TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema)
             : Columns(std::move(columns))
             , Schema(schema)
@@ -222,17 +257,7 @@ struct TPortionInfo {
 
         }
 
-        std::shared_ptr<arrow::RecordBatch> Assemble() {
-            std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
-            for (auto&& i : Columns) {
-                columns.emplace_back(i.Assemble());
-            }
-
-            auto table = arrow::Table::Make(Schema, columns);
-            auto res = table->CombineChunks();
-            Y_VERIFY(res.ok());
-            return NArrow::ToBatch(*res);
-        }
+        std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = Default<TAssembleOptions>()) const;
     };
 
     TPreparedBatchData PrepareForAssemble(const TIndexInfo& indexInfo,

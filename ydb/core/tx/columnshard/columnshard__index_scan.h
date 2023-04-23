@@ -144,7 +144,7 @@ private:
             ReadyResults.emplace_back(std::move(ready[i]));
             auto& batch = ReadyResults.back();
             if (batch.ResultBatch->num_rows() > limitLeft) {
-                // Trim the last batch if total row count execceds the requested limit
+                // Trim the last batch if total row count exceeds the requested limit
                 batch.ResultBatch = batch.ResultBatch->Slice(0, limitLeft);
                 ready.clear();
             }

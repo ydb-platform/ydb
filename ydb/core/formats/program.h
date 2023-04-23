@@ -6,6 +6,8 @@
 
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
+#include "arrow_helpers.h"
+#include "arrow_filter.h"
 
 namespace NKikimr::NArrow {
 
@@ -191,6 +193,8 @@ struct TProgramStep {
         static std::shared_ptr<TProgramStep::TDatumBatch> FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch);
     };
 
+    std::set<std::string> GetColumnsInUsage() const;
+
     bool Empty() const {
         return Assignes.empty() && Filters.empty() && Projection.empty() && GroupBy.empty() && GroupByKeys.empty();
     }
@@ -203,7 +207,7 @@ struct TProgramStep {
     arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
     arrow::Status ApplyProjection(TDatumBatch& batch) const;
 
-   arrow::Status MakeCombinedFilter(TDatumBatch& batch, std::vector<bool>& bits) const;
+   arrow::Status MakeCombinedFilter(TDatumBatch& batch, NArrow::TColumnFilter& result) const;
 };
 
 struct TProgram {
@@ -230,7 +234,8 @@ struct TProgram {
         return arrow::Status::OK();
     }
 
-    std::vector<bool> MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
+    std::set<std::string> GetEarlyFilterColumns() const;
+    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
                                       arrow::compute::ExecContext* ctx) const;
 };
 

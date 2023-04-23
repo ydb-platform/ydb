@@ -117,25 +117,61 @@ bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
     /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto batch = BatchConstructor.Assemble();
+    const std::set<std::string> columnNames = ReadMetadata->GetFilterColumns(true);
+    if (columnNames.empty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("method", "TAssembledNotFiltered::DoExecuteImpl")
+            ("event", "skip_data_no_columns")("columns_count", BatchConstructor.GetColumnsCount());
+        FilteredBatch = BatchConstructor.Assemble();
+        return true;
+    }
+    TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+    options.SetIncludeColumnNames(columnNames);
+    auto batch = BatchConstructor.Assemble(options);
+    const size_t ignoredColumnsCount = BatchConstructor.GetColumnsCount() - batch->schema()->num_fields();
     Y_VERIFY(batch);
-    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
+
+    NArrow::TColumnFilter globalFilter = NOlap::FilterPortion(batch, *ReadMetadata);
+    if (!globalFilter.Apply(batch)) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("method", "TAssembledNotFiltered::DoExecuteImpl")
+            ("event", "skip_data")("columns_count", ignoredColumnsCount);
+        FilteredBatch = nullptr;
+        return true;
     }
 #if 1 // optimization
-    if (filtered.Batch && ReadMetadata->Program && AllowEarlyFilter) {
-        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
-    }
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
+    if (ReadMetadata->Program && AllowEarlyFilter) {
+        auto filter = NOlap::EarlyFilter(batch, ReadMetadata->Program);
+        globalFilter.CombineSequential(filter);
+        if (!filter.Apply(batch)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("method", "TAssembledNotFiltered::DoExecuteImpl")
+                ("event", "skip_data")("columns_count", ignoredColumnsCount);
+            FilteredBatch = nullptr;
+            return true;
+        }
     }
 #else
     Y_UNUSED(AllowEarlyFilter);
 #endif
-    FilteredBatch = filtered.Batch;
+
+    if (BatchConstructor.GetColumnsCount() > (size_t)batch->schema()->num_fields()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("method", "TAssembledNotFiltered::DoExecuteImpl")
+            ("event", "not_skip_data")("columns_count", ignoredColumnsCount)("num_rows", batch->num_rows());
+        TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+        options.SetExcludeColumnNames(columnNames);
+
+        if (globalFilter.GetInactiveHeadSize() > globalFilter.GetInactiveTailSize()) {
+            options.SetRecordsCountLimit(globalFilter.Size() - globalFilter.GetInactiveHeadSize())
+                .SetForwardAssemble(false);
+            globalFilter.CutInactiveHead();
+        } else {
+            options.SetRecordsCountLimit(globalFilter.Size() - globalFilter.GetInactiveTailSize());
+            globalFilter.CutInactiveTail();
+        }
+        std::shared_ptr<arrow::RecordBatch> fBatch = BatchConstructor.Assemble(options);
+        Y_VERIFY(globalFilter.Apply(fBatch));
+        Y_VERIFY(NArrow::MergeBatchColumns({ batch, fBatch }, batch, BatchConstructor.GetColumnsOrder()));
+    }
+
+    FilteredBatch = batch;
     return true;
 }
 
@@ -146,6 +182,38 @@ bool TIndexedReadData::TAssembledNotFiltered::DoApply(TIndexedReadData& owner) c
 
 std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan() const {
     return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this());
+}
+
+std::set<std::string> TReadMetadata::GetFilterColumns(const bool early) const {
+    std::set<std::string> result;
+    if (PlanStep) {
+        auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
+        for (auto&& i : snapSchema->fields()) {
+            result.emplace(i->name());
+        }
+    }
+    if (LessPredicate) {
+        for (auto&& i : LessPredicate->ColumnNames()) {
+            result.emplace(i);
+        }
+    }
+    if (GreaterPredicate) {
+        for (auto&& i : GreaterPredicate->ColumnNames()) {
+            result.emplace(i);
+        }
+    }
+    if (Program) {
+        if (!early) {
+            for (auto&& i : Program->SourceColumns) {
+                result.emplace(i.second);
+            }
+        } else {
+            for (auto&& i : Program->GetEarlyFilterColumns()) {
+                result.emplace(i);
+            }
+        }
+    }
+    return result;
 }
 
 
@@ -299,20 +367,20 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     auto batch = NArrow::ExtractExistedColumns(srcBatch, ReadMetadata->LoadSchema);
     Y_VERIFY(batch);
 
-    auto filtered = FilterNotIndexed(batch, *ReadMetadata);
-    if (!filtered.Batch) {
-        return {};
+    auto filter = FilterNotIndexed(batch, *ReadMetadata);
+    if (filter.IsTotalDenyFilter()) {
+        return nullptr;
     }
+    auto preparedBatch = batch;
 
-    filtered.Batch = TIndexInfo::AddSpecialColumns(filtered.Batch, planStep, txId);
-    Y_VERIFY(filtered.Batch);
+    preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, planStep, txId);
+    Y_VERIFY(preparedBatch);
 
-    filtered.Batch = NArrow::ExtractColumns(filtered.Batch, ReadMetadata->LoadSchema);
-    Y_VERIFY(filtered.Batch);
+    preparedBatch = NArrow::ExtractColumns(preparedBatch, ReadMetadata->LoadSchema);
+    Y_VERIFY(preparedBatch);
 
-    Y_VERIFY(filtered.Valid());
-    filtered.ApplyFilter();
-    return filtered.Batch;
+    filter.Apply(preparedBatch);
+    return preparedBatch;
 }
 
 TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {

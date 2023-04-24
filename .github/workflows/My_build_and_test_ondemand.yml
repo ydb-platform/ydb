@@ -9,9 +9,6 @@ on:
       test_label_regexp:
         required: false
         type: string
-      test_python_suite:
-        required: false
-        type: string
       launch_unit_tests:
         required: true
         type: boolean
@@ -86,7 +83,10 @@ jobs:
       if: ${{ inputs.launch_functional_tests }}
       uses: ./.github/actions/test_python
       with:
-        test_python_suite: ${{ inputs.test_python_suite }}
+        log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
 
   release-runner:
     name: Release self-hosted YC runner if provided on-demand

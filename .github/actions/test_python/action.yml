@@ -1,8 +1,17 @@
 name: test-python
 description: Run functional Python tests
 inputs:
+  log_suffix:
+    required: true
+    type: string
   test_python_suite:
     required: false
+    type: string
+  aws_key_id:
+    required: true
+    type: string
+  aws_key_value: 
+    required: trye
     type: string
     
 runs:
@@ -15,5 +24,21 @@ runs:
       export build_root=$(pwd)/../build/
       rm -rf ${source_root}/ydb/tests/functional/test-results/
       source ${source_root}/ydb/tests/oss/launch/prepare.sh
+
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+
       pytest -o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/res.xml \
-        ${source_root}/ydb/tests/functional/${{ inputs.test_python_suite }}
+        ${source_root}/ydb/tests/functional/${{ inputs.test_python_suite }} | \
+      sed -e 's/\x1b\[[0-9;]*m//g' | \
+      tee >(gzip --stdout > ../../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
+      tee -a $GITHUB_STEP_SUMMARY
+  - name: Upload S3
+    uses: shallwefootball/s3-upload-action@master
+    if: always()
+    with:
+      aws_key_id: ${{inputs.AWS_KEY_ID }}
+      aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
+      aws_bucket: ydb-tech-ci
+      source_dir: ../artifacts
+      destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
+      endpoint: https://storage.yandexcloud.net

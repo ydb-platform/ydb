@@ -4,7 +4,7 @@ inputs:
   log_suffix:
     required: true
     type: string
-  test_python_suite:
+  test_label_regexp:
     required: false
     type: string
   aws_key_id:
@@ -28,7 +28,7 @@ runs:
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
 
       pytest -o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/res.xml \
-        ${source_root}/ydb/tests/functional/${{ inputs.test_python_suite }} | \
+        ${source_root}/ydb/tests/functional/ | \
       sed -e 's/\x1b\[[0-9;]*m//g' | \
       tee >(gzip --stdout > ../../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
       tee -a $GITHUB_STEP_SUMMARY

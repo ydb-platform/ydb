@@ -382,22 +382,47 @@ protected:
 
         RunConfig.Labels["node_id"] = ToString(NodeId);
         RunConfig.Labels["node_host"] = FQDNHostName();
-        RunConfig.Labels["tenant"] = RunConfig.TenantName;
+        RunConfig.Labels["tenant"] = TenantName;
         RunConfig.Labels["node_type"] = NodeType;
         // will be replaced with proper version info
         RunConfig.Labels["branch"] = GetBranch();
         RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
         RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
 
+        NKikimrConfig::TLabel *dynamicLabel = nullptr;
+        NKikimrConfig::TLabel *nodeIdLabel = nullptr;
+
         for (const auto& [name, value] : RunConfig.Labels) {
             auto *label = RunConfig.AppConfig.AddLabels();
+            if (name == "dynamic") {
+                dynamicLabel = label;
+            }
+            if (name == "node_id") {
+                nodeIdLabel = label;
+            }
             label->SetName(name);
             label->SetValue(value);
         }
 
         RunConfig.ClusterName = ClusterName;
 
-        MaybeRegisterAndLoadConfigs();
+        // static node
+        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
+            if (!NodeId) {
+                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
+            }
+
+            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
+                LoadCachedConfigsForStaticNode();
+        } else {
+            RegisterDynamicNode();
+
+            RunConfig.Labels["node_id"] = ToString(RunConfig.NodeId);
+            nodeIdLabel->SetValue(RunConfig.Labels["node_id"]);
+
+            if (!HierarchicalCfg && !IgnoreCmsConfigs)
+                LoadConfigForDynamicNode();
+        }
 
         LoadYamlConfig();
 
@@ -703,6 +728,12 @@ protected:
             messageBusConfig->SetStartTracingBusProxy(!!TracePath);
             messageBusConfig->SetTracePath(TracePath);
         }
+
+        if (RunConfig.AppConfig.HasDynamicNameserviceConfig()) {
+            bool isDynamic = RunConfig.NodeId > RunConfig.AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
+            RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
+            dynamicLabel->SetValue(RunConfig.Labels["dynamic"]);
+        }
     }
 
     inline bool LoadConfigFromCMS() {
@@ -882,24 +913,6 @@ protected:
         if (GetCachedConfig(appConfig) && appConfig.HasLogConfig()) {
             AppConfig.MutableLogConfig()->CopyFrom(appConfig.GetLogConfig());
         }
-    }
-
-    void MaybeRegisterAndLoadConfigs()
-    {
-        // static node
-        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
-            if (!NodeId) {
-                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
-            }
-
-            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
-                LoadCachedConfigsForStaticNode();
-            return;
-        }
-
-        RegisterDynamicNode();
-        if (!HierarchicalCfg && !IgnoreCmsConfigs)
-            LoadConfigForDynamicNode();
     }
 
     THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(

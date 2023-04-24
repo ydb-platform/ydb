@@ -31,10 +31,10 @@ static const ui32 MAX_USER_ACTS = 1000;
 void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config, const TActorContext& ctx) {
     TSet<TString> hasReadRule;
 
-    for (auto& userInfo : UsersInfoStorage->GetAll()) {
-        userInfo.second.ReadFromTimestamp = TInstant::Zero();
-        userInfo.second.HasReadRule = false;
-        hasReadRule.insert(userInfo.first);
+    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
+        userInfo.ReadFromTimestamp = TInstant::Zero();
+        userInfo.HasReadRule = false;
+        hasReadRule.insert(consumer);
     }
     for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
         const auto& consumer = config.GetReadRules(i);
@@ -128,15 +128,15 @@ void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
 
     auto now = ctx.Now();
     WriteQuota->Update(now);
-    for (auto &c : UsersInfoStorage->GetAll()) {
+    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
         while (true) {
-            if (!c.second.ReadQuota.CanExaust(now) && !c.second.ReadRequests.empty()) {
+            if (!userInfo.ReadQuota.CanExaust(now) && !userInfo.ReadRequests.empty()) {
                 break;
             }
-            if (!c.second.ReadRequests.empty()) {
-                auto ri(std::move(c.second.ReadRequests.front().first));
-                auto cookie = c.second.ReadRequests.front().second;
-                c.second.ReadRequests.pop_front();
+            if (!userInfo.ReadRequests.empty()) {
+                auto ri(std::move(userInfo.ReadRequests.front().first));
+                auto cookie = userInfo.ReadRequests.front().second;
+                userInfo.ReadRequests.pop_front();
                 ProcessRead(ctx, std::move(ri), cookie, false);
             } else
                 break;
@@ -202,13 +202,13 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
             userInfo->Offset = StartOffset;
         ReadTimestampForOffset(importantUser, *userInfo, ctx);
     }
-    for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
-        if (!important.contains(userInfoPair.first) && userInfoPair.second.Important && userInfoPair.second.LabeledCounters) {
+    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
+        if (!important.contains(consumer) && userInfo.Important && userInfo.LabeledCounters) {
             ctx.Send(
                 Tablet,
-                new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfoPair.second.LabeledCounters->GetGroup())
+                new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup())
             );
-            userInfoPair.second.SetImportant(false);
+            userInfo.SetImportant(false);
         }
     }
 }
@@ -823,9 +823,9 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 }
 
 void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx) {
-    for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
-        if (userInfoPair.second.Offset >= (i64)prevEndOffset && userInfoPair.second.Offset < (i64)EndOffset) {
-            ReadTimestampForOffset(userInfoPair.first, userInfoPair.second, ctx);
+    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
+        if (userInfo.Offset >= (i64)prevEndOffset && userInfo.Offset < (i64)EndOffset) {
+            ReadTimestampForOffset(consumer, userInfo, ctx);
         }
     }
 }

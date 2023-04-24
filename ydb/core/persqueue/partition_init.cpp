@@ -55,7 +55,7 @@ void TInitializer::Next(const TActorContext& ctx) {
 }
 
 void TInitializer::Done(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName()
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicName()
                                                 << "' partition " << Partition->Partition
                                                 << ". Completed.");
     InProgress = false;
@@ -77,7 +77,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
         }
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicConverter->GetClientsideName()
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicName()
                                                 << "' partition " << Partition->Partition
                                                 << ". Step " << CurrentStep->Get()->Name);
     CurrentStep->Get()->Execute(ctx);
@@ -117,7 +117,7 @@ void TInitializerStep::PoisonPill(const TActorContext& ctx) {
 }
 
 TString TInitializerStep::TopicName() const {
-    return Partition()->TopicConverter->GetClientsideName();
+    return Partition()->TopicName();
 }
 
 
@@ -700,11 +700,11 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicConverter->GetClientsideName()),
+        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
                                                                      Partition,
                                                                      Config.GetYdbDatabasePath()));
     } else {
-        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicConverter->GetClientsideName(),
+        PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
                                                                      Partition));
     }
 

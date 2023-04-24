@@ -77,6 +77,9 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitDataRangeStep;
     friend TInitDataStep;
 
+public:
+    const TString& TopicName() const;
+
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
 

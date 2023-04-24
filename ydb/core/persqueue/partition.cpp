@@ -48,6 +48,10 @@ struct TMirrorerInfo {
     TTabletCountersBase Baseline;
 };
 
+const TString& TPartition::TopicName() const {
+    return TopicConverter->GetClientsideName();
+}
+
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 offset) {
     if (container.empty()) {
         return offset;
@@ -63,7 +67,7 @@ ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp
 
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error) {
     ReplyPersQueueError(
-        dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicConverter->GetClientsideName(), Partition,
+        dst == 0 ? ctx.SelfID : Tablet, ctx, TabletID, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true
     );
 }
@@ -398,7 +402,7 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
     // Reply to all outstanding requests in order to destroy corresponding actors
 
     TStringBuilder ss;
-    ss << "Tablet is restarting, topic '" << TopicConverter->GetClientsideName() << "'";
+    ss << "Tablet is restarting, topic '" << TopicName() << "'";
 
     for (const auto& ev : WaitToChangeOwner) {
         ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::INITIALIZING, ss);
@@ -444,11 +448,11 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     LOG_INFO_S(
             ctx, NKikimrServices::PERSQUEUE,
-            "init complete for topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " " << ctx.SelfID
+            "init complete for topic '" << TopicName() << "' partition " << Partition << " " << ctx.SelfID
     );
 
     TStringBuilder ss;
-    ss << "SYNC INIT topic " << TopicConverter->GetClientsideName() << " partitition " << Partition
+    ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition
        << " so " << StartOffset << " endOffset " << EndOffset << " Head " << Head << "\n";
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
@@ -479,7 +483,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Init complete for topic '" << TopicConverter->GetClientsideName() << "' Partition: " << Partition
+                "Init complete for topic '" << TopicName() << "' Partition: " << Partition
                     << " SourceId: " << s.first << " SeqNo: " << s.second.SeqNo << " offset: " << s.second.Offset
                     << " MaxOffset: " << EndOffset
         );
@@ -729,7 +733,7 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
     NKikimrPQ::TStatusResponse::TErrorMessage error;
     error.SetTimestamp(ctx.Now().Seconds());
     error.SetService(service);
-    error.SetMessage(TStringBuilder() << "topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " got error: " << msg);
+    error.SetMessage(TStringBuilder() << "topic '" << TopicName() << "' partition " << Partition << " got error: " << msg);
     LogAndCollectError(error, ctx);
 }
 
@@ -927,7 +931,7 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
 
     LOG_ERROR_S(
             ctx, NKikimrServices::PERSQUEUE,
-            "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+            "Topic '" << TopicName() << "' partition " << Partition
                 << " user " << ReadingForUser << " readTimeStamp error: " << ev->Get()->Error
     );
 
@@ -1208,7 +1212,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         LOG_ERROR_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "OnWrite topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                "OnWrite topic '" << TopicName() << "' partition " << Partition
                     << " commands are not processed at all, reason: " << response.DebugString()
         );
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
@@ -1220,7 +1224,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
             if (response.GetDeleteRangeResult(i).GetStatus() != NKikimrProto::OK) {
                 LOG_ERROR_S(
                         ctx, NKikimrServices::PERSQUEUE,
-                        "OnWrite topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                        "OnWrite topic '" << TopicName() << "' partition " << Partition
                             << " delete range error"
                 );
                 //TODO: if disk is full, could this be ok? delete must be ok, of course
@@ -1236,7 +1240,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
             if (response.GetWriteResult(i).GetStatus() != NKikimrProto::OK) {
                 LOG_ERROR_S(
                         ctx, NKikimrServices::PERSQUEUE,
-                        "OnWrite  topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                        "OnWrite  topic '" << TopicName() << "' partition " << Partition
                             << " write error"
                 );
                 ctx.Send(Tablet, new TEvents::TEvPoisonPill());
@@ -1252,7 +1256,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         if (res.GetStatus() != NKikimrProto::OK) {
             LOG_ERROR_S(
                     ctx, NKikimrServices::PERSQUEUE,
-                    "OnWrite  topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                    "OnWrite  topic '" << TopicName() << "' partition " << Partition
                         << " are not processed at all, got KV error in CmdGetStatus " << res.GetStatus()
             );
             ctx.Send(Tablet, new TEvents::TEvPoisonPill());
@@ -1768,7 +1772,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                "Topic '" << TopicName() << "' partition " << Partition
                     << " user " << user << " drop request"
         );
 
@@ -1828,7 +1832,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         offset = 0;
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                "Topic '" << TopicName() << "' partition " << Partition
                     << " user " << act.ClientId << " reinit request with generation " << readRuleGeneration
         );
     }
@@ -1846,7 +1850,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         }
         LOG_WARN_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "commit to future - topic " << TopicConverter->GetClientsideName() << " partition " << Partition
+                "commit to future - topic " << TopicName() << " partition " << Partition
                     << " client " << act.ClientId << " EndOffset " << EndOffset << " offset " << offset
         );
         act.Offset = EndOffset;
@@ -1886,14 +1890,14 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " user " << user
+                "Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
         );
         PendingUsersInfo.erase(user);
     } else if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " user " << user
+                "Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " reinit with generation " << readRuleGeneration << " done"
         );
 
@@ -1931,7 +1935,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         Y_VERIFY(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition << " user " << user
+                "Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << (setSession || dropSession ? " session" : " offset")
                     << " is set to " << offset << " (startOffset " << StartOffset << ") session " << session
         );
@@ -2257,7 +2261,7 @@ void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& c
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
             "Got quota." <<
-            " Topic: \"" << TopicConverter->GetClientsideName() << "\"." <<
+            " Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << ": " << ev->Get()->Result << "." <<
             " Cookie: " << cookie
     );
@@ -2268,7 +2272,7 @@ void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& c
         LOG_ERROR_S(
                 ctx, NKikimrServices::PERSQUEUE,
                 "Got quota error." <<
-                " Topic: \"" << TopicConverter->GetClientsideName() << "\"." <<
+                " Topic: \"" << TopicName() << "\"." <<
                 " Partition " << Partition << ": " << ev->Get()->Result
         );
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
@@ -2336,7 +2340,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         LOG_INFO_S(
             ctx, NKikimrServices::PERSQUEUE,
             "SubDomainOutOfSpace was changed." <<
-            " Topic: \"" << TopicConverter->GetClientsideName() << "\"." <<
+            " Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << "." <<
             " SubDomainOutOfSpace: " << SubDomainOutOfSpace 
         );

@@ -53,28 +53,6 @@ namespace {
         ClientLostTag = 1,
         ClientTimeoutTag = 2
     };
-
-    bool FillKqpRequest(const Ydb::Scripting::ExecuteYqlRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
-        TParseRequestError& error)
-    {
-        kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
-
-        auto& script = req.script();
-        NYql::TIssues issues;
-        if (!CheckQuery(script, issues)) {
-            error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues);
-            return false;
-        }
-
-        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING);
-        kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats()));
-        kqpRequest.MutableRequest()->SetCollectStats(req.collect_stats());
-        kqpRequest.MutableRequest()->SetKeepSession(false);
-        kqpRequest.MutableRequest()->SetQuery(script);
-
-        return true;
-    }
 }
 
 class TStreamExecuteYqlScriptRPC
@@ -132,6 +110,7 @@ private:
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             // Overide default forget action which terminate this actor on client disconnect
             hFunc(TRpcServices::TEvForgetOperation, HandleForget);
+            hFunc(TEvSubscribeGrpcCancel, HandleSubscribeiGrpcCancel);
             default: {
                 return ReplyFinishStream(TStringBuilder()
                     << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite());
@@ -152,20 +131,30 @@ private:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
+        auto script = req->script();
 
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
+        NYql::TIssues issues;
+        if (!CheckQuery(script, issues)) {
+            return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, issues);
         }
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            NKikimrKqp::QUERY_ACTION_EXECUTE,
+            NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING,
+            SelfId(),
+            Request_,
+            TString(), //sessionId
+            std::move(script),
+            TString(), //queryId
+            nullptr, //tx_control
+            &req->parameters(),
+            req->collect_stats(),
+            nullptr, // query_cache_policy
+            req->has_operation_params() ? &req->operation_params() : nullptr
+        );
 
         ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId());
 
-        TParseRequestError parseError;
-        if (!FillKqpRequest(*req, ev->Record, parseError)) {
-            return ReplyFinishStream(parseError.Status, parseError.Issues);
-        }
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             return ReplyFinishStream("Couldn't send request to KqpProxy");
         }
@@ -356,13 +345,7 @@ private:
     }
 
     void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost, send abort event to executer " << GatewayRequestHandlerActorId_);
-
-        if (GatewayRequestHandlerActorId_) {
-            auto abortEv = NKqp::TEvKqp::TEvAbortExecution::Aborted("Client lost");
-
-            ctx.Send(GatewayRequestHandlerActorId_, abortEv.Release());
-        }
+        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
@@ -461,6 +444,11 @@ private:
     }
 
 private:
+    void HandleSubscribeiGrpcCancel(TEvSubscribeGrpcCancel::TPtr& ev) {
+        auto as = TActivationContext::ActorSystem();
+        PassSubscription(ev->Get(), Request_.get(), as);
+    }
+
     const ui64 RpcBufferSize_;
 
     TDuration InactiveClientTimeout_;

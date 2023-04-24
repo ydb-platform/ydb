@@ -1,6 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
+#include <ydb/core/kqp/counters/kqp_counters.h>
+
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
+
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
 #include <library/cpp/json/json_prettifier.h>
@@ -522,6 +526,41 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[[8u]]])", StreamResultToYson(it));
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanCancelation) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+
+        {
+            auto it = client.StreamExecuteYqlScript(R"(
+                PRAGMA kikimr.ScanQuery = "true";
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1";
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            // We must wait execution to be started
+            int count = 60;
+            while (counters.GetActiveSessionActors()->Val() != 2 && count) {
+                count--;
+                Sleep(TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_C(count, "Unable to wait second session actor (executing compiled program) start");
+        }
+
+        NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        int count = 60;
+        while (counters.GetActiveSessionActors()->Val() != 1 && count) {
+            count--;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanScalar) {

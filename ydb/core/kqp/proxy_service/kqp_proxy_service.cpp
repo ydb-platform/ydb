@@ -706,7 +706,6 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
-        LogResponse(proxyRequest->TraceId, ev->Get()->Record, proxyRequest->DbCounters);
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
@@ -1130,26 +1129,6 @@ private:
         }
 
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), status);
-    }
-
-    void LogResponse(const TKqpRequestInfo&,
-        const TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& holder,
-        TKqpDbCountersPtr dbCounters)
-    {
-        const auto& event = holder.GetRef();
-
-        Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
-            event.GetYdbStatus());
-
-        for (auto& issue : event.GetResponse().GetQueryIssues()) {
-            Counters->ReportIssues(dbCounters, issue);
-        }
-
-        ui64 resultsBytes = 0;
-        for (auto& result : event.GetResponse().GetResults()) {
-            resultsBytes += result.ByteSize();
-        }
-        Counters->ReportResultsBytes(dbCounters, resultsBytes);
     }
 
     void LogResponse(const TKqpRequestInfo&,

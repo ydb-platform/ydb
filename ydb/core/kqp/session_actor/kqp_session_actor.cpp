@@ -411,6 +411,7 @@ public:
     void CompileQuery() {
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileRequest();
+        LOG_D("Sending CompileQuery request");
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
         Become(&TKqpSessionActor::CompileState);
     }
@@ -494,6 +495,7 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
+        LOG_D("acquire persistent snapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -1573,6 +1575,7 @@ public:
             Counters->ReportTxAborted(Settings.DbCounters, Transactions.ToBeAbortedSize());
         }
 
+        auto workerId = WorkerId;
         if (WorkerId) {
             auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(SessionId);
@@ -1593,7 +1596,8 @@ public:
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}
-            << " TransactionsToBeAborted.size(): " << (CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0));
+            << " TransactionsToBeAborted.size(): " << (CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0)
+            << " WorkerId: " << (workerId ? *workerId : TActorId()));
         if (CleanupCtx) {
             Become(&TKqpSessionActor::CleanupState);
         } else {

@@ -6499,7 +6499,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty " << mapJoin.RightDict().Ref().Content();
 
             if (const auto& joinKind = mapJoin.JoinKind().Value(); joinKind == "Inner" || joinKind == "LeftSemi")
-                return ctx.NewCallable(mapJoin.Pos(), "EmptyIterator", {ExpandType(mapJoin.Pos(), *node->GetTypeAnn(), ctx)});
+                return KeepConstraints(ctx.NewCallable(mapJoin.Pos(), "EmptyIterator", {ExpandType(mapJoin.Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
             else if (joinKind == "Left" || joinKind == "LeftOnly") {
                 switch (const auto& itemType = GetSeqItemType(*node->GetTypeAnn()); itemType.GetKind()) {
                     case ETypeAnnotationKind::Tuple: {
@@ -6551,7 +6551,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                 .Seal().Build();
                         }
                         auto lambda = ctx.NewLambda(mapJoin.Pos(), ctx.NewArguments(mapJoin.Pos(), {std::move(row)}), ctx.NewCallable(mapJoin.Pos(), "AsStruct", std::move(fields)));
-                        return ctx.NewCallable(mapJoin.Pos(), "Map", {mapJoin.LeftInput().Ptr(), std::move(lambda)});
+                        return KeepConstraints(ctx.NewCallable(mapJoin.Pos(), "OrderedMap", {mapJoin.LeftInput().Ptr(), std::move(lambda)}), *node, ctx);
                     }
                     default: break;
                 }

@@ -2640,44 +2640,46 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
 }
 
 void FixSortness(const TExprNode& origNode, TExprNode::TPtr& node, TExprContext& ctx) {
-    if (auto sorted = origNode.GetConstraint<TSortedConstraintNode>()) {
-        const auto& content = sorted->GetContent();
-        node = ctx.Builder(origNode.Pos())
-            .Callable("Sort")
-                .Add(0, std::move(node))
-                .List(1)
-                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        size_t index = 0;
-                        for (auto c : content) {
-                            parent.Callable(index++, "Bool")
-                                    .Atom(0, ToString(c.second), TNodeFlags::Default)
-                                    .Seal();
-                        }
-                        return parent;
-                    })
-                .Seal()
-                .Lambda(2)
-                    .Param("item")
-                    .List()
+    if (const auto sorted = origNode.GetConstraint<TSortedConstraintNode>()) {
+        if (const auto simple = static_cast<const TSortedConstraintNode*>(sorted->OnlySimpleColumns(ctx))) {
+            const auto& content = simple->GetContent();
+            node = ctx.Builder(origNode.Pos())
+                .Callable("Sort")
+                    .Add(0, std::move(node))
+                    .List(1)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             size_t index = 0;
                             for (auto c : content) {
-                                if (c.first.empty())
-                                    parent.Arg(0, "item");
-                                else {
-                                    YQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
-                                    parent.Callable(index++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, c.first.front().front())
-                                            .Seal();
-                                }
+                                parent.Callable(index++, "Bool")
+                                        .Atom(0, ToString(c.second), TNodeFlags::Default)
+                                        .Seal();
                             }
                             return parent;
                         })
                     .Seal()
+                    .Lambda(2)
+                        .Param("item")
+                        .List()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                size_t index = 0;
+                                for (auto c : content) {
+                                    if (c.first.empty())
+                                        parent.Arg(0, "item");
+                                    else {
+                                        YQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
+                                        parent.Callable(index++, "Member")
+                                                .Arg(0, "item")
+                                                .Atom(1, c.first.front().front())
+                                                .Seal();
+                                    }
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
                 .Seal()
-            .Seal()
-            .Build();
+                .Build();
+        }
     }
 }
 

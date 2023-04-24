@@ -251,7 +251,7 @@ public:
     }
 
     /// @returns blobId -> granule map. Granules could be read independently
-    THashMap<TBlobRange, ui64> InitRead(ui32 numNotIndexed, bool inGranulesOrder = false);
+    std::vector<TBlobRange> InitRead(ui32 numNotIndexed, bool inGranulesOrder = false);
 
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     TVector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
@@ -270,23 +270,20 @@ public:
     }
 
     void AddIndexed(const TBlobRange& blobRange, const TString& column, NColumnShard::IDataTasksProcessor::TPtr processor);
-    size_t NumPortions() const { return PortionBatch.size(); }
-    bool HasIndexRead() const { return WaitIndexed.size() || Indexed.size(); }
+    bool IsInProgress() const { return Granules.size() > ReadyGranulesAccumulator.size(); }
     bool IsIndexedBlob(const TBlobRange& blobRange) const {
         return IndexedBlobs.contains(blobRange);
     }
-    void ForceFinishWaiting() {
-        WaitIndexed.clear();
-    }
-    bool HasWaitIndexed() const {
-        return WaitIndexed.size();
+    void Abort() {
+        for (auto&& i : Granules) {
+            ReadyGranulesAccumulator.emplace(i.first);
+        }
+        Y_VERIFY(ReadyGranulesAccumulator.size() == Granules.size());
+        Y_VERIFY(!IsInProgress());
     }
 private:
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
-    ui32 FirstIndexedBatch{0};
-    THashMap<TBlobRange, TString> Data;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
-    THashMap<ui32, std::shared_ptr<arrow::RecordBatch>> Indexed;
 
     class TAssembledNotFiltered: public NColumnShard::IDataPreparationTask {
     private:
@@ -313,42 +310,145 @@ private:
     };
     void PortionFinished(const ui32 batchNo, std::shared_ptr<arrow::RecordBatch> batch);
 
-    THashMap<ui32, THashSet<TBlobRange>> WaitIndexed;
-    THashMap<TBlobRange, ui32> IndexedBlobs; // blobId -> batchNo
+    class TGranule;
+
+    class TBatch {
+    private:
+        YDB_READONLY(ui64, BatchNo, 0);
+        YDB_READONLY(ui64, Portion, 0);
+        YDB_READONLY(ui64, Granule, 0);
+        THashSet<TBlobRange> WaitIndexed;
+        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilteredBatch);
+        YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
+        THashMap<TBlobRange, TString> Data;
+        TGranule* Owner = nullptr;
+        const TPortionInfo* PortionInfo = nullptr;
+
+        friend class TGranule;
+        TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo & portionInfo);
+        void FillBlobsForFetch(std::vector<TBlobRange>& result) const {
+            for (auto&& i : WaitIndexed) {
+                result.emplace_back(i);
+            }
+        }
+    public:
+        NColumnShard::IDataPreparationTask::TPtr AssembleIndexedBatch(NColumnShard::IDataTasksProcessor::TPtr processor, NOlap::TReadMetadata::TConstPtr readMetadata);
+
+        const THashSet<TBlobRange>& GetWaitingBlobs() const {
+            return WaitIndexed;
+        }
+
+        const TGranule& GetOwner() const {
+            return *Owner;
+        }
+
+        bool IsFetchingReady() const {
+            return WaitIndexed.empty();
+        }
+
+        const TPortionInfo& GetPortionInfo() const {
+            return *PortionInfo;
+        }
+
+        void InitBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+            Y_VERIFY(!FilteredBatch);
+            FilteredBatch = batch;
+            Owner->OnBatchReady(*this, batch);
+        }
+
+        bool AddIndexedReady(const TBlobRange& bRange, const TString& blobData) {
+            if (!WaitIndexed.erase(bRange)) {
+                return false;
+            }
+            Data.emplace(bRange, blobData);
+            return true;
+        }
+    };
+
+    class TGranule {
+    private:
+        YDB_READONLY(ui64, GranuleId, 0);
+        YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::RecordBatch>>, ReadyBatches);
+        YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
+        YDB_READONLY_FLAG(Ready, false);
+        THashMap<ui32, TBatch> Batches;
+        std::set<ui32> WaitBatches;
+        TIndexedReadData* Owner = nullptr;
+        void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
+            Y_VERIFY(!ReadyFlag);
+            Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchNo()));
+            if (batch && batch->num_rows()) {
+                ReadyBatches.emplace_back(batch);
+            }
+            Owner->OnBatchReady(batchInfo, batch);
+            if (WaitBatches.empty()) {
+                ReadyFlag = true;
+                Owner->OnGranuleReady(*this);
+            }
+        }
+
+    public:
+        friend class TIndexedReadData::TBatch;
+        TGranule(const ui64 granuleId, TIndexedReadData& owner)
+            : GranuleId(granuleId)
+            , Owner(&owner)
+        {
+
+        }
+
+        void FillBlobsForFetch(std::vector<TBlobRange>& result) const {
+            for (auto&& i : Batches) {
+                i.second.FillBlobsForFetch(result);
+            }
+        }
+
+        TBatch& AddBatch(const ui32 batchNo, const TPortionInfo& portionInfo) {
+            Y_VERIFY(!ReadyFlag);
+            WaitBatches.emplace(batchNo);
+            auto infoEmplace = Batches.emplace(batchNo, TBatch(batchNo, *this, portionInfo));
+            Y_VERIFY(infoEmplace.second);
+            return infoEmplace.first->second;
+        }
+    };
+
+    void OnGranuleReady(TGranule& granule) {
+        Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
+        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second);
+    }
+
+    void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
+        if (batch && batch->num_rows()) {
+            if (batchInfo.IsDuplicationsAvailable()) {
+                Y_VERIFY(batchInfo.GetOwner().IsDuplicationsAvailable());
+                BatchesToDedup.insert(batch.get());
+            } else {
+                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, IndexInfo().GetReplaceKey(), false));
+            }
+        }
+    }
+
+    THashSet<const void*> BatchesToDedup;
+    THashMap<TBlobRange, TBatch*> IndexedBlobSubscriber; // blobId -> batch
+    THashMap<ui64, TGranule*> GranulesToOut;
+    std::set<ui64> ReadyGranulesAccumulator;
+    THashSet<TBlobRange> IndexedBlobs;
     ui32 ReadyNotIndexed{0};
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> OutNotIndexed; // granule -> not indexed to append
-    THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyGranules; // granule -> portions data
-    THashMap<ui64, ui32> PortionBatch; // portion -> batch
-    TVector<ui64> BatchPortion; // batch -> portion
-    THashMap<ui64, ui64> PortionGranule; // portion -> granule
-    THashMap<ui64, ui32> GranuleWaits; // granule -> num portions to wait
-    TDeque<ui64> GranulesOutOrder;
-    THashSet<ui64> GranulesWithDups;
-    THashSet<ui64> PortionsWithDups;
-    THashSet<const void*> BatchesToDedup;
+    TVector<TBatch*> BatchInfo;
+    THashMap<ui64, TGranule> Granules;
+    TDeque<TGranule*> GranulesOutOrder;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
+
+    std::vector<TGranule*> DetachReadyInOrder();
 
     const TIndexInfo& IndexInfo() const {
         return ReadMetadata->IndexInfo;
     }
 
-    const TPortionInfo& Portion(ui32 batchNo) const {
-        Y_VERIFY(batchNo >= FirstIndexedBatch);
-        return ReadMetadata->SelectInfo->Portions[batchNo - FirstIndexedBatch];
-    }
-
-    ui64 BatchGranule(ui32 batchNo) const {
-        Y_VERIFY(batchNo < BatchPortion.size());
-        ui64 portion = BatchPortion[batchNo];
-        Y_VERIFY(PortionGranule.count(portion));
-        return PortionGranule.find(portion)->second;
-    }
-
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(
         const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) const;
 
-    NColumnShard::IDataPreparationTask::TPtr AssembleIndexedBatch(ui32 batchNo, NColumnShard::IDataTasksProcessor::TPtr processor);
-    void UpdateGranuleWaits(ui32 batchNo);
+    NColumnShard::IDataPreparationTask::TPtr AssembleIndexedBatch(const TBatch& batch, NColumnShard::IDataTasksProcessor::TPtr processor);
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();

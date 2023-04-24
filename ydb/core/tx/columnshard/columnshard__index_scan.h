@@ -48,11 +48,7 @@ public:
             const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
             WaitCommitted.emplace(cmtBlob, batchNo);
         }
-        auto indexedBlobs = IndexedData.InitRead(batchNo, true);
-        THashMap<ui64, THashSet<TBlobRange>> granuleBlobs; // granule -> blobs
-        for (auto& [blobId, granule] : indexedBlobs) {
-            granuleBlobs[granule].insert(blobId);
-        }
+        std::vector<TBlobRange> indexedBlobs = IndexedData.InitRead(batchNo, true);
 
         // Add cached batches without read
         for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
@@ -72,11 +68,8 @@ public:
 
         Y_VERIFY(ReadMetadata->IsSorted());
 
-        // Read all indexed blobs (in correct order)
-        auto granulesOrder = ReadMetadata->SelectInfo->GranulesOrder(ReadMetadata->IsDescSorted());
-        for (ui64 granule : granulesOrder) {
-            auto& blobs = granuleBlobs[granule];
-            BlobsToRead.insert(BlobsToRead.end(), blobs.begin(), blobs.end());
+        for (auto&& blobRange : indexedBlobs) {
+            BlobsToRead.emplace_back(blobRange);
         }
 
         IsReadFinished = ReadMetadata->Empty();
@@ -154,11 +147,11 @@ private:
 
         if (limitLeft == 0) {
             WaitCommitted.clear();
-            IndexedData.ForceFinishWaiting();
+            IndexedData.Abort();
             IsReadFinished = true;
         }
 
-        if (WaitCommitted.empty() && !IndexedData.HasWaitIndexed() && NextBlobIdxToRead == BlobsToRead.size()) {
+        if (WaitCommitted.empty() && !IndexedData.IsInProgress() && NextBlobIdxToRead == BlobsToRead.size()) {
             IsReadFinished = true;
         }
     }

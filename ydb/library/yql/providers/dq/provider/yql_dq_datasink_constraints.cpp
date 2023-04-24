@@ -175,7 +175,6 @@ public:
 
             const bool lOneRow = lUnique && lUnique->HasEqualColumns(leftJoinKeys);
             const bool rOneRow = rUnique && rUnique->HasEqualColumns(rightJoinKeys);
-            const bool bothOne = lOneRow && rOneRow;
 
             const auto makeRename = [&ctx](const TExprBase& label) -> TConstraintNode::TPathReduce {
                 if (label.Ref().IsAtom()) {
@@ -199,13 +198,17 @@ public:
                     unique = leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique;
                 else if (rightSide && rUnique)
                     unique = rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique;
-            } else if (joinType.IsAtom("Exclusion") || (lOneRow && rOneRow && joinType.IsAtom({"Inner", "Full", "Left", "Right"}))) {
-                if (lUnique && rUnique)
-                    unique = TUniqueConstraintNode::Merge(leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique, rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique, ctx);
-                else if (lUnique)
+            } else {
+                const bool exclusion = joinType.IsAtom("Exclusion");
+                const bool useLeft = lUnique && (rOneRow || exclusion);
+                const bool useRight = rUnique && (lOneRow || exclusion);
+
+                if (useLeft && !useRight)
                     unique = leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique;
-                else if (rUnique)
+                else if (useRight && !useLeft)
                     unique = rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique;
+                else if (useRight && useLeft)
+                    unique = TUniqueConstraintNode::Merge(leftRename ? lUnique->RenameFields(ctx, leftRename) : lUnique, rightRename ? rUnique->RenameFields(ctx, rightRename) : rUnique, ctx);
             }
 
             const auto lDistinct = join.LeftInput().Ref().GetConstraint<TDistinctConstraintNode>();
@@ -217,9 +220,9 @@ public:
                 else if (rightSide && rDistinct)
                     distinct = rightRename ? rDistinct->RenameFields(ctx, rightRename) : rDistinct;
             } else {
-                const bool useBoth = bothOne && joinType.IsAtom("Inner");
-                const bool useLeft = lDistinct && ((leftSide && rOneRow) || useBoth);
-                const bool useRight = rDistinct && ((rightSide && lOneRow) || useBoth);
+                const bool inner = joinType.IsAtom("Inner");
+                const bool useLeft = lDistinct && rOneRow && (inner || leftSide);
+                const bool useRight = rDistinct && lOneRow && (inner || rightSide);
 
                 if (useLeft && !useRight)
                     distinct = leftRename ? lDistinct->RenameFields(ctx, leftRename) : lDistinct;

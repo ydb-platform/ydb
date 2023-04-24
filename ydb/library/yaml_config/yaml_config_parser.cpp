@@ -4,6 +4,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
 
+#include <library/cpp/json/writer/json.h>
 
 namespace NKikimr::NYaml {
 
@@ -219,6 +220,37 @@ namespace NKikimr::NYaml {
         return it->second;
     }
 
+    const NJson::TJsonArray::TArray& GetTabletIdsFor(NJson::TJsonValue& json, TString type) {
+        auto& systemTabletsConfig = json["system_tablets"];
+        TString toLowerType = to_lower(type);
+
+        if (!systemTabletsConfig.Has(toLowerType)) {
+            auto& stubs = systemTabletsConfig[toLowerType];
+            stubs.SetType(NJson::EJsonValueType::JSON_ARRAY);
+            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) {
+                NJson::TJsonValue stub;
+                stub.SetType(NJson::EJsonValueType::JSON_MAP);
+                stub.InsertValue("type", type);
+
+                stubs.AppendValue(std::move(stub));
+            }
+        }
+
+        ui32 idx = 0;
+        for(NJson::TJsonValue& tablet : systemTabletsConfig[toLowerType].GetArraySafe()) {
+            ++idx;
+
+            NJson::TJsonValue& tabletInfo = tablet["info"];
+
+            if (!tabletInfo.Has("tablet_id")) {
+                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
+                tabletInfo.InsertValue("tablet_id", NJson::TJsonValue(GetNextTabletID(type, idx)));
+            }
+        }
+
+        return json["system_tablets"][toLowerType].GetArraySafe();
+    }
+
     const NJson::TJsonArray::TArray& GetTabletsFor(NJson::TJsonValue& json, TString type) {
         auto& systemTabletsConfig = json["system_tablets"];
         TString toLowerType = to_lower(type);
@@ -271,6 +303,11 @@ namespace NKikimr::NYaml {
         }
 
         auto& config = json["actor_system_config"];
+
+        if (config.Has("use_auto_config") && config["use_auto_config"].GetBooleanSafe()) {
+            return; // do nothing for auto config
+        }
+
         auto& executors = config["executor"];
 
         const std::vector<std::pair<TString, TString>> defaultExecutors = {{"io_executor", "IO"}, {"sys_executor", "SYSTEM"}, {"user_executor", "USER"}, {"batch_executor", "BATCH"}};
@@ -344,6 +381,7 @@ namespace NKikimr::NYaml {
 
         Y_ENSURE_BT(serviceSet.Has("groups"), "groups field should be specified in service_set field of blob_storage_config");
         auto& groups = serviceSet["groups"];
+
         bool shouldFillVdisks = !serviceSet.Has("vdisks");
         auto& vdisksServiceSet = serviceSet["vdisks"];
         if (shouldFillVdisks) {
@@ -487,7 +525,11 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareSystemTabletsInfo(NJson::TJsonValue& json)  {
+    void PrepareSystemTabletsInfo(NJson::TJsonValue& json, bool relaxed)  {
+        if (relaxed && (!json.Has("nameservice_config") || !json["nameservice_config"].Has("node"))) {
+            return;
+        }
+
         if (!json.Has("system_tablets")) {
             auto& config = json["system_tablets"];
             config.SetType(NJson::EJsonValueType::JSON_MAP);
@@ -507,8 +549,12 @@ namespace NKikimr::NYaml {
 
     }
 
-    void PrepareBootstrapConfig(NJson::TJsonValue& json) {
+    void PrepareBootstrapConfig(NJson::TJsonValue& json, bool relaxed) {
         if (json.Has("bootstrap_config") && json["bootstrap_config"].Has("tablet")) {
+            return;
+        }
+
+        if (relaxed && (!json.Has("system_tablets") || !json.Has("static_erasure"))) {
             return;
         }
 
@@ -527,7 +573,10 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareDomainsConfig(NJson::TJsonValue& json) {
+    void PrepareDomainsConfig(NJson::TJsonValue& json, bool relaxed) {
+        if (relaxed && !json.Has("domains_config")) {
+            return;
+        }
 
         Y_ENSURE_BT(json.Has("domains_config"));
         Y_ENSURE_BT(json["domains_config"].IsMap());
@@ -581,17 +630,24 @@ namespace NKikimr::NYaml {
 
             const std::vector<std::pair<TString, TString>> exps = {{"explicit_coordinators", "FLAT_TX_COORDINATOR"}, {"explicit_allocators", "TX_ALLOCATOR"}, {"explicit_mediators", "TX_MEDIATOR"}};
             for(auto [field, type] : exps) {
+                if (relaxed && domain.Has(field)) {
+                    continue;
+                }
                 Y_ENSURE_BT(!domain.Has(field));
                 auto& arr = domain[field];
                 arr.SetType(NJson::EJsonValueType::JSON_ARRAY);
-                for(auto tablet: GetTabletsFor(json, type)) {
+                for(auto tablet: GetTabletIdsFor(json, type)) {
                     arr.AppendValue(GetUnsignedIntegerSafe(tablet["info"], "tablet_id"));
                 }
             }
         }
     }
 
-    void PrepareSecurityConfig(NJson::TJsonValue& json) {
+    void PrepareSecurityConfig(NJson::TJsonValue& json, bool relaxed) {
+        if (relaxed && !json.Has("domains_config")) {
+            return;
+        }
+
         Y_ENSURE_BT(json.Has("domains_config"));
         Y_ENSURE_BT(json["domains_config"].IsMap());
 
@@ -778,16 +834,16 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareJson(NJson::TJsonValue& json){
+    void TransformConfig(NJson::TJsonValue& json, bool relaxed) {
         PrepareNameserviceConfig(json);
         PrepareActorSystemConfig(json);
         PrepareStaticGroup(json);
         PrepareIcConfig(json);
         PrepareLogConfig(json);
-        PrepareSystemTabletsInfo(json);
-        PrepareDomainsConfig(json);
-        PrepareSecurityConfig(json);
-        PrepareBootstrapConfig(json);
+        PrepareSystemTabletsInfo(json, relaxed);
+        PrepareDomainsConfig(json, relaxed);
+        PrepareSecurityConfig(json, relaxed);
+        PrepareBootstrapConfig(json, relaxed);
         ClearFields(json);
     }
 
@@ -831,7 +887,7 @@ namespace NKikimr::NYaml {
     void Parse(const TString& data, NKikimrConfig::TAppConfig& config) {
         auto yamlNode = YAML::Load(data);
         NJson::TJsonValue jsonNode = Yaml2Json(yamlNode, true);
-        PrepareJson(jsonNode);
+        TransformConfig(jsonNode);
         NProtobufJson::MergeJson2Proto(jsonNode, config, GetJsonToProtoConfig());
     }
 }

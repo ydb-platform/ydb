@@ -42,13 +42,14 @@ private:
         ReportError(ctx, "Query timed out");
     }
 
-    void ReportSuccess(const TActorContext& ctx, NKikimrKqp::TQueryResponse response) {
+    void ReportResult(const TActorContext& ctx, NKikimrKqp::TQueryResponse response, TMaybe<TString> errorMessage) {
         CloseSession(ctx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for successfull query response");
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST,
+            "Creating event for query response " << (errorMessage.Defined() ? "with error" : "with success"));
         auto* finishEv = new TEvLoad::TEvYqlSingleQueryResponse(
             Result,
-            Nothing(),
+            std::move(errorMessage),
             std::move(response)
         );
         ctx.Send(Parent, finishEv);
@@ -125,7 +126,10 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query is executed successfully");
-            ReportSuccess(ctx, response.GetResponse());
+            ReportResult(ctx, response.GetResponse(), Nothing());
+        } else if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SCHEME_ERROR) {
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Abort after query execution failed with scheme error: " + ev->Get()->ToString());
+            ReportResult(ctx, response.GetResponse(), ev->Get()->ToString());
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query execution failed: " + ev->Get()->ToString());
             ExecuteQuery(ctx);

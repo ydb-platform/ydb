@@ -208,7 +208,7 @@ public:
         , ReaderOne_(MakeBlockReader(TTypeInfoHelper(), type))
         , ReaderTwo_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
-        , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
+        , Compare_(TBlockTypeHelper().MakeComparator(type))
     {
     }
 
@@ -280,7 +280,7 @@ private:
     const std::unique_ptr<IBlockReader> ReaderOne_;
     const std::unique_ptr<IBlockReader> ReaderTwo_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
-    const std::unique_ptr<NYql::NUdf::IBlockItemComparator> Compare_;
+    const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
 template<bool IsMin>
@@ -294,7 +294,7 @@ public:
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
-        , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
+        , Compare_(TBlockTypeHelper().MakeComparator(type))
     {
     }
 
@@ -324,7 +324,7 @@ private:
     TType* const Type_;
     const std::unique_ptr<IBlockReader> Reader_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
-    const std::unique_ptr<NYql::NUdf::IBlockItemComparator> Compare_;
+    const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
 template<bool IsMin>
@@ -338,8 +338,7 @@ public:
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
-        , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
-
+        , Compare_(TBlockTypeHelper().MakeComparator(type))
     {
     }
 
@@ -369,7 +368,7 @@ private:
     TType* const Type_;
     const std::unique_ptr<IBlockReader> Reader_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
-    const std::unique_ptr<NYql::NUdf::IBlockItemComparator> Compare_;
+    const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
 template <typename TStringType, bool IsMin>

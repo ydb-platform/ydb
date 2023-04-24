@@ -175,7 +175,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
             if (versionIsSame) {
                 shard->PreviousSuccessfullyProcessedLastMessage = shard->CurrentLastMessage;
             }
-            if (!IsFifo_) {
+            {
                 const i64 newMessagesCount = val["newMessagesCount"];
                 Y_VERIFY(newMessagesCount >= 0);
                 auto notification = MakeHolder<TSqsEvents::TEvQueuePurgedNotification>();

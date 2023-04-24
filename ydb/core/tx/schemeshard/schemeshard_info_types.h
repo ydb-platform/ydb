@@ -419,6 +419,15 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() { return TableDescription.GetReplicationConfig(); }
     NKikimrSchemeOp::TTableReplicationConfig& MutableReplicationConfig() { return *TableDescription.MutableReplicationConfig(); }
 
+    bool IsAsyncReplica() const {
+        switch (TableDescription.GetReplicationConfig().GetMode()) {
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     bool HasTTLSettings() const { return TableDescription.HasTTLSettings(); }
     const NKikimrSchemeOp::TTTLSettings& TTLSettings() const { return TableDescription.GetTTLSettings(); }
     bool IsTTLEnabled() const { return HasTTLSettings() && TTLSettings().HasEnabled(); }

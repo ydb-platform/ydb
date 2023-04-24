@@ -28,6 +28,7 @@ target_sources(library-cpp-actors-interconnect-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/event_holder_pool_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/interconnect_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/large.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/outgoing_stream_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/poller_actor_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/dynamic_proxy_ut.cpp
 )

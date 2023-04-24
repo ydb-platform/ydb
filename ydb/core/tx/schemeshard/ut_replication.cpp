@@ -163,7 +163,28 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     }
 
-    Y_UNIT_TEST(AlterReplicationConfig) {
+    Y_UNIT_TEST(CannotAddReplicationConfig) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_READ_ONLY
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(AlterReplicatedTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -182,10 +203,19 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             DropColumns { Name: "value" }
-            ReplicationConfig {
-              Mode: REPLICATION_MODE_NONE
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusSchemeError});
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "by_value", {"value"},
+            Ydb::StatusIds::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(CopyReplicatedTable) {

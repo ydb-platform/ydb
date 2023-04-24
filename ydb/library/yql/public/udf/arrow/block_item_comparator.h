@@ -3,12 +3,17 @@
 #include "block_item.h"
 #include "block_reader.h"
 
+#include <ydb/library/yql/public/udf/udf_ptr.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
+#include <ydb/library/yql/public/udf/udf_type_size_check.h>
 
 namespace NYql::NUdf {
 
+// ABI stable
 class IBlockItemComparator {
 public:
+    using TPtr = TUniquePtr<IBlockItemComparator>;
+
     virtual ~IBlockItemComparator() = default;
 
     virtual i64 Compare(TBlockItem lhs, TBlockItem rhs) const = 0;
@@ -19,6 +24,7 @@ public:
     }
 };
 
+UDF_ASSERT_TYPE_SIZE(IBlockItemComparator, 8);
 
 template <typename TDerived, bool Nullable>
 class TBlockItemComparatorBase : public IBlockItemComparator {
@@ -126,15 +132,9 @@ public:
     }
 };
 
-template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
-class TStringBlockItemComparator : public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable, PgString>, Nullable> {
+template <typename TStringType, bool Nullable>
+class TStringBlockItemComparator : public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
 public:
-    void SetPgBuilder(const IPgBuilder* pgBuilder, i32 typeLen, ui32 pgTypeId) {
-        Y_UNUSED(pgBuilder);
-        Y_UNUSED(typeLen);
-        Y_UNUSED(pgTypeId);
-    }
-
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef().Compare(rhs.AsStringRef());
     }
@@ -217,20 +217,5 @@ public:
 private:
     std::unique_ptr<IBlockItemComparator> Inner_;
 };
-
-struct TComparatorTraits {
-    using TResult = IBlockItemComparator;
-    template <bool Nullable>
-    using TTuple = TTupleBlockItemComparator<Nullable>;
-    template <typename T, bool Nullable>
-    using TFixedSize = TFixedSizeBlockItemComparator<T, Nullable>;
-    template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
-    using TStrings = TStringBlockItemComparator<TStringType, Nullable, PgString>;
-    using TExtOptional = TExternalOptionalBlockItemComparator;
-};
-
-inline std::unique_ptr<IBlockItemComparator> MakeBlockItemComparator(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    return MakeBlockReaderImpl<TComparatorTraits>(typeInfoHelper, type, nullptr);
-}
 
 }

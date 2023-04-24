@@ -15,6 +15,7 @@ target_link_libraries(pgwire PUBLIC
   library-cpp-cpuid_check
   ydb-core-base
   ydb-core-pgproxy
+  ydb-core-protos
   api-grpc
   cpp-client-ydb_driver
   cpp-client-draft

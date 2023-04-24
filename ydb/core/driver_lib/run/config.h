@@ -71,6 +71,7 @@ union TBasicKikimrServicesMask {
         bool EnableBackgroundTasks:1;
         bool EnableExternalIndex: 1;
         bool EnableConveyor: 1;
+        bool EnableLocalPgWire:1;
     };
 
     ui64 Raw;

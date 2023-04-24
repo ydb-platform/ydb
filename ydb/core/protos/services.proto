@@ -241,6 +241,10 @@ enum EServiceKikimr {
     SCHEME_BOARD_SUBSCRIBER = 571;
     SCHEME_BOARD_POPULATOR = 572;
 
+    PGWIRE = 579;
+    LOCAL_PGWIRE = 580;
+    PGYDB = 581;
+
     // Distributed Storage
     DS_PROXY_NODE_MON = 600;
 

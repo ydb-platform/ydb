@@ -644,7 +644,18 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 32)
+class IBlockTypeHelper;
+
+class IFunctionTypeInfoBuilder16: public IFunctionTypeInfoBuilder15 {
+public:
+    virtual const IBlockTypeHelper& IBlockTypeHelper() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 32)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder16;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 28)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder15;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder14;

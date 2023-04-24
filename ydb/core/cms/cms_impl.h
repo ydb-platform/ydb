@@ -301,8 +301,7 @@ private:
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         TErrorInfo &error) const;
-    bool CheckSysTabletsNode(const NKikimrCms::TAction &action,
-        const TActionOptions &opts,
+    bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,

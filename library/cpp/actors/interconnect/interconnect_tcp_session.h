@@ -24,6 +24,7 @@
 #include "watchdog_timer.h"
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"
+#include "outgoing_stream.h"
 
 #include <unordered_set>
 #include <unordered_map>
@@ -217,10 +218,6 @@ namespace NActors {
         const ui32 NodeId;
         const TSessionParams Params;
 
-        // header we are currently processing (parsed from the stream)
-        TTcpPacketHeader_v2 Header;
-        ui64 HeaderConfirm, HeaderSerial;
-
         size_t PayloadSize;
         ui32 ChecksumExpected, Checksum;
         bool IgnorePayload;
@@ -233,6 +230,7 @@ namespace NActors {
 
         THolder<TEvUpdateFromInputSession> UpdateFromInputSession;
 
+        std::optional<ui64> LastReceivedSerial;
         ui64 ConfirmedByInput;
 
         std::shared_ptr<IInterconnectMetrics> Metrics;
@@ -390,7 +388,7 @@ namespace NActors {
 
         ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
-        bool DropConfirmed(ui64 confirm);
+        bool DropConfirmed(ui64 confirm, bool ignoreSendQueuePos = false);
         void ShutdownSocket(TDisconnectReason reason);
 
         void StartHandshake();
@@ -447,15 +445,20 @@ namespace NActors {
         void SetOutputStuckFlag(bool state);
         void SwitchStuckPeriod();
 
-        using TSendQueue = TList<TTcpPacketOutTask>;
-        TSendQueue SendQueue;
-        TSendQueue SendQueueCache;
-        TSendQueue::iterator SendQueuePos;
+        NInterconnect::TOutgoingStream OutgoingStream;
+
+        struct TOutgoingPacket {
+            size_t PacketSize;
+            ui64 Serial;
+            bool Data;
+        };
+        std::deque<TOutgoingPacket> SendQueue; // packet boundaries
+        size_t SendQueuePos = 0; // packet being sent now
+        size_t SendOffset = 0;
+
         ui64 WriteBlockedCycles = 0; // start of current block period
         TDuration WriteBlockedTotal; // total incremental duration that session has been blocked
         ui64 BytesUnwritten = 0;
-
-        void TrimSendQueueCache();
 
         TDuration GetWriteBlockedTotal() const {
             if (ReceiveContext->WriteBlockedByFullSendBuffer) {

@@ -536,39 +536,44 @@ const TChoppedConstraintNode* TChoppedConstraintNode::MakeCommon(const std::vect
 
 const TChoppedConstraintNode*
 TChoppedConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
-    auto sets = Sets_;
-    for (auto it = sets.cbegin(); sets.cend() != it;) {
-        if (std::all_of(it->cbegin(), it->cend(), predicate))
-            ++it;
-        else
-            it = sets.erase(it);
+    TFullSetType chopped;
+    chopped.reserve(Sets_.size());
+    for (const auto& set : Sets_) {
+        auto newSet = set;
+        for (auto it = newSet.cbegin(); newSet.cend() != it;) {
+            if (predicate(*it))
+                ++it;
+            else
+                it = newSet.erase(it);
+        }
+
+        if (newSet.empty())
+            return nullptr;;
+
+        chopped.insert_unique(std::move(newSet));
     }
-    return sets.empty() ? nullptr : ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+    return ctx.MakeConstraint<TChoppedConstraintNode>(std::move(chopped));
 }
 
 const TChoppedConstraintNode*
 TChoppedConstraintNode::RenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
-    TFullSetType sets;
-    sets.reserve(Sets_.size());
+    TFullSetType chopped;
+    chopped.reserve(Sets_.size());
     for (const auto& set : Sets_) {
-        std::vector<TSetType> newSets(1U);
-        newSets.front().reserve(set.size());
+        TSetType newSet;
+        newSet.reserve(set.size());
         for (const auto& path : set) {
-            auto newPaths = reduce(path);
-            if (newPaths.empty())
-                break;
-            auto tmpSets(std::move(newSets));
-            for (const auto& newPath : newPaths) {
-                for (const auto& oldSet : tmpSets) {
-                    newSets.emplace_back(oldSet);
-                    newSets.back().insert_unique(newPath);
-                }
-            }
+            if (const auto& newPaths = reduce(path); !newPaths.empty())
+                newSet.insert_unique(newPaths.cbegin(), newPaths.cend());
         }
-        if (set.size() == newSets.front().size())
-            sets.insert_unique(newSets.cbegin(), newSets.cend());
+
+        if (newSet.empty())
+            return nullptr;
+
+        chopped.insert_unique(std::move(newSet));
     }
-    return sets.empty() ? nullptr : ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+
+    return ctx.MakeConstraint<TChoppedConstraintNode>(std::move(chopped));
 }
 
 const TChoppedConstraintNode*
@@ -1986,6 +1991,11 @@ void Out<NYql::TDistinctConstraintNode>(IOutputStream& out, const NYql::TDistinc
 
 template<>
 void Out<NYql::TPartOfSortedConstraintNode>(IOutputStream& out, const NYql::TPartOfSortedConstraintNode& c) {
+    c.Out(out);
+}
+
+template<>
+void Out<NYql::TPartOfChoppedConstraintNode>(IOutputStream& out, const NYql::TPartOfChoppedConstraintNode& c) {
     c.Out(out);
 }
 

@@ -7,7 +7,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
 
 namespace NYql::NDq {
@@ -23,33 +23,34 @@ public:
     NDqProto::EDataTransportVersion GetTransportVersion() const;
 
     NDqProto::TData Serialize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* itemType) const;
-    NDqProto::TData Serialize(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, const NKikimr::NMiniKQL::TType* itemType) const;
 
     template <class TForwardIterator>
     NDqProto::TData Serialize(TForwardIterator first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType) const {
-        switch (TransportVersion) {
-            case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
-            case NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0:
-            case NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0: {
-                auto count = std::distance(first, last);
-                const auto listType = NKikimr::NMiniKQL::TListType::Create(
-                    const_cast<NKikimr::NMiniKQL::TType*>(itemType), TypeEnv);
-                const NUdf::TUnboxedValue listValue = HolderFactory.RangeAsArray(first, last);
+        return Serialize(first, last, itemType, {});
+    }
 
-                auto data = Serialize(listValue, listType);
-                data.SetRows(count);
-                return data;
-            }
-            default:
-                YQL_ENSURE(false, "Unsupported TransportVersion");
+    template <class TForwardIterator>
+    NDqProto::TData Serialize(TForwardIterator& first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType, TMaybe<size_t> limit) const {
+        const auto listType = NKikimr::NMiniKQL::TListType::Create(const_cast<NKikimr::NMiniKQL::TType*>(itemType), TypeEnv);
+        if (TransportVersion == NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED ||
+            TransportVersion == NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0)
+        {
+            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(listType);
+            return SerializeBatch(packer, first, last, limit);
         }
+        
+        if (TransportVersion == NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0) {
+            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(listType);
+            return SerializeBatch(packer, first, last, limit);
+        }
+        YQL_ENSURE(false, "Unsupported TransportVersion");
     }
 
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType,
         NKikimr::NMiniKQL::TUnboxedValueVector& buffer) const;
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
 
-    ui64 CalcSerializedSize(NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type);
+    ui64 CalcSerializedSize(NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type) const;
 
     struct TEstimateSizeSettings {
         bool WithHeaders;
@@ -72,6 +73,28 @@ public:
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     const NDqProto::EDataTransportVersion TransportVersion;
+private:
+    template <class TForwardIterator, class TPacker>
+    NDqProto::TData SerializeBatch(TPacker& packer, TForwardIterator& first, TForwardIterator last, TMaybe<size_t> limit) const {
+        size_t count = 0;
+        while (first != last) {
+            packer.AddItem(*first);
+            if (limit.Defined() && count && packer.PackedSizeEstimate() > *limit) {
+                packer.Rollback(*first);
+                break;
+            }
+            ++first;
+            ++count;
+        }
+        const auto& packed = packer.Finish();
+        NDqProto::TData data;
+        data.SetTransportVersion(TransportVersion);
+        data.MutableRaw()->reserve(packed.Size());
+        packed.CopyTo(*data.MutableRaw());
+        data.SetRows(count);
+        return data;
+    }
+
 };
 
 } // namespace NYql::NDq

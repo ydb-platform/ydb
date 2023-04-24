@@ -1766,6 +1766,11 @@ message TClientCertificateAuthorization {
     optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
 }
 
+message TLocalPgWireConfig {
+    optional int32 ListeningPort = 1 [default = 5432];
+    optional string SslCertificate = 5;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1833,6 +1838,7 @@ message TAppConfig {
     optional bool YamlConfigEnabled = 64;
     optional TConveyorConfig ConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
+    optional TLocalPgWireConfig LocalPgWireConfig = 69;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

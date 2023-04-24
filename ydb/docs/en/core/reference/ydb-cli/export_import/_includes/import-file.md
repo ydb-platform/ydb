@@ -31,6 +31,7 @@ General format of the command:
 * `--null-value STRING`: The value to be imported as `NULL`. Default value: `""`.
 * `--batch-bytes VAL`: Split the imported file into batches of specified sizes. If a row fails to fit into a batch completely, it's discarded and added to the next batch. Whatever the batch size is, the batch must include at least one row. Default value: `1 MiB`.
 * `--max-in-flight VAL`: The number of data batches imported in parallel. You can increase the value of this parameter to accelerate importation of large files. The default value is `100`.
+* `--newline-delimited` — a flag which guarantees that there are no newline characters inside records. If the flag is set, and import is performed from a file, then different import threads work with the different parts of a source file. This allows to provide maximized performance when loading sorted datasets into partitioned tables, as load is distributed across all partitions.
 
 ## Examples {#examples}
 

@@ -88,6 +88,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
 

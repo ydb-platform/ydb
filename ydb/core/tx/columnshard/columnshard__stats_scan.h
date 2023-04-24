@@ -115,27 +115,20 @@ private:
     }
 
     void ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& batch) {
-        std::vector<bool> less;
+        NArrow::TColumnFilter filter;
         if (ReadMetadata->LessPredicate) {
             auto cmpType = ReadMetadata->LessPredicate->Inclusive ?
                 NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-            less = NArrow::MakePredicateFilter(batch, ReadMetadata->LessPredicate->Batch, cmpType);
+            filter.And(NArrow::TColumnFilter::MakePredicateFilter(batch, ReadMetadata->LessPredicate->Batch, cmpType));
         }
 
-        std::vector<bool> greater;
         if (ReadMetadata->GreaterPredicate) {
             auto cmpType = ReadMetadata->GreaterPredicate->Inclusive ?
                 NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-            greater = NArrow::MakePredicateFilter(batch, ReadMetadata->GreaterPredicate->Batch, cmpType);
+            filter.And(NArrow::TColumnFilter::MakePredicateFilter(batch, ReadMetadata->GreaterPredicate->Batch, cmpType));
         }
 
-        std::vector<bool> bits = NArrow::CombineFilters(std::move(less), std::move(greater));
-        if (bits.size()) {
-            auto res = arrow::compute::Filter(batch, NArrow::MakeFilter(bits));
-            Y_VERIFY_S(res.ok(), res.status().message());
-            Y_VERIFY((*res).kind() == arrow::Datum::RECORD_BATCH);
-            batch = (*res).record_batch();
-        }
+        filter.Apply(batch);
     }
 
     void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders,

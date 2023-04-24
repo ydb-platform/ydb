@@ -54,6 +54,8 @@ target_sources(ydb-core-persqueue PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ownerinfo.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_init.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_monitoring.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/percentile_counter.cpp

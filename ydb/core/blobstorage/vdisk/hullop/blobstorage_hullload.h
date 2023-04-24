@@ -220,13 +220,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
-            TString message;
-            if (msg->Status != NKikimrProto::OK) {
-                TStringStream str;
-                str << "{Origin# '" << Origin << "'}";
-                message = str.Str();
-            }
-            CHECK_PDISK_RESPONSE_MSG(VCtx, ev, ctx, message);
+            CHECK_PDISK_RESPONSE_READABLE_MSG(VCtx, ev, ctx, TStringBuilder() << "{Origin# '" << Origin << "'}");
 
             const TBufferWithGaps &data = msg->Data;
             LevelSegment->IndexParts.push_back({msg->ChunkIdx, msg->Offset, msg->Data.Size()});

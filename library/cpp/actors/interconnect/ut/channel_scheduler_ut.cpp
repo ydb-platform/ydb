@@ -43,8 +43,10 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
 
         std::deque<std::map<ui16, ui32>> window;
 
+        NInterconnect::TOutgoingStream stream;
+
         for (; numEvents; ++step) {
-            TTcpPacketOutTask task(p);
+            TTcpPacketOutTask task(p, stream);
 
             if (step == 100) {
                 for (ui32 i = 0; i < 200; ++i) {

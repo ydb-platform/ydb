@@ -9,6 +9,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <util/random/shuffle.h>
+#include "arrow_filter.h"
 
 namespace NKikimr {
 namespace {
@@ -626,15 +627,15 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             border = arrow::RecordBatch::Make(table->schema(), 1, columns);
         }
 
-        std::vector<bool> lt = NArrow::MakePredicateFilter(table, border, NArrow::ECompareType::LESS);
-        std::vector<bool> le = NArrow::MakePredicateFilter(table, border, NArrow::ECompareType::LESS_OR_EQUAL);
-        std::vector<bool> gt = NArrow::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER);
-        std::vector<bool> ge = NArrow::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER_OR_EQUAL);
+        const NArrow::TColumnFilter lt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::LESS);
+        const NArrow::TColumnFilter le = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::LESS_OR_EQUAL);
+        const NArrow::TColumnFilter gt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER);
+        const NArrow::TColumnFilter ge = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER_OR_EQUAL);
 
-        UNIT_ASSERT(CheckFilter(lt, 234, true));
-        UNIT_ASSERT(CheckFilter(le, 235, true));
-        UNIT_ASSERT(CheckFilter(gt, 235, false));
-        UNIT_ASSERT(CheckFilter(ge, 234, false));
+        UNIT_ASSERT(CheckFilter(lt.BuildFilter(), 234, true));
+        UNIT_ASSERT(CheckFilter(le.BuildFilter(), 235, true));
+        UNIT_ASSERT(CheckFilter(gt.BuildFilter(), 235, false));
+        UNIT_ASSERT(CheckFilter(ge.BuildFilter(), 234, false));
     }
 
     Y_UNIT_TEST(SortWithCompositeKey) {

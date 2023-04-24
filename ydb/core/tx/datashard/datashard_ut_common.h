@@ -451,6 +451,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
+    TABLE_OPTION(bool, Replicated, false);
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL

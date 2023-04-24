@@ -364,11 +364,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxies[0], true));
-        auto discoveryService = new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxies[0], true);
-        if (!options.SslData.Empty()) {
-            discoveryService->SetDynamicNodeAuthParams(NKikimr::GetDynamicNodeAuthorizationParams(Settings->AppConfig.GetClientCertificateAuthorization()));
-        }
-        GRpcServer->AddService(discoveryService);
+        GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxies[0], true));

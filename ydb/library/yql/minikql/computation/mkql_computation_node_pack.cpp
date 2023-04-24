@@ -904,6 +904,37 @@ NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TStringBuf buf, const TH
 }
 
 template<bool Fast>
+void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueVector& result) const {
+    MKQL_ENSURE(Type_->IsList(), "UnpackBatch() requires list type");
+
+    auto& s = State_;
+    ui64 len;
+    ui32 topLength;
+    const TType* itemType = static_cast<const TListType*>(Type_)->GetItemType();
+    if constexpr (!Fast) {
+        auto pair = SkipEmbeddedLength<Fast>(buf);
+        topLength = pair.first;
+        bool emptySingleOptional = pair.second;
+
+        if (s.Properties.Test(EPackProps::UseOptionalMask)) {
+            s.OptionalUsageMask.Reset(buf);
+        }
+
+        MKQL_ENSURE(!s.Properties.Test(EPackProps::SingleOptional) || !emptySingleOptional, "Unexpected header settings");
+        len = NDetails::UnpackUInt64(buf);
+    } else {
+        topLength = 0;
+        len = NDetails::GetRawData<ui64>(buf);
+    }
+
+    result.reserve(len);
+    for (ui64 i = 0; i < len; ++i) {
+        result.emplace_back(UnpackFromContigousBuffer<Fast>(itemType, buf, topLength, holderFactory, s));
+    }
+    MKQL_ENSURE(buf.empty(), "Bad packed data. Not fully data read");
+}
+
+template<bool Fast>
 const TPagedBuffer& TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
     MKQL_ENSURE(ItemCount_ == 0, "Can not mix Pack() and AddItem() calls");
     Buffer_.Clear();
@@ -931,11 +962,28 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TU
             State_.OptionalUsageMask.Reset();
             Buffer_.ReserveHeader(sizeof(ui32) + State_.OptionalMaskReserve + MAX_PACKED64_SIZE);
         }
+        Rollback_.ConstructInPlace();
     }
 
-    PackImpl<Fast, false>(Type_, Buffer_, value, State_);
+    Rollback_->BufferSize = Buffer_.Size();
+    if constexpr (!Fast) {
+        Rollback_->OptionalCount = State_.OptionalUsageMask.GetOptionalCount();
+    }
+
+    PackImpl<Fast, false>(itemType, Buffer_, value, State_);
     ++ItemCount_;
     return *this;
+}
+
+template<bool Fast>
+void TValuePackerTransport<Fast>::Rollback(NUdf::TUnboxedValuePod& value) {
+    MKQL_ENSURE(Rollback_.Defined() && ItemCount_ > 0, "AddItem() was never called or RemoveLastItem() is called twice in a row");
+    Buffer_.Resize(Rollback_->BufferSize);
+    if constexpr (!Fast) {
+        State_.OptionalUsageMask.Shrink(Rollback_->OptionalCount);
+    }
+    --ItemCount_;
+    Rollback_ = {};
 }
 
 template<bool Fast>
@@ -949,6 +997,7 @@ const TPagedBuffer& TValuePackerTransport<Fast>::Finish() {
         BuildMeta(true);
     }
     ItemCount_ = 0;
+    Rollback_ = {};
     return Buffer_;
 }
 
@@ -977,9 +1026,17 @@ void TValuePackerTransport<Fast>::BuildMeta(bool addItemCount) const {
         TFixedSizeBuffer buf(header, metaSize + itemCountSize);
         SerializeMeta(buf, useMask, s.OptionalUsageMask, fullLen, s.Properties.Test(EPackProps::SingleOptional));
         if (addItemCount) {
-            PackData<Fast>(ItemCount_, buf);
+            if constexpr (Fast) {
+                PackData<Fast>(ItemCount_, buf);
+            } else {
+                // PackData() can not be used here - it may overwrite some bytes past the end of header
+                char tmp[MAX_PACKED64_SIZE];
+                size_t actualItemCountSize = Pack64(ItemCount_, tmp);
+                std::memcpy(buf.Pos(), tmp, actualItemCountSize);
+                buf.Advance(actualItemCountSize);
+            }
         }
-        Y_VERIFY_DEBUG(buf.Size() == metaSize + itemCountSize);
+        MKQL_ENSURE(buf.Size() == metaSize + itemCountSize, "Partial header write");
     } else {
         s.OptionalMaskReserve = maskSize;
 

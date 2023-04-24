@@ -12,8 +12,7 @@ LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
     bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
-        const size_t descrSize = sizeof(TEventDescr2);
-        const size_t amount = sizeof(TChannelPart) + descrSize;
+        const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr2);
         if (task.GetVirtualFreeAmount() < amount) {
             return false;
         }
@@ -25,28 +24,33 @@ namespace NActors {
         task.Orbit.Take(event.Orbit);
 
         Y_VERIFY(SerializationInfo);
-        event.Descr.Flags = (event.Descr.Flags & ~IEventHandle::FlagForwardOnNondelivery) |
+        const ui32 flags = (event.Descr.Flags & ~IEventHandle::FlagForwardOnNondelivery) |
             (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
 
-        TChannelPart *part = static_cast<TChannelPart*>(task.GetFreeArea());
-        part->Channel = ChannelId | TChannelPart::LastPartFlag;
-        part->Size = descrSize;
-
-        auto *p = reinterpret_cast<TEventDescr2*>(part + 1);
-        *p = {
+        // prepare descriptor record
+        TEventDescr2 descr{
             event.Descr.Type,
-            event.Descr.Flags,
+            flags,
             event.Descr.Recipient,
             event.Descr.Sender,
             event.Descr.Cookie,
             {},
             event.Descr.Checksum
         };
-        traceId.Serialize(&p->TraceId);
+        traceId.Serialize(&descr.TraceId);
 
-        task.AppendBuf(part, amount);
+        // and channel header before the descriptor
+        TChannelPart part{
+            .Channel = static_cast<ui16>(ChannelId | TChannelPart::LastPartFlag),
+            .Size = sizeof(descr),
+        };
+
+        // append them to the packet
+        task.Write(&part, sizeof(part));
+        task.Write(&descr, sizeof(descr));
+
         *weightConsumed += amount;
-        OutputQueueSize -= part->Size;
+        OutputQueueSize -= part.Size;
         Metrics->UpdateOutputChannelEvents(ChannelId);
 
         return true;
@@ -75,7 +79,9 @@ namespace NActors {
                     } else if (event.Event) {
                         State = EState::CHUNKER;
                         IEventBase *base = event.Event.Get();
-                        Chunker.SetSerializingEvent(base);
+                        if (event.EventSerializedSize) {
+                            Chunker.SetSerializingEvent(base);
+                        }
                         SerializationInfoContainer = base->CreateSerializationInfo();
                         SerializationInfo = &SerializationInfoContainer;
                     } else { // event without buffer and IEventBase instance
@@ -83,28 +89,28 @@ namespace NActors {
                         SerializationInfoContainer = {};
                         SerializationInfo = &SerializationInfoContainer;
                     }
+                    if (!event.EventSerializedSize) {
+                        State = EState::DESCRIPTOR;
+                    }
                     break;
 
                 case EState::CHUNKER:
                 case EState::BUFFER: {
-                    size_t maxBytes = task.GetVirtualFreeAmount();
-                    if (maxBytes <= sizeof(TChannelPart)) {
+                    if (task.GetVirtualFreeAmount() <= sizeof(TChannelPart)) {
                         return false;
                     }
 
-                    TChannelPart *part = static_cast<TChannelPart*>(task.GetFreeArea());
-                    part->Channel = ChannelId;
-                    part->Size = 0;
-                    task.AppendBuf(part, sizeof(TChannelPart));
-                    maxBytes -= sizeof(TChannelPart);
-                    Y_VERIFY(maxBytes);
+                    TChannelPart part{
+                        .Channel = ChannelId,
+                        .Size = 0,
+                    };
+
+                    auto partBookmark = task.Bookmark(sizeof(part));
 
                     auto addChunk = [&](const void *data, size_t len) {
                         event.UpdateChecksum(data, len);
-                        task.AppendBuf(data, len);
-                        part->Size += len;
-                        Y_VERIFY_DEBUG(maxBytes >= len);
-                        maxBytes -= len;
+                        task.Append(data, len);
+                        part.Size += len;
 
                         event.EventActuallySerialized += len;
                         if (event.EventActuallySerialized > MaxSerializedEventSize) {
@@ -114,18 +120,18 @@ namespace NActors {
 
                     bool complete = false;
                     if (State == EState::CHUNKER) {
-                        Y_VERIFY_DEBUG(task.GetFreeArea() == part + 1);
-                        while (!complete && maxBytes) {
-                            const auto [first, last] = Chunker.FeedBuf(task.GetFreeArea(), maxBytes);
+                        while (!complete && !task.IsFull()) {
+                            TMutableContiguousSpan out = task.AcquireSpanForWriting();
+                            const auto [first, last] = Chunker.FeedBuf(out.data(), out.size());
                             for (auto p = first; p != last; ++p) {
                                 addChunk(p->first, p->second);
                             }
                             complete = Chunker.IsComplete();
                         }
                         Y_VERIFY(!complete || Chunker.IsSuccessfull());
-                        Y_VERIFY_DEBUG(complete || !maxBytes);
+                        Y_VERIFY_DEBUG(complete || task.IsFull());
                     } else { // BUFFER
-                        while (const size_t numb = Min(maxBytes, Iter.ContiguousSize())) {
+                        while (const size_t numb = Min(task.GetVirtualFreeAmount(), Iter.ContiguousSize())) {
                             const char *obuf = Iter.ContiguousData();
                             addChunk(obuf, numb);
                             Iter += numb;
@@ -138,12 +144,10 @@ namespace NActors {
                             event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);
                     }
 
-                    if (!part->Size) {
-                        task.Undo(sizeof(TChannelPart));
-                    } else {
-                        *weightConsumed += sizeof(TChannelPart) + part->Size;
-                        OutputQueueSize -= part->Size;
-                    }
+                    Y_VERIFY_DEBUG(part.Size);
+                    task.WriteBookmark(std::exchange(partBookmark, {}), &part, sizeof(part));
+                    *weightConsumed += sizeof(TChannelPart) + part.Size;
+                    OutputQueueSize -= part.Size;
                     if (complete) {
                         State = EState::DESCRIPTOR;
                     }

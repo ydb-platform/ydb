@@ -28,6 +28,7 @@ void TPagedBuffer::AppendPage() {
             page->Clear();
         } else {
             page = TBufferPage::Allocate();
+            page->Prev_ = tailPage;
             tailPage->Next_ = page;
         }
         tailPage->Size_ = TailSize_;

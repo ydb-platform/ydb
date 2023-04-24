@@ -18,6 +18,7 @@ target_link_libraries(ydb-core-pgproxy-ut PUBLIC
   cpp-testing-unittest_main
   ydb-core-pgproxy
   cpp-actors-testlib
+  ydb-core-protos
 )
 target_link_options(ydb-core-pgproxy-ut PRIVATE
   -ldl

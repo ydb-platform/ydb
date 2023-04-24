@@ -78,18 +78,29 @@ public:
 
     // incremental packing - works only for List<T> type
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
-    size_t GetPackedSize() const;
+    // can only be called once
+    void Rollback(NUdf::TUnboxedValuePod& value);
+    size_t PackedSizeEstimate() const {
+        return Buffer_.Size() + Buffer_.ReservedHeaderSize();
+    }
     const TPagedBuffer& Finish();
     TPagedBuffer FinishAndPull();
 
     // reference is valid till the next call to Pack()
     const TPagedBuffer& Pack(const NUdf::TUnboxedValuePod& value) const;
     NUdf::TUnboxedValue Unpack(TStringBuf buf, const THolderFactory& holderFactory) const;
+    void UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueVector& result) const;
 private:
     void BuildMeta(bool addItemCount) const;
 
+    struct TRollbackState {
+        ui32 OptionalCount = 0;
+        size_t BufferSize = 0;
+    };
+
     const TType* const Type_;
-    size_t ItemCount_ = 0;
+    ui64 ItemCount_ = 0;
+    TMaybe<TRollbackState> Rollback_;
     mutable TPagedBuffer Buffer_;
     mutable NDetails::TPackerState State_;
 };

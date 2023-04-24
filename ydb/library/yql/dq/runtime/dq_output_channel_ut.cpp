@@ -147,13 +147,16 @@ void TestPartialRead(TTestContext& ctx, bool quantum) {
 
     int req = 0;
     ui32 expected[] = {3, 3, 3};
-    ui32 expectedQ[] = {3, 5, 1};
+    ui32 expectedQ[] = {3, 3, 3};
 
     ui32 readChunks = 0;
     ui32 readRows = 0;
     while (readRows < 9) {
         NDqProto::TData data;
-        UNIT_ASSERT(ch->Pop(data, 50));
+        size_t limit = quantum ? 
+             // packed size is 13 byte header + 2 bytes for each row
+             20 : 50;
+        UNIT_ASSERT(ch->Pop(data, limit));
 
         ui32 v = quantum ? expectedQ[req] : expected[req];
         ++req;

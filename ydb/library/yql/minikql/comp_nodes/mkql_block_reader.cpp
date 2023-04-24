@@ -174,9 +174,25 @@ struct TConverterTraits {
     using TTuple = TTupleBlockItemConverter<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockItemConverter<T, Nullable>;
-    template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
+    template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
     using TStrings = TStringBlockItemConverter<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
+
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+        if (desc.PassByValue) {
+            return std::make_unique<TFixedSize<ui64, true>>();
+        } else {
+            if (desc.Typelen == -1) {
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::Text>>();
+                ret->SetPgBuilder(pgBuilder, desc.Typelen, desc.TypeId);
+                return ret;
+            } else {
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::CString>>();
+                ret->SetPgBuilder(pgBuilder, desc.Typelen, desc.TypeId);
+                return ret;
+            }
+        }        
+    }
 };
 
 } // namespace

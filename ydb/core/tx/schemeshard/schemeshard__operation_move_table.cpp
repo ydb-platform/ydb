@@ -580,6 +580,7 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotBackupTable()
+                .NotAsyncReplicaTable()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
 

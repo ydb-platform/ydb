@@ -32,6 +32,7 @@ target_link_libraries(clicommands PUBLIC
   lib-ydb_cli-import
   topic
   cpp-client-draft
+  cpp-client-ydb_coordination
   cpp-client-ydb_discovery
   cpp-client-ydb_export
   cpp-client-ydb_import
@@ -88,6 +89,7 @@ target_link_libraries(clicommands.global PUBLIC
   lib-ydb_cli-import
   topic
   cpp-client-draft
+  cpp-client-ydb_coordination
   cpp-client-ydb_discovery
   cpp-client-ydb_export
   cpp-client-ydb_import

@@ -3,11 +3,12 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
+#include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
+#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -57,6 +58,11 @@ private:
     int PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResult& result);
     int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings);
     int PrintTopicResponseProtoJsonBase64(const NYdb::NTopic::TDescribeTopicResult& result);
+
+    int DescribeCoordinationNode(const TDriver& driver);
+    int PrintCoordinationNodeResponse(const NYdb::NCoordination::TDescribeNodeResult& result) const;
+    int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
+    int PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const;
 
     // Common options
     bool ShowPermissions = false;

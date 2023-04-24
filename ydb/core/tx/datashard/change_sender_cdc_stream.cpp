@@ -49,8 +49,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Init'"
-                << ": reason# " << result.GetError().Reason);
+            LOG_E("Error at 'Init': " << result.GetError().ToString());
             return Leave();
         }
 
@@ -167,8 +166,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Write'"
-                << ": reason# " << result.GetError().Reason);
+            LOG_E("Error at 'Write': " << result.DumpError());
             return Leave();
         }
 

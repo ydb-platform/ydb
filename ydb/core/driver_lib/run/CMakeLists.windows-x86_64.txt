@@ -59,7 +59,6 @@ target_link_libraries(run PUBLIC
   fq-libs-logs
   ydb-core-grpc_services
   core-grpc_services-base
-  core-grpc_services-auth_processor
   ydb-core-health_check
   ydb-core-http_proxy
   core-kesus-proxy
@@ -68,6 +67,7 @@ target_link_libraries(run PUBLIC
   ydb-core-kqp
   core-kqp-rm_service
   ydb-core-load_test
+  ydb-core-local_pgwire
   ydb-core-log_backend
   ydb-core-metering
   ydb-core-mind

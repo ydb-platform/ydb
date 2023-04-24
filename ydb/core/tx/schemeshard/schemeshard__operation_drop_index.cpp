@@ -282,6 +282,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .NotUnderOperation()
                 .IsCommonSensePath();
 
@@ -416,6 +417,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
             .IsResolved()
             .NotDeleted()
             .IsTable()
+            .NotAsyncReplicaTable()
             .NotUnderDeleting()
             .NotUnderOperation()
             .IsCommonSensePath();

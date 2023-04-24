@@ -6,6 +6,7 @@
 
 namespace NYql::NUdf {
 
+// ABI stable
 class TBlockItem {
     enum class EMarkers : ui8 {
         Empty = 0,

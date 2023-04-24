@@ -4,6 +4,8 @@
 
 namespace NKikimr::NPQ {
 
+static const ui64 SET_OFFSET_COOKIE = 1;
+
 class TKeyLevel {
 public:
     friend IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value);
@@ -107,7 +109,30 @@ private:
     ui16 InternalPartsCount_;
 };
 
+struct TPartition::THasDataReq {
+    ui64 Num;
+    ui64 Offset;
+    TActorId Sender;
+    TMaybe<ui64> Cookie;
+    TString ClientId;
+
+    bool operator < (const THasDataReq& req) const {
+        return Num < req.Num;
+    }
+};
+
+struct TPartition::THasDataDeadline {
+    TInstant Deadline;
+    TPartition::THasDataReq Request;
+
+    bool operator < (const THasDataDeadline& dl) const {
+        return Deadline < dl.Deadline || Deadline == dl.Deadline && Request < dl.Request;
+    }
+};
+
 void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels);
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i);
+bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig,
+                      bool isLocalDC);
 
 } // namespace NKikimr::NPQ

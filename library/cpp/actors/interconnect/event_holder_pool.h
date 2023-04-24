@@ -8,7 +8,6 @@ namespace NActors {
     struct TEvFreeItems : TEventLocal<TEvFreeItems, EventSpaceBegin(TEvents::ES_PRIVATE)> {
         static constexpr size_t MaxEvents = 256;
 
-        TList<TTcpPacketOutTask> Items;
         std::list<TEventHolder> FreeQueue;
         TStackVec<THolder<IEventBase>, MaxEvents> Events;
         TStackVec<THolder<TEventSerializedData>, MaxEvents> Buffers;

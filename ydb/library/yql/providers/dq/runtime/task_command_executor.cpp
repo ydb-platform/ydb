@@ -648,7 +648,7 @@ public:
                         NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
 
                     *response.MutableData() = dataSerializer.Serialize(
-                        batch,
+                        batch.begin(), batch.end(),
                         static_cast<NKikimr::NMiniKQL::TType*>(outputType));
                 }
                 response.SetBytes(bytes);

@@ -228,7 +228,7 @@ message TKqpTransaction {
          reserved 8; // optional bytes ProcessProgram = 8;
          optional EScanDataFormat DataFormat = 9;
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
-         optional bool Sorted = 11;
+         optional bool EnableShardsSequentialScan = 11;
          repeated TColumnMeta ResultColumns = 12;
          // Type of read result: unboxed values or Arrow blocks of data
          optional EReadType ReadType = 14;

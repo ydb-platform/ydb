@@ -5,7 +5,7 @@
 #include "datashard_active_transaction.h"
 #include "range_treap.h"
 
-#include <library/cpp/containers/flat_hash/flat_hash.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -137,11 +137,11 @@ private:
     // Last planned snapshot operation
     TOperation::TPtr LastSnapshotOp;
     // Maps lock id to prediction of what this lock would look like when all transactions are complete
-    NFH::TFlatHashMap<ui64, TLockPrediction> Locks;
+    absl::flat_hash_map<ui64, TLockPrediction> Locks;
     // Maps lock id to the last operation that used them, all lock operations are serialized
-    NFH::TFlatHashMap<ui64, TOperation::TPtr> LastLockOps;
+    absl::flat_hash_map<ui64, TOperation::TPtr> LastLockOps;
     // Maps table id to current ranges that have been read/written by all transactions
-    NFH::TFlatHashMap<ui64, TTableState> Tables;
+    absl::flat_hash_map<ui64, TTableState> Tables;
     // All operations that are reading or writing something
     TIntrusiveList<TOperation, TOperationAllListTag> AllPlannedReaders;
     TIntrusiveList<TOperation, TOperationAllListTag> AllPlannedWriters;

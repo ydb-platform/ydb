@@ -231,7 +231,11 @@ const char* const PurgeQueueStage2Query = R"__(
                     (Length recordsExisted)
                     (Uint64 '0))
             ))
-
+            (AsList (SetResult 'newMessagesCount
+                (If versionIsSame
+                    count
+                    (Member stateRead 'MessageCount))
+            ))
             (If versionIsSame
                 (AsList (UpdateRow stateTable stateRow stateUpdate))
             (AsList (Void)))

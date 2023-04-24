@@ -246,14 +246,14 @@ struct TGetTimeComponent {
                     argType = block.GetItemType();
                 }
 
+                bool isOptional = false;
+                if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
+                    argType = opt.GetItemType();
+                    isOptional = true;
+                }
+
                 TResourceTypeInspector res(*typeInfoHelper, argType);
                 if (!res) {
-                    bool isOptional = false;
-                    if (auto opt = TOptionalTypeInspector(*typeInfoHelper, argType)) {
-                        argType = opt.GetItemType();
-                        isOptional = true;
-                    }
-
                     TDataTypeInspector data(*typeInfoHelper, argType);
                     if (!data) {
                         builder.SetError("Expected data type");

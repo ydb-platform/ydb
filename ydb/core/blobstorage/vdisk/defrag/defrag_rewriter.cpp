@@ -101,7 +101,7 @@ namespace NKikimr {
             FullSnap.reset();
 
             // FIXME: handle read errors gracefully
-            CHECK_PDISK_RESPONSE(DCtx->VCtx, ev, ctx);
+            CHECK_PDISK_RESPONSE_READABLE(DCtx->VCtx, ev, ctx);
 
             auto *msg = ev->Get();
             const TDefragRecord &rec = Recs[RecToReadIdx++];

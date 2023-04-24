@@ -19,6 +19,11 @@ TQueryStats::TQueryStats(const Ydb::TableStats::QueryStats& proto) {
     Impl_->Proto = proto;
 }
 
+TQueryStats::TQueryStats(Ydb::TableStats::QueryStats&& proto) {
+    Impl_ = std::make_shared<TImpl>();
+    Impl_->Proto = std::move(proto);
+}
+
 TString TQueryStats::ToString(bool withPlan) const {
     auto proto = Impl_->Proto;
 

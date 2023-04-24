@@ -1175,6 +1175,10 @@ void CreateShardedTable(
         desc->MutablePartitionConfig()->SetExecutorCacheSize(*opts.ExecutorCacheSize_);
     }
 
+    if (opts.Replicated_) {
+        desc->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    }
+
     WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));
 }
 

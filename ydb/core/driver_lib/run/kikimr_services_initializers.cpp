@@ -69,6 +69,9 @@
 
 #include <ydb/core/load_test/service_actor.h>
 
+#include <ydb/core/pgproxy/pg_proxy.h>
+#include <ydb/core/local_pgwire/local_pgwire.h>
+
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/mind/address_classification/net_classifier.h>
@@ -2788,6 +2791,32 @@ void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSet
     setup->LocalServices.emplace_back(
         NReplication::MakeReplicationServiceId(NodeId),
         TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+}
+
+TLocalPgWireServiceInitializer::TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.emplace_back(
+        NLocalPgWire::CreateLocalPgWireProxyId(),
+        TActorSetupCmd(NLocalPgWire::CreateLocalPgWireProxy(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+
+    NPG::TListenerSettings settings;
+    if (Config.GetLocalPgWireConfig().HasListeningPort()) {
+        settings.Port = Config.GetLocalPgWireConfig().GetListeningPort();
+    }
+    if (Config.GetLocalPgWireConfig().HasSslCertificate()) {
+        settings.SslCertificatePem = Config.GetLocalPgWireConfig().GetSslCertificate();
+    }
+
+    setup->LocalServices.emplace_back(
+        TActorId(),
+        TActorSetupCmd(NPG::CreatePGListener(MakePollerActorId(), NLocalPgWire::CreateLocalPgWireProxyId(), settings),
+            TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
 

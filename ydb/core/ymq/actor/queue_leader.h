@@ -88,6 +88,7 @@ private:
     void RequestMessagesCountMetrics(ui64 shard);
     void RequestOldestTimestampMetrics(ui64 shard);
     void ReceiveMessagesCountMetrics(ui64 shard, const TSqsEvents::TEvExecuted::TRecord& reply);
+    void PlanningRetentionWakeup();
     void ReceiveOldestTimestampMetrics(ui64 shard, const TSqsEvents::TEvExecuted::TRecord& reply);
     void ReportMessagesCountMetricsIfReady();
     void ReportOldestTimestampMetricsIfReady();
@@ -157,6 +158,7 @@ private:
     TQueuePath GetQueuePath() {
         return TQueuePath(Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_);
     }
+    void SetInflyMessagesCount(ui64 shard, const NKikimr::NClient::TValue& value);
     void SetMessagesCount(ui64 shard, const NKikimr::NClient::TValue& value);
     void SetMessagesCount(ui64 shard, ui64 value);
 
@@ -433,7 +435,10 @@ private:
     };
     std::vector<TShardInfo> Shards_;
     TMessageDelayStatistics DelayStatistics_;
+    TInstant RetentionWakeupPlannedAt_;
+    bool AskQueueAttributesInProcess_ = false;
     bool UpdateStateRequestInProcess = false;
+
     bool UseCPUOptimization = false;
 
     // background actors

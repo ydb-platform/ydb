@@ -163,9 +163,10 @@ public:
             WaitCommitted.emplace(cmtBlob, notIndexed);
         }
 
-        IndexedBlobs = IndexedData.InitRead(notIndexed);
-        for (auto& [blobRange, granule] : IndexedBlobs) {
+        auto indexedBlobsForFetch = IndexedData.InitRead(notIndexed);
+        for (auto&& blobRange : indexedBlobsForFetch) {
             WaitIndexed.insert(blobRange);
+            IndexedBlobs.emplace(blobRange);
         }
 
         // Add cached batches without read
@@ -202,7 +203,7 @@ public:
                 auto& blobId = cmtBlob.BlobId;
                 SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
             }
-            for (auto& [blobRange, granule] : IndexedBlobs) {
+            for (auto&& blobRange : IndexedBlobs) {
                 SendReadRequest(ctx, blobRange);
             }
         }
@@ -248,7 +249,7 @@ private:
     TInstant Deadline;
     TActorId ColumnShardActorId;
     const ui64 RequestCookie;
-    THashMap<NBlobCache::TBlobRange, ui64> IndexedBlobs;
+    THashSet<NBlobCache::TBlobRange> IndexedBlobs;
     THashSet<TUnifiedBlobId> CommittedBlobs;
     THashSet<NBlobCache::TBlobRange> WaitIndexed;
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;

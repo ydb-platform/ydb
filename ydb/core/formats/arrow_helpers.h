@@ -106,21 +106,11 @@ std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<ar
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
 std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse = false);
-std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits);
-std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2);
-std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2, size_t& count);
 TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
 size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset = 0);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
-enum class ECompareType {
-    LESS = 1,
-    LESS_OR_EQUAL,
-    GREATER,
-    GREATER_OR_EQUAL,
-};
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {});
 
-// It makes a filter using composite predicate. You need MakeFilter() + arrow::Filter() to apply it to Datum.
-std::vector<bool> MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                         const std::shared_ptr<arrow::Schema>& sortingKey);
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,

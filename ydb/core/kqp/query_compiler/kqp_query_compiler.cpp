@@ -286,6 +286,9 @@ void FillKeyRange(const TKqlKeyRange& range, NKqpProto::TKqpPhyKeyRange& rangePr
 
     FillKeyBound(range.From(), *rangeProto.MutableFrom());
     FillKeyBound(range.To(), *rangeProto.MutableTo());
+    if (rangeProto.GetFrom().SerializeAsString() == rangeProto.GetTo().SerializeAsString()) {
+        rangeProto.SetRangeIsPoint(true);
+    }
 }
 
 void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& tableMeta,

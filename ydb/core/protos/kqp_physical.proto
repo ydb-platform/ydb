@@ -127,6 +127,7 @@ message TKqpPhyKeyBound {
 message TKqpPhyKeyRange {
     TKqpPhyKeyBound From = 1;
     TKqpPhyKeyBound To = 2;
+    bool RangeIsPoint = 3;
 }
 
 message TKqpPhyOpReadRange {

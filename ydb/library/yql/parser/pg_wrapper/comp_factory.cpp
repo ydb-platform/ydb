@@ -2627,17 +2627,23 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     }
 }
 
-template <bool PassByValue>
+template <bool PassByValue, bool IsArray>
 class TPgHash : public NUdf::IHash {
 public:
     TPgHash(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
     {
-        Y_ENSURE(PassByValue == TypeDesc.PassByValue);
-        Y_ENSURE(TypeDesc.HashProcId);
+        auto hashProcId = TypeDesc.HashProcId;
+        if constexpr (IsArray) {
+            const auto& elemDesc = NYql::NPg::LookupType(TypeDesc.ElementTypeId);
+            Y_ENSURE(elemDesc.HashProcId);
 
+            hashProcId = NYql::NPg::LookupProc("hash_array", { 0, 0 }).ProcId;
+        }
+
+        Y_ENSURE(hashProcId);;
         Zero(FInfoHash);
-        fmgr_info(TypeDesc.HashProcId, &FInfoHash);
+        fmgr_info(hashProcId, &FInfoHash);
         Y_ENSURE(!FInfoHash.fn_retset);
         Y_ENSURE(FInfoHash.fn_addr);
         Y_ENSURE(FInfoHash.fn_nargs == 1);
@@ -2672,43 +2678,59 @@ private:
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
     const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
     if (typeDesc.PassByValue) {
-        return new TPgHash<true>(typeDesc);
+        return new TPgHash<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgHash<false, true>(typeDesc);
     } else {
-        return new TPgHash<false>(typeDesc);
+        return new TPgHash<false, false>(typeDesc);
     }
 }
 
-template <bool PassByValue>
-class TPgCompare : public NUdf::ICompare, public NUdf::TBlockItemComparatorBase<TPgCompare<PassByValue>, true> {
+template <bool PassByValue, bool IsArray>
+class TPgCompare : public NUdf::ICompare, public NUdf::TBlockItemComparatorBase<TPgCompare<PassByValue, IsArray>, true> {
 public:
     TPgCompare(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
     {
-        Y_ENSURE(PassByValue == TypeDesc.PassByValue);
-        Y_ENSURE(TypeDesc.LessProcId);
-        Y_ENSURE(TypeDesc.CompareProcId);
-        Y_ENSURE(TypeDesc.EqualProcId);
+        Zero(FInfoLess);        
+        Zero(FInfoCompare);        
+        Zero(FInfoEquals);        
 
-        Zero(FInfoLess);
-        fmgr_info(TypeDesc.LessProcId, &FInfoLess);
-        Y_ENSURE(!FInfoLess.fn_retset);
-        Y_ENSURE(FInfoLess.fn_addr);
-        Y_ENSURE(FInfoLess.fn_nargs == 2);
+        auto lessProcId = TypeDesc.LessProcId;
+        auto compareProcId = TypeDesc.CompareProcId;
+        auto equalProcId = TypeDesc.EqualProcId;
+        if constexpr (IsArray) {
+            const auto& elemDesc = NYql::NPg::LookupType(TypeDesc.ElementTypeId);
+            Y_ENSURE(elemDesc.CompareProcId);
 
-        Zero(FInfoCompare);
-        fmgr_info(TypeDesc.CompareProcId, &FInfoCompare);
+            compareProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
+        } else {
+            Y_ENSURE(lessProcId);
+            Y_ENSURE(equalProcId);
+
+            fmgr_info(lessProcId, &FInfoLess);
+            Y_ENSURE(!FInfoLess.fn_retset);
+            Y_ENSURE(FInfoLess.fn_addr);
+            Y_ENSURE(FInfoLess.fn_nargs == 2);
+
+            fmgr_info(equalProcId, &FInfoEquals);
+            Y_ENSURE(!FInfoEquals.fn_retset);
+            Y_ENSURE(FInfoEquals.fn_addr);
+            Y_ENSURE(FInfoEquals.fn_nargs == 2);        
+        }
+
+        Y_ENSURE(compareProcId);
+        fmgr_info(compareProcId, &FInfoCompare);
         Y_ENSURE(!FInfoCompare.fn_retset);
         Y_ENSURE(FInfoCompare.fn_addr);
         Y_ENSURE(FInfoCompare.fn_nargs == 2);
-
-        Zero(FInfoEquals);
-        fmgr_info(TypeDesc.EqualProcId, &FInfoEquals);
-        Y_ENSURE(!FInfoEquals.fn_retset);
-        Y_ENSURE(FInfoEquals.fn_addr);
-        Y_ENSURE(FInfoEquals.fn_nargs == 2);        
     }
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        if constexpr (IsArray) {
+            return Compare(lhs, rhs) < 0;
+        }
+
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
@@ -2790,6 +2812,10 @@ public:
     }
 
     bool DoEquals(NUdf::TBlockItem lhs, NUdf::TBlockItem rhs) const {
+        if constexpr (IsArray) {
+            return DoCompare(lhs, rhs) == 0;
+        }
+
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquals); // don't copy becase of ICompare isn't threadsafe
@@ -2809,6 +2835,10 @@ public:
     }
 
     bool DoLess(NUdf::TBlockItem lhs, NUdf::TBlockItem rhs) const {
+        if constexpr (IsArray) {
+            return DoCompare(lhs, rhs) < 0;
+        }
+
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
@@ -2836,32 +2866,43 @@ private:
 NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
     const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
     if (typeDesc.PassByValue) {
-        return new TPgCompare<true>(typeDesc);
+        return new TPgCompare<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgCompare<false, true>(typeDesc);
     } else {
-        return new TPgCompare<false>(typeDesc);
+        return new TPgCompare<false, false>(typeDesc);
     }
 }
 
 NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
     const auto& typeDesc = NYql::NPg::LookupType(typeId);
     if (typeDesc.PassByValue) {
-        return new TPgCompare<true>(typeDesc);
+        return new TPgCompare<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgCompare<false, true>(typeDesc);
     } else {
-        return new TPgCompare<false>(typeDesc);
+        return new TPgCompare<false, false>(typeDesc);
     }
 }
 
-template <bool PassByValue>
+template <bool PassByValue, bool IsArray>
 class TPgEquate: public NUdf::IEquate {
 public:
     TPgEquate(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
     {
-        Y_ENSURE(PassByValue == TypeDesc.PassByValue);
-        Y_ENSURE(TypeDesc.EqualProcId);
+        auto equalProcId = TypeDesc.EqualProcId;
+        if constexpr (IsArray) {
+            const auto& elemDesc = NYql::NPg::LookupType(TypeDesc.ElementTypeId);
+            Y_ENSURE(elemDesc.CompareProcId);
+
+            equalProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
+        }
+
+        Y_ENSURE(equalProcId);
 
         Zero(FInfoEquate);
-        fmgr_info(TypeDesc.EqualProcId, &FInfoEquate);
+        fmgr_info(equalProcId, &FInfoEquate);
         Y_ENSURE(!FInfoEquate.fn_retset);
         Y_ENSURE(FInfoEquate.fn_addr);
         Y_ENSURE(FInfoEquate.fn_nargs == 2);
@@ -2895,6 +2936,10 @@ public:
 
         auto x = FInfoEquate.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
+        if constexpr (IsArray) {
+            return DatumGetInt32(x) == 0;
+        }
+
         return DatumGetBool(x);
     }
 
@@ -2907,9 +2952,11 @@ private:
 NUdf::IEquate::TPtr MakePgEquate(const TPgType* type) {
     const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
     if (typeDesc.PassByValue) {
-        return new TPgEquate<true>(typeDesc);
+        return new TPgEquate<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgEquate<false, true>(typeDesc);
     } else {
-        return new TPgEquate<false>(typeDesc);
+        return new TPgEquate<false, false>(typeDesc);
     }
 }
 
@@ -2988,12 +3035,26 @@ public:
 
     NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
         auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
-        return { x, strlen(x) };
+        return { x, strlen(x) + 1};
     }
 
     NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
         auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
-        return GetVarBuf(x);
+        return { (const char*)x, GetFullVarSize(x) };
+    }
+
+    NUdf::TUnboxedValue MakeCString(const char* value) const override {
+        auto len = 1 + strlen(value);
+        char* ret = (char*)palloc(len);
+        memcpy(ret, value, len);
+        return PointerDatumToPod((Datum)ret);
+    }
+    
+    NUdf::TUnboxedValue MakeText(const char* value) const override {
+        auto len = GetFullVarSize((const text*)value);
+        char* ret = (char*)palloc(len);
+        memcpy(ret, value, len);
+        return PointerDatumToPod((Datum)ret);
     }
 };
 

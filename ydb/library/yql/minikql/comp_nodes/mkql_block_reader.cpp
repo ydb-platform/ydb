@@ -42,11 +42,9 @@ public:
 template<typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
 class TStringBlockItemConverter : public IBlockItemConverter {
 public:
-    void SetPgBuilder(const NUdf::IPgBuilder* pgBuilder, i32 typeLen, ui32 pgTypeId) {
+    void SetPgBuilder(const NUdf::IPgBuilder* pgBuilder) {
         Y_ENSURE(PgString != NUdf::EPgStringType::None);
         PgBuilder = pgBuilder;
-        TypeLen = typeLen;
-        PgTypeId = pgTypeId;
     }
 
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
@@ -57,8 +55,10 @@ public:
             }
         }
 
-        if constexpr (PgString != NUdf::EPgStringType::None) {
-             return PgBuilder->NewString(TypeLen, PgTypeId, item.AsStringRef()).Release();
+        if constexpr (PgString == NUdf::EPgStringType::CString) {
+             return PgBuilder->MakeCString(item.AsStringRef().Data()).Release();
+        } else if constexpr (PgString == NUdf::EPgStringType::Text) {
+             return PgBuilder->MakeText(item.AsStringRef().Data()).Release();             
         } else {
             return MakeString(item.AsStringRef());
         }
@@ -184,11 +184,11 @@ struct TConverterTraits {
         } else {
             if (desc.Typelen == -1) {
                 auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::Text>>();
-                ret->SetPgBuilder(pgBuilder, desc.Typelen, desc.TypeId);
+                ret->SetPgBuilder(pgBuilder);
                 return ret;
             } else {
                 auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::CString>>();
-                ret->SetPgBuilder(pgBuilder, desc.Typelen, desc.TypeId);
+                ret->SetPgBuilder(pgBuilder);
                 return ret;
             }
         }        

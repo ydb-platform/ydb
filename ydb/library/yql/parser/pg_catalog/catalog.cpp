@@ -442,6 +442,7 @@ public:
             arrayType.ElementTypeId = arrayType.TypeId;
             arrayType.TypeId = LastType.ArrayTypeId;
             arrayType.PassByValue = false;
+            arrayType.TypeLen = -1;
             Types[LastType.ArrayTypeId] = arrayType;
         }
 

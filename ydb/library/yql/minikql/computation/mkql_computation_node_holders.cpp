@@ -3939,7 +3939,7 @@ IComputationNode* TNodeFactory::CreateImmutableNode(NUdf::TUnboxedValue&& value)
     return new TUnboxedImmutableCodegeneratorNode(&MemInfo, std::move(value));
 }
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash) {
+void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple) {
     isTuple = false;
     encoded = false;
     useIHash = false;
@@ -3954,7 +3954,7 @@ void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool
         keyType = AS_TYPE(TOptionalType, keyType)->GetItemType();
     }
 
-    if (keyType->IsTuple()) {
+    if (expandTuple && keyType->IsTuple()) {
         auto tuple = AS_TYPE(TTupleType, keyType);
         for (ui32 i = 0; i < tuple->GetElementsCount(); ++i) {
             bool isOptional;

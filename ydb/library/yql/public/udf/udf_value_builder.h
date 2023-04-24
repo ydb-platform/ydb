@@ -138,8 +138,18 @@ public:
 };
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 33)
+class IPgBuilder3: public IPgBuilder2
+{
+public:
+    virtual TUnboxedValue MakeCString(const char* value) const = 0;
+    virtual TUnboxedValue MakeText(const char* value) const = 0;
+};
+#endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 31)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 33)
+class IPgBuilder: public IPgBuilder3 {};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 31)
 class IPgBuilder: public IPgBuilder2 {};
 #else
 class IPgBuilder: public IPgBuilder1 {};

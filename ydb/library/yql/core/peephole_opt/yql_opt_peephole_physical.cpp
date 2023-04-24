@@ -4029,25 +4029,22 @@ TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx
             }
         });
 
-        const auto itemType = node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
         std::unordered_set<size_t> unique;
         std::vector<size_t> sorted;
         if (node->Tail().Tail().IsCallable("Member") && &node->Tail().Tail().Head() == &node->Tail().Head().Head()) {
-            if (const auto it = indexes.find(&node->Tail().Tail().Tail()); indexes.cend() == it)
+            if (const auto it = indexes.find(&node->Tail().Tail().Tail()); indexes.cend() == it) {
                 return node;
-            else if (IsDataOrOptionalOfData(itemType->FindItemType(node->Tail().Tail().Tail().Content())))
+            } else {
                 sorted.emplace_back(it->second);
-            else
-                return node;
+            }
         } else if (node->Tail().Tail().IsList()) {
             for (const auto& field : node->Tail().Tail().Children()) {
                 if (field->IsCallable("Member") && &field->Head() == &node->Tail().Head().Head())
-                    if (const auto it = indexes.find(&field->Tail()); indexes.cend() == it)
+                    if (const auto it = indexes.find(&field->Tail()); indexes.cend() == it) {
                         return node;
-                    else if (IsDataOrOptionalOfData(itemType->FindItemType(field->Tail().Content())))
+                    } else {
                         sorted.emplace_back(it->second);
-                    else
-                        return node;
+                    }
                 else
                     return node;
             }

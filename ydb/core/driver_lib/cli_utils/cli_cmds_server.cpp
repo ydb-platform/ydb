@@ -392,6 +392,8 @@ protected:
         NKikimrConfig::TLabel *dynamicLabel = nullptr;
         NKikimrConfig::TLabel *nodeIdLabel = nullptr;
 
+        RunConfig.AppConfig.MutableLabels()->Reserve(RunConfig.Labels.size());
+
         for (const auto& [name, value] : RunConfig.Labels) {
             auto *label = RunConfig.AppConfig.AddLabels();
             if (name == "dynamic") {

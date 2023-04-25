@@ -161,53 +161,7 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            // serialize payload first
-            if (Payload) {
-                void *data;
-                int size = 0;
-                auto append = [&](const char *p, size_t len) {
-                    while (len) {
-                        if (size) {
-                            const size_t numBytesToCopy = std::min<size_t>(size, len);
-                            memcpy(data, p, numBytesToCopy);
-                            data = static_cast<char*>(data) + numBytesToCopy;
-                            size -= numBytesToCopy;
-                            p += numBytesToCopy;
-                            len -= numBytesToCopy;
-                        } else if (!chunker->Next(&data, &size)) {
-                            return false;
-                        }
-                    }
-                    return true;
-                };
-                auto appendNumber = [&](size_t number) {
-                    char buf[MaxNumberBytes];
-                    return append(buf, SerializeNumber(number, buf));
-                };
-                char marker = PayloadMarker;
-                append(&marker, 1);
-                if (!appendNumber(Payload.size())) {
-                    return false;
-                }
-                for (const TRope& rope : Payload) {
-                    if (!appendNumber(rope.GetSize())) {
-                        return false;
-                    }
-                    if (rope) {
-                        if (size) {
-                            chunker->BackUp(std::exchange(size, 0));
-                        }
-                        if (!chunker->WriteRope(&rope)) {
-                            return false;
-                        }
-                    }
-                }
-                if (size) {
-                    chunker->BackUp(size);
-                }
-            }
-
-            return Record.SerializeToZeroCopyStream(chunker);
+            return SerializeToArcadiaStreamImpl(chunker, TString());
         }
 
         ui32 CalculateSerializedSize() const override {
@@ -285,25 +239,7 @@ namespace NActors {
         }
 
         TEventSerializationInfo CreateSerializationInfo() const override {
-            TEventSerializationInfo info;
-
-            if (Payload) {
-                char temp[MaxNumberBytes];
-                info.Sections.push_back(TEventSectionInfo{0, 1, 0, 0}); // payload marker
-                info.Sections.push_back(TEventSectionInfo{0, SerializeNumber(Payload.size(), temp), 0, 0});
-                for (const TRope& payload : Payload) {
-                    info.Sections.push_back(TEventSectionInfo{0, SerializeNumber(payload.GetSize(), temp), 0, 0}); // length
-                    info.Sections.push_back(TEventSectionInfo{0, payload.GetSize(), 0, 0}); // data
-                }
-                info.IsExtendedFormat = true;
-            } else {
-                info.IsExtendedFormat = false;
-            }
-
-            const int byteSize = Max(0, Record.ByteSize());
-            info.Sections.push_back(TEventSectionInfo{0, static_cast<size_t>(byteSize), 0, 0});
-
-            return info;
+            return CreateSerializationInfoImpl(0);
         }
 
     public:
@@ -329,6 +265,93 @@ namespace NActors {
 
         void StripPayload() {
             Payload.clear();
+        }
+
+    protected:
+        TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize) const {
+            TEventSerializationInfo info;
+
+            if (Payload) {
+                char temp[MaxNumberBytes];
+                info.Sections.push_back(TEventSectionInfo{0, 1 + SerializeNumber(Payload.size(), temp), 0, 0}); // payload marker and rope count
+                for (const TRope& rope : Payload) {
+                    const size_t ropeSize = rope.GetSize();
+                    info.Sections.back().Size += SerializeNumber(ropeSize, temp);
+                    info.Sections.push_back(TEventSectionInfo{0, ropeSize, 0, 0}); // data as a separate section
+                }
+                info.IsExtendedFormat = true;
+            } else {
+                info.IsExtendedFormat = false;
+            }
+
+            const size_t byteSize = Max<ssize_t>(0, Record.ByteSize()) + preserializedSize;
+            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0}); // protobuf itself
+
+#ifndef NDEBUG
+            size_t total = 0;
+            for (const auto& section : info.Sections) {
+                total += section.Size;
+            }
+            size_t serialized = CalculateSerializedSize();
+            Y_VERIFY(total == serialized, "total# %zu serialized# %zu byteSize# %zd Payload.size# %zu", total,
+                serialized, byteSize, Payload.size());
+#endif
+
+            return info;
+        }
+
+        bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TString& preserialized) const {
+            // serialize payload first
+            if (Payload) {
+                void *data;
+                int size = 0;
+                auto append = [&](const char *p, size_t len) {
+                    while (len) {
+                        if (size) {
+                            const size_t numBytesToCopy = std::min<size_t>(size, len);
+                            memcpy(data, p, numBytesToCopy);
+                            data = static_cast<char*>(data) + numBytesToCopy;
+                            size -= numBytesToCopy;
+                            p += numBytesToCopy;
+                            len -= numBytesToCopy;
+                        } else if (!chunker->Next(&data, &size)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                auto appendNumber = [&](size_t number) {
+                    char buf[MaxNumberBytes];
+                    return append(buf, SerializeNumber(number, buf));
+                };
+                char marker = PayloadMarker;
+                append(&marker, 1);
+                if (!appendNumber(Payload.size())) {
+                    return false;
+                }
+                for (const TRope& rope : Payload) {
+                    if (!appendNumber(rope.GetSize())) {
+                        return false;
+                    }
+                    if (rope) {
+                        if (size) {
+                            chunker->BackUp(std::exchange(size, 0));
+                        }
+                        if (!chunker->WriteRope(&rope)) {
+                            return false;
+                        }
+                    }
+                }
+                if (size) {
+                    chunker->BackUp(size);
+                }
+            }
+
+            if (preserialized && !chunker->WriteString(&preserialized)) {
+                return false;
+            }
+
+            return Record.SerializeToZeroCopyStream(chunker);
         }
 
     protected:
@@ -488,7 +511,7 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            return chunker->WriteString(&PreSerializedData) && TBase::SerializeToArcadiaStream(chunker);
+            return TBase::SerializeToArcadiaStreamImpl(chunker, PreSerializedData);
         }
 
         ui32 CalculateSerializedSize() const override {
@@ -501,6 +524,10 @@ namespace NActors {
 
         ui32 CalculateSerializedSizeCached() const override {
             return GetCachedByteSize();
+        }
+
+        TEventSerializationInfo CreateSerializationInfo() const override {
+            return TBase::CreateSerializationInfoImpl(PreSerializedData.size());
         }
     };
 

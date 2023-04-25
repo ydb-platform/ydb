@@ -14,6 +14,10 @@
 
 #include <sys/uio.h>
 
+namespace NActors {
+    class TPollerToken;
+}
+
 namespace NInterconnect {
     class TSocket: public NActors::TSharedDescriptor, public TNonCopyable {
     protected:
@@ -63,6 +67,8 @@ namespace NInterconnect {
 
         void SetSendBufferSize(i32 len) const;
         ui32 GetSendBufferSize() const;
+
+        virtual void Request(NActors::TPollerToken& token, bool read, bool write);
     };
 
     class TSecureSocketContext {
@@ -114,6 +120,7 @@ namespace NInterconnect {
 
         bool WantRead() const;
         bool WantWrite() const;
+        virtual void Request(NActors::TPollerToken& token, bool read, bool write) override;
     };
 
     class TDatagramSocket: public TSocket {

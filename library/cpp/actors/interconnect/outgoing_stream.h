@@ -38,6 +38,10 @@ namespace NInterconnect {
         size_t SendOffset = 0;
 
     public:
+        operator bool() const {
+            return SendQueuePos != SendQueue.size();
+        }
+
         size_t CalculateOutgoingSize() const {
             size_t res = 0;
             for (const TSendChunk& chunk : SendQueue) {
@@ -54,8 +58,12 @@ namespace NInterconnect {
             return res - SendOffset;
         }
 
+        size_t GetSendQueueSize() const {
+            return SendQueue.size();
+        }
+
         TMutableContiguousSpan AcquireSpanForWriting(size_t maxLen) {
-            if (AppendOffset == BufferSize) { // we have no free buffer, allocate one
+            if (maxLen && AppendOffset == BufferSize) { // we have no free buffer, allocate one
                 Buffers.emplace_back(static_cast<TBuffer*>(malloc(sizeof(TBuffer))));
                 AppendBuffer = Buffers.back().get();
                 Y_VERIFY(AppendBuffer);
@@ -67,14 +75,8 @@ namespace NInterconnect {
         }
 
         void Append(TContiguousSpan span) {
-            TBuffer *buffer = nullptr;
             if (AppendBuffer && span.data() == AppendBuffer->Data + AppendOffset) { // the only valid case to use previously acquired span
-                buffer = AppendBuffer;
-                AppendOffset += span.size();
-                Y_VERIFY_DEBUG(AppendOffset <= BufferSize);
-                if (AppendOffset != BufferSize) {
-                    ++buffer->RefCount;
-                }
+                AppendAcquiredSpan(span);
             } else {
 #ifndef NDEBUG
                 // ensure this span does not point into any existing buffer part
@@ -88,33 +90,15 @@ namespace NInterconnect {
                     }
                 }
 #endif
+                AppendSpanWithGlueing(span, nullptr);
             }
-
-            if (!SendQueue.empty()) {
-                auto& back = SendQueue.back();
-                if (back.Span.data() + back.Span.size() == span.data()) { // check if it is possible just to extend the last span
-                    if (SendQueuePos == SendQueue.size()) {
-                        --SendQueuePos;
-                        SendOffset = back.Span.size();
-                    }
-                    back.Span = {back.Span.data(), back.Span.size() + span.size()};
-                    DropBufferReference(buffer);
-                    return;
-                }
-            }
-
-            if (buffer) {
-                ++buffer->RefCount;
-            }
-            SendQueue.push_back(TSendChunk{span, buffer});
-            DropBufferReference(buffer);
         }
 
         void Write(TContiguousSpan in) {
             while (in.size()) {
                 auto outChunk = AcquireSpanForWriting(in.size());
-                Append(outChunk);
                 memcpy(outChunk.data(), in.data(), outChunk.size());
+                AppendAcquiredSpan(outChunk);
                 in = in.SubSpan(outChunk.size(), Max<size_t>());
             }
         }
@@ -126,7 +110,7 @@ namespace NInterconnect {
 
             while (len) {
                 const auto span = AcquireSpanForWriting(len);
-                Append(span);
+                AppendAcquiredSpan(span);
                 bookmark.push_back(span);
                 len -= span.size();
             }
@@ -136,7 +120,7 @@ namespace NInterconnect {
 
         void WriteBookmark(TBookmark&& bookmark, TContiguousSpan in) {
             for (auto& outChunk : bookmark) {
-                Y_VERIFY(outChunk.size() <= in.size());
+                Y_VERIFY_DEBUG(outChunk.size() <= in.size());
                 memcpy(outChunk.data(), in.data(), outChunk.size());
                 in = in.SubSpan(outChunk.size(), Max<size_t>());
             }
@@ -144,6 +128,11 @@ namespace NInterconnect {
 
         void Rewind() {
             SendQueuePos = 0;
+            SendOffset = 0;
+        }
+
+        void RewindToEnd() {
+            SendQueuePos = SendQueue.size();
             SendOffset = 0;
         }
 
@@ -173,7 +162,8 @@ namespace NInterconnect {
                 if (numBytes < front.Span.size()) {
                     front.Span = front.Span.SubSpan(numBytes, Max<size_t>());
                     if (SendQueuePos == 0) {
-                        Y_VERIFY_DEBUG(numBytes <= SendOffset);
+                        Y_VERIFY_DEBUG(numBytes <= SendOffset, "numBytes# %zu SendOffset# %zu SendQueuePos# %zu"
+                            " SendQueue.size# %zu", numBytes, SendOffset, SendQueuePos, SendQueue.size());
                         SendOffset -= numBytes;
                     }
                     break;
@@ -207,6 +197,37 @@ namespace NInterconnect {
         }
 
     private:
+        void AppendAcquiredSpan(TContiguousSpan span) {
+            TBuffer *buffer = AppendBuffer;
+            Y_VERIFY_DEBUG(buffer);
+            Y_VERIFY_DEBUG(span.data() == AppendBuffer->Data + AppendOffset);
+            AppendOffset += span.size();
+            Y_VERIFY_DEBUG(AppendOffset <= BufferSize);
+            if (AppendOffset == BufferSize) {
+                AppendBuffer = nullptr;
+            } else {
+                ++buffer->RefCount;
+            }
+            AppendSpanWithGlueing(span, buffer);
+        }
+
+        void AppendSpanWithGlueing(TContiguousSpan span, TBuffer *buffer) {
+            if (!SendQueue.empty()) {
+                auto& back = SendQueue.back();
+                if (back.Span.data() + back.Span.size() == span.data()) { // check if it is possible just to extend the last span
+                    Y_VERIFY_DEBUG(buffer == back.Buffer);
+                    if (SendQueuePos == SendQueue.size()) {
+                        --SendQueuePos;
+                        SendOffset = back.Span.size();
+                    }
+                    back.Span = {back.Span.data(), back.Span.size() + span.size()};
+                    DropBufferReference(buffer);
+                    return;
+                }
+            }
+            SendQueue.push_back(TSendChunk{span, buffer});
+        }
+
         void DropBufferReference(TBuffer *buffer) {
             if (buffer && !--buffer->RefCount) {
                 const size_t index = buffer->Index;

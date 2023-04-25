@@ -1,5 +1,6 @@
 #include "interconnect_stream.h"
 #include "logging.h"
+#include "poller_actor.h"
 #include <library/cpp/openssl/init/init.h>
 #include <util/network/socket.h>
 #include <openssl/ssl.h>
@@ -207,6 +208,10 @@ namespace NInterconnect {
         ui32 res = 0;
         CheckedGetSockOpt(Descriptor, SOL_SOCKET, SO_SNDBUF, res, "SO_SNDBUF");
         return res;
+    }
+
+    void TStreamSocket::Request(NActors::TPollerToken& token, bool read, bool write) {
+        token.Request(read, write);
     }
 
     //////////////////////////////////////////////////////
@@ -478,6 +483,9 @@ namespace NInterconnect {
         std::optional<std::pair<const void*, size_t>> BlockedSend;
 
         ssize_t Send(const void* msg, size_t len, TString *err) {
+            if (BlockedSend && BlockedSend->first == msg && BlockedSend->second < len) {
+                len = BlockedSend->second;
+            }
             Y_VERIFY(!BlockedSend || *BlockedSend == std::make_pair(msg, len));
             const ssize_t res = Operate(msg, len, &SSL_write_ex, err);
             if (res == -EAGAIN) {
@@ -491,6 +499,9 @@ namespace NInterconnect {
         std::optional<std::pair<void*, size_t>> BlockedReceive;
 
         ssize_t Recv(void* msg, size_t len, TString *err) {
+            if (BlockedReceive && BlockedReceive->first == msg && BlockedReceive->second < len) {
+                len = BlockedReceive->second;
+            }
             Y_VERIFY(!BlockedReceive || *BlockedReceive == std::make_pair(msg, len));
             const ssize_t res = Operate(msg, len, &SSL_read_ex, err);
             if (res == -EAGAIN) {
@@ -628,4 +639,7 @@ namespace NInterconnect {
         return Impl->WantWrite();
     }
 
+    void TSecureSocket::Request(NActors::TPollerToken& token, bool /*read*/, bool /*write*/) {
+        token.Request(WantRead(), WantWrite());
+    }
 }

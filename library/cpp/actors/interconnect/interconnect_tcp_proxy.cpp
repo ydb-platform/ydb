@@ -294,7 +294,7 @@ namespace NActors {
                 Send(ev->Sender, new TEvHandshakeReplyError("duplicate serial"));
                 return;
             } else if (serial == *LastSerialFromIncomingHandshake) {
-                LOG_NOTICE_IC("ICP15", "Handshake# %s is obsolete, serial# %" PRIu64
+                LOG_NOTICE_IC("ICP00", "Handshake# %s is obsolete, serial# %" PRIu64
                     " LastSerialFromIncomingHandshake# %" PRIu64, ev->Sender.ToString().data(),
                     serial, *LastSerialFromIncomingHandshake);
                 Send(ev->Sender, new TEvents::TEvPoisonPill);
@@ -731,11 +731,16 @@ namespace NActors {
             }
         }
 
-        if (Session != nullptr) {
-            Session->GenerateHttpInfo(str);
+        TAutoPtr<IEventHandle> h(new IEventHandle(ev->Sender, ev->Recipient, new NMon::TEvHttpInfoRes(str.Str())));
+        if (Session) {
+            switch (auto& ev = h; ev->GetTypeRewrite()) {
+                hFunc(NMon::TEvHttpInfoRes, Session->GenerateHttpInfo);
+                default:
+                    Y_FAIL();
+            }
+        } else {
+            TActivationContext::Send(h.Release());
         }
-
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
     void TInterconnectProxyTCP::TransitToErrorState(TString explanation, bool updateErrorLog) {

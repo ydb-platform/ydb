@@ -228,7 +228,7 @@ private:
     std::set<ui32> EarlyFilterColumns;
     YDB_READONLY_DEF(std::set<ui32>, PostFilterColumns);
     bool AbortedFlag = false;
-    NColumnShard::TScanCounters Counters;
+    YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
     std::vector<NIndexedReader::TBatch*> Batches;
     TFetchBlobsQueue& FetchBlobsQueue;
     friend class NIndexedReader::TBatch;

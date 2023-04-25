@@ -23,6 +23,7 @@ private:
     YDB_READONLY(ui64, Portion, 0);
     YDB_READONLY(ui64, Granule, 0);
     YDB_READONLY(ui64, WaitingBytes, 0);
+    YDB_READONLY(ui64, FetchedBytes, 0);
 
     THashSet<TBlobRange> WaitIndexed;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilteredBatch);

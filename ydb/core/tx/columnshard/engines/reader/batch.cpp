@@ -63,6 +63,7 @@ void TBatch::Reset(const std::set<ui32>* columnIds) {
     Y_VERIFY(WaitIndexed.empty());
     Y_VERIFY(Data.empty());
     WaitingBytes = 0;
+    FetchedBytes = 0;
     for (const NOlap::TColumnRecord& rec : PortionInfo->Records) {
         if (CurrentColumnIds && !CurrentColumnIds->contains(rec.ColumnId)) {
             continue;
@@ -95,6 +96,7 @@ bool TBatch::AddIndexedReady(const TBlobRange& bRange, const TString& blobData) 
         return false;
     }
     WaitingBytes -= bRange.Size;
+    FetchedBytes += bRange.Size;
     Data.emplace(bRange, blobData);
     return true;
 }

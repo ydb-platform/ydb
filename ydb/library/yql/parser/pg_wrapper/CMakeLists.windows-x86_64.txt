@@ -145,6 +145,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
 )
 target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/thread_inits.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp

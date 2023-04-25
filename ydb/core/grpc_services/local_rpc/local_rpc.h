@@ -30,12 +30,14 @@ class TLocalRpcCtx : public NGRpcService::IRequestOpCtx {
 public:
     using TResp = typename TRpc::TResponse;
     template<typename TProto, typename TCb>
-    TLocalRpcCtx(TProto&& req, TCb&& cb, const TString& databaseName, const TString& token)
+    TLocalRpcCtx(TProto&& req, TCb&& cb, const TString& databaseName, const TMaybe<TString>& token)
         : Request(std::forward<TProto>(req))
         , CbWrapper(std::forward<TCb>(cb))
         , DatabaseName(databaseName)
     {
-        InternalToken = new NACLib::TUserToken(token);
+        if (token) {
+            InternalToken = new NACLib::TUserToken(*token);
+        }
     }
 
     bool HasClientCapability(const TString&) const override {
@@ -232,7 +234,7 @@ private:
 };
 
 template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TString& token, TActorSystem* actorSystem) {
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem) {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
     proto.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
@@ -246,7 +248,7 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
 }
 
 template<typename TRpc>
-TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TString& token, const TActorContext& ctx) {
+TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx) {
     proto.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 
     auto req = new TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>(std::move(proto), std::move(cb), database, token);

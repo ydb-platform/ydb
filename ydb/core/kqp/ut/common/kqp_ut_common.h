@@ -162,7 +162,8 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
 {
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig)
-        .SetKqpSettings(kqpSettings);
+        .SetKqpSettings(kqpSettings)
+        .SetEnableScriptExecutionOperations(true);
 
     return TKikimrRunner{settings};
 }

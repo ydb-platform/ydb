@@ -1,4 +1,5 @@
 #include "kqp_proxy_service.h"
+#include "kqp_script_executions.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
@@ -12,7 +13,6 @@
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/kqp/runtime/kqp_spilling_file.h>
 #include <ydb/core/kqp/runtime/kqp_spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -102,7 +102,6 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     return NOperationId::ProtoToString(opId);
 }
 
-
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
         enum EEv {
@@ -111,6 +110,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvOnRequestTimeout,
             EvCloseIdleSessions,
             EvResourcesSnapshot,
+            EvScriptExecutionsTableCreationFinished,
         };
 
         struct TEvReadyToPublishResources : public TEventLocal<TEvReadyToPublishResources, EEv::EvReadyToPublishResources> {};
@@ -142,6 +142,10 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
 
             TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
                 : Snapshot(std::move(snapshot)) {}
+        };
+
+        struct TEvScriptExecutionsTableCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTableCreationFinished, EvScriptExecutionsTableCreationFinished> {
+            TEvScriptExecutionsTableCreationFinished() = default;
         };
     };
 
@@ -228,6 +232,8 @@ public:
         AskSelfNodeInfo();
         SendWhiteboardRequest();
         ScheduleIdleSessionCheck(TDuration::Seconds(2));
+
+        CheckScriptExecutionsTableExistence();
     }
 
     TDuration GetSessionIdleDuration() const {
@@ -607,11 +613,19 @@ public:
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
-        const NActors::TActorId actorId = Register(CreateRunScriptActor(ev->Get()->Record));
-        Ydb::TOperationId operationId;
-        operationId.SetKind(Ydb::TOperationId::SCRIPT);
-        NOperationId::AddOptionalValue(operationId, "actor_id", actorId.ToString());
-        Send(ev->Sender, new TEvKqp::TEvScriptResponse(NOperationId::ProtoToString(operationId), actorId.ToString(), Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_MODE_EXECUTE));
+        if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
+            if (ScriptExecutionsCreationStatus == EScriptExecutionsCreationStatus::Pending) {
+                NYql::TIssues issues;
+                issues.AddIssue("Not ready");
+                Send(ev->Sender, new TEvKqp::TEvScriptResponse(Ydb::StatusIds::UNAVAILABLE, std::move(issues)));
+            } else {
+                Register(CreateScriptExecutionCreatorActor(std::move(ev)));
+            }
+        } else {
+            NYql::TIssues issues;
+            issues.AddIssue("ExecuteScript feature is not enabled");
+            Send(ev->Sender, new TEvKqp::TEvScriptResponse(Ydb::StatusIds::UNSUPPORTED, std::move(issues)));
+        }
     }
 
     void Handle(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
@@ -1113,6 +1127,7 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
+            hFunc(TEvPrivate::TEvScriptExecutionsTableCreationFinished, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1298,6 +1313,18 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
+    void CheckScriptExecutionsTableExistence() {
+        if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
+            Register(CreateScriptExecutionsTableCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTableCreationFinished>()));
+        } else {
+            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+        }
+    }
+
+    void Handle(TEvPrivate::TEvScriptExecutionsTableCreationFinished::TPtr&) {
+        ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+    }
+
 private:
     NYql::NLog::YqlLoggerScope YqlLoggerScope;
     NKikimrConfig::TLogConfig LogConfig;
@@ -1337,6 +1364,12 @@ private:
     TActorId WhiteBoardService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+
+    enum class EScriptExecutionsCreationStatus {
+        Pending,
+        Finished,
+    };
+    EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
 };
 
 } // namespace

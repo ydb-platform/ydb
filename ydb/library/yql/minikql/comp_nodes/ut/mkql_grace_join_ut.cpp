@@ -332,7 +332,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 }
 
 
-
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
     Y_UNIT_TEST_LLVM(TestInner1) {
@@ -827,12 +826,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto key2 = pb.NewDataLiteral<ui32>(2);
             const auto key3 = pb.NewDataLiteral<ui32>(2);
             const auto key4 = pb.NewDataLiteral<ui32>(3);
+            const auto key5 = pb.NewDataLiteral<ui32>(4);
             const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
             const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
             const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-            const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-            const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-            const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+            const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("D");
+            const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
+            const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
+            const auto payload7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
 
             const auto tupleType = pb.NewTupleType({
                 pb.NewDataType(NUdf::TDataType<ui32>::Id),
@@ -842,13 +843,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             const auto list1 = pb.NewList(tupleType, {
                 pb.NewTuple({key1, payload1}),
                 pb.NewTuple({key2, payload2}),
-                pb.NewTuple({key3, payload3})
+                pb.NewTuple({key3, payload3}),
+                pb.NewTuple({key4, payload4}),
+                pb.NewTuple({key5, payload4})
             });
 
             const auto list2 = pb.NewList(tupleType, {
-                pb.NewTuple({key2, payload4}),
-                pb.NewTuple({key3, payload5}),
-                pb.NewTuple({key4, payload6})
+                pb.NewTuple({key2, payload5}),
+                pb.NewTuple({key3, payload6}),
+                pb.NewTuple({key4, payload7})
             });
 
             const auto resultType = pb.NewFlowType(pb.NewMultiType({
@@ -868,8 +871,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             NUdf::TUnboxedValue tuple;
 
             UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "D");
+            UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 4);
+
+            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).Get<ui32>(), 1);
+
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
         }

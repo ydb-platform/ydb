@@ -15,17 +15,16 @@ struct Schema : NIceDb::Schema {
         struct Port : Column<3, NScheme::NTypeIds::Uint32> {};
         struct ResolveHost : Column<4, NScheme::NTypeIds::Utf8> {};
         struct Address : Column<5, NScheme::NTypeIds::Utf8> {};
-        struct DataCenter : Column<6, NScheme::NTypeIds::Uint64> {};
-        struct Room : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct Rack : Column<8, NScheme::NTypeIds::Uint64> {};
-        struct Body : Column<9, NScheme::NTypeIds::Uint64> {};
+        // struct DataCenter : Column<6, NScheme::NTypeIds::Uint64> {};
+        // struct Room : Column<7, NScheme::NTypeIds::Uint64> {};
+        // struct Rack : Column<8, NScheme::NTypeIds::Uint64> {};
+        // struct Body : Column<9, NScheme::NTypeIds::Uint64> {};
         struct Lease : Column<10, NScheme::NTypeIds::Uint32> {};
         struct Expire : Column<11, NScheme::NTypeIds::Uint64> {};
         struct Location : Column<12, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Host, Port, ResolveHost, Address, DataCenter, Room, Rack, Body, Lease, Expire,
-                                      Location>;
+        using TColumns = TableColumns<ID, Host, Port, ResolveHost, Address, Lease, Expire, Location>;
     };
 
     struct Config : Table<2> {

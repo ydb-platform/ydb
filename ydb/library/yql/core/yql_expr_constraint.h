@@ -10,7 +10,7 @@
 
 namespace NYql {
 
-TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly = false, bool subGraph = false);
+TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly = false, bool subGraph = false, bool disableCheck = false);
 TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer();
 
 IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda);

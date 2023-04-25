@@ -111,9 +111,9 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCod
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool forSubGraph, EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool forSubGraph, bool disableConstraintCheck, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
-        CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph), "Constraints", issueCode));
+        CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph, disableConstraintCheck), "Constraints", issueCode));
     Transformers_.push_back(TTransformStage(
         CreateFunctorTransformer(
             [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

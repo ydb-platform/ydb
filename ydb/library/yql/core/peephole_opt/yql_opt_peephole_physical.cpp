@@ -2069,6 +2069,7 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
     }, ctx, settings);
 }
 
+template<bool FinalStage>
 void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransformer* typeAnnotator) {
     auto issueCode = TIssuesIds::CORE_EXEC;
     pipelene.AddServiceTransformers(issueCode);
@@ -2078,7 +2079,7 @@ void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransforme
         pipelene.AddTypeAnnotationTransformer(issueCode);
     }
 
-    pipelene.AddPostTypeAnnotation(true, issueCode);
+    pipelene.AddPostTypeAnnotation(true, FinalStage, issueCode);
     pipelene.Add(TExprLogTransformer::Sync("PeepHoleOpt", NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE),
         "PeepHoleOptTrace", issueCode, "PeepHoleOptTrace");
 }
@@ -7271,7 +7272,7 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
         peepholeSettings.CommonConfig->AfterCreate(&pipeline);
     }
 
-    AddStandardTransformers(pipeline, typeAnnotator);
+    AddStandardTransformers<false>(pipeline, typeAnnotator);
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterTypeAnnotation(&pipeline);
     }
@@ -7306,7 +7307,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         peepholeSettings.FinalConfig->AfterCreate(&pipeline);
     }
 
-    AddStandardTransformers(pipeline, typeAnnotator);
+    AddStandardTransformers<true>(pipeline, typeAnnotator);
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterTypeAnnotation(&pipeline);
     }

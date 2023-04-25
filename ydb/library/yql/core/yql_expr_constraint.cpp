@@ -2648,7 +2648,7 @@ private:
                         }
                     }
                 }
-            } else if (auto l = GetPathToKey(SkipCallables(body.Head(), {"Length"}), args), r = GetPathToKey(SkipCallables(body.Tail(), {"Length"}), args); l && r && *l == *r) {
+            } else if (auto l = GetPathToKey(body.Head(), args), r = GetPathToKey(body.Tail(), args); l && r && *l == *r) {
                 if constexpr (Wide) {
                     auto path = l->first;
                     path.emplace_front(ctx.GetIndexAsString(l->second));
@@ -3373,6 +3373,7 @@ public:
     }
 };
 
+template<bool DisableCheck>
 class TConstraintTransformer : public TGraphTransformerBase {
 public:
     TConstraintTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types)
@@ -3758,6 +3759,9 @@ private:
     }
 
     void CheckExpected(const TExprNode& input, TExprContext& ctx) {
+        if constexpr (DisableCheck)
+            return;
+
         if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) {
             for (const TConstraintNode* expectedConstr: it->second) {
                 if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
@@ -3786,7 +3790,6 @@ private:
             }
         }
     }
-
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
     std::deque<TExprNode::TPtr> CallableInputs;
@@ -3798,9 +3801,11 @@ private:
 
 } // namespace
 
-TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly, bool subGraph) {
+TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly, bool subGraph, bool disableCheck) {
     TAutoPtr<IGraphTransformer> callableTransformer(new TCallableConstraintTransformer(types, instantOnly, subGraph));
-    return new TConstraintTransformer(callableTransformer, types);
+    return disableCheck ?
+        static_cast<IGraphTransformer*>(new TConstraintTransformer<true>(callableTransformer, types)):
+        static_cast<IGraphTransformer*>(new TConstraintTransformer<false>(callableTransformer, types));
 }
 
 TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer() {

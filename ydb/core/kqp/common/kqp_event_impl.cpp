@@ -88,6 +88,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
+        Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
 
         RequestCtx.reset();
     }

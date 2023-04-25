@@ -62,6 +62,7 @@ struct TKqpQueryState {
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     ui32 ReplyFlags = 0;
     bool KeepSession = false;
+    bool IsInternalCall = false;
 
     TMaybe<NKikimrKqp::TRlPath> RlPath;
 };
@@ -206,6 +207,7 @@ public:
         QueryState->ReplyFlags = queryRequest.GetReplyFlags();
         QueryState->UserToken = new NACLib::TUserToken(event.GetUserToken());
         QueryState->RequestActorId = ActorIdFromProto(event.GetRequestActorId());
+        QueryState->IsInternalCall = queryRequest.GetIsInternalCall();
 
         if (GetStatsMode(queryRequest, EKikimrStatsMode::None) > EKikimrStatsMode::Basic) {
             QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST;
@@ -683,6 +685,7 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_DML: {
                 IKqpHost::TPrepareSettings prepareSettings;
                 prepareSettings.DocumentApiRestricted = IsDocumentApiRestricted(QueryState->RequestType);
+                prepareSettings.IsInternalCall = QueryState->IsInternalCall;
                 QueryState->AsyncQueryResult = KqpHost->PrepareDataQuery(query, prepareSettings);
                 break;
             }

@@ -427,7 +427,7 @@ public:
         using TEvCreateSessionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
             Ydb::Table::CreateSessionResponse>;
         Ydb::Table::CreateSessionRequest req;
-        Subscribe<Ydb::Table::CreateSessionResponse, TEvPrivate::TEvCreateSessionResult>(NRpcService::DoLocalRpc<TEvCreateSessionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem()));
+        Subscribe<Ydb::Table::CreateSessionResponse, TEvPrivate::TEvCreateSessionResult>(NRpcService::DoLocalRpc<TEvCreateSessionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
     }
 
     void RunDeleteSession() {
@@ -435,7 +435,7 @@ public:
             Ydb::Table::DeleteSessionResponse>;
         Ydb::Table::DeleteSessionRequest req;
         req.set_session_id(SessionId);
-        Subscribe<Ydb::Table::DeleteSessionResponse, TEvPrivate::TEvDeleteSessionResult>(NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem()));
+        Subscribe<Ydb::Table::DeleteSessionResponse, TEvPrivate::TEvDeleteSessionResult>(NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
     }
 
     void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params) {
@@ -452,7 +452,7 @@ public:
             auto p = params->Build();
             *req.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(p);
         }
-        Subscribe<Ydb::Table::ExecuteDataQueryResponse, TEvPrivate::TEvDataQueryResult>(NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem()));
+        Subscribe<Ydb::Table::ExecuteDataQueryResponse, TEvPrivate::TEvDataQueryResult>(NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
     }
 
     virtual void RunQuery() = 0;

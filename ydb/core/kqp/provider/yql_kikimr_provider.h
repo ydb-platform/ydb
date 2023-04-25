@@ -98,6 +98,8 @@ struct TKikimrQueryContext : TThrRefBase {
     // full mode can be enabled explicitly.
     bool DocumentApiRestricted = true;
 
+    bool IsInternalCall = false;
+
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     NKikimr::NKqp::TQueryData::TPtr QueryData;
@@ -454,7 +456,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory);
+    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
+    bool isInternalCall);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

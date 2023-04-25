@@ -98,6 +98,7 @@ message TQueryRequest {
     optional TTopicOperations TopicOperations = 22;
     optional bool UsePublicResponseDataFormat = 23;
     map<string, Ydb.TypedValue> YdbParameters = 24;
+    optional bool IsInternalCall = 25;
 }
 
 message TKqpPathIdProto {

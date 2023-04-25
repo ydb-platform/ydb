@@ -28,27 +28,28 @@ using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
 
 class TColumnShardScanIterator : public TScanIteratorBase {
+private:
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
+    NOlap::TFetchBlobsQueue FetchBlobsQueue;
     NOlap::TIndexedReadData IndexedData;
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
-    TVector<TBlobRange> BlobsToRead;
-    ui64 NextBlobIdxToRead = 0;
     TDeque<NOlap::TPartialReadResult> ReadyResults;
-    bool IsReadFinished = false;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
-
+    NColumnShard::TDataTasksProcessorContainer DataTasksProcessor;
+    NColumnShard::TScanCounters ScanCounters;
 public:
-    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata);
+    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TScanCounters& scanCounters);
+    ~TColumnShardScanIterator();
 
-    virtual void Apply(IDataPreparationTask::TPtr task) override {
-        task->Apply(IndexedData);
-    }
+    virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
 
-    void AddData(const TBlobRange& blobRange, TString data, IDataTasksProcessor::TPtr processor) override;
+    virtual bool HasWaitingTasks() const override;
+
+    void AddData(const TBlobRange& blobRange, TString data) override;
 
     bool Finished() const  override {
-        return IsReadFinished && ReadyResults.empty();
+        return FetchBlobsQueue.IsStopped() && ReadyResults.empty();
     }
 
     NOlap::TPartialReadResult GetBatch() override;

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(reader)
 add_subdirectory(ut)
 
 add_library(tx-columnshard-engines)
@@ -22,6 +23,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   ydb-core-scheme
   ydb-core-tablet
   ydb-core-tablet_flat
+  columnshard-engines-reader
   udf-service-exception_policy
 )
 target_sources(tx-columnshard-engines PRIVATE

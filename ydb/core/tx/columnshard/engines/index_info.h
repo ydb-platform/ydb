@@ -58,7 +58,8 @@ public:
     }
 
     /// Returns an id of the column located by name. The name should exists in the schema.
-    ui32 GetColumnId(const TString& name) const;
+    ui32 GetColumnId(const std::string& name) const;
+    std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
     TString GetColumnName(ui32 id, bool required = true) const;
@@ -80,7 +81,7 @@ public:
         return KeyColumns[0];
     }
 
-    // Sorting key: colud be less or greater then traditional PK
+    // Sorting key: could be less or greater then traditional PK
     // It could be empty for append-only tables. It could be greater then PK for better columns compression.
     // If sorting key includes uniqueness key as a prefix we are able to use MergeSort for REPLACE.
     const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return SortingKey; }

@@ -1,18 +1,27 @@
 #include "columnshard__index_scan.h"
+#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor/usage/events.h>
 
 namespace NKikimr::NColumnShard {
 
-TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata)
+TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata,
+    NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TScanCounters& scanCounters)
     : ReadMetadata(readMetadata)
-    , IndexedData(ReadMetadata)
+    , IndexedData(ReadMetadata, FetchBlobsQueue, false, scanCounters)
+    , DataTasksProcessor(processor)
+    , ScanCounters(scanCounters)
 {
     ui32 batchNo = 0;
     for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++batchNo) {
         const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
         WaitCommitted.emplace(cmtBlob, batchNo);
     }
-    std::vector<TBlobRange> indexedBlobs = IndexedData.InitRead(batchNo, true);
-
+    // Read all committed blobs
+    for (const auto& cmtBlob : ReadMetadata->CommittedBlobs) {
+        auto& blobId = cmtBlob.BlobId;
+        FetchBlobsQueue.emplace_back(TBlobRange(blobId, 0, blobId.BlobSize()));
+    }
+    IndexedData.InitRead(batchNo, true);
     // Add cached batches without read
     for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
         auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
@@ -23,25 +32,17 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
         IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.PlanStep, cmtBlob.TxId);
     }
 
-    // Read all committed blobs
-    for (const auto& cmtBlob : ReadMetadata->CommittedBlobs) {
-        auto& blobId = cmtBlob.BlobId;
-        BlobsToRead.push_back(TBlobRange(blobId, 0, blobId.BlobSize()));
-    }
-
     Y_VERIFY(ReadMetadata->IsSorted());
 
-    for (auto&& blobRange : indexedBlobs) {
-        BlobsToRead.emplace_back(blobRange);
+    if (ReadMetadata->Empty()) {
+        FetchBlobsQueue.Stop();
     }
-
-    IsReadFinished = ReadMetadata->Empty();
 }
 
-void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data, IDataTasksProcessor::TPtr processor) {
+void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data) {
     const auto& blobId = blobRange.BlobId;
     if (IndexedData.IsIndexedBlob(blobRange)) {
-        IndexedData.AddIndexed(blobRange, data, processor);
+        IndexedData.AddIndexed(blobRange, data, DataTasksProcessor);
     } else {
         auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
         if (cmt.empty()) {
@@ -67,12 +68,7 @@ NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
 }
 
 NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
-    if (IsReadFinished || NextBlobIdxToRead == BlobsToRead.size()) {
-        return TBlobRange();
-    }
-    const auto& blob = BlobsToRead[NextBlobIdxToRead];
-    ++NextBlobIdxToRead;
-    return blob;
+    return FetchBlobsQueue.pop_front();
 }
 
 void TColumnShardScanIterator::FillReadyResults() {
@@ -96,14 +92,31 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
+        DataTasksProcessor.Stop();
         WaitCommitted.clear();
         IndexedData.Abort();
-        IsReadFinished = true;
+        FetchBlobsQueue.Stop();
     }
 
-    if (WaitCommitted.empty() && !IndexedData.IsInProgress() && NextBlobIdxToRead == BlobsToRead.size()) {
-        IsReadFinished = true;
+    if (WaitCommitted.empty() && !IndexedData.IsInProgress() && FetchBlobsQueue.empty()) {
+        DataTasksProcessor.Stop();
+        FetchBlobsQueue.Stop();
     }
+}
+
+bool TColumnShardScanIterator::HasWaitingTasks() const {
+    return DataTasksProcessor.InWaiting();
+}
+
+TColumnShardScanIterator::~TColumnShardScanIterator() {
+    ReadMetadata->ReadStats->PrintToLog();
+}
+
+void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
+    if (!task->IsDataProcessed()) {
+        return;
+    }
+    task->Apply(IndexedData);
 }
 
 }

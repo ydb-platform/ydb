@@ -312,7 +312,7 @@ bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch || !batch->num_rows()) {
         return false;
     }
-    Y_VERIFY(Filter.empty() || Count == (size_t)batch->num_rows());
+    Y_VERIFY_S(Filter.empty() || Count == (size_t)batch->num_rows(), Count << " != " << batch->num_rows());
     if (IsTotalDenyFilter()) {
         batch = batch->Slice(0, 0);
         return false;

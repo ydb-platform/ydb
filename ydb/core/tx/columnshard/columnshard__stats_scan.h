@@ -43,6 +43,10 @@ public:
     {
     }
 
+    virtual bool HasWaitingTasks() const override {
+        return false;
+    }
+
     bool Finished() const override {
         return IndexStats.empty();
     }

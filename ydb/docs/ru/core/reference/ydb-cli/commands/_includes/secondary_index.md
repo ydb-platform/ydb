@@ -124,10 +124,10 @@
 
 **Пример**
 
-{% include [example_db1.md](../../../../_includes/ydb-cli-profile.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 Переименование индекса `idx_aired` с таблицы episodes, построенного в примере создания индекса выше:
 
 ```bash
-{{ ydb-cli }} -p db1 table index rename episodes --index-name idx_aired --to idx_aired_renamed
+{{ ydb-cli }} -p quickstart table index rename episodes --index-name idx_aired --to idx_aired_renamed
 ```

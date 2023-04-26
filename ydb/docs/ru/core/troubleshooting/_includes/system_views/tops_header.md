@@ -21,7 +21,6 @@
 --- | ---
 `IntervalEnd` | Момент закрытия минутного или часового интервала.<br>Тип: `Timestamp`.<br>Ключ: `0`.
 `Rank` | Ранг запроса в топе.<br>Тип: `Uint32`.<br>Ключ: `1`.
-`RequestUnits` | Количество затраченных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options)
 `QueryText` | Текст запроса.<br>Тип: `Utf8`.
 `Duration` | Полное время исполнения запроса.<br>Тип: `Interval`.
 `EndTime` | Момент окончания исполнения запроса. <br>Тип: `Timestamp`. 

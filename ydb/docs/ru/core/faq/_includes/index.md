@@ -6,4 +6,3 @@
 {% endif %}
 * [Ошибки](../errors.md)
 * [YQL](../yql.md)
-* [Serverless](../serverless.md)

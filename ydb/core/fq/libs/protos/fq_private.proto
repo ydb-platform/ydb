@@ -38,6 +38,7 @@ message TaskResources {
     ResourceState compilation = 2;
     ResourceState topic_consumers_state = 3;
     repeated NYql.NDqProto.TExternalEffect external_effects = 4;
+    uint32 final_run_no = 5;
 
     string rate_limiter_path = 10;
     repeated TopicConsumer topic_consumers = 11;

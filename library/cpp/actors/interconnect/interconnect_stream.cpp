@@ -214,6 +214,10 @@ namespace NInterconnect {
         token.Request(read, write);
     }
 
+    bool TStreamSocket::ExpectingCertainWrite() const {
+        return false;
+    }
+
     //////////////////////////////////////////////////////
 
     TDatagramSocket::TPtr TDatagramSocket::Make(int domain) {
@@ -496,6 +500,10 @@ namespace NInterconnect {
             return res;
         }
 
+        bool ExpectingCertainWrite() const {
+            return BlockedSend.has_value();
+        }
+
         std::optional<std::pair<void*, size_t>> BlockedReceive;
 
         ssize_t Recv(void* msg, size_t len, TString *err) {
@@ -641,5 +649,9 @@ namespace NInterconnect {
 
     void TSecureSocket::Request(NActors::TPollerToken& token, bool /*read*/, bool /*write*/) {
         token.Request(WantRead(), WantWrite());
+    }
+
+    bool TSecureSocket::ExpectingCertainWrite() const {
+        return Impl->ExpectingCertainWrite();
     }
 }

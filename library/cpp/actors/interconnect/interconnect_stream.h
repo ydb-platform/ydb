@@ -69,6 +69,8 @@ namespace NInterconnect {
         ui32 GetSendBufferSize() const;
 
         virtual void Request(NActors::TPollerToken& token, bool read, bool write);
+
+        virtual bool ExpectingCertainWrite() const;
     };
 
     class TSecureSocketContext {
@@ -120,7 +122,8 @@ namespace NInterconnect {
 
         bool WantRead() const;
         bool WantWrite() const;
-        virtual void Request(NActors::TPollerToken& token, bool read, bool write) override;
+        void Request(NActors::TPollerToken& token, bool read, bool write) override;
+        bool ExpectingCertainWrite() const override;
     };
 
     class TDatagramSocket: public TSocket {

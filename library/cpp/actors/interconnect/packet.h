@@ -20,6 +20,14 @@
 #define FORCE_EVENT_CHECKSUM 0
 #endif
 
+// WARNING: turning this feature on will make protocol incompatible with ordinary Interconnect, use with caution
+#define IC_FORCE_HARDENED_PACKET_CHECKS 0
+
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+#undef FORCE_EVENT_CHECKSUM
+#define FORCE_EVENT_CHECKSUM 1
+#endif
+
 Y_FORCE_INLINE ui32 Crc32cExtendMSanCompatible(ui32 checksum, const void *data, size_t len) {
     if constexpr (NSan::MSanIsOn()) {
         const char *begin = static_cast<const char*>(data);
@@ -56,6 +64,9 @@ struct TEventData {
     ui64 Cookie;
     NWilson::TTraceId TraceId;
     ui32 Checksum;
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+    ui32 Len;
+#endif
 };
 
 #pragma pack(push, 1)
@@ -68,6 +79,9 @@ struct TEventDescr2 {
     ui64 Cookie;
     NWilson::TTraceId::TSerializedTraceId TraceId;
     ui32 Checksum;
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+    ui32 Len;
+#endif
 };
 
 #pragma pack(pop)

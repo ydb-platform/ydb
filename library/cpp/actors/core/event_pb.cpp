@@ -77,7 +77,8 @@ namespace NActors {
             if (CancelFlag || AbortFlag) {
                 return false;
             } else if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
-                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 2 * 64) {
+                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 2 * 64 &&
+                        (NumChunks == 0 || data != Chunks[NumChunks - 1].first + Chunks[NumChunks - 1].second)) {
                     memcpy(BufferPtr, data, bytesToAppend);
 
                     if (!Produce(BufferPtr, bytesToAppend)) {

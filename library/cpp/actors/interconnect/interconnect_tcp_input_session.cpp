@@ -409,7 +409,10 @@ namespace NActors {
                     v2.Sender,
                     v2.Cookie,
                     NWilson::TTraceId(v2.TraceId),
-                    v2.Checksum
+                    v2.Checksum,
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+                    v2.Len
+#endif
                 };
 
                 Metrics->IncInputChannelsIncomingEvents(channel);
@@ -420,9 +423,9 @@ namespace NActors {
         }
 
         // mark packet as processed
-        ProcessInboundPacketQ(0);
         XdcCatchStreamFinal = XdcCatchStreamFinalPending;
         Context->LastProcessedSerial += !IgnorePayload;
+        ProcessInboundPacketQ(0);
 
         ++PacketsReadFromSocket;
         ++DataPacketsReadFromSocket;
@@ -442,8 +445,10 @@ namespace NActors {
                 break;
             }
 
-            if (!Context->AdvanceLastPacketSerialToConfirm(front.Serial)) {
-                throw TExDestroySession{TDisconnectReason::NewSession()};
+            const bool success = Context->AdvanceLastPacketSerialToConfirm(front.Serial);
+            Y_VERIFY_DEBUG(Context->GetLastPacketSerialToConfirm() <= Context->LastProcessedSerial);
+            if (!success) {
+                throw TExReestablishConnection{TDisconnectReason::NewSession()};
             }
         }
     }
@@ -531,6 +536,13 @@ namespace NActors {
             }
 
             auto& descr = *pendingEvent.EventData;
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+            if (descr.Len != pendingEvent.Payload.GetSize()) {
+                LOG_CRIT_IC_SESSION("ICISxx", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
+                    descr.Type, pendingEvent.Payload.GetSize(), descr.Len);
+                throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+            }
+#endif
             if (descr.Checksum) {
                 ui32 checksum = 0;
                 for (const auto&& [data, size] : pendingEvent.Payload) {

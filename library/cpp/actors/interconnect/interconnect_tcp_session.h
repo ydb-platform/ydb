@@ -459,11 +459,11 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void WriteData();
-        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket);
+        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
         ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
-        bool DropConfirmed(ui64 confirm, bool ignoreSendQueuePos = false);
+        bool DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
 
         void StartHandshake();
@@ -532,6 +532,7 @@ namespace NActors {
         std::deque<TOutgoingPacket> SendQueue; // packet boundaries
         size_t SendQueuePos = 0; // packet being sent now
         size_t SendOffset = 0;
+        bool WriteSinglePacketAndDropConfirmed = false;
 
         ui64 XdcBytesSent = 0;
 

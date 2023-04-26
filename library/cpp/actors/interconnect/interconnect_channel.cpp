@@ -32,7 +32,10 @@ namespace NActors {
             event.Descr.Sender,
             event.Descr.Cookie,
             {},
-            event.Descr.Checksum
+            event.Descr.Checksum,
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+            event.EventSerializedSize
+#endif
         };
         traceId.Serialize(&descr.TraceId);
 

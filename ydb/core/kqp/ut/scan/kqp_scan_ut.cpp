@@ -128,6 +128,43 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
     }
 
+    Y_UNIT_TEST(StreamExecuteScanQueryTimeoutBruteForce) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        int maxTimeoutMs = 100;
+
+        for (int i = 1; i < maxTimeoutMs; i++) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+            )",
+            TStreamExecScanQuerySettings()
+                .ClientTimeout(TDuration::MilliSeconds(i))
+            ).GetValueSync();
+
+            if (it.IsSuccess()) {
+                try {
+                    auto yson = StreamResultToYson(it, true);
+                    CompareYson(R"([[[1];[101u];["Value1"]];[[2];[201u];["Value1"]];[[3];[301u];["Value1"]];[[1];[401u];["Value1"]];[[2];[501u];["Value1"]];[[3];[601u];["Value1"]];[[1];[701u];["Value1"]];[[2];[801u];["Value1"]]])", yson);
+                } catch (const TStreamReadError& ex) {
+                    UNIT_ASSERT_VALUES_EQUAL(ex.Status, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+                } catch (const std::exception& ex) {
+                    UNIT_ASSERT_C(false, "unknown exception during the test");
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+            }
+        }
+
+        int count = 60;
+        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
+            count--;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+    }
+
     Y_UNIT_TEST(IsNull) {
         auto kikimr = DefaultKikimrRunner();
         CreateNullSampleTables(kikimr);

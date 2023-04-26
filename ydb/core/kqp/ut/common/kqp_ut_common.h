@@ -235,9 +235,17 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
-TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it);
-TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it);
-TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it);
+class TStreamReadError : public yexception {
+public:
+    TStreamReadError(NYdb::EStatus status)
+        : Status(status)
+    {}
+    NYdb::EStatus Status;
+};
+
+TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTImeout = false);
+TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTImeout = false);
+TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTImeout = false);
 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);

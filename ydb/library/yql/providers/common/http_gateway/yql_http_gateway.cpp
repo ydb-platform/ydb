@@ -183,9 +183,10 @@ public:
         curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, &WriteMemoryCallback);
         curl_easy_setopt(Handle, CURLOPT_WRITEDATA, static_cast<void*>(this));
 
-        if (EMethod::PUT == Method) {
+        if (Method == EMethod::PUT) {
             curl_easy_setopt(Handle, CURLOPT_HEADERFUNCTION, &WriteHeaderCallback);
             curl_easy_setopt(Handle, CURLOPT_HEADERDATA, static_cast<void*>(this));
+            curl_easy_setopt(Handle, CURLOPT_INFILESIZE_LARGE, BodySize);
         }
 
         if (Method == EMethod::POST) {

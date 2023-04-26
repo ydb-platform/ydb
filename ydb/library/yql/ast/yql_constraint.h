@@ -312,6 +312,7 @@ public:
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
     static const TMainConstraint* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TMainConstraint* original, const std::string_view& field = {});
+    static const TMainConstraint* MakeComplete(TExprContext& ctx, const TPartOfConstraintNode* partial, const TMainConstraint* original, const std::string_view& field = {});
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:

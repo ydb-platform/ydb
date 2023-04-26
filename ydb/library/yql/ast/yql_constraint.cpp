@@ -1234,6 +1234,15 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, 
 }
 
 template<class TOriginalConstraintNode>
+const TOriginalConstraintNode*
+TPartOfConstraintNode<TOriginalConstraintNode>::MakeComplete(TExprContext& ctx, const TPartOfConstraintNode* partial, const TOriginalConstraintNode* original, const std::string_view& field) {
+    if (!partial)
+        return nullptr;
+
+    return MakeComplete(ctx, partial->GetColumnMapping(), original, field);
+}
+
+template<class TOriginalConstraintNode>
 bool TPartOfConstraintNode<TOriginalConstraintNode>::IsApplicableToType(const TTypeAnnotationNode& type) const {
     if (ETypeAnnotationKind::Dict == type.GetKind())
         return true; // TODO: check for dict.

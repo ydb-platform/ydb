@@ -153,8 +153,6 @@ private:
             req->has_operation_params() ? &req->operation_params() : nullptr
         );
 
-        ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId());
-
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             return ReplyFinishStream("Couldn't send request to KqpProxy");
         }

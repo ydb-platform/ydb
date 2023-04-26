@@ -179,11 +179,11 @@ public:
     }
 
     bool ConvertParameters() {
-        auto& event = QueryState->RequestEv->Record;
+        auto& proto = QueryState->RequestEv->Record;
 
-        if (!event.GetRequest().HasParameters() && event.GetRequest().YdbParametersSize()) {
+        if (!proto.GetRequest().HasParameters() && QueryState->RequestEv->GetYdbParameters().size()) {
             try {
-                ConvertYdbParamsToMiniKQLParams(event.GetRequest().GetYdbParameters(), *event.MutableRequest()->MutableParameters());
+                ConvertYdbParamsToMiniKQLParams(QueryState->RequestEv->GetYdbParameters(), *proto.MutableRequest()->MutableParameters());
             } catch (const std::exception& ex) {
                 TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
                 ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);

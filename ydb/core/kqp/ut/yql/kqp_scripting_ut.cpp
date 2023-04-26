@@ -95,6 +95,26 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetUint64(), 8u);
     }
 
+    Y_UNIT_TEST(StreamScanQuery) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto params = client.GetParamsBuilder()
+            .AddParam("$text").String("Value1").Build()
+            .Build();
+
+        auto it = client.StreamExecuteYqlScript(R"(
+            PRAGMA db.ScanQuery = "true";
+            DECLARE $text AS String;
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = $text;
+        )", params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[8u]]
+        ])", StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(ScanQueryInvalid) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());

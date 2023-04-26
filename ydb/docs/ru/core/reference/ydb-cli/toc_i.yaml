@@ -113,4 +113,5 @@ items:
       href: workload-click-bench.md
     - name: Key-Value нагрузка
       href: workload-kv.md
-
+    - name: Topic нагрузка
+      href: workload-topic.md

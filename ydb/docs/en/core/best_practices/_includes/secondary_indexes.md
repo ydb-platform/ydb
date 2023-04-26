@@ -2,7 +2,7 @@
 
 [Indexes]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Индекс_(базы_данных)){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Database_index){% endif %} are auxiliary structures within databases that help find data by certain criteria without having to search an entire database, and retrieve sorted samples without actually sorting, which would require processing the entire dataset.
 
-Data in a YDB dataset is always sorted by the primary key. That means that retrieving any entry from the table with specified field values comprising the primary key always takes the minimum fixed time, regardless of the total number of table entries. Indexing by the primary key makes it possible to retrieve any consecutive range of entries in ascending or descending order of the primary key. Execution time for this operation depends only on the number of retrieved entries rather than on the total number of table values.
+Data in a YDB table is always sorted by the primary key. That means that retrieving any entry from the table with specified field values comprising the primary key always takes the minimum fixed time, regardless of the total number of table entries. Indexing by the primary key makes it possible to retrieve any consecutive range of entries in ascending or descending order of the primary key. Execution time for this operation depends only on the number of retrieved entries rather than on the total number of table records.
 
 To use a similar feature with any field or combination of fields, additional indexes called **secondary indexes** can be created for them
 
@@ -12,11 +12,11 @@ This article describes the main operations with secondary indexes and gives refe
 
 ## Creating secondary indexes {#create}
 
-A secondary index is a data schema object that can be set when creating a table with the [`CREATE TABLE` YQL command](../../yql/reference/syntax/create_table.md) or added to it later with the [`ALTER TABLE` YQL command](../../yql/reference/syntax/alter_table.md).
+A secondary index is a data schema object that can be defined when creating a table with the [`CREATE TABLE` YQL command](../../yql/reference/syntax/create_table.md) or added to it later with the [`ALTER TABLE` YQL command](../../yql/reference/syntax/alter_table.md).
 
 The [`table index add` command](../../reference/ydb-cli/commands/secondary_index.md#add) is supported in the YDB CLI.
 
-Since an index contains its own data derived from table data, when creating an index on an existing table with data, an operation is performed to initially build an index. This may take a long time. This operation is executed in the background and you can keep working with the table while it's in progress. However, you can't use the new index until it's created.
+Since an index contains its own data derived from table data, when creating an index on an existing table with data, an operation is performed to initially build an index. This may take a long time. This operation is executed in the background and you can keep working with the table while it's in progress. However, you can't use the new index until it's build is completed.
 
 An index can only be used in the order of the fields included in it. If an index contains two fields, such as `a` and `b`, you can effectively use it for queries such as:
 * `WHERE a = $var1 AND b = $var2`.
@@ -29,7 +29,7 @@ This index can't be used in the following queries:
 * `WHERE a > $var1 AND b > $var2`, which is equivalent to `WHERE a > $var1` in terms of applying the index.
 * `WHERE b > $var1`.
 
-Considering the above, there's no use in pre-indexing all possible combinations of table columns to speed up the execution of any query. An index is always a compromise between the lookup and write speed and the storage space occupied by the data. Indexes are created for specific search queries and criteria made by an app in the database.
+Considering the above, there's no use in pre-indexing all possible combinations of table columns to speed up the execution of any query. An index is always a compromise between the lookup and write speed and the storage space occupied by the data. Indexes are created for specific queries and search criteria made by an app in the database.
 
 ## Using secondary indexes when selecting data {#use}
 
@@ -44,9 +44,9 @@ WHERE  o.id_customer = $customer_id
 
 Where `idx_customer` is the name of the secondary index on the `orders` table with the `id_customer` field specified first.
 
-If no `VIEW` section is specified, making a query like this requires a full scan of the `orders` table .
+If no `VIEW` section is specified, making a query like this results in a full scan of the `orders` table .
 
-In transactional applications, such information queries are executed with paginated data results. This eliminates an increase in the cost and time of query execution if the number of entries that meet the filtering conditions grows. The described approach to writing [paginated queries](../paging.md) using the primary key can also be applied to columns that are part of a secondary index.
+In transactional applications, such information queries are executed with paginated data output. This eliminates an increase in the cost and time of query execution if the number of entries that meet the filtering conditions grows. The described approach to writing [paginated queries](../paging.md) using the primary key can also be applied to columns that are part of a secondary index.
 
 ## Checking the cost of queries {#cost}
 
@@ -56,7 +56,7 @@ If you use the YDB CLI, select the `--stats` option to enable printing statistic
 
 ## Updating data using a secondary index {#update}
 
-The [`UPDATE`](../../yql/reference/syntax/update.md), [`UPSERT`](../../yql/reference/syntax/upsert_into.md), and [`REPLACE`](../../yql/reference/syntax/replace_into.md) YQL statements don't permit indicating the use of a secondary index to perform a search for data, so an attempt to make an `UPDATE ... WHERE indexed_field = $value` will result in a full scan of the table. To avoid this, you can first run `SELECT` by index to get the primary key value and then `UPDATE` by the primary key. You can also use `UPDATE ON`.
+The [`UPDATE`](../../yql/reference/syntax/update.md), [`UPSERT`](../../yql/reference/syntax/upsert_into.md), and [`REPLACE`](../../yql/reference/syntax/replace_into.md) YQL statements don't permit specifying a secondary index to perform a search for data, so an attempt to make an `UPDATE ... WHERE indexed_field = $value` will result in a full scan of the table. To avoid this, you can first run `SELECT` by index to get the primary key value and then `UPDATE` by the primary key. You can also use `UPDATE ON`.
 
 To update data in the `table1` table, run the query:
 

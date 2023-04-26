@@ -3796,6 +3796,14 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
     }
+
+    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
+        NSQLTranslation::TTranslationSettings settings;
+        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
@@ -4782,12 +4790,31 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
     }
 
-    Y_UNIT_TEST(NoDeclareOverrides) {
+    Y_UNIT_TEST(DeclareOverrides) {
         NSQLTranslation::TTranslationSettings settings;
         settings.DeclaredNamedExprs["foo"] = "String";
         auto res = SqlToYqlWithSettings("declare $foo as Int32; select $foo;", settings);
         UNIT_ASSERT(res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:9: Warning: Duplicate declaration of '$foo' will be ignored, code: 4536\n");
+        UNIT_ASSERT(res.Issues.Size() == 0);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "declare") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'Int32)))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("declare"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
+    }
+
+    Y_UNIT_TEST(UnusedDeclareDoesNotProduceWarning) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.DeclaredNamedExprs["foo"] = "String";
+        auto res = SqlToYqlWithSettings("select 1;", settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
@@ -4809,14 +4836,6 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:0:5: Error: Unknown type: 'BadType'\n"
             "<main>: Error: Failed to parse type for externally declared name 'foo'\n");
-    }
-
-    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
-        NSQLTranslation::TTranslationSettings settings;
-        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
 }
 
@@ -5200,7 +5219,6 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
         TStringBuilder finalQuery;
 
         finalQuery << "use plato;" << Endl << query;
-        Cerr << "Run query: " << query << Endl;
         auto res = SqlToYql(finalQuery, 10, "kikimr");
         if (expectOk) {
             UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());

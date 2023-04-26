@@ -23,7 +23,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const IRetryPolicy<long>::TPtr& retryPolicy,
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
     IArrowReader::TPtr arrowReader,
     ::NMonitoring::TDynamicCounterPtr counters,

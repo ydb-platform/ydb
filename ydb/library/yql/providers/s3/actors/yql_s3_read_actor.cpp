@@ -199,15 +199,18 @@ struct TEvPrivate {
     };
 
     struct TEvReadStarted : public TEventLocal<TEvReadStarted, EvReadStarted> {
-        explicit TEvReadStarted(long httpResponseCode) : HttpResponseCode(httpResponseCode) {}
+        TEvReadStarted(CURLcode curlResponseCode, long httpResponseCode) 
+            : CurlResponseCode(curlResponseCode), HttpResponseCode(httpResponseCode) {}
+        const CURLcode CurlResponseCode;
         const long HttpResponseCode;
     };
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        TEvReadFinished(size_t pathIndex, TIssues&& issues)
-            : PathIndex(pathIndex), Issues(std::move(issues)) {
+        TEvReadFinished(size_t pathIndex, CURLcode curlResponseCode, TIssues&& issues)
+            : PathIndex(pathIndex), CurlResponseCode(curlResponseCode), Issues(std::move(issues)) {
         }
         const size_t PathIndex;
+        const CURLcode CurlResponseCode;
         TIssues Issues;
     };
 
@@ -692,7 +695,7 @@ public:
         ui64 startPathIndex,
         const NActors::TActorId& computeActorId,
         ui64 sizeLimit,
-        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
@@ -965,7 +968,7 @@ private:
     const ui64 InputIndex;
     const TTxId TxId;
     const NActors::TActorId ComputeActorId;
-    const IRetryPolicy<long>::TPtr RetryPolicy;
+    const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     TActorSystem* const ActorSystem;
 
@@ -1030,7 +1033,7 @@ struct TRetryStuff {
         std::size_t sizeLimit,
         const TTxId& txId,
         const TString& requestId,
-        const IRetryPolicy<long>::TPtr& retryPolicy
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy
     ) : Gateway(std::move(gateway))
       , Url(UrlEscapeRet(url, true))
       , Headers(headers)
@@ -1048,13 +1051,13 @@ struct TRetryStuff {
     std::size_t Offset, SizeLimit;
     const TTxId TxId;
     const TString RequestId;
-    IRetryPolicy<long>::IRetryState::TPtr RetryState;
-    IRetryPolicy<long>::TPtr RetryPolicy;
+    IHTTPGateway::TRetryPolicy::IRetryState::TPtr RetryState;
+    IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     IHTTPGateway::TCancelHook CancelHook;
     TMaybe<TDuration> NextRetryDelay;
     std::atomic_bool Cancelled;
 
-    const IRetryPolicy<long>::IRetryState::TPtr& GetRetryState() {
+    const IHTTPGateway::TRetryPolicy::IRetryState::TPtr& GetRetryState() {
         if (!RetryState) {
             RetryState = RetryPolicy->CreateRetryState();
         }
@@ -1074,16 +1077,16 @@ struct TRetryStuff {
     }
 };
 
-void OnDownloadStart(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, long httpResponseCode) {
-    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadStarted(httpResponseCode)));
+void OnDownloadStart(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, CURLcode curlResponseCode, long httpResponseCode) {
+    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadStarted(curlResponseCode, httpResponseCode)));
 }
 
 void OnNewData(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, IHTTPGateway::TCountedContent&& data) {
     actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvDataPart(std::move(data))));
 }
 
-void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, TIssues issues) {
-    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished(pathIndex, std::move(issues))));
+void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, CURLcode curlResponseCode, TIssues issues) {
+    actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadFinished(pathIndex, curlResponseCode, std::move(issues))));
 }
 
 void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) {
@@ -1092,10 +1095,9 @@ void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSyste
         retryStuff->Headers,
         retryStuff->Offset,
         retryStuff->SizeLimit,
-        std::bind(&OnDownloadStart, actorSystem, self, parent, std::placeholders::_1),
+        std::bind(&OnDownloadStart, actorSystem, self, parent, std::placeholders::_1, std::placeholders::_2),
         std::bind(&OnNewData, actorSystem, self, parent, std::placeholders::_1),
-        std::bind(
-            &OnDownloadFinished, actorSystem, self, parent, pathIndex, std::placeholders::_1),
+        std::bind(&OnDownloadFinished, actorSystem, self, parent, pathIndex, std::placeholders::_1, std::placeholders::_2),
         inflightCounter);
 }
 
@@ -1802,6 +1804,7 @@ public:
 
     void Handle(TEvPrivate::TEvReadStarted::TPtr& ev) {
         HttpResponseCode = ev->Get()->HttpResponseCode;
+        CurlResponseCode = ev->Get()->CurlResponseCode;
         LOG_CORO_D("TEvReadStarted, Http code: " << HttpResponseCode);
     }
 
@@ -1830,6 +1833,10 @@ public:
 
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev) {
 
+        if (CurlResponseCode == CURLE_OK) {
+            CurlResponseCode = ev->Get()->CurlResponseCode;
+        }
+
         Issues.Clear();
         if (!ErrorText.empty()) {
             TString errorCode;
@@ -1850,7 +1857,7 @@ public:
         }
 
         if (Issues) {
-            RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(HttpResponseCode >= 300 ? HttpResponseCode : 0);
+            RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(CurlResponseCode, HttpResponseCode);
             LOG_CORO_D("TEvReadFinished with Issues (try to retry): " << Issues.ToOneLineString());
             if (RetryStuff->NextRetryDelay) {
                 // inplace retry: report problem to TransientIssues and repeat
@@ -2071,6 +2078,7 @@ private:
 
     bool InputFinished = false;
     long HttpResponseCode = 0L;
+    CURLcode CurlResponseCode = CURLE_OK;
     bool ServerReturnedError = false;
     TString ErrorText;
     TIssues Issues;
@@ -2118,7 +2126,7 @@ public:
         ui64 startPathIndex,
         const TReadSpec::TPtr& readSpec,
         const NActors::TActorId& computeActorId,
-        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const std::size_t maxBlocksInFly,
         IArrowReader::TPtr arrowReader,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
@@ -2561,7 +2569,7 @@ private:
     const ui64 InputIndex;
     const TTxId TxId;
     const NActors::TActorId ComputeActorId;
-    const IRetryPolicy<long>::TPtr RetryPolicy;
+    const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const TString Url;
     const TString Token;
@@ -2748,7 +2756,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const IRetryPolicy<long>::TPtr& retryPolicy,
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
     IArrowReader::TPtr arrowReader,
     ::NMonitoring::TDynamicCounterPtr counters,

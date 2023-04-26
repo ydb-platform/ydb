@@ -14,7 +14,7 @@ void RegisterS3ReadActorFactory(
         TDqAsyncIoFactory& factory,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr gateway,
-        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         const TS3ReadActorFactoryConfig& cfg,
         ::NMonitoring::TDynamicCounterPtr counters,
         IArrowReader::TPtr arrowReader) {

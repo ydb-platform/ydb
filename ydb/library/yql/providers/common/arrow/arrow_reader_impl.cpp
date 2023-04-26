@@ -112,7 +112,7 @@ private:
 
     IHTTPGateway::TPtr Gateway;
     IHTTPGateway::THeaders Headers;
-    IRetryPolicy<long>::TPtr RetryPolicy;
+    IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     const TString Url;
     const size_t FileSize;
     int64_t InnerPos = 0;

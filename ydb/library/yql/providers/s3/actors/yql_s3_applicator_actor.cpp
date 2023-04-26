@@ -261,8 +261,8 @@ public:
         hFunc(TEvPrivate::TEvListParts, Handle);
     )
 
-    bool RetryOperation(ui32 httpResponseCode) {
-        auto result = RetryCount && RetryPolicy->CreateRetryState()->GetNextRetryDelay(httpResponseCode);
+    bool RetryOperation(CURLcode curlResponseCode, ui32 httpResponseCode) {
+        auto result = RetryCount && RetryPolicy->CreateRetryState()->GetNextRetryDelay(curlResponseCode, httpResponseCode);
         if (result) {
             RetryCount--;
         } else {
@@ -351,7 +351,7 @@ public:
             }
         }
         LOG_D("CommitMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.Content.HttpResponseCode)) {
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
             PushCommitMultipartUpload(ev->Get()->State);
         }
     }
@@ -425,7 +425,7 @@ public:
             return;
         }
         LOG_D("ListMultipartUploads ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.Content.HttpResponseCode)) {
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
             PushListMultipartUploads(ev->Get()->State);
         }
     }
@@ -442,7 +442,7 @@ public:
             return;
         }
         LOG_D("AbortMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.Content.HttpResponseCode)) {
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
             PushAbortMultipartUpload(ev->Get()->State);
         }
     }
@@ -482,7 +482,7 @@ public:
             return;
         }
         LOG_D("ListParts ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.Content.HttpResponseCode)) {
+        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
             PushListParts(ev->Get()->State);
         }
     }
@@ -560,7 +560,7 @@ private:
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     NYql::NDqProto::TExternalEffect ExternalEffect;
     NActors::TActorSystem* const ActorSystem;
-    const IRetryPolicy<long>::TPtr RetryPolicy;
+    const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     ui64 HttpRequestInflight = 0;
     ui64 RetryCount;
     THashSet<TString> UnknownPrefixes;

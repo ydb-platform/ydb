@@ -231,7 +231,7 @@ public:
         const std::shared_ptr<TListEntries> Output;
         // HTTP control
         const IHTTPGateway::TWeakPtr GatewayWeak;
-        const IRetryPolicy<long>::TPtr RetryPolicy;
+        const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
         const TString RequestId;
         const TListingRequest ListingRequest;
         const TMaybe<TString> Delimiter;

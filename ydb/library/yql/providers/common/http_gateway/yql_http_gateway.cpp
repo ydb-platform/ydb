@@ -2,7 +2,6 @@
 #include "yql_dns_gateway.h"
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <contrib/libs/curl/include/curl/curl.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/generic/size_literals.h>
@@ -219,7 +218,7 @@ public:
         return Method;
     }
 
-    virtual void Fail(const TIssue& error) = 0;
+    virtual void Fail(CURLcode result, const TIssue& error) = 0;
     virtual void Done(CURLcode result, long httpResponseCode) = 0;
 
     virtual size_t Write(void* contents, size_t size, size_t nmemb) = 0;
@@ -295,7 +294,7 @@ public:
         size_t offset,
         size_t sizeLimit,
         IHTTPGateway::TOnResult callback,
-        IRetryPolicy<long>::IRetryState::TPtr retryState,
+        IHTTPGateway::TRetryPolicy::IRetryState::TPtr retryState,
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
         : TEasyCurl(
@@ -330,7 +329,7 @@ public:
         size_t offset,
         size_t sizeLimit,
         IHTTPGateway::TOnResult callback,
-        IRetryPolicy<long>::IRetryState::TPtr retryState,
+        IHTTPGateway::TRetryPolicy::IRetryState::TPtr retryState,
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr) {
         return std::make_shared<TEasyCurlBuffer>(
@@ -358,9 +357,9 @@ public:
         return true;
     }
 
-    TMaybe<TDuration> GetNextRetryDelay(long httpResponseCode) const {
+    TMaybe<TDuration> GetNextRetryDelay(CURLcode curlResponseCode, long httpResponseCode) const {
         if (RetryState)
-            return RetryState->GetNextRetryDelay(httpResponseCode);
+            return RetryState->GetNextRetryDelay(curlResponseCode, httpResponseCode);
 
         return {};
     }
@@ -375,18 +374,18 @@ public:
         InitHandles();
     }
 private:
-    void Fail(const TIssue& error) final  {
+    void Fail(CURLcode result, const TIssue& error) final  {
         TIssues issues{error};
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
-            Callbacks.top()(issues);
+            Callbacks.top()(IHTTPGateway::TResult(result, issues));
             Callbacks.pop();
         }
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
         if (CURLE_OK != result)
-            return Fail(TIssue( TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
+            return Fail(result, TIssue( TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
 
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
@@ -421,7 +420,7 @@ private:
 
     std::mutex SyncCallbacks;
     std::stack<IHTTPGateway::TOnResult> Callbacks;
-    const IRetryPolicy<long>::IRetryState::TPtr RetryState;
+    const IHTTPGateway::TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
 class TEasyCurlStream : public TEasyCurl {
@@ -495,35 +494,35 @@ public:
 
     void Cancel(TIssue issue) {
         Cancelled = true;
-        OnFinish(TIssues{issue});
+        OnFinish(CURLE_OK, TIssues{issue});
     }
 private:
-    void Fail(const TIssue& error) final  {
+    void Fail(CURLcode result, const TIssue& error) final  {
         if (!Cancelled)
-            OnFinish(TIssues{error});
+            OnFinish(result, TIssues{error});
     }
 
-    void MaybeStart(long httpResponseCode = 0) {
+    void MaybeStart(CURLcode result, long httpResponseCode = 0) {
         if (!HttpResponseCode) {
             if (!httpResponseCode) {
                 curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
             }
             HttpResponseCode = httpResponseCode;
-            OnStart(HttpResponseCode);
+            OnStart(result, HttpResponseCode);
         }
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
-        MaybeStart(httpResponseCode);
+        MaybeStart(result, httpResponseCode);
         if (CURLE_OK != result) {
-            return Fail(TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
+            return Fail(result, TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
         }
         if (!Cancelled)
-            OnFinish(TIssues());
+            OnFinish(result, TIssues());
     }
 
     size_t Write(void* contents, size_t size, size_t nmemb) final {
-        MaybeStart();
+        MaybeStart(CURLE_OK);
         const auto realsize = size * nmemb;
         if (!Cancelled)
             OnNewData(IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter, InflightCounter));
@@ -545,7 +544,7 @@ private:
     long HttpResponseCode = 0L;
 };
 
-using TKeyType = std::tuple<TString, size_t, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
+using TKeyType = std::tuple<TString, size_t, IHTTPGateway::THeaders, TString, IHTTPGateway::TRetryPolicy::TPtr>;
 
 class TKeyHash {
 public:
@@ -560,7 +559,7 @@ public:
     }
 private:
     const std::hash<TString> Hash;
-    const std::hash<IRetryPolicy<long>::TPtr> HashPtr;
+    const std::hash<IHTTPGateway::TRetryPolicy::TPtr> HashPtr;
 };
 
 class THTTPMultiGateway : public IHTTPGateway {
@@ -788,7 +787,7 @@ private:
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     AllocatedSize -= buffer->GetSizeLimit();
-                    if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(httpResponseCode)) {
+                    if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(result, httpResponseCode)) {
                         buffer->Reset();
                         Delayed.emplace(nextRetryDelay->ToDeadLine(), std::move(buffer));
                         easy.reset();
@@ -818,12 +817,12 @@ private:
         const TIssue error(curl_multi_strerror(result));
         while (!works.empty()) {
             curl_multi_remove_handle(Handle, works.top()->GetHandle());
-            works.top()->Fail(error);
+            works.top()->Fail(CURLE_OK, error);
             works.pop();
         }
     }
 
-    void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, IRetryPolicy<long>::TPtr retryPolicy) final {
+    void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
         const std::unique_lock lock(Sync);
@@ -832,7 +831,7 @@ private:
         Wakeup(0U);
     }
 
-    void Delete(TString url, THeaders headers, TOnResult callback, IRetryPolicy<long>::TPtr retryPolicy) final {
+    void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
         const std::unique_lock lock(Sync);
@@ -848,12 +847,12 @@ private:
         size_t sizeLimit,
         TOnResult callback,
         TString data,
-        IRetryPolicy<long>::TPtr retryPolicy) final
+        TRetryPolicy::TPtr retryPolicy) final
     {
         Rps->Inc();
         if (sizeLimit > MaxSimulatenousDownloadsSize) {
             TIssue error(TStringBuilder() << "Too big file for downloading: size " << sizeLimit << ", but limit is " << MaxSimulatenousDownloadsSize);
-            callback(TIssues{error});
+            callback(TResult(CURLE_OK, TIssues{error}));
             return;
         }
         const std::unique_lock lock(Sync);

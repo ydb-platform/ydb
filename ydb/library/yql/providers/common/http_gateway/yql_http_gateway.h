@@ -7,6 +7,8 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/retry/retry_policy.h>
 
+#include <contrib/libs/curl/include/curl/curl.h>
+
 #include <atomic>
 #include <variant>
 #include <functional>
@@ -17,6 +19,7 @@ class IHTTPGateway {
 public:
     using TPtr = std::shared_ptr<IHTTPGateway>;
     using TWeakPtr = std::weak_ptr<IHTTPGateway>;
+    using TRetryPolicy = IRetryPolicy<CURLcode, long>;
 
     virtual ~IHTTPGateway() = default;
 
@@ -63,9 +66,10 @@ public:
 
     using THeaders = TSmallVec<TString>;
     struct TResult {
-        TResult(TContent&& content) : Content(std::move(content)) {}
-        TResult(const TIssues& issues) : Content(""), Issues(issues) {}
+        TResult(TContent&& content) : Content(std::move(content)), CurlResponseCode(CURLE_OK) {}
+        TResult(CURLcode curlResponseCode, const TIssues& issues) : Content(""), CurlResponseCode(curlResponseCode), Issues(issues) {}
         TContent Content;
+        CURLcode CurlResponseCode;
         TIssues Issues;
     };
     using TOnResult = std::function<void(TResult&&)>;
@@ -76,13 +80,13 @@ public:
         TString body,
         TOnResult callback,
         bool put = false,
-        IRetryPolicy</*http response code*/long>::TPtr retryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
 
     virtual void Delete(
         TString url,
         THeaders headers,
         TOnResult callback,
-        IRetryPolicy</*http response code*/long>::TPtr retryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
 
     virtual void Download(
         TString url,
@@ -91,7 +95,7 @@ public:
         std::size_t sizeLimit,
         TOnResult callback,
         TString data = {},
-        IRetryPolicy</*http response code*/long>::TPtr retryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
 
     class TCountedContent : public TContentBase {
     public:
@@ -107,9 +111,9 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr InflightCounter;
     };
 
-    using TOnDownloadStart = std::function<void(long)>; // http code.
+    using TOnDownloadStart = std::function<void(CURLcode, long)>; // http code.
     using TOnNewDataPart = std::function<void(TCountedContent&&)>;
-    using TOnDownloadFinish = std::function<void(TIssues)>;
+    using TOnDownloadFinish = std::function<void(CURLcode, TIssues)>;
     using TCancelHook = std::function<void(TIssue)>;
 
     virtual TCancelHook Download(

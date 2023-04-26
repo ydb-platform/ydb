@@ -352,7 +352,9 @@ public:
     void RemoveCompletingOp(const TOperation::TPtr& op);
     TOperation::TPtr FindCompletingOp(ui64 txId) const;
 
+    void AddCommittingOp(const TRowVersion& version);
     void AddCommittingOp(const TOperation::TPtr& op);
+    void RemoveCommittingOp(const TRowVersion& version);
     void RemoveCommittingOp(const TOperation::TPtr& op);
     bool WaitCompletion(const TOperation::TPtr& op) const;
     bool HasCommittingOpsBelow(TRowVersion upperBound) const;

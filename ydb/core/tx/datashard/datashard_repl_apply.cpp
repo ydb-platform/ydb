@@ -9,8 +9,10 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxApplyReplicationChanges : public TTransactionBase<TDataShard> {
 public:
-    explicit TTxApplyReplicationChanges(TDataShard* self, TEvDataShard::TEvApplyReplicationChanges::TPtr&& ev)
+    explicit TTxApplyReplicationChanges(TDataShard* self, TPipeline& pipeline,
+            TEvDataShard::TEvApplyReplicationChanges::TPtr&& ev)
         : TTransactionBase(self)
+        , Pipeline(pipeline)
         , Ev(std::move(ev))
     {
     }
@@ -22,8 +24,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
-        // TODO: check this is a replicated shard
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready && !Self->IsReplicated()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE);
@@ -33,11 +34,11 @@ public:
         const auto& msg = Ev->Get()->Record;
 
         const auto& tableId = msg.GetTableId();
-        TPathId pathId(tableId.GetOwnerId(), tableId.GetTableId());
+        const TTableId fullTableId(tableId.GetOwnerId(), tableId.GetTableId());
 
         const auto& userTables = Self->GetUserTables();
-        auto it = userTables.find(pathId.LocalPathId);
-        if (pathId.OwnerId != Self->GetPathOwnerId() || it == userTables.end()) {
+        auto it = userTables.find(fullTableId.PathId.LocalPathId);
+        if (fullTableId.PathId.OwnerId != Self->GetPathOwnerId() || it == userTables.end()) {
             TString error = TStringBuilder()
                 << "DataShard " << Self->TabletID() << " does not have a table "
                 << tableId.GetOwnerId() << ":" << tableId.GetTableId();
@@ -62,17 +63,24 @@ public:
             return true;
         }
 
-        auto& source = EnsureSource(txc, pathId, msg.GetSource());
+        auto& source = EnsureSource(txc, fullTableId.PathId, msg.GetSource());
 
         for (const auto& change : msg.GetChanges()) {
-            if (!ApplyChange(txc, userTable, source, change)) {
+            if (!ApplyChange(txc, fullTableId, userTable, source, change)) {
                 Y_VERIFY(Result);
-                return true;
+                break;
             }
         }
 
-        Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
-            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
+        if (MvccReadWriteVersion) {
+            Pipeline.AddCommittingOp(*MvccReadWriteVersion);
+        }
+
+        if (!Result) {
+            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
+        }
+
         return true;
     }
 
@@ -84,19 +92,31 @@ public:
     }
 
     bool ApplyChange(
-            TTransactionContext& txc, const TUserTable& userTable, TReplicationSourceState& source,
-            const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
+            TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
+            TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
     {
+        Y_VERIFY(userTable.IsReplicated());
+
         // TODO: check source and offset, persist new values
         i64 sourceOffset = change.GetSourceOffset();
 
         ui64 writeTxId = change.GetWriteTxId();
-        if (Y_UNLIKELY(writeTxId == 0)) {
-            Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                "Every change must specify a non-zero WriteTxId");
-            return false;
+        if (userTable.ReplicationConfig.HasWeakConsistency()) {
+            if (writeTxId) {
+                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                    "WriteTxId cannot be specified for weak consistency");
+                return false;
+            }
+        } else {
+            if (writeTxId == 0) {
+                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
+                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
+                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
+                    "Non-zero WriteTxId must be specified for strong consistency");
+                return false;
+            }
         }
 
         TSerializedCellVec keyCellVec;
@@ -153,7 +173,19 @@ public:
             }
         }
 
-        txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
+        if (writeTxId) {
+            txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
+        } else {
+            if (!MvccReadWriteVersion) {
+                auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
+                Y_VERIFY_DEBUG(readVersion == writeVersion);
+                MvccReadWriteVersion = writeVersion;
+            }
+
+            Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
+            txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccReadWriteVersion);
+        }
+
         return true;
     }
 
@@ -201,16 +233,24 @@ public:
     void Complete(const TActorContext& ctx) override {
         Y_VERIFY(Ev);
         Y_VERIFY(Result);
-        ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
+
+        if (MvccReadWriteVersion) {
+            Pipeline.RemoveCommittingOp(*MvccReadWriteVersion);
+            Self->SendImmediateWriteResult(*MvccReadWriteVersion, Ev->Sender, Result.Release(), Ev->Cookie);
+        } else {
+            ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
+        }
     }
 
 private:
+    TPipeline& Pipeline;
     TEvDataShard::TEvApplyReplicationChanges::TPtr Ev;
     THolder<TEvDataShard::TEvApplyReplicationChangesResult> Result;
+    std::optional<TRowVersion> MvccReadWriteVersion;
 }; // TTxApplyReplicationChanges
 
 void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxApplyReplicationChanges(this, std::move(ev)), ctx);
+    Execute(new TTxApplyReplicationChanges(this, Pipeline, std::move(ev)), ctx);
 }
 
 } // NDataShard

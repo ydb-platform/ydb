@@ -1898,6 +1898,12 @@ TOperation::TPtr TPipeline::FindCompletingOp(ui64 txId) const {
     return nullptr;
 }
 
+void TPipeline::AddCommittingOp(const TRowVersion& version) {
+    if (!Self->IsMvccEnabled())
+        return;
+    CommittingOps.Add(version);
+}
+
 void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
     if (!Self->IsMvccEnabled() || op->IsReadOnly())
         return;
@@ -1907,6 +1913,12 @@ void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
         CommittingOps.Add(op->GetTxId(), version);
     else
         CommittingOps.Add(version);
+}
+
+void TPipeline::RemoveCommittingOp(const TRowVersion& version) {
+    if (!Self->IsMvccEnabled())
+        return;
+    CommittingOps.Remove(version);
 }
 
 void TPipeline::RemoveCommittingOp(const TOperation::TPtr& op) {

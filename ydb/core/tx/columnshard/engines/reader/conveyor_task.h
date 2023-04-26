@@ -79,6 +79,10 @@ public:
         return Object && Object->InWaiting();
     }
 
+    bool IsStopped() const {
+        return Object && Object->IsStopped();
+    }
+
     void Add(NOlap::TIndexedReadData& indexedDataRead, IDataTasksProcessor::ITask::TPtr task);
 };
 

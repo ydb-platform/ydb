@@ -41,21 +41,30 @@ bool TAssembleFilter::DoApply(TIndexedReadData& owner) const {
     Y_VERIFY(OriginalCount);
     owner.GetCounters().GetOriginalRowsCount()->Add(OriginalCount);
     batch.InitFilter(Filter, FilteredBatch);
+    owner.GetCounters().GetAssembleFilterCount()->Add(1);
     if (!FilteredBatch || FilteredBatch->num_rows() == 0) {
-        owner.GetCounters().GetEmptyFilterPortionsCount()->Add(1);
-        owner.GetCounters().GetEmptyFilterPortionsBytes()->Add(batch.GetFetchedBytes());
+        owner.GetCounters().GetEmptyFilterCount()->Add(1);
+        owner.GetCounters().GetEmptyFilterFetchedBytes()->Add(batch.GetFetchedBytes());
+        owner.GetCounters().GetSkippedBytes()->Add(batch.GetFetchBytes(&owner.GetPostFilterColumns()));
         batch.InitBatch(FilteredBatch);
     } else {
         owner.GetCounters().GetFilteredRowsCount()->Add(FilteredBatch->num_rows());
-        owner.GetCounters().GetUsefulFilterBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
         if (batch.AskedColumnsAlready(owner.GetPostFilterColumns())) {
-            owner.GetCounters().GetFilterOnlyPortionsCount()->Add(1);
-            owner.GetCounters().GetFilterOnlyPortionsBytes()->Add(batch.GetFetchedBytes());
+            owner.GetCounters().GetFilterOnlyCount()->Add(1);
+            owner.GetCounters().GetFilterOnlyFetchedBytes()->Add(batch.GetFetchedBytes());
+            owner.GetCounters().GetFilterOnlyUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
+            owner.GetCounters().GetSkippedBytes()->Add(batch.GetFetchBytes(&owner.GetPostFilterColumns()));
+
             batch.InitBatch(FilteredBatch);
         } else {
-            owner.GetCounters().GetPostFilterPortionsCount()->Add(1);
+            owner.GetCounters().GetTwoPhasesFilterFetchedBytes()->Add(batch.GetFetchedBytes());
+            owner.GetCounters().GetTwoPhasesFilterUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
+
             batch.Reset(&owner.GetPostFilterColumns());
-            owner.GetCounters().GetUsefulPostFilterBytes()->Add(batch.GetWaitingBytes() * FilteredBatch->num_rows() / OriginalCount);
+
+            owner.GetCounters().GetTwoPhasesCount()->Add(1);
+            owner.GetCounters().GetTwoPhasesPostFilterFetchedBytes()->Add(batch.GetWaitingBytes());
+            owner.GetCounters().GetTwoPhasesPostFilterUsefulBytes()->Add(batch.GetWaitingBytes() * FilteredBatch->num_rows() / OriginalCount);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "additional_data")
                 ("filtered_count", FilteredBatch->num_rows())
                 ("blobs_count", batch.GetWaitingBlobs().size())

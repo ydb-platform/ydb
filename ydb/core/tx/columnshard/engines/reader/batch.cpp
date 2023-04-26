@@ -48,6 +48,20 @@ bool TBatch::AskedColumnsAlready(const std::set<ui32>& columnIds) const {
     return true;
 }
 
+ui64 TBatch::GetFetchBytes(const std::set<ui32>* columnIds) {
+    ui64 result = 0;
+    for (const NOlap::TColumnRecord& rec : PortionInfo->Records) {
+        if (columnIds && !columnIds->contains(rec.ColumnId)) {
+            continue;
+        }
+        Y_VERIFY(rec.Portion == Portion);
+        Y_VERIFY(rec.Valid());
+        Y_VERIFY(Granule == rec.Granule);
+        result += rec.BlobRange.Size;
+    }
+    return result;
+}
+
 void TBatch::Reset(const std::set<ui32>* columnIds) {
     if (!columnIds) {
         CurrentColumnIds.reset();

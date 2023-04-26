@@ -44,6 +44,7 @@ public:
     bool AskedColumnsAlready(const std::set<ui32>& columnIds) const;
 
     void Reset(const std::set<ui32>* columnIds);
+    ui64 GetFetchBytes(const std::set<ui32>* columnIds);
 
     void InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch);
     void InitBatch(std::shared_ptr<arrow::RecordBatch> batch);

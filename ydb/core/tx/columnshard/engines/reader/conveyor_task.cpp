@@ -15,6 +15,9 @@ bool IDataTasksProcessor::ITask::DoExecute() {
 bool IDataTasksProcessor::ITask::Apply(NOlap::TIndexedReadData& indexedDataRead) const {
     if (OwnerOperator) {
         OwnerOperator->ReplyReceived();
+        if (OwnerOperator->IsStopped()) {
+            return true;
+        }
     }
     return DoApply(indexedDataRead);
 }

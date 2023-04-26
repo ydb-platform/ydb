@@ -113,10 +113,10 @@ TColumnShardScanIterator::~TColumnShardScanIterator() {
 }
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
-    if (!task->IsDataProcessed()) {
+    if (!task->IsDataProcessed() || DataTasksProcessor.IsStopped()) {
         return;
     }
-    task->Apply(IndexedData);
+    Y_VERIFY(task->Apply(IndexedData));
 }
 
 }

@@ -35,7 +35,7 @@ runs:
     id: th
     shell: bash
     run: |
-      testmo automation:run:create --project-id 1 --name "${{ github.run_id }}" \
+      testmo automation:run:create --instance "$TESTMO_URL" --project-id 1 --name "${{ github.run_id }}" \
         --source "${{inputs.log_suffix}}${{inputs.sanitizer}}" | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
@@ -60,13 +60,13 @@ runs:
     shell: bash
     run: |
       testmo automation:run:submit-thread \
-        --run-id ${{steps.th.outputs.runid}} \
+        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
         --results ${{steps.init.outputs.testrepdir}}/unittests/*.xml 
       testmo automation:run:submit-thread \
-        --run-id ${{steps.th.outputs.runid}} \
+        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
         --results ${{steps.init.outputs.testrepdir}}/suites/*.xml \
         -- cat ${{steps.init.outputs.workdir}}/short.log
-      testmo automation:run:complete --run-id ${{steps.th.outputs.runid}}
+      testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

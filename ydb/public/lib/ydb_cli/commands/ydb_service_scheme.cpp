@@ -111,25 +111,17 @@ namespace {
             Cout << "none" << Endl;
         }
     }
+}
 
-    void PrintAllPermissions(
-        const TString& owner,
-        const TVector<NScheme::TPermissions>& permissions,
-        const TVector<NScheme::TPermissions>& effectivePermissions
-    ) {
-        Cout << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
-        PrintPermissions(permissions);
-        Cout << Endl << "Effective permissions: " << Endl;
-        PrintPermissions(effectivePermissions);
-    }
-
-    void PrintEntryVerbose(const NScheme::TSchemeEntry& entry, bool permissions) {
-        Cout << "<" << EntryTypeToString(entry.Type) << "> " << entry.Name << Endl;
-        if (permissions) {
-            Cout << Endl;
-            PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);
-        }
-    }
+void PrintAllPermissions(
+    const TString& owner,
+    const TVector<NScheme::TPermissions>& permissions,
+    const TVector<NScheme::TPermissions>& effectivePermissions
+) {
+    Cout << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
+    PrintPermissions(permissions);
+    Cout << Endl << "Effective permissions: " << Endl;
+    PrintPermissions(effectivePermissions);
 }
 
 TCommandDescribe::TCommandDescribe()
@@ -174,6 +166,7 @@ int TCommandDescribe::Run(TConfig& config) {
 
 int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result) {
     NScheme::TSchemeEntry entry = result.GetEntry();
+    Cout << "<" << EntryTypeToString(entry.Type) << "> " << entry.Name << Endl;
     switch (entry.Type) {
     case NScheme::ESchemeEntryType::Table:
         return DescribeTable(driver);
@@ -185,9 +178,17 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::CoordinationNode:
         return DescribeCoordinationNode(driver);
     default:
-        WarnAboutTableOptions();
-        PrintEntryVerbose(entry, ShowPermissions);
+        return DescribeEntryDefault(entry);
     }
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeEntryDefault(NScheme::TSchemeEntry entry) {
+    if (ShowPermissions) {
+        Cout << Endl;
+        PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);
+    }
+    WarnAboutTableOptions();
     return EXIT_SUCCESS;
 }
 
@@ -277,6 +278,8 @@ int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescrip
         Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
     }
     PrintTopicConsumers(description.GetConsumers());
+
+    PrintPermissionsIfNeeded(description);
 
     if (ShowStats) {
         PrintStatistics(description);
@@ -386,7 +389,7 @@ int TCommandDescribe::PrintCoordinationNodeResponse(const NYdb::NCoordination::T
 }
 
 int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const {
-    Cout << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
+    Cout << Endl << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
     Cout << "ReadConsistencyMode: " << result.GetReadConsistencyMode() << Endl;
     if (result.GetSessionGracePeriod().Defined()) {
         Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod() << Endl;
@@ -427,6 +430,7 @@ namespace {
         if (!tableDescription.GetTableColumns().size()) {
             return;
         }
+        Cerr << Endl;
         TPrettyTable table({ "Name", "Type", "Family", "Key" }, TPrettyTableConfig().WithoutRowDelimiters());
 
         const TVector<TString>& keyColumns = tableDescription.GetPrimaryKeyColumns();
@@ -777,16 +781,7 @@ void TCommandDescribe::PrintResponsePretty(const NTable::TTableDescription& tabl
             << (tableDescription.GetKeyBloomFilter().GetRef() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription);
-    if (ShowPermissions) {
-        if (tableDescription.GetColumns().size()) {
-            Cout << Endl;
-        }
-        PrintAllPermissions(
-            tableDescription.GetOwner(),
-            tableDescription.GetPermissions(),
-            tableDescription.GetEffectivePermissions()
-        );
-    }
+    PrintPermissionsIfNeeded(tableDescription);
     if (ShowStats) {
         PrintStatistics(tableDescription);
     }

@@ -13,7 +13,7 @@ inputs:
   aws_key_value: 
     required: true
     type: string
-   testman_token:
+  testman_token:
      required: true
      type: string
     

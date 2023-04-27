@@ -29,13 +29,15 @@ runs:
       testmo automation:run:create --instance https://nebius.testmo.net --project-id 1 --name "${{ github.run_id }}" \
         --source "${{inputs.log_suffix}}${{inputs.sanitizer}}" | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
+      echo "repsdir=$(pwd)/test_reports" >> $GITHUB_OUTPUT
+      rm -rf $(pwd)/test_reports/*
   - name: Test
     shell: bash
+    env:
+      REPSDIR: ${{steps.th.outputs.repsdir}}
     run: |
       cd ../build/ydb
       rm -rf $(pwd)/../../tmp/*
-      rm -rf $(pwd)/../../test_reports/*
-      rm -rf $(pwd)/../../test_suites/*
       mkdir -p ../../artifacts
       rm -rf $(pwd)/../../artifacts/*
 
@@ -43,9 +45,9 @@ runs:
 
       # Sed removes coloring from the output
       
-      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" Y_UNITTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
+      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$REPSDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$REPSDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
-              --output-junit $(pwd)/../../test_suites/ctest_report.xml \
+              --output-junit $REPSDIR/suites/ctest_report.xml \
               -L '${{inputs.test_label_regexp}}' | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
         tee >(gzip --stdout > ../../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
@@ -58,10 +60,7 @@ runs:
     run: |
       testmo automation:run:submit-thread \
         --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
-        --results ../../test_suites/*.xml 
-      testmo automation:run:submit-thread \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
-        --results ../../test_suites/*.xml 
+        --results ${{steps.th.outputs.repsdir}}/**/*.xml 
       testmo automation:run:complete \
         --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3

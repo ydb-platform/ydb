@@ -302,6 +302,7 @@ std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TS
 
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
 bool HasContextFuncs(const TExprNode& input);
+IGraphTransformer::TStatus TryConvertToPgOp(TStringBuf op, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
 bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx);
 bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);

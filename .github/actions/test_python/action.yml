@@ -22,8 +22,10 @@ runs:
     run: |
       export source_root=$(pwd)
       export build_root=$(pwd)/../build/
-      rm -rf ${source_root}/ydb/tests/functional/test-results/
+      mkdir -p ../../artifacts
+      rm -rf $(pwd)/../../artifacts/*
       source ${source_root}/ydb/tests/oss/launch/prepare.sh
+      rm -rf ${source_root}/ydb/tests/functional/test-results/
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
 

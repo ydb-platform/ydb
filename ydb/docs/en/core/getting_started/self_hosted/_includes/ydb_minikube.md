@@ -1,12 +1,12 @@
 # Running {{ ydb-short-name }} in Minikube
 
-To create a {{ ydb-short-name }} cluster using [Minikube](https://kubernetes.io/ru/docs/tasks/tools/install-minikube/), follow these steps.
+To create a {{ ydb-short-name }} cluster using [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/), follow these steps.
 
 ## Before you start {#before-begin}
 
 1. Install the {{ k8s }} CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl).
 
-1. Install and run [Minikube](https://kubernetes.io/ru/docs/tasks/tools/install-minikube/).
+1. Install and run [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
 
 1. Install the {{ k8s }} [Helm 3](https://helm.sh/docs/intro/install/) package manager.
 

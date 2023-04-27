@@ -174,9 +174,6 @@ public:
         Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
         Functions["EmptyList"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["EmptyDict"] = &TCallableConstraintTransformer::FromEmpty;
-        Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
-        Functions["DictKeys"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
-        Functions["DictPayloads"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["DictFromKeys"] = &TCallableConstraintTransformer::DictFromKeysWrap;
         Functions["If"] = &TCallableConstraintTransformer::IfWrap;
         Functions["Nothing"] = &TCallableConstraintTransformer::FromEmpty;
@@ -200,7 +197,7 @@ public:
         Functions["GraceJoinCore"] = &TCallableConstraintTransformer::GraceJoinCoreWrap;
         Functions["CommonJoinCore"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["ToDict"] = &TCallableConstraintTransformer::ToDictWrap;
-        Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>;
+        Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TEmptyConstraintNode>;
         Functions["DictKeys"] = &TCallableConstraintTransformer::DictHalfWrap<true>;
         Functions["DictPayloads"] = &TCallableConstraintTransformer::DictHalfWrap<false>;
         Functions["Chain1Map"] = &TCallableConstraintTransformer::Chain1MapWrap<false>;
@@ -2913,6 +2910,8 @@ private:
                 input->AddConstraint(extracted);
         ReduceFromHead<TUniqueConstraintNode>(input, reduce, ctx);
         ReduceFromHead<TDistinctConstraintNode>(input, reduce, ctx);
+        ReduceFromHead<TPartOfUniqueConstraintNode>(input, reduce, ctx);
+        ReduceFromHead<TPartOfDistinctConstraintNode>(input, reduce, ctx);
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 

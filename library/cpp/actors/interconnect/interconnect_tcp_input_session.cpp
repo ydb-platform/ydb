@@ -6,10 +6,35 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    void TReceiveContext::TPerChannelContext::CalculateBytesToCatch() {
-        XdcBytesToCatch = FetchOffset;
+    void TReceiveContext::TPerChannelContext::PrepareCatchBuffer() {
+        size_t bytesToCatch = FetchOffset;
         for (auto it = XdcBuffers.begin(), end = it + FetchIndex; it != end; ++it) {
-            XdcBytesToCatch += it->size();
+            bytesToCatch += it->size();
+        }
+
+        XdcCatchBuffer = TRcBuf::Uninitialized(bytesToCatch);
+        XdcCatchBytesRead = 0;
+    }
+
+    void TReceiveContext::TPerChannelContext::ApplyCatchBuffer() {
+        if (auto buffer = std::exchange(XdcCatchBuffer, {})) {
+            Y_VERIFY(XdcCatchBytesRead >= buffer.size());
+
+            const size_t offset = XdcCatchBytesRead % buffer.size();
+            const char *begin = buffer.data();
+            const char *mid = begin + offset;
+            const char *end = begin + buffer.size();
+            Y_VERIFY_DEBUG(begin <= mid && mid < end);
+
+            TRope rope;
+            rope.Insert(rope.End(), TRcBuf(TRcBuf::Piece, mid, end, buffer));
+            if (begin != mid) {
+                rope.Insert(rope.End(), TRcBuf(TRcBuf::Piece, begin, mid, buffer));
+            }
+
+            DropFront(&rope, buffer.size());
+        } else {
+            Y_VERIFY_DEBUG(!XdcCatchBytesRead);
         }
     }
 
@@ -35,6 +60,8 @@ namespace NActors {
     }
 
     void TReceiveContext::TPerChannelContext::DropFront(TRope *from, size_t numBytes) {
+        Y_VERIFY_DEBUG(from || !XdcCatchBuffer);
+
         size_t n = numBytes;
         for (auto& pendingEvent : PendingEvents) {
             const size_t numBytesInEvent = Min(n, pendingEvent.XdcSizeLeft);
@@ -97,10 +124,10 @@ namespace NActors {
 
         // calculate number of bytes to catch
         for (auto& context : Context->ChannelArray) {
-            context.CalculateBytesToCatch();
+            context.PrepareCatchBuffer();
         }
         for (auto& [channel, context] : Context->ChannelMap) {
-            context.CalculateBytesToCatch();
+            context.PrepareCatchBuffer();
         }
 
         UsageHisto.fill(0);
@@ -317,20 +344,21 @@ namespace NActors {
             }
         }
         if (PayloadSize) {
-            const ui64 expected = Context->LastProcessedSerial + 1;
-            if (serial == 0 || serial > expected) {
-                LOG_CRIT_IC_SESSION("ICIS06", "packet serial %" PRIu64 ", but %" PRIu64 " expected", serial, expected);
+            const ui64 expectedMin = Context->GetLastPacketSerialToConfirm() + 1;
+            const ui64 expectedMax = Context->LastProcessedSerial + 1;
+            Y_VERIFY_DEBUG(expectedMin <= expectedMax);
+            if (CurrentSerial ? serial != CurrentSerial + 1 : (serial == 0 || serial > expectedMin)) {
+                LOG_CRIT_IC_SESSION("ICIS06", "%s", TString(TStringBuilder()
+                        << "packet serial number mismatch"
+                        << " Serial# " << serial
+                        << " ExpectedMin# " << expectedMin
+                        << " ExpectedMax# " << expectedMax
+                        << " CurrentSerial# " << CurrentSerial
+                    ).data());
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             }
-            if (Context->LastProcessedSerial <= serial) {
-                XdcCatchStreamFinalPending = true; // we can't switch it right now, only after packet is fully processed
-            }
-            if (serial == expected) {
-                InboundPacketQ.push_back(TInboundPacket{serial, 0});
-                IgnorePayload = false;
-            } else {
-                IgnorePayload = true;
-            }
+            IgnorePayload = serial != expectedMax;
+            CurrentSerial = serial;
             State = EState::PAYLOAD;
             Y_VERIFY_DEBUG(!Payload);
         } else if (serial & TTcpPacketBuf::PingRequestMask) {
@@ -355,6 +383,7 @@ namespace NActors {
         if (PayloadSize) {
             return; // there is still some data to receive in the Payload rope
         }
+        InboundPacketQ.push_back(TInboundPacket{CurrentSerial, 0});
         State = EState::HEADER;
         if (!Params.Encryption) { // see if we are checksumming packet body
             for (const auto&& [data, size] : Payload) {
@@ -423,8 +452,14 @@ namespace NActors {
         }
 
         // mark packet as processed
-        XdcCatchStreamFinal = XdcCatchStreamFinalPending;
-        Context->LastProcessedSerial += !IgnorePayload;
+        if (IgnorePayload) {
+            Y_VERIFY_DEBUG(CurrentSerial <= Context->LastProcessedSerial);
+        } else {
+            ++Context->LastProcessedSerial;
+            Y_VERIFY_DEBUG(CurrentSerial == Context->LastProcessedSerial);
+        }
+        XdcCatchStream.Ready = Context->LastProcessedSerial == CurrentSerial;
+        ApplyXdcCatchStream();
         ProcessInboundPacketQ(0);
 
         ++PacketsReadFromSocket;
@@ -432,7 +467,7 @@ namespace NActors {
         IgnoredDataPacketsFromSocket += IgnorePayload;
     }
 
-    void TInputSessionTCP::ProcessInboundPacketQ(size_t numXdcBytesRead) {
+    void TInputSessionTCP::ProcessInboundPacketQ(ui64 numXdcBytesRead) {
         for (; !InboundPacketQ.empty(); InboundPacketQ.pop_front()) {
             auto& front = InboundPacketQ.front();
 
@@ -445,9 +480,11 @@ namespace NActors {
                 break;
             }
 
-            const bool success = Context->AdvanceLastPacketSerialToConfirm(front.Serial);
-            Y_VERIFY_DEBUG(Context->GetLastPacketSerialToConfirm() <= Context->LastProcessedSerial);
-            if (!success) {
+            Y_VERIFY_DEBUG(front.Serial + InboundPacketQ.size() - 1 <= Context->LastProcessedSerial,
+                "front.Serial# %" PRIu64 " LastProcessedSerial# %" PRIu64 " InboundPacketQ.size# %zu",
+                front.Serial, Context->LastProcessedSerial, InboundPacketQ.size());
+
+            if (Context->GetLastPacketSerialToConfirm() < front.Serial && !Context->AdvanceLastPacketSerialToConfirm(front.Serial)) {
                 throw TExReestablishConnection{TDisconnectReason::NewSession()};
             }
         }
@@ -503,16 +540,18 @@ namespace NActors {
                         XdcChecksumQ.emplace_back(size, checksumExpected);
                     }
 
+                    // account channel and number of bytes in XDC for this packet
+                    auto& packet = InboundPacketQ.back();
+                    packet.XdcUnreadBytes += size;
+
                     if (IgnorePayload) {
                         // this packet was already marked as 'processed', all commands had been executed, but we must
-                        // parse XDC stream correctly
-                        XdcCatchStreamBytesPending += size;
-                        XdcCatchStreamMarkup.emplace_back(channel, size);
+                        // parse XDC stream from this packet correctly
+                        const bool apply = Context->GetLastPacketSerialToConfirm() < CurrentSerial &&
+                            GetPerChannelContext(channel).XdcCatchBuffer;
+                        XdcCatchStream.BytesPending += size;
+                        XdcCatchStream.Markup.emplace_back(channel, apply, size);
                     } else {
-                        // account channel and number of bytes in XDC for this packet
-                        auto& packet = InboundPacketQ.back();
-                        packet.XdcUnreadBytes += size;
-
                         // find buffers and acquire data buffer pointers
                         context.FetchBuffers(channel, size, XdcInputQ);
                     }
@@ -538,7 +577,7 @@ namespace NActors {
             auto& descr = *pendingEvent.EventData;
 #if IC_FORCE_HARDENED_PACKET_CHECKS
             if (descr.Len != pendingEvent.Payload.GetSize()) {
-                LOG_CRIT_IC_SESSION("ICISxx", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
+                LOG_CRIT_IC_SESSION("ICIS17", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
                     descr.Type, pendingEvent.Payload.GetSize(), descr.Len);
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
@@ -693,83 +732,89 @@ namespace NActors {
     bool TInputSessionTCP::ReadXdcCatchStream(ui64 *numDataBytes) {
         bool progress = false;
 
-        while (XdcCatchStreamBytesPending) { // read data into catch stream if we still have to
-            if (!XdcCatchStreamBuffer) {
-                XdcCatchStreamBuffer = TRcBuf::Uninitialized(64 * 1024);
+        while (XdcCatchStream.BytesPending) {
+            if (!XdcCatchStream.Buffer) {
+                XdcCatchStream.Buffer = TRcBuf::Uninitialized(64 * 1024);
             }
 
-            const size_t numBytesToRead = Min<size_t>(XdcCatchStreamBytesPending, XdcCatchStreamBuffer.size() - XdcCatchStreamBufferOffset);
+            const size_t numBytesToRead = Min<size_t>(XdcCatchStream.BytesPending, XdcCatchStream.Buffer.size());
 
-            TIoVec iov{XdcCatchStreamBuffer.GetDataMut() + XdcCatchStreamBufferOffset, numBytesToRead};
+            TIoVec iov{XdcCatchStream.Buffer.GetDataMut(), numBytesToRead};
             ssize_t recvres = Read(*XdcSocket, XdcPollerToken, &Context->XdcReadPending, &iov, 1);
             if (recvres == -1) {
                 return progress;
             }
 
-            HandleXdcChecksum({XdcCatchStreamBuffer.data() + XdcCatchStreamBufferOffset, static_cast<size_t>(recvres)});
+            HandleXdcChecksum({XdcCatchStream.Buffer.data(), static_cast<size_t>(recvres)});
 
-            XdcCatchStreamBufferOffset += recvres;
-            XdcCatchStreamBytesPending -= recvres;
+            XdcCatchStream.BytesPending -= recvres;
+            XdcCatchStream.BytesProcessed += recvres;
             *numDataBytes += recvres;
             BytesReadFromXdcSocket += recvres;
 
-            if (XdcCatchStreamBufferOffset == XdcCatchStreamBuffer.size() || XdcCatchStreamBytesPending == 0) {
-                TRope(std::exchange(XdcCatchStreamBuffer, {})).ExtractFront(XdcCatchStreamBufferOffset, &XdcCatchStream);
-                XdcCatchStreamBufferOffset = 0;
+            // scatter read data
+            const char *in = XdcCatchStream.Buffer.data();
+            while (recvres) {
+                Y_VERIFY_DEBUG(!XdcCatchStream.Markup.empty());
+                auto& [channel, apply, bytes] = XdcCatchStream.Markup.front();
+                size_t bytesInChannel = Min<size_t>(recvres, bytes);
+                bytes -= bytesInChannel;
+                recvres -= bytesInChannel;
+
+                if (apply) {
+                    auto& context = GetPerChannelContext(channel);
+                    while (bytesInChannel) {
+                        const size_t offset = context.XdcCatchBytesRead % context.XdcCatchBuffer.size();
+                        TMutableContiguousSpan out = context.XdcCatchBuffer.GetContiguousSpanMut().SubSpan(offset, bytesInChannel);
+                        memcpy(out.data(), in, out.size());
+                        context.XdcCatchBytesRead += out.size();
+                        in += out.size();
+                        bytesInChannel -= out.size();
+                    }
+                } else {
+                    in += bytesInChannel;
+                }
+
+                if (!bytes) {
+                    XdcCatchStream.Markup.pop_front();
+                }
             }
 
             progress = true;
         }
 
-        if (XdcCatchStreamFinal && XdcCatchStream) {
-            // calculate total number of bytes to catch
-            size_t totalBytesToCatch = 0;
-            for (auto& context : Context->ChannelArray) {
-                totalBytesToCatch += context.XdcBytesToCatch;
-            }
-            for (auto& [channel, context] : Context->ChannelMap) {
-                totalBytesToCatch += context.XdcBytesToCatch;
-            }
-
-            // calculate ignored offset
-            Y_VERIFY(totalBytesToCatch <= XdcCatchStream.GetSize());
-            size_t bytesToIgnore = XdcCatchStream.GetSize() - totalBytesToCatch;
-
-            // process catch stream markup
-            THashSet<ui16> channels;
-            for (auto [channel, size] : XdcCatchStreamMarkup) {
-                if (const size_t n = Min<size_t>(bytesToIgnore, size)) {
-                    XdcCatchStream.EraseFront(n);
-                    bytesToIgnore -= n;
-                    size -= n;
-                }
-                if (const size_t n = Min<size_t>(totalBytesToCatch, size)) {
-                    GetPerChannelContext(channel).DropFront(&XdcCatchStream, n);
-                    channels.insert(channel);
-                    totalBytesToCatch -= n;
-                    size -= n;
-                }
-                Y_VERIFY(!size);
-            }
-            for (ui16 channel : channels) {
-                ProcessEvents(GetPerChannelContext(channel));
-            }
-
-            // ensure everything was processed
-            Y_VERIFY(!XdcCatchStream);
-            Y_VERIFY(!bytesToIgnore);
-            Y_VERIFY(!totalBytesToCatch);
-            XdcCatchStreamMarkup = {};
-        }
+        ApplyXdcCatchStream();
 
         return progress;
+    }
+
+    void TInputSessionTCP::ApplyXdcCatchStream() {
+        if (!XdcCatchStream.Applied && XdcCatchStream.Ready && !XdcCatchStream.BytesPending) {
+            Y_VERIFY_DEBUG(XdcCatchStream.Markup.empty());
+
+            auto process = [&](auto& context) {
+                context.ApplyCatchBuffer();
+                ProcessEvents(context);
+            };
+            for (auto& context : Context->ChannelArray) {
+                process(context);
+            }
+            for (auto& [channel, context] : Context->ChannelMap) {
+                process(context);
+            }
+
+            ProcessInboundPacketQ(XdcCatchStream.BytesProcessed);
+
+            XdcCatchStream.Buffer = {};
+            XdcCatchStream.Applied = true;
+        }
     }
 
     bool TInputSessionTCP::ReadXdc(ui64 *numDataBytes) {
         bool progress = ReadXdcCatchStream(numDataBytes);
 
         // exit if we have no work to do
-        if (XdcInputQ.empty() || XdcCatchStreamBytesPending) {
+        if (XdcInputQ.empty() || !XdcCatchStream.Applied) {
             return progress;
         }
 

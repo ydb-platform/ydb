@@ -133,9 +133,12 @@ namespace NActors {
             std::deque<TMutableContiguousSpan> XdcBuffers; // receive queue for current channel
             size_t FetchIndex = 0;
             size_t FetchOffset = 0;
-            size_t XdcBytesToCatch = 0; // number of bytes to catch after reconnect
 
-            void CalculateBytesToCatch();
+            ui64 XdcCatchBytesRead = 0; // number of bytes actually read into cyclic buffer
+            TRcBuf XdcCatchBuffer;
+
+            void PrepareCatchBuffer();
+            void ApplyCatchBuffer();
             void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
         };
@@ -174,8 +177,8 @@ namespace NActors {
             }
         }
 
-        void ResetLastPacketSerialToConfirm() {
-            LastPacketSerialToConfirm = LastProcessedSerial;
+        void UnlockLastPacketSerialToConfirm() {
+            LastPacketSerialToConfirm &= ~LastPacketSerialToConfirmLockBit;
         }
 
         ui64 GetLastPacketSerialToConfirm() {
@@ -258,6 +261,7 @@ namespace NActors {
             PAYLOAD,
         };
         EState State = EState::HEADER;
+        ui64 CurrentSerial = 0;
 
         std::vector<char> XdcCommands;
 
@@ -267,17 +271,19 @@ namespace NActors {
         };
         std::deque<TInboundPacket> InboundPacketQ;
         std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference
-
-        // catch stream -- used after TCP reconnect to match unread XDC stream with main packet stream
-        TRope XdcCatchStream; // temporary data buffer to process XDC stream retransmission upon reconnect
-        TRcBuf XdcCatchStreamBuffer;
-        size_t XdcCatchStreamBufferOffset = 0;
-        ui64 XdcCatchStreamBytesPending = 0;
-        std::deque<std::tuple<ui16, ui16>> XdcCatchStreamMarkup; // a queue of pairs (channel, bytes)
         std::deque<std::tuple<ui16, ui32>> XdcChecksumQ; // (size, expectedChecksum)
         ui32 XdcCurrentChecksum = 0;
-        bool XdcCatchStreamFinal = false;
-        bool XdcCatchStreamFinalPending = false;
+
+        // catch stream -- used after TCP reconnect to match XDC stream with main packet stream
+        struct TXdcCatchStream {
+            TRcBuf Buffer;
+            ui64 BytesPending = 0;
+            ui64 BytesProcessed = 0;
+            std::deque<std::tuple<ui16, bool, size_t>> Markup; // a queue of tuples (channel, apply, bytes)
+            bool Ready = false;
+            bool Applied = false;
+        };
+        TXdcCatchStream XdcCatchStream;
 
         THolder<TEvUpdateFromInputSession> UpdateFromInputSession;
 
@@ -295,13 +301,14 @@ namespace NActors {
         void ReceiveData();
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
-        void ProcessInboundPacketQ(size_t numXdcBytesRead);
+        void ProcessInboundPacketQ(ui64 numXdcBytesRead);
         void ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context);
         void ProcessEvents(TReceiveContext::TPerChannelContext& context);
         ssize_t Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token, bool *readPending,
             const TIoVec *iov, size_t num);
         bool ReadMore();
         bool ReadXdcCatchStream(ui64 *numDataBytes);
+        void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
 
@@ -384,7 +391,7 @@ namespace NActors {
         ui64 MessagesGot = 0;
         ui64 MessagesWrittenToBuffer = 0;
         ui64 PacketsGenerated = 0;
-        ui64 PacketsWrittenToSocket = 0;
+        ui64 BytesWrittenToSocket = 0;
         ui64 PacketsConfirmed = 0;
 
     public:
@@ -459,7 +466,7 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void WriteData();
-        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
+        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket);
 
         ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
@@ -530,17 +537,14 @@ namespace NActors {
             bool Data;
         };
         std::deque<TOutgoingPacket> SendQueue; // packet boundaries
-        size_t SendQueuePos = 0; // packet being sent now
-        size_t SendOffset = 0;
-        bool WriteSinglePacketAndDropConfirmed = false;
+        size_t OutgoingOffset = 0;
+        size_t XdcOffset = 0;
 
         ui64 XdcBytesSent = 0;
 
         ui64 WriteBlockedCycles = 0; // start of current block period
         TDuration WriteBlockedTotal; // total incremental duration that session has been blocked
         bool WriteBlockedByFullSendBuffer = false;
-
-        ui64 BytesUnwritten = 0; // number of bytes in outgoing main queue
 
         TDuration GetWriteBlockedTotal() const {
             return WriteBlockedTotal + (WriteBlockedByFullSendBuffer
@@ -549,7 +553,6 @@ namespace NActors {
         }
 
         ui64 OutputCounter;
-        ui64 LastSentSerial = 0;
 
         TInstant LastHandshakeDone;
 

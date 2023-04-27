@@ -223,7 +223,7 @@ namespace NActors {
             i64(*ev->Get()->Socket));
 
         NewConnectionSet = TActivationContext::Now();
-        PacketsWrittenToSocket = 0;
+        BytesWrittenToSocket = 0;
 
         SendBufferSize = ev->Get()->Socket->GetSendBufferSize();
         Socket = std::move(ev->Get()->Socket);
@@ -248,9 +248,9 @@ namespace NActors {
         ReceiveContext->XdcReadPending = false;
 
         // create input session actor
+        ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
             Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
-        ReceiveContext->ResetLastPacketSerialToConfirm();
         ReceiverId = Params.Encryption ? RegisterWithSameMailbox(actor.Release()) : Register(actor.Release(), TMailboxType::ReadAsFilled);
 
         // register our socket in poller actor
@@ -274,36 +274,28 @@ namespace NActors {
         //
         // scan through send queue and leave only those packets who have data -- we will simply resend them; drop all other
         // auxiliary packets; also reset packet metrics to zero to start sending from the beginning
-        // also reset SendQueuePos
+        // also reset send queue
 
         // drop confirmed packets first as we do not need unwanted retransmissions
-        WriteSinglePacketAndDropConfirmed = false;
         OutgoingStream.RewindToEnd();
         XdcStream.RewindToEnd();
-        SendQueuePos = SendQueue.size();
-        SendOffset = 0;
+        OutgoingOffset = XdcOffset = Max<size_t>();
         DropConfirmed(nextPacket);
         OutgoingStream.Rewind();
         XdcStream.Rewind();
-        SendQueuePos = 0;
-        SendOffset = 0;
+        OutgoingOffset = XdcOffset = 0;
 
         ui64 serial = Max<ui64>();
-        BytesUnwritten = 0;
         for (const auto& packet : SendQueue) {
-            if (packet.Data && packet.Serial < serial) {
+            if (packet.Data) {
                 serial = packet.Serial;
+                break;
             }
-            BytesUnwritten += packet.PacketSize;
         }
 
         Y_VERIFY(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed);
-        LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " SendQueuePos.Serial# %" PRIu64 "\n",
+        LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
-
-        Y_VERIFY_DEBUG(BytesUnwritten == OutgoingStream.CalculateUnsentSize(), "%s", TString(TStringBuilder()
-            << "BytesUnwritten# " << BytesUnwritten
-            << " CalculateUnsentSize# " << OutgoingStream.CalculateUnsentSize()).data());
 
         SwitchStuckPeriod();
 
@@ -576,13 +568,14 @@ namespace NActors {
     void TInterconnectSessionTCP::WriteData() {
         Y_VERIFY(Socket); // ensure that socket wasn't closed
 
-        // total bytes written during this call
-        ui64 written = 0;
-
         auto process = [&](NInterconnect::TOutgoingStream& stream, const TIntrusivePtr<NInterconnect::TStreamSocket>& socket,
-                const TPollerToken::TPtr& token, bool *writeBlocked, size_t maxBytes, auto&& callback) {
+                const TPollerToken::TPtr& token, bool *writeBlocked) {
+            size_t totalWritten = 0;
+
+            *writeBlocked = false;
+
             while (stream && socket) {
-                ssize_t r = Write(stream, *socket, maxBytes);
+                ssize_t r = Write(stream, *socket);
                 if (r == -1) {
                     *writeBlocked = true;
                     if (token) {
@@ -593,57 +586,35 @@ namespace NActors {
                     break; // error condition
                 }
 
-                *writeBlocked = false;
-                written += r;
-                callback(r);
+                stream.Advance(r);
+                totalWritten += r;
             }
-            if (!socket) {
-                *writeBlocked = true;
-            } else if (!stream) {
-                *writeBlocked = false;
-            }
+
+            return totalWritten;
         };
 
-        Y_VERIFY_DEBUG(BytesUnwritten == OutgoingStream.CalculateUnsentSize());
+        // total bytes written during this call
+        ui64 written = 0;
 
-        Y_VERIFY_DEBUG(!WriteSinglePacketAndDropConfirmed || SendQueuePos != SendQueue.size());
-        const size_t maxBytesFromMainStream = WriteSinglePacketAndDropConfirmed
-            ? SendQueue[SendQueuePos].PacketSize - SendOffset
-            : Max<size_t>();
-        process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, maxBytesFromMainStream, [&](size_t r) {
-            Y_VERIFY(r <= BytesUnwritten);
-            BytesUnwritten -= r;
+        if (const size_t w = process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked)) {
+            written += w;
+            BytesWrittenToSocket += w;
+            OutgoingOffset += w;
+        }
 
-            OutgoingStream.Advance(r);
-
-            ui64 packets = 0;
-            Y_VERIFY_DEBUG(SendQueuePos != SendQueue.size());
-            SendOffset += r;
-            for (auto it = SendQueue.begin() + SendQueuePos; SendOffset && it->PacketSize <= SendOffset; ++SendQueuePos, ++it) {
-                SendOffset -= it->PacketSize;
-                Y_VERIFY_DEBUG(!it->Data || it->Serial <= OutputCounter);
-                if (it->Data && LastSentSerial < it->Serial) {
-                    LastSentSerial = it->Serial;
-                }
-                ++PacketsWrittenToSocket;
-                ++packets;
-                Y_VERIFY_DEBUG(SendOffset == 0 || SendQueuePos != SendQueue.size() - 1);
-
-                if (std::exchange(WriteSinglePacketAndDropConfirmed, false)) { // drop remaining already confirmed packets
-                    DropConfirmed(LastConfirmed);
-                }
-            }
-
-            Y_VERIFY_DEBUG(BytesUnwritten == OutgoingStream.CalculateUnsentSize());
-        });
-
-        process(XdcStream, XdcSocket, XdcPollerToken, &ReceiveContext->XdcWriteBlocked, Max<size_t>(), [&](size_t r) {
-            XdcBytesSent += r;
-            XdcStream.Advance(r);
-        });
+        if (const size_t w = process(XdcStream, XdcSocket, XdcPollerToken, &ReceiveContext->XdcWriteBlocked)) {
+            written += w;
+            XdcBytesSent += w;
+            XdcOffset += w;
+        }
 
         if (written) {
             Proxy->Metrics->AddTotalBytesWritten(written);
+        }
+
+        if (DropConfirmed(LastConfirmed) && !RamInQueue) { // issue GenerateTraffic a bit later
+            RamInQueue = new TEvRam(false);
+            Send(SelfId(), RamInQueue);
         }
 
         const bool writeBlockedByFullSendBuffer = ReceiveContext->MainWriteBlocked || ReceiveContext->XdcWriteBlocked;
@@ -656,8 +627,7 @@ namespace NActors {
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
     }
 
-    ssize_t TInterconnectSessionTCP::Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket,
-            size_t maxBytes) {
+    ssize_t TInterconnectSessionTCP::Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket) {
         LWPROBE_IF_TOO_LONG(SlowICWriteData, Proxy->PeerNodeId, ms) {
             constexpr ui32 iovLimit = 256;
 
@@ -678,21 +648,6 @@ namespace NActors {
 
             stream.ProduceIoVec(wbuffers, maxElementsInIOV);
             Y_VERIFY(!wbuffers.empty());
-
-            if (maxBytes != Max<size_t>()) {
-                for (auto it = wbuffers.begin(); it != wbuffers.end(); ++it) {
-                    if (maxBytes < it->Size) {
-                        if (maxBytes) {
-                            it->Size = maxBytes;
-                            ++it;
-                        }
-                        wbuffers.erase(it, wbuffers.end());
-                        break;
-                    } else {
-                        maxBytes -= it->Size;
-                    }
-                }
-            }
 
             TString err;
             ssize_t r = 0;
@@ -818,10 +773,6 @@ namespace NActors {
 
         // count number of bytes pending for write
         const size_t packetSize = packet.GetPacketSize();
-        BytesUnwritten += packetSize;
-        Y_VERIFY_DEBUG(BytesUnwritten == OutgoingStream.CalculateUnsentSize(), "%s", TString(TStringBuilder()
-                << "BytesUnwritten# " << BytesUnwritten << " packetSize# " << packetSize
-                << " CalculateUnsentSize# " << OutgoingStream.CalculateUnsentSize()).data());
 
 #ifndef NDEBUG
         const size_t outgoingStreamSizeAfter = OutgoingStream.CalculateOutgoingSize();
@@ -844,8 +795,7 @@ namespace NActors {
         });
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %zu"
-            " InflightDataAmount# %" PRIu64 " BytesUnwritten# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(),
-            InflightDataAmount, BytesUnwritten);
+            " InflightDataAmount# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(), InflightDataAmount);
 
         // reset forced packet sending timestamp as we have confirmed all received data
         ResetFlushLogic();
@@ -858,59 +808,34 @@ namespace NActors {
     bool TInterconnectSessionTCP::DropConfirmed(ui64 confirm) {
         LOG_DEBUG_IC_SESSION("ICS23", "confirm count: %" PRIu64, confirm);
 
-        Y_VERIFY(LastConfirmed <= confirm && confirm <= LastSentSerial && LastSentSerial <= OutputCounter,
-            "%s confirm# %" PRIu64 " LastConfirmed# %" PRIu64 " OutputCounter# %" PRIu64 " LastSentSerial# %" PRIu64,
-            LogPrefix.data(), confirm, LastConfirmed, OutputCounter, LastSentSerial);
+        Y_VERIFY(LastConfirmed <= confirm && confirm <= OutputCounter,
+            "%s confirm# %" PRIu64 " LastConfirmed# %" PRIu64 " OutputCounter# %" PRIu64,
+            LogPrefix.data(), confirm, LastConfirmed, OutputCounter);
         LastConfirmed = confirm;
 
         std::optional<ui64> lastDroppedSerial = 0;
         ui32 numDropped = 0;
 
-#ifndef NDEBUG
-        {
-            size_t totalBytesInSendQueue = 0;
-            size_t unsentBytesInSendQueue = 0;
-            for (size_t i = 0; i < SendQueue.size(); ++i) {
-                totalBytesInSendQueue += SendQueue[i].PacketSize;
-                if (SendQueuePos <= i) {
-                    unsentBytesInSendQueue += SendQueue[i].PacketSize;
-                }
-            }
-            unsentBytesInSendQueue -= SendOffset;
-            Y_VERIFY(totalBytesInSendQueue == OutgoingStream.CalculateOutgoingSize());
-            Y_VERIFY(unsentBytesInSendQueue == OutgoingStream.CalculateUnsentSize());
-        }
-#endif
-
         // drop confirmed packets; this also includes any auxiliary packets as their serial is set to zero, effectively
         // making Serial <= confirm true
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
-        for (; !SendQueue.empty(); SendQueue.pop_front(), --SendQueuePos) {
+        for (; !SendQueue.empty(); SendQueue.pop_front()) {
             auto& front = SendQueue.front();
             if (front.Data && confirm < front.Serial) {
                 break;
             }
-            if (!SendQueuePos) {
-                // we are sending this packet right now; it might be a race -- we are resending packets after reconnection,
-                // while getting confirmation for higher packet number (as we have sent it before); here we have to send
-                // these packets (if necessary) and skip the rest of them
-                if (!SendOffset && Socket && !Socket->ExpectingCertainWrite()) {
-                    // just advance to next packet -- we won't send current one
-                    ++SendQueuePos;
-                } else {
-                    // can't skip packets now, make a mark and exit
-                    WriteSinglePacketAndDropConfirmed = true;
-                    break;
-                }
+            if (OutgoingOffset < front.PacketSize || XdcOffset < front.ExternalSize) {
+                break; // packet wasn't actually sent to receiver, can't drop it now
             }
             if (front.Data) {
                 lastDroppedSerial.emplace(front.Serial);
             }
+            OutgoingOffset -= front.PacketSize;
+            XdcOffset -= front.ExternalSize;
             bytesDropped += front.PacketSize;
             bytesDroppedFromXdc += front.ExternalSize;
             ++numDropped;
-            Y_VERIFY_DEBUG(SendQueuePos != 0);
         }
 
         if (!numDropped) {
@@ -1238,7 +1163,6 @@ namespace NActors {
                             MON_VAR(MessagesGot)
                             MON_VAR(MessagesWrittenToBuffer)
                             MON_VAR(PacketsGenerated)
-                            MON_VAR(PacketsWrittenToSocket)
                             MON_VAR(PacketsConfirmed)
                             MON_VAR(ConfirmPacketsForcedBySize)
                             MON_VAR(ConfirmPacketsForcedByTimeout)
@@ -1284,7 +1208,6 @@ namespace NActors {
                             MON_VAR(SendQueue.size())
                             MON_VAR(NumEventsInReadyChannels)
                             MON_VAR(TotalOutputQueueSize)
-                            MON_VAR(BytesUnwritten)
                             MON_VAR(InflightDataAmount)
                             MON_VAR(unsentQueueSize)
                             MON_VAR(SendBufferSize)
@@ -1292,7 +1215,6 @@ namespace NActors {
                             MON_VAR(now - LastPayloadActivityTimestamp)
                             MON_VAR(LastHandshakeDone)
                             MON_VAR(OutputCounter)
-                            MON_VAR(LastSentSerial)
                             MON_VAR(LastConfirmed)
                             MON_VAR(FlushSchedule.size())
                             MON_VAR(MaxFlushSchedule)
@@ -1301,15 +1223,18 @@ namespace NActors {
 
                             MON_VAR(GetWriteBlockedTotal())
 
+                            MON_VAR(BytesWrittenToSocket)
                             MON_VAR(XdcBytesSent)
 
                             MON_VAR(OutgoingStream.CalculateOutgoingSize())
                             MON_VAR(OutgoingStream.CalculateUnsentSize())
                             MON_VAR(OutgoingStream.GetSendQueueSize())
+                            MON_VAR(OutgoingOffset)
 
                             MON_VAR(XdcStream.CalculateOutgoingSize())
                             MON_VAR(XdcStream.CalculateUnsentSize())
                             MON_VAR(XdcStream.GetSendQueueSize())
+                            MON_VAR(XdcOffset)
 
                             TString clockSkew;
                             i64 x = GetClockSkew();

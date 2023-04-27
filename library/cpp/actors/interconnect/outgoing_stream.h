@@ -163,7 +163,8 @@ namespace NInterconnect {
                     front.Span = front.Span.SubSpan(numBytes, Max<size_t>());
                     if (SendQueuePos == 0) {
                         Y_VERIFY_DEBUG(numBytes <= SendOffset, "numBytes# %zu SendOffset# %zu SendQueuePos# %zu"
-                            " SendQueue.size# %zu", numBytes, SendOffset, SendQueuePos, SendQueue.size());
+                            " SendQueue.size# %zu CalculateUnsentSize# %zu", numBytes, SendOffset, SendQueuePos,
+                            SendQueue.size(), CalculateUnsentSize());
                         SendOffset -= numBytes;
                     }
                     break;

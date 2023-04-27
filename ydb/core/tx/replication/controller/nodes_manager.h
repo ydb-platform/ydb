@@ -17,7 +17,7 @@ public:
     const THashSet<ui32>& GetNodes(const TString& tenant) const;
 
     void DiscoverNodes(const TString& tenant, const TActorId& cache, const TActorContext& ctx);
-    void ProcessResponse(TEvStateStorage::TEvBoardInfo::TPtr& ev, const TActorContext& ctx);
+    void ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void ProcessResponse(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
 
     void Shutdown(const TActorContext& ctx);

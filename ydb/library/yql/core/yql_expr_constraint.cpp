@@ -2616,8 +2616,8 @@ private:
             if (auto path = GetPathToKey(body.Head(), args)) {
                 path->first.emplace_back(body.Tail().Content());
                 return path;
-            } else if (body.IsCallable("Member") && body.Head().IsCallable("AsStruct")) {
-                return GetPathToKey(GetLiteralStructMember(body.Head(), body.Tail()), args);
+            } else if (const auto& head = SkipCallables(body.Head(), {"CastStruct","FilterMembers"}); head.IsCallable("AsStruct") && body.IsCallable("Member")) {
+                return GetPathToKey(GetLiteralStructMember(head, body.Tail()), args);
             } else if (body.IsCallable("Nth") && body.Head().IsList()) {
                 return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), args);
             } else if (body.IsCallable({"CastStruct","FilterMembers"}))  {

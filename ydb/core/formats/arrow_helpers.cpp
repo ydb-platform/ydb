@@ -266,6 +266,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
 
     for (auto& field : dstSchema->fields()) {
         columns.push_back(srcBatch->GetColumnByName(field->name()));
+        Y_VERIFY(columns.back());
         if (!columns.back()->type()->Equals(field->type())) {
             columns.back() = {};
         }
@@ -842,7 +843,8 @@ bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
     return true;
 }
 
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder) {
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result,
+    const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
     if (batches.empty()) {
         result = nullptr;
         return true;
@@ -855,6 +857,7 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
     std::vector<std::shared_ptr<arrow::Array>> columns;
     std::map<std::string, ui32> fieldNames;
     for (auto&& i : batches) {
+        Y_VERIFY(i);
         for (auto&& f : i->schema()->fields()) {
             if (!fieldNames.emplace(f->name(), fields.size()).second) {
                 return false;
@@ -877,7 +880,11 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
         std::vector<std::shared_ptr<arrow::Array>> columnsOrdered;
         for (auto&& i : columnsOrder) {
             auto it = fieldNames.find(i);
-            Y_VERIFY(it != fieldNames.end());
+            if (orderFieldsAreNecessary) {
+                Y_VERIFY(it != fieldNames.end());
+            } else if (it == fieldNames.end()) {
+                continue;
+            }
             fieldsOrdered.emplace_back(fields[it->second]);
             columnsOrdered.emplace_back(columns[it->second]);
         }

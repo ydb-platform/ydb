@@ -174,9 +174,6 @@ public:
         Functions["Dict"] = &TCallableConstraintTransformer::DictWrap;
         Functions["EmptyList"] = &TCallableConstraintTransformer::FromEmpty;
         Functions["EmptyDict"] = &TCallableConstraintTransformer::FromEmpty;
-        Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
-        Functions["DictKeys"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
-        Functions["DictPayloads"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["DictFromKeys"] = &TCallableConstraintTransformer::DictFromKeysWrap;
         Functions["If"] = &TCallableConstraintTransformer::IfWrap;
         Functions["Nothing"] = &TCallableConstraintTransformer::FromEmpty;
@@ -200,7 +197,7 @@ public:
         Functions["GraceJoinCore"] = &TCallableConstraintTransformer::GraceJoinCoreWrap;
         Functions["CommonJoinCore"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["ToDict"] = &TCallableConstraintTransformer::ToDictWrap;
-        Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>;
+        Functions["DictItems"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TEmptyConstraintNode>;
         Functions["DictKeys"] = &TCallableConstraintTransformer::DictHalfWrap<true>;
         Functions["DictPayloads"] = &TCallableConstraintTransformer::DictHalfWrap<false>;
         Functions["Chain1Map"] = &TCallableConstraintTransformer::Chain1MapWrap<false>;
@@ -2619,8 +2616,8 @@ private:
             if (auto path = GetPathToKey(body.Head(), args)) {
                 path->first.emplace_back(body.Tail().Content());
                 return path;
-            } else if (body.IsCallable("Member") && body.Head().IsCallable("AsStruct")) {
-                return GetPathToKey(GetLiteralStructMember(body.Head(), body.Tail()), args);
+            } else if (const auto& head = SkipCallables(body.Head(), {"CastStruct","FilterMembers"}); head.IsCallable("AsStruct") && body.IsCallable("Member")) {
+                return GetPathToKey(GetLiteralStructMember(head, body.Tail()), args);
             } else if (body.IsCallable("Nth") && body.Head().IsList()) {
                 return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), args);
             } else if (body.IsCallable({"CastStruct","FilterMembers"}))  {
@@ -2648,7 +2645,7 @@ private:
                         }
                     }
                 }
-            } else if (auto l = GetPathToKey(SkipCallables(body.Head(), {"Length"}), args), r = GetPathToKey(SkipCallables(body.Tail(), {"Length"}), args); l && r && *l == *r) {
+            } else if (auto l = GetPathToKey(body.Head(), args), r = GetPathToKey(body.Tail(), args); l && r && *l == *r) {
                 if constexpr (Wide) {
                     auto path = l->first;
                     path.emplace_front(ctx.GetIndexAsString(l->second));
@@ -2913,6 +2910,8 @@ private:
                 input->AddConstraint(extracted);
         ReduceFromHead<TUniqueConstraintNode>(input, reduce, ctx);
         ReduceFromHead<TDistinctConstraintNode>(input, reduce, ctx);
+        ReduceFromHead<TPartOfUniqueConstraintNode>(input, reduce, ctx);
+        ReduceFromHead<TPartOfDistinctConstraintNode>(input, reduce, ctx);
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
@@ -3373,6 +3372,7 @@ public:
     }
 };
 
+template<bool DisableCheck>
 class TConstraintTransformer : public TGraphTransformerBase {
 public:
     TConstraintTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types)
@@ -3758,6 +3758,9 @@ private:
     }
 
     void CheckExpected(const TExprNode& input, TExprContext& ctx) {
+        if constexpr (DisableCheck)
+            return;
+
         if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) {
             for (const TConstraintNode* expectedConstr: it->second) {
                 if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
@@ -3786,7 +3789,6 @@ private:
             }
         }
     }
-
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
     std::deque<TExprNode::TPtr> CallableInputs;
@@ -3798,9 +3800,11 @@ private:
 
 } // namespace
 
-TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly, bool subGraph) {
+TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly, bool subGraph, bool disableCheck) {
     TAutoPtr<IGraphTransformer> callableTransformer(new TCallableConstraintTransformer(types, instantOnly, subGraph));
-    return new TConstraintTransformer(callableTransformer, types);
+    return disableCheck ?
+        static_cast<IGraphTransformer*>(new TConstraintTransformer<true>(callableTransformer, types)):
+        static_cast<IGraphTransformer*>(new TConstraintTransformer<false>(callableTransformer, types));
 }
 
 TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer() {

@@ -30,7 +30,7 @@ public:
     TTransformationPipeline& AddPreIOAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddIOAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN);
-    TTransformationPipeline& AddPostTypeAnnotation(bool forSubGraph = false, EYqlIssueCode issueCode = TIssuesIds::CORE_POST_TYPE_ANN);
+    TTransformationPipeline& AddPostTypeAnnotation(bool forSubGraph = false, bool disableConstraintCheck = false, EYqlIssueCode issueCode = TIssuesIds::CORE_POST_TYPE_ANN);
     TTransformationPipeline& AddCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
     TTransformationPipeline& AddFinalCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);
     TTransformationPipeline& AddOptimization(bool checkWorld = true, bool withFinalOptimization = true, EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);

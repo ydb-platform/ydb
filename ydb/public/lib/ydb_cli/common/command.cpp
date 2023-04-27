@@ -260,29 +260,18 @@ void TClientCommand::SetFreeArgTitle(size_t pos, const TString& title, const TSt
     Opts.SetFreeArgTitle(pos, title, help);
 }
 
-TString TClientCommand::Ends2Prefix(const std::basic_string<bool>& ends) {
-    TString prefix;
-    if (!ends.empty()) {
-        for (auto it = ends.begin();;) {
-            bool s = *it;
-            ++it;
-            if (it == ends.end()) {
-                prefix += s ? "└─ " : "├─ ";
-                break;
-            } else {
-                prefix += s ? "   " : "│  ";
-            }
-        }
-    }
-    return prefix;
-}
-
-void TClientCommand::RenderCommandsDescription(
+void TClientCommand::RenderOneCommandDescription(
     TStringStream& stream,
     const NColorizer::TColors& colors,
-    const std::basic_string<bool>& ends
+    RenderEntryType type
 ) {
-    TString prefix = Ends2Prefix(ends);
+    TString prefix;
+    if (type == MIDDLE) {
+        prefix = "├─ ";
+    }
+    if (type == END) {
+        prefix = "└─ ";
+    }
     TString line = prefix + Name;
     stream << prefix << colors.BoldColor() << Name << colors.OldColor();
     if (!Description.empty()) {
@@ -399,13 +388,12 @@ bool TClientCommandTree::HasOptionsToShow() {
 
 void TClientCommandTree::RenderCommandsDescription(
     TStringStream& stream,
-    const NColorizer::TColors& colors,
-    const std::basic_string<bool>& ends
+    const NColorizer::TColors& colors
 ) {
-    TClientCommand::RenderCommandsDescription(stream, colors, ends);
+    TClientCommand::RenderOneCommandDescription(stream, colors, BEGIN);
     for (auto it = SubCommands.begin(); it != SubCommands.end(); ++it) {
         bool lastCommand = (std::next(it) == SubCommands.end());
-        it->second->RenderCommandsDescription(stream, colors, ends + lastCommand);
+        it->second->RenderOneCommandDescription(stream, colors, lastCommand ? END : MIDDLE);
     }
 }
 

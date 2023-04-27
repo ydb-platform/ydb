@@ -1418,7 +1418,7 @@ public:
 
     bool IsReplicated() const {
         for (const auto& [_, info] : TableInfos) {
-            if (info->IsReplicated) {
+            if (info->IsReplicated()) {
                 return true;
             }
         }

@@ -1821,7 +1821,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         }
 
         // Outer variant index to inner index + lambda
-        THashMap<TStringBuf, std::pair<TStringBuf, TExprNode::TPtr>> innerLambdas;
+        THashMap<TStringBuf, std::vector<std::pair<TStringBuf, TExprNode::TPtr>>> innerLambdas;
         TExprNode::TPtr defValue;
         TStringBuf defOutIndex;
         TSet<TString> defInnerIndicies;
@@ -1850,7 +1850,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                 ++index;
                 auto lambda = innerVisit.ChildPtr(index);
                 if (auto var = TMaybeNode<TCoVariant>(lambda->Child(1))) {
-                    innerLambdas[var.Cast().Index().Value()] = std::make_pair(itemIndex, std::move(lambda));
+                    innerLambdas[var.Cast().Index().Value()].emplace_back(itemIndex, std::move(lambda));
                 }
                 else {
                     return node;
@@ -1891,21 +1891,23 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                             const auto itemIndex = node->Child(i)->Content();
                             auto lambda = node->ChildPtr(i + 1);
                             if (auto p = innerLambdas.FindPtr(itemIndex)) {
-                                lambda = ctx.Builder(lambda->Pos())
-                                    .Lambda()
-                                        .Param("item")
-                                        .Apply(*lambda)
-                                            .With(0)
-                                                .ApplyPartial(p->second->HeadPtr(), p->second->Child(1)->ChildPtr(TCoVariant::idx_Item))
-                                                    .With(0, "item")
-                                                .Seal()
-                                            .Done()
+                                for (auto pr: *p) {
+                                    auto itemLambda = ctx.Builder(lambda->Pos())
+                                        .Lambda()
+                                            .Param("item")
+                                            .Apply(*lambda)
+                                                .With(0)
+                                                    .ApplyPartial(pr.second->HeadPtr(), pr.second->Child(1)->ChildPtr(TCoVariant::idx_Item))
+                                                        .With(0, "item")
+                                                    .Seal()
+                                                .Done()
+                                            .Seal()
                                         .Seal()
-                                    .Seal()
-                                    .Build();
+                                        .Build();
 
-                                parent.Atom(++index, p->first);
-                                parent.Add(++index, lambda);
+                                    parent.Atom(++index, pr.first);
+                                    parent.Add(++index, std::move(itemLambda));
+                                }
                             }
                             else {
                                 lambda = ctx.Builder(lambda->Pos())

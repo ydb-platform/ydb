@@ -91,18 +91,12 @@ bool NeedReportPlan(const Ydb::Table::ExecuteScanQueryRequest& req) {
     }
 }
 
-bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
-    TParseRequestError& error)
+bool CheckRequest(const Ydb::Table::ExecuteScanQueryRequest& req, TParseRequestError& error)
 {
-    kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
     switch (req.mode()) {
         case Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC:
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats()));
-            kqpRequest.MutableRequest()->SetCollectStats(req.collect_stats());
             break;
         case Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN:
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             break;
         default: {
             NYql::TIssues issues;
@@ -111,8 +105,6 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
             return false;
         }
     }
-    kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
-    kqpRequest.MutableRequest()->SetKeepSession(false);
 
     auto& query = req.query();
     switch (query.query_case()) {
@@ -122,8 +114,6 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
                 error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues);
                 return false;
             }
-
-            kqpRequest.MutableRequest()->SetQuery(query.yql_text());
             break;
         }
 
@@ -213,21 +203,30 @@ private:
         const auto req = Request_->GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-        SetRlPath(ev, *Request_);
-
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
-        }
-
-        ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId());
-
         TParseRequestError parseError;
-        if (!FillKqpRequest(*req, ev->Record, parseError)) {
+        if (!CheckRequest(*req, parseError)) {
             return ReplyFinishStream(parseError.Status, parseError.Issues);
         }
+
+        auto action = (req->mode() == Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC)
+            ? NKikimrKqp::QUERY_ACTION_EXECUTE
+            : NKikimrKqp::QUERY_ACTION_EXPLAIN;
+
+        auto text = req->query().yql_text();
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            action,
+            NKikimrKqp::QUERY_TYPE_SQL_SCAN,
+            SelfId(),
+            Request_,
+            TString(), //sessionId
+            std::move(text),
+            TString(), //queryId,
+            nullptr, //tx_control
+            &req->parameters(),
+            req->collect_stats(),
+            nullptr, // query_cache_policy
+            nullptr
+        );
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
@@ -402,13 +401,7 @@ private:
     }
 
     void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost, send abort event to executer " << ExecuterActorId_);
-
-        if (ExecuterActorId_) {
-            auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
-
-            ctx.Send(ExecuterActorId_, abortEv.Release());
-        }
+        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
@@ -421,6 +414,8 @@ private:
     void HandleTimeout(const TActorContext& ctx) {
         TInstant now = TAppData::TimeProvider->Now();
         TDuration timeout;
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got timeout event, InactiveClientTimeout: " << InactiveClientTimeout_
+            << " GRpcResponsesSizeQueue: " << GRpcResponsesSizeQueue_.size());
 
         if (InactiveClientTimeout_ && GRpcResponsesSizeQueue_.size() > 0) {
             TDuration processTime = now - LastDataStreamTimestamp_;
@@ -485,7 +480,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvStreamExecuteScanQueryRequest> Request_;
+    std::shared_ptr<TEvStreamExecuteScanQueryRequest> Request_;
     const ui64 RpcBufferSize_;
 
     TDuration InactiveClientTimeout_;

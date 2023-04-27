@@ -118,6 +118,14 @@ struct TPortionInfo {
         return {sum, max};
     }
 
+    ui64 BlobsBytes() const {
+        ui32 sum = 0;
+        for (auto& rec : Records) {
+            sum += rec.BlobRange.Size;
+        }
+        return sum;
+    }
+
     void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap, const TSnapshot& snapshot) {
         for (auto& rec : Records) {
             rec.Portion = portion;
@@ -156,6 +164,7 @@ struct TPortionInfo {
     void AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch,
                      const TString& tierName);
     void AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted);
+    void MinMaxValue(const ui32 columnId, std::shared_ptr<arrow::Scalar>& minValue, std::shared_ptr<arrow::Scalar>& maxValue) const;
     std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
 
@@ -222,29 +231,10 @@ struct TPortionInfo {
 
         class TAssembleOptions {
         private:
-            YDB_OPT(std::set<std::string>, IncludeColumnNames);
-            YDB_OPT(std::set<std::string>, ExcludeColumnNames);
             YDB_OPT(ui32, RecordsCountLimit);
             YDB_FLAG_ACCESSOR(ForwardAssemble, true);
         public:
-            bool CheckFieldAcceptance(const std::string& fieldName) const {
-                if (!!IncludeColumnNames && !IncludeColumnNames->contains(fieldName)) {
-                    return false;
-                }
-                if (!!ExcludeColumnNames && ExcludeColumnNames->contains(fieldName)) {
-                    return false;
-                }
-                return true;
-            }
         };
-
-        std::vector<std::string> GetColumnsOrder() const {
-            std::vector<std::string> result;
-            for (auto&& i : Schema->fields()) {
-                result.emplace_back(i->name());
-            }
-            return result;
-        }
 
         size_t GetColumnsCount() const {
             return Columns.size();
@@ -262,11 +252,11 @@ struct TPortionInfo {
 
     TPreparedBatchData PrepareForAssemble(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
-                                           const THashMap<TBlobRange, TString>& data) const;
+                                           const THashMap<TBlobRange, TString>& data, const std::optional<std::set<ui32>>& columnIds) const;
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
                                            const THashMap<TBlobRange, TString>& data) const {
-        return PrepareForAssemble(indexInfo, schema, data).Assemble();
+        return PrepareForAssemble(indexInfo, schema, data, {}).Assemble();
     }
 
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,

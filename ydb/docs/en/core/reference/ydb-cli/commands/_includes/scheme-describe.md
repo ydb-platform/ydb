@@ -9,6 +9,8 @@ Get information about a schema object:
 Result:
 
 ```text
+<table> episodes
+
 ┌────────────┬─────────┬────────┬─────┐
 | Name       | Type    | Family | Key |
 ├────────────┼─────────┼────────┼─────┤

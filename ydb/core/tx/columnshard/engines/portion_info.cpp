@@ -31,11 +31,23 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
 
 TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const TIndexInfo& indexInfo,
                                                      const std::shared_ptr<arrow::Schema>& schema,
-                                                     const THashMap<TBlobRange, TString>& blobsData) const {
+                                                     const THashMap<TBlobRange, TString>& blobsData, const std::optional<std::set<ui32>>& columnIds) const {
     // Correct records order
     TMap<int, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks
 
+    std::vector<std::shared_ptr<arrow::Field>> schemaFields;
+
+    for (auto&& i : schema->fields()) {
+        if (columnIds && !columnIds->contains(indexInfo.GetColumnId(i->name()))) {
+            continue;
+        }
+        schemaFields.emplace_back(i);
+    }
+
     for (auto& rec : Records) {
+        if (columnIds && !columnIds->contains(rec.ColumnId)) {
+            continue;
+        }
         ui32 columnId = rec.ColumnId;
         TString columnName = indexInfo.GetColumnName(columnId);
         std::string name(columnName.data(), columnName.size());
@@ -70,7 +82,7 @@ TPortionInfo::TPreparedBatchData TPortionInfo::PrepareForAssemble(const TIndexIn
         columns.emplace_back(TPreparedColumn(field, std::move(blobs)));
     }
 
-    return TPreparedBatchData(std::move(columns), schema);
+    return TPreparedBatchData(std::move(columns), std::make_shared<arrow::Schema>(schemaFields));
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {
@@ -206,6 +218,17 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
     }
 }
 
+void TPortionInfo::MinMaxValue(const ui32 columnId, std::shared_ptr<arrow::Scalar>& minValue, std::shared_ptr<arrow::Scalar>& maxValue) const {
+    auto it = Meta.ColumnMeta.find(columnId);
+    if (it == Meta.ColumnMeta.end()) {
+        minValue = nullptr;
+        maxValue = nullptr;
+    } else {
+        minValue = it->second.Min;
+        maxValue = it->second.Max;
+    }
+}
+
 std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {
     if (!Meta.ColumnMeta.contains(columnId)) {
         return {};
@@ -264,25 +287,12 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(con
 }
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    for (auto&& f : Schema->fields()) {
-        if (!options.CheckFieldAcceptance(f->name())) {
-            continue;
-        }
-        fields.emplace_back(f);
-    }
-    if (fields.empty()) {
-        return nullptr;
-    }
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     for (auto&& i : Columns) {
-        if (!options.CheckFieldAcceptance(i.GetName())) {
-            continue;
-        }
         columns.emplace_back(i.Assemble(options.GetRecordsCountLimitDef(Max<ui32>()), !options.IsForwardAssemble()));
     }
 
-    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns);
+    auto table = arrow::Table::Make(Schema, columns);
     auto res = table->CombineChunks();
     Y_VERIFY(res.ok());
     return NArrow::ToBatch(*res);

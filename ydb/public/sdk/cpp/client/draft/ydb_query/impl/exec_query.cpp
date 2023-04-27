@@ -124,17 +124,15 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
             }
 
             if (part.HasResultSet()) {
-                // TODO: Support multi-results
-                Y_ENSURE(part.GetResultSetIndex() == 0);
-
                 auto inRs = part.ExtractResultSet();
                 auto& inRsProto = TProtoAccessor::GetProto(inRs);
 
-                if (self->ResultSets_.empty()) {
-                    self->ResultSets_.resize(1);
+                // TODO: Use result sets metadata
+                if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
+                    self->ResultSets_.resize(part.GetResultSetIndex() + 1);
                 }
 
-                auto& resultSet = self->ResultSets_[0];
+                auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
                 if (resultSet.columns().empty()) {
                     resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
                 }

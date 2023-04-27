@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "counters.h"
 #include "columnshard.h"
 #include "columnshard_common.h"
 #include "columnshard_ttl.h"
@@ -38,7 +39,7 @@ IActor* CreateReadActor(ui64 tabletId,
                         NOlap::TReadMetadata::TConstPtr readMetadata,
                         const TInstant& deadline,
                         const TActorId& columnShardActorId,
-                        ui64 requestCookie);
+                        ui64 requestCookie, const TScanCounters& counters);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 
@@ -372,7 +373,7 @@ private:
     TInstant LastStatsReport;
 
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
-    TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compation.
+    TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compaction.
     TActorId EvictionActor;
     TActorId StatsReportPipe;
 
@@ -382,6 +383,8 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     TBatchCache BatchCache;
+    TScanCounters ReadCounters;
+    TScanCounters ScanCounters;
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;

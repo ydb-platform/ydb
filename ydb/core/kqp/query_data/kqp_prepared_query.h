@@ -26,7 +26,6 @@ namespace NKikimr::NKqp {
 class TPreparedQueryAllocHolder;
 
 struct TPhyTxResultMetadata {
-    bool IsStream = false;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     TVector<ui32> ColumnOrder;
 };

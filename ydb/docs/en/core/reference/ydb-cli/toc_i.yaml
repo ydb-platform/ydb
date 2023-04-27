@@ -1,12 +1,12 @@
 items:
   - name: Installation
     href: install.md
+  - name: Connecting to and authenticating with a database
+    href: connect.md
   - name: All commands in alphabetical order
     href: commands.md
   - name: Service commands
     href: commands/service.md
-  - name: Connecting to and authenticating with a database
-    href: connect.md
   - name: Global parameters
     href: commands/global-options.md
   - name: YDB CLI commands
@@ -31,7 +31,7 @@ items:
       href: commands/tools/rename.md
     - name: Setting TTL parameters
       href: table-ttl-set.md
-    - name: Deleting TTL parameters
+    - name: Resetting TTL parameters
       href: table-ttl-reset.md
     - name: Deleting a table
       href: table-drop.md
@@ -75,23 +75,23 @@ items:
       href: scripting-yql.md
     - name: Running a query
       href: table-query-execute.md
+    - name: Running parameterized queries
+      href: parameterized-queries-cli.md
 #  - name: Utilities
 #    items:
-    # - name: Copy tables
-    #   href: commands/tools/copy.md
     # - name: Backup
     #   href: commands/tools/dump.md
     # - name: Restore backup
     #   href: commands/tools/restore.md
-  - name: Managing long running operations
+  - name: Managing background operations
     items:
-    - name: Getting a list of long running operations
+    - name: Getting a list of long-running operations
       href: operation-list.md
-    - name: Obtaining the status of long running operations
+    - name: Obtaining the status of long-running operations
       href: operation-get.md
-    - name: Canceling long running operations
+    - name: Canceling long-running operations
       href: operation-cancel.md
-    - name: Deleting long running operations from the list
+    - name: Deleting long-running operations from the list
       href: operation-forget.md
   - name: Managing profiles
     include: { mode: link, path: profile/toc_p.yaml }
@@ -113,3 +113,5 @@ items:
       href: workload-click-bench.md
     - name: Key-Value load
       href: workload-kv.md
+    - name: Topic load
+      href: workload-topic.md      

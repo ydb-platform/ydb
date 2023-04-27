@@ -456,7 +456,7 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
-                LOG_DEBUG_IC("ICP112", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
+                LOG_DEBUG_IC("ICP052", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
                              poison ? "true" : "false");
                 if (poison) {
                     Send(actorId, new TEvents::TEvPoisonPill);

@@ -58,6 +58,19 @@ The profile will update with the parameters entered on the command line. Any pro
 
 ### Examples {#create-cmdline-examples}
 
+#### Creating a profile for connecting to a test database {#quickstart}
+
+You can use the `quickstart` profile to connect to a database in a single-node cluster {{ ydb-short-name }}:
+
+```bash
+ydb config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
+```
+
+* `path_database`: the database path. Specify one of the values:
+
+  * `/Root/test`: If you deployed the cluster using an executable file.
+  * `/local`: If you used a Docker image.
+
 #### Creating a profile from previous connection settings {#cmdline-example-from-explicit}
 
 Any command with explicit connection settings performing a YDB database transaction can be converted to a profile create command by moving connection properties from global options to options specific to the `config profile create` command.

@@ -77,6 +77,10 @@ domains_config:
         - property:
           - type: ROT
         encryption_mode: 1
+  security_config:
+    default_users:
+    - name: "root"
+      password: "1234"
 static_erasure: "{ydb_static_erasure}"
 system_tablets:
   default_node: {ydb_defaut_tablet_node_ids}

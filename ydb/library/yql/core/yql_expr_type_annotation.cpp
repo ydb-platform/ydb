@@ -5394,6 +5394,31 @@ bool HasContextFuncs(const TExprNode& input) {
     return needCtx;
 }
 
+IGraphTransformer::TStatus TryConvertToPgOp(TStringBuf op, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    if (!EnsureMinArgsCount(*input, 1, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool hasPg = false;
+    for (const auto& child : input->Children()) {
+        if (!EnsureComputable(*child, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        hasPg = hasPg || child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
+    }
+
+    if (!hasPg) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TListType args;
+    args.push_back(ctx.NewAtom(input->Pos(), op));
+    args.insert(args.end(), input->Children().begin(), input->Children().end());
+    output = ctx.NewCallable(input->Pos(), "PgOp", std::move(args));
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);

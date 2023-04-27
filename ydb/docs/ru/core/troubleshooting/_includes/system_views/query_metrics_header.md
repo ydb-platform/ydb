@@ -42,7 +42,3 @@
 `SumDeleteRows` | Общее количество удалённых строк.<br>Тип: `Uint64`.
 `MinDeleteRows` | Минимальное количество удалённых строк.<br>Тип: `Uint64`.
 `MaxDeleteRows` | Максимальное количество удалённых строк.<br>Тип: `Uint64`.
-`SumRequestUnits` | Общее количество использованных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options).<br>Тип: `Uint64`.
-`MinRequestUnits` | Минимальное количество использованных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options).<br>Тип: `Uint64`.
-`MaxRequestUnits` | Максимальное количество использованных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options).<br>Тип: `Uint64`.
-

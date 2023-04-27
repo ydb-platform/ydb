@@ -241,6 +241,13 @@ namespace NYdb {
                 Parser.CloseTagged();
                 break;
 
+            case TTypeParser::ETypeKind::EmptyList:
+            {
+                Writer.BeginList();
+                Writer.EndList();
+                break;
+            }
+
             case TTypeParser::ETypeKind::List:
                 Parser.OpenList();
                 Writer.BeginList();
@@ -278,6 +285,13 @@ namespace NYdb {
                 Writer.EndList();
                 break;
 
+            case TTypeParser::ETypeKind::EmptyDict:
+            {
+                Writer.BeginList();
+                Writer.EndList();
+                break;
+            }
+
             case TTypeParser::ETypeKind::Dict:
                 Parser.OpenDict();
                 Writer.BeginList();
@@ -293,7 +307,9 @@ namespace NYdb {
                 Parser.CloseDict();
                 Writer.EndList();
                 break;
-
+            case TTypeParser::ETypeKind::Null:
+                Writer.WriteNull();
+                break;
             default:
                 ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << Parser.GetKind());
             }
@@ -648,6 +664,10 @@ namespace {
 
         void ParseValue(const NJson::TJsonValue& jsonValue) {
             switch (TypeParser.GetKind()) {
+            case TTypeParser::ETypeKind::Null:
+                EnsureType(jsonValue, NJson::JSON_NULL);
+                break;
+
             case TTypeParser::ETypeKind::Primitive:
                 ParsePrimitiveValue(jsonValue, TypeParser.GetPrimitive());
                 break;
@@ -694,6 +714,10 @@ namespace {
                 ParseValue(jsonValue);
                 ValueBuilder.EndTagged();
                 TypeParser.CloseTagged();
+                break;
+
+            case TTypeParser::ETypeKind::EmptyList:
+                EnsureType(jsonValue, NJson::JSON_ARRAY);
                 break;
 
             case TTypeParser::ETypeKind::List:
@@ -751,6 +775,10 @@ namespace {
 
                 ValueBuilder.EndTuple();
                 TypeParser.CloseTuple();
+                break;
+
+            case TTypeParser::ETypeKind::EmptyDict:
+                EnsureType(jsonValue, NJson::JSON_ARRAY);
                 break;
 
             case TTypeParser::ETypeKind::Dict:

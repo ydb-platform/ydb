@@ -78,10 +78,9 @@ public:
                              TStringBuilder() << "Another location is registered for "
                              << host << ":" << port,
                              ctx);
-            } else if (node.Location != loc || node.LegacyUpdatePending) {
+            } else if (node.Location != loc) {
                 node.Location = loc;
                 Self->DbUpdateNodeLocation(node, txc);
-                node.LegacyUpdatePending = false;
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
@@ -105,7 +104,7 @@ public:
         NodeId = Self->FreeIds.FirstNonZeroBit();
         Self->FreeIds.Reset(NodeId);
 
-        Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc, false);
+        Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
         Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
         Node->Lease = 1;
         Node->Expire = expire;

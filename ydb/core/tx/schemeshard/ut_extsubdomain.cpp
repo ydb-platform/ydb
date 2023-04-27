@@ -1133,6 +1133,100 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
 
+    Y_UNIT_TEST_FLAG(CreateThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+        });
+
+        const auto& prevParentVersion = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription()
+            .GetSelf()
+            .GetPathVersion()
+        ;
+
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        // Check that drop properly propagated to schemeboard
+        {
+            auto nav = Navigate(runtime, "/MyRoot", NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
+            const auto& entry = nav->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+
+            UNIT_ASSERT(bool(entry.Self));
+            UNIT_ASSERT_VALUES_EQUAL(entry.Self->Info.GetPathVersion(), prevParentVersion + 2);
+
+            UNIT_ASSERT(bool(entry.ListNodeEntry));
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 0, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+        });
+
+        const auto& prevParentVersion = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription()
+            .GetSelf()
+            .GetPathVersion()
+        ;
+
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        // Check that drop properly propagated to schemeboard
+        {
+            auto nav = Navigate(runtime, "/MyRoot", NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
+            const auto& entry = nav->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+
+            UNIT_ASSERT(bool(entry.Self));
+            UNIT_ASSERT_VALUES_EQUAL(entry.Self->Info.GetPathVersion(), prevParentVersion + 2);
+
+            UNIT_ASSERT(bool(entry.ListNodeEntry));
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 0, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
+        }
+    }
+
     Y_UNIT_TEST_FLAG(SysViewProcessorSync, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));

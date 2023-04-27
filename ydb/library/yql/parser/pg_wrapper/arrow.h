@@ -153,6 +153,7 @@ void GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, cons
             }
         }
 
+        fcinfo->isnull = false;
         ret = TFunc()(fcinfo);
         if constexpr (IsFixedResult) {
             if (fcinfo->isnull) {
@@ -229,10 +230,12 @@ struct TDefaultArgsPolicy {
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
 
+extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
+
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
 arrow::Status GenericExec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
     LOCAL_FCINFO(fcinfo, FUNC_MAX_ARGS);
-    const auto& state = dynamic_cast<TPgKernelState&>(*ctx->state());
+    const auto& state = GetPGKernelState(ctx);
 	fcinfo->flinfo = state.flinfo;
 	fcinfo->context = state.context;
 	fcinfo->resultinfo = state.resultinfo;

@@ -18,7 +18,7 @@ public:
         const TString& url, 
         IHTTPGateway::TPtr gateway,
         IHTTPGateway::THeaders headers,
-        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         size_t size,
         const TString& format = ""
     );
@@ -26,7 +26,7 @@ public:
     TString Url;
     IHTTPGateway::TPtr Gateway;
     IHTTPGateway::THeaders Headers;
-    IRetryPolicy<long>::TPtr RetryPolicy;
+    IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
     TString Format;
     size_t Size;
     bool IsLocal;

@@ -5334,6 +5334,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["SqueezeToDict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Head().GetConstraint<TSortedConstraintNode>() || node->Head().GetConstraint<TChoppedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over ordered " << node->Head().Content();
+            return ctx.ChangeChild(*node, 0U, ctx.NewCallable(node->Pos(), "Unordered", {node->HeadPtr()}));
+        }
+
         if (const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables); IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content();
             return ctx.Builder(node->Pos())
@@ -5364,7 +5369,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             YQL_ENSURE(!settingsError);
 
             if (!*isMany && *type != EDictType::Sorted) {
-                YQL_CLOG(DEBUG, Core) << "ToDict without payload over list literal";
+                YQL_CLOG(DEBUG, Core) << node->Content() << " without payload over list literal";
                 return ctx.Builder(node->Pos())
                     .Callable("DictFromKeys")
                         .Add(0, ExpandType(node->Pos(), *node->GetTypeAnn()->Cast<TDictExprType>()->GetKeyType(), ctx))
@@ -5390,19 +5395,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 auto payloadLambda = node->Child(2);
                 auto settings = node->Child(3);
                 auto innerSettings = inner->Child(3);
-                bool sameType = AnyOf(settings->Children(), [](const auto& x) { return x->Content() == "Hashed"; }) ==
-                    AnyOf(innerSettings->Children(), [](const auto& x) { return x->Content() == "Hashed"; });
+                bool sameType = AnyOf(settings->Children(), [](const auto& x) { return x->IsAtom("Hashed"); }) ==
+                    AnyOf(innerSettings->Children(), [](const auto& x) { return x->IsAtom("Hashed"); });
 
                 if (sameType
-                    && keyLambda->Child(1)->IsCallable("Nth") && keyLambda->Child(1)->Child(1)->Content() == "0"
+                    && keyLambda->Child(1)->IsCallable("Nth") && keyLambda->Child(1)->Child(1)->IsAtom("0")
                     && keyLambda->Child(1)->Child(0) == keyLambda->Child(0)->Child(0)
-                    && payloadLambda->Child(1)->IsCallable("Nth") && payloadLambda->Child(1)->Child(1)->Content() == "1"
+                    && payloadLambda->Child(1)->IsCallable("Nth") && payloadLambda->Child(1)->Child(1)->IsAtom("1")
                     && payloadLambda->Child(1)->Child(0) == payloadLambda->Child(0)->Child(0)
-                    && !AnyOf(settings->Children(), [](const auto& x) { return x->Content() == "Many"; })) {
-                    YQL_CLOG(DEBUG, Core) << "ToDict over DictItems";
+                    && !AnyOf(settings->Children(), [](const auto& x) { return x->IsAtom("Many"); })) {
+                    YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
                     return inner;
                 }
             }
+        }
+
+        if (node->Head().GetConstraint<TSortedConstraintNode>() || node->Head().GetConstraint<TChoppedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over ordered " << node->Head().Content();
+            return ctx.ChangeChild(*node, 0U, ctx.NewCallable(node->Pos(), "Unordered", {node->HeadPtr()}));
         }
 
         return node;

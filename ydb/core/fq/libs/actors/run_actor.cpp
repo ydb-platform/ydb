@@ -1224,16 +1224,17 @@ private:
         if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
            LOG_E("StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
         }
-        const bool failure = statusCode != NYql::NDqProto::StatusIds::SUCCESS;
-        const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
-        if (finalize) {
+        
+        if (statusCode != NYql::NDqProto::StatusIds::SUCCESS) {
+            // Error
+            ResignQuery(statusCode);
+            return;
+        }
 
-            if (failure) {
-                ResignQuery(statusCode);
-                return;
-            }
-
-            Finish(GetFinishStatus(!failure));
+        if (DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size())) {
+            // Success
+            QueryStateUpdateRequest.mutable_resources()->set_final_run_no(Params.RestartCount);
+            Finish(GetFinishStatus(true));
             return;
         }
 
@@ -1678,7 +1679,7 @@ private:
                                             , Params.S3Gateway
                                             , Params.QueryId
                                             , Params.JobId
-                                            , Params.RestartCount
+                                            , QueryStateUpdateRequest.resources().final_run_no()
                                             , Params.Status == FederatedQuery::QueryMeta::COMPLETING || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER
                                             , mergedSecureParams
                                             , Params.CredentialsFactory
@@ -1916,10 +1917,10 @@ private:
             if (issues) {
                 SendTransientIssues(issues);
             }
-            PrepareGraphs();
             for (auto& graphParams : DqGraphParams) {
                 FillGraphMemoryInfo(graphParams);
             }
+            PrepareGraphs(); // will compress and seal graphs
         } else {
             Issues.AddIssues(issues);
             if (message) {

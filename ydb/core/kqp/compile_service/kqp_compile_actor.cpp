@@ -103,10 +103,11 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Query.Cluster, Query.Database, Config, ModuleResolverState->ModuleResolver,
-            HttpGateway, AppData(ctx)->FunctionRegistry, false);
+            HttpGateway, AppData(ctx)->FunctionRegistry, false, Query.Settings.IsInternalCall);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = Query.Settings.DocumentApiRestricted;
+        prepareSettings.IsInternalCall = Query.Settings.IsInternalCall;
 
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 

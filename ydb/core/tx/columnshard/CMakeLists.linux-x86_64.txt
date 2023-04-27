@@ -62,6 +62,8 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__read_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__read_blob_ranges.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__scan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__index_scan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__stats_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.cpp
@@ -69,6 +71,7 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_costs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_private_events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/compaction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/defs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/eviction_actor.cpp

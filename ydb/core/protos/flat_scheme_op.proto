@@ -331,7 +331,14 @@ message TTableReplicationConfig {
         REPLICATION_MODE_READ_ONLY = 1;
     }
 
+    enum EConsistency {
+        CONSISTENCY_UNKNOWN = 0;
+        CONSISTENCY_STRONG = 1;
+        CONSISTENCY_WEAK = 2;
+    }
+
     optional EReplicationMode Mode = 1;
+    optional EConsistency Consistency = 2;
 }
 
 message TTableDescription {

@@ -109,7 +109,7 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse = fal
 TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
 size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset = 0);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {});
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                         const std::shared_ptr<arrow::Schema>& sortingKey);

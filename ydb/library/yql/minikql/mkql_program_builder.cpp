@@ -2257,6 +2257,10 @@ TRuntimeNode TProgramBuilder::NewStruct(TType* structType, const TArrayRef<const
     return TRuntimeNode(TStructLiteral::Create(values.size(), values.data(), detailedStructType, Env), true);
 }
 
+TRuntimeNode TProgramBuilder::NewEmptyList() {
+    return TRuntimeNode(Env.GetEmptyList(), true);
+}
+
 TRuntimeNode TProgramBuilder::NewEmptyList(TType* itemType) {
     TListLiteralBuilder builder(Env, itemType);
     return TRuntimeNode(builder.Build(), true);
@@ -2309,6 +2313,10 @@ TType* TProgramBuilder::NewTaggedType(TType* baseType, const std::string_view& t
 
 TType* TProgramBuilder::NewDictType(TType* keyType, TType* payloadType, bool multi) {
     return TDictType::Create(keyType, multi ? NewListType(payloadType) : payloadType, Env);
+}
+
+TRuntimeNode TProgramBuilder::NewEmptyDict() {
+    return TRuntimeNode(Env.GetEmptyDict(), true);
 }
 
 TRuntimeNode TProgramBuilder::NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items) {

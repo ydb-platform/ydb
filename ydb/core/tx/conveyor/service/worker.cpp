@@ -7,7 +7,7 @@ void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     if (workerTask.GetTask()->Execute()) {
         TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask.GetOwnerId(), workerTask.GetTask()).SendTo(ev->Sender);
     } else {
-        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask.GetOwnerId(), "cannot execute task").SendTo(ev->Sender);
+        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask.GetOwnerId(), workerTask.GetTask()->GetErrorMessage()).SendTo(ev->Sender);
     }
 }
 

@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
         NInterconnect::TOutgoingStream stream;
 
         for (; numEvents; ++step) {
-            TTcpPacketOutTask task(p, stream);
+            TTcpPacketOutTask task(p, stream, stream);
 
             if (step == 100) {
                 for (ui32 i = 0; i < 200; ++i) {

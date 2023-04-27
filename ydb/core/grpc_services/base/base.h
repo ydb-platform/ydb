@@ -256,6 +256,10 @@ public:
     // Returns internal token as a serialized message.
     virtual const TString& GetSerializedToken() const = 0;
     virtual bool IsClientLost() const = 0;
+    // Is this call made from inside YDB?
+    virtual bool IsInternalCall() const {
+        return false;
+    }
 };
 
 class IRequestCtxBase : public virtual IRequestCtxBaseMtSafe {
@@ -385,7 +389,7 @@ public:
     virtual void Pass(const IFacilityProvider& facility) = 0;
 };
 
-// Provide methods which can be safly passed though actor system
+// Provide methods which can be safely passed though actor system
 // as part of event
 class IRequestCtxMtSafe : public virtual IRequestCtxBaseMtSafe {
 public:

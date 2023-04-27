@@ -906,11 +906,11 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
             if (ydbSchema == TTestSchema::YdbSchema()) {
                 if (codec == "" || codec == "lz4") {
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 50);
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetPortionsBytes() / 100000, 50);
                 } else if (codec == "none") {
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 75);
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetPortionsBytes() / 100000, 75);
                 } else if (codec == "zstd") {
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetDataBytes() / 100000, 26);
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetPortionsBytes() / 100000, 26);
                 } else {
                     UNIT_ASSERT(false);
                 }
@@ -1138,7 +1138,7 @@ void TestCompactionInGranuleImpl(bool reboots,
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
         UNIT_ASSERT(readStats.GetIndexBatches() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
+        UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
         UNIT_ASSERT(readStats.GetIndexPortions() <= 2); // got compaction
 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -2065,7 +2065,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
                 UNIT_ASSERT(readStats.GetIndexBatches() > 0);
                 //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
                 UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
                 //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
             }
@@ -2126,7 +2126,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
                     UNIT_ASSERT(readStats.GetIndexBatches() > 0);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 1); // TODO: min-max index optimization?
                 }
@@ -2186,7 +2186,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
                     UNIT_ASSERT(readStats.GetIndexBatches() > 0);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetUsedColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
                 }

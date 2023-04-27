@@ -14,7 +14,7 @@ Before running the benchmark, create a table:
 {{ ydb-cli }} workload clickbench init
 ```
 
-See the description of the command to run the data load:
+See the description of the command to init the data load:
 
 ```bash
 {{ ydb-cli }} workload clickbench init --help

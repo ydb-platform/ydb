@@ -68,10 +68,10 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
         }
     }
 
-    ui32 i = 0;
-    for (const auto& txResult : Proto->GetResults()) {
-        auto& result = TxResultsMeta[i++];
-        result.IsStream = txResult.GetIsStream();
+    for (ui32 i = 0; i < Proto->ResultsSize(); ++i) {
+        const auto& txResult = Proto->GetResults(i);
+        auto& result = TxResultsMeta[i];
+
         result.MkqlItemType = ImportTypeFromProto(txResult.GetItemType(), Alloc->TypeEnv);
         if (txResult.ColumnHintsSize() > 0) {
             result.ColumnOrder.reserve(txResult.GetColumnHints().size());

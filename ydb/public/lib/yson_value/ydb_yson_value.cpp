@@ -133,6 +133,11 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             parser.CloseTagged();
             break;
 
+        case TTypeParser::ETypeKind::EmptyList:
+            writer.OnBeginList();
+            writer.OnEndList();
+            break;
+
         case TTypeParser::ETypeKind::List:
             parser.OpenList();
             writer.OnBeginList();
@@ -170,6 +175,11 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
 
             writer.OnEndList();
             parser.CloseTuple();
+            break;
+
+        case TTypeParser::ETypeKind::EmptyDict:
+            writer.OnBeginList();
+            writer.OnEndList();
             break;
 
         case TTypeParser::ETypeKind::Dict:

@@ -26,8 +26,14 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Strong)
+        );
+        CreateShardedTable(server, sender, "/Root", "table-2", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Strong)
+        );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         auto shards2 = GetTableShards(server, sender, "/Root/table-2");
@@ -96,8 +102,14 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Strong)
+        );
+        CreateShardedTable(server, sender, "/Root", "table-2", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Strong)
+        );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
@@ -232,6 +244,41 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         ExecSQL(server, sender, "SELECT * FROM `/Root/table-1`");
         ExecSQL(server, sender, "INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);", true,
             Ydb::StatusIds::GENERIC_ERROR);
+    }
+
+    Y_UNIT_TEST(ApplyChangesToReplicatedTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Weak)
+        );
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ApplyChanges(server, shards.at(0), tableId, "my-source", {
+            TChange{ .Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11 },
+            TChange{ .Offset = 1, .WriteTxId = 0, .Key = 2, .Value = 22 },
+            TChange{ .Offset = 2, .WriteTxId = 0, .Key = 3, .Value = 33 },
+        });
+
+        auto result = ReadShardedTable(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(result,
+            "key = 1, value = 11\n"
+            "key = 2, value = 22\n"
+            "key = 3, value = 33\n"
+        );
     }
 
 }

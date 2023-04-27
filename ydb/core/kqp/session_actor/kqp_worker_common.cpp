@@ -145,12 +145,16 @@ bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::
             return IsSameProtoTypeImpl(actual.GetData(), expected.GetData());
         case NKikimrMiniKQL::ETypeKind::Optional:
             return IsSameProtoType(actual.GetOptional().GetItem(), expected.GetOptional().GetItem());
+        case NKikimrMiniKQL::ETypeKind::EmptyList:
+            return true;
         case NKikimrMiniKQL::ETypeKind::List:
             return IsSameProtoType(actual.GetList().GetItem(), expected.GetList().GetItem());
         case NKikimrMiniKQL::ETypeKind::Tuple:
             return IsSameProtoTypeImpl(actual.GetTuple(), expected.GetTuple());
         case NKikimrMiniKQL::ETypeKind::Struct:
             return IsSameProtoTypeImpl(actual.GetStruct(), expected.GetStruct());
+        case NKikimrMiniKQL::ETypeKind::EmptyDict:
+            return true;
         case NKikimrMiniKQL::ETypeKind::Dict:
             return IsSameProtoType(actual.GetDict().GetKey(), expected.GetDict().GetKey()) &&
                 IsSameProtoType(actual.GetDict().GetPayload(), expected.GetDict().GetPayload());
@@ -164,8 +168,6 @@ bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::
             return (actual.GetTagged().GetTag() == expected.GetTagged().GetTag()) &&
                 IsSameProtoType(actual.GetTagged().GetItem(), expected.GetTagged().GetItem());
         case NKikimrMiniKQL::ETypeKind::Unknown:
-        case NKikimrMiniKQL::ETypeKind::Reserved_12:
-        case NKikimrMiniKQL::ETypeKind::Reserved_13:
         case NKikimrMiniKQL::ETypeKind::Reserved_14:
             return false;
     }

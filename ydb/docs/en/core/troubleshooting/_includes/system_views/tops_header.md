@@ -21,7 +21,6 @@ All tables have the same set of fields:
 --- | ---
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br>Type: `Timestamp`.<br>Key: `0`. |
 | `Rank` | Rank of a top query.<br>Type: `Uint32`.<br>Key: `1`. |
-| `RequestUnits` | Number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used. |
 | `QueryText` | Query text.<br>Type: `Utf8`. |
 | `Duration` | Total query execution time.<br>Type: `Interval`. |
 | `EndTime` | Query execution end time. <br>Type: `Timestamp`. |

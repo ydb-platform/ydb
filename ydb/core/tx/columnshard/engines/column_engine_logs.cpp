@@ -1531,8 +1531,21 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
     inserted = 0;
     ui64 sumSize = 0;
     ui64 sumMaxSize = 0;
+    std::shared_ptr<arrow::Scalar> minPk0;
+    std::shared_ptr<arrow::Scalar> maxPk0;
+    if (actual.size()) {
+        actual[0]->MinMaxValue(actual[0]->FirstPkColumn, minPk0, maxPk0);
+    }
+    bool pkEqual = !!minPk0 && !!maxPk0 && arrow::ScalarEquals(*minPk0, *maxPk0);
     for (auto* portionInfo : actual) {
         Y_VERIFY(portionInfo);
+        if (pkEqual) {
+            std::shared_ptr<arrow::Scalar> minPkCurrent;
+            std::shared_ptr<arrow::Scalar> maxPkCurrent;
+            portionInfo->MinMaxValue(portionInfo->FirstPkColumn, minPkCurrent, maxPkCurrent);
+            pkEqual = !!minPkCurrent && !!maxPkCurrent && arrow::ScalarEquals(*minPk0, *minPkCurrent)
+                && arrow::ScalarEquals(*maxPk0, *maxPkCurrent);
+        }
         auto sizes = portionInfo->BlobsSizes();
         sumSize += sizes.first;
         sumMaxSize += sizes.second;
@@ -1541,8 +1554,8 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
         }
     }
 
-    return sumMaxSize >= limits.GranuleBlobSplitSize
-        || sumSize >= limits.GranuleOverloadSize;
+    return !pkEqual && (sumMaxSize >= limits.GranuleBlobSplitSize
+        || sumSize >= limits.GranuleOverloadSize);
 }
 
 std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {

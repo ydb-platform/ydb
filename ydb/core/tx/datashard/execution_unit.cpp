@@ -216,7 +216,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.IsReplicated()) {
+    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
         TString err = TStringBuilder()
             << "Can't execute write tx at replicated table:"
             << " tablet id: " << DataShard.TabletID();
@@ -261,7 +261,7 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.IsReplicated()) {
+    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
         return true;
     }
 

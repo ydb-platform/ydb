@@ -485,21 +485,25 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
-        for (const auto& result : query.Results()) {
+        for (ui32 i = 0; i < query.Results().Size(); ++i) {
+            const auto& result = query.Results().Item(i);
+
             YQL_ENSURE(result.Maybe<TKqpTxResultBinding>());
             auto binding = result.Cast<TKqpTxResultBinding>();
-
             auto txIndex = FromString<ui32>(binding.TxIndex().Value());
-            auto resultIndex = FromString<ui32>(binding.ResultIndex());
+            auto txResultIndex = FromString<ui32>(binding.ResultIndex());
 
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
-            YQL_ENSURE(resultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
-            YQL_ENSURE(queryProto.GetTransactions(txIndex).GetResults(resultIndex).GetIsStream());
+            YQL_ENSURE(txResultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
+            auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
+
+            YQL_ENSURE(txResult.GetIsStream());
+            txResult.SetQueryResultIndex(i);
 
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
-            txBindingProto.SetResultIndex(resultIndex);
+            txBindingProto.SetResultIndex(txResultIndex);
         }
 
         return true;

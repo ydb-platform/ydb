@@ -185,13 +185,9 @@ public:
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
         TKiDataQueryBlocks dataQueryBlocks(query);
+        YQL_ENSURE(dataQueryBlocks.ArgCount() == 1);
 
         const auto& queryBlock = dataQueryBlocks.Arg(0);
-        if (queryBlock.Results().Size() != 1) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(dataQueryBlocks.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                "Multiple result sets not yet supported."));
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
-        }
         if (queryBlock.Effects().ArgCount() > 0) {
             ctx.AddError(YqlIssue(ctx.GetPosition(dataQueryBlocks.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 "Data modifications not yet supported."));

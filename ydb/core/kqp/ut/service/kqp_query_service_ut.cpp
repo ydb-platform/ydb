@@ -98,6 +98,40 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(ExecuteQueryMultiResult) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[202u];["Value2"]];
+            [[1];[502u];["Value2"]];
+            [[1];[802u];["Value2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1u];["One"];[-1]];
+            [[2u];["Two"];[0]];
+            [[3u];["Three"];[1]]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST(ExecuteQueryMultiScalar) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM EightShard;
+            SELECT COUNT(*) FROM TwoShard;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
     Y_UNIT_TEST(ExecuteScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

@@ -133,7 +133,7 @@ public:
         const TString& key,
         const TString& url,
         const std::string_view& compression,
-        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool dirtyWrite,
         const TString& token)
         : TxId(txId)
@@ -396,7 +396,7 @@ private:
     const TTxId TxId;
     const IHTTPGateway::TPtr Gateway;
     const NYdb::TCredentialsProviderPtr CredProvider;
-    const IRetryPolicy<long>::TPtr RetryPolicy;
+    const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     TActorSystem* const ActorSystem;
     TActorId ParentId;
@@ -429,7 +429,7 @@ public:
         const TString& compression,
         bool multipart,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-        const IRetryPolicy<long>::TPtr& retryPolicy,
+        const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
         bool dirtyWrite,
         const TString& token)
         : Gateway(std::move(gateway))
@@ -602,7 +602,7 @@ private:
     const NYdb::TCredentialsProviderPtr CredProvider;
     IRandomProvider* RandomProvider;
     TIntrusivePtr<IRandomProvider> DefaultRandomProvider;
-    const IRetryPolicy<long>::TPtr RetryPolicy;
+    const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const ui64 OutputIndex;
     const TTxId TxId;
@@ -639,7 +639,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const IRetryPolicy<long>::TPtr& retryPolicy)
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);

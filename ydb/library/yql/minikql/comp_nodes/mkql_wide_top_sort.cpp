@@ -2,6 +2,7 @@
 #include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/presort.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/defs.h>
@@ -14,16 +15,56 @@ namespace NMiniKQL {
 
 namespace {
 
-struct TMyValueCompare {
-    TMyValueCompare(const TKeyTypes& types)
-        : Types(types)
-    {}
+struct TKeyInfo {
+    NUdf::EDataSlot Slot;
+    bool IsOptional;
+    NUdf::ICompare::TPtr Compare;
+    TType* PresortType = nullptr;
+    std::optional<TGenericPresortEncoder> LeftPacker;
+    std::optional<TGenericPresortEncoder> RightPacker;
+};
 
-    int operator()(const bool* directions, const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
-        return CompareValues(left, right, Types, directions);
+struct TMyValueCompare {
+    TMyValueCompare(const std::vector<TKeyInfo>& keys)
+        : Keys(keys)
+    {
+        for (auto& key : Keys) {
+            if (key.PresortType) {
+                key.LeftPacker.emplace(key.PresortType);
+                key.RightPacker.emplace(key.PresortType);
+            }
+        }
     }
 
-    const TKeyTypes& Types;
+    int operator()(const bool* directions, const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
+        for (auto i = 0u; i < Keys.size(); ++i) {
+            auto& key = Keys[i];
+            int cmp;
+            if (key.Compare) {
+                cmp = key.Compare->Compare(left[i], right[i]);
+                if (!directions[i]) {
+                    cmp = -cmp;
+                }
+            } else if (key.LeftPacker) {
+                auto strLeft = key.LeftPacker->Encode(left[i], false);
+                auto strRight = key.RightPacker->Encode(right[i], false);
+                cmp = strLeft.compare(strRight);
+                if (!directions[i]) {
+                    cmp = -cmp;
+                }
+            } else {
+                cmp = CompareValues(key.Slot, directions[i], key.IsOptional, left[i], right[i]);
+            }
+
+            if (cmp)  {
+                return cmp;
+            }
+        }
+
+        return 0;
+    }
+
+    mutable std::vector<TKeyInfo> Keys;
 };
 
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
@@ -213,9 +254,21 @@ class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper
 {
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort, HasCount>>;
 public:
-    TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, TKeyTypes&& keyTypes, std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), KeyTypes(std::move(keyTypes)), Indexes(std::move(indexes)), Representations(std::move(representations))
-    {}
+    TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
+        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), Keys(std::move(keys))
+        , Indexes(std::move(indexes)), Representations(std::move(representations))
+    {
+        for (const auto& x : Keys) {
+            if (x.Compare || x.PresortType) {
+                KeyTypes.clear();
+                HasComplexType = true;
+                break;
+            }
+
+            KeyTypes.emplace_back(x.Slot, x.IsOptional);
+        }
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (!state.HasValue()) {
@@ -381,7 +434,7 @@ public:
                 }
 
                 } else {
-                for (auto i = 0U; i < KeyTypes.size(); ++i) {
+                for (auto i = 0U; i < Keys.size(); ++i) {
                     const auto item = getres.second[Indexes[i]](ctx, block);
                     new StoreInst(item, placeholders[i], block);
                 }
@@ -400,11 +453,11 @@ public:
 
                 block = push;
 
-                for (auto i = 0U; i < KeyTypes.size(); ++i) {
+                for (auto i = 0U; i < Keys.size(); ++i) {
                     ValueAddRef(Representations[i], placeholders[i], ctx, block);
                 }
 
-                for (auto i = KeyTypes.size(); i < Representations.size(); ++i) {
+                for (auto i = Keys.size(); i < Representations.size(); ++i) {
                     const auto item = getres.second[Indexes[i]](ctx, block);
                     ValueAddRef(Representations[i], item, ctx, block);
                     new StoreInst(item, placeholders[i], block);
@@ -415,7 +468,7 @@ public:
 
                 block = skip;
 
-                for (auto i = 0U; i < KeyTypes.size(); ++i) {
+                for (auto i = 0U; i < Keys.size(); ++i) {
                     ValueCleanup(Representations[i], placeholders[i], ctx, block);
                     new StoreInst(ConstantInt::get(valueType, 0), placeholders[i], block);
                 }
@@ -454,9 +507,9 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, ui64 count, const bool* directions) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState<HasCount>>(count, directions, Directions.size(), TMyValueCompare(KeyTypes), Indexes);
+        state = ctx.HolderFactory.Create<TState<HasCount>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes);
 #else
-        state = ctx.HolderFactory.Create<TState<HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(KeyTypes)), Indexes);
+        state = ctx.HolderFactory.Create<TState<HasCount>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes);
 #endif
     }
 
@@ -473,9 +526,12 @@ private:
     IComputationWideFlowNode *const Flow;
     IComputationNode *const Count;
     const TComputationNodePtrVector Directions;
-    const TKeyTypes KeyTypes;
+    const std::vector<TKeyInfo> Keys;
     const std::vector<ui32> Indexes;
     const std::vector<EValueRepresentation> Representations;
+    TKeyTypes KeyTypes;
+    bool HasComplexType = false;
+    
 #ifndef MKQL_DISABLE_CODEGEN
     TComparePtr Compare = nullptr;
 
@@ -494,7 +550,9 @@ private:
     }
 
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
-        codegen->ExportSymbol(CompareFunc = GenerateCompareFunction(codegen, MakeName(), KeyTypes));
+        if (!HasComplexType) {
+            codegen->ExportSymbol(CompareFunc = GenerateCompareFunction(codegen, MakeName(), KeyTypes));
+        }
     }
 #endif
 };
@@ -519,16 +577,30 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     const auto inputWideComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     std::vector<ui32> indexes(inputWideComponents.size());
 
-    TKeyTypes keyTypes(keyWidth);
-    std::unordered_set<ui32> keyIndexes;
-    for (auto i = 0U; i < keyTypes.size(); ++i) {
-        const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();
-        indexes[i] = keyIndex;
+    std::unordered_set<ui32> keyIndexes; 
+    std::vector<TKeyInfo> keys(keyWidth);
+    for (auto i = 0U; i < keyWidth; ++i) {
+        const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();        
+        indexes[i] = keyIndex;        
         keyIndexes.emplace(keyIndex);
-        keyTypes[i].first = *UnpackOptionalData(inputWideComponents[keyIndex], keyTypes[i].second)->GetDataSlot();
+
+        bool isTuple;
+        bool encoded;
+        bool useIHash;
+        TKeyTypes oneKeyTypes;
+        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple,encoded, useIHash, false);
+        if (useIHash) {
+            keys[i].Compare = MakeCompareImpl(inputWideComponents[keyIndex]);
+        } else if (encoded) {
+            keys[i].PresortType = inputWideComponents[keyIndex];
+        } else {
+            Y_ENSURE(oneKeyTypes.size() == 1);
+            keys[i].Slot = oneKeyTypes.front().first;
+            keys[i].IsOptional = oneKeyTypes.front().second;
+        }
     }
 
-    size_t payloadPos = keyTypes.size();
+    size_t payloadPos = keyWidth;
     for (auto i = 0U; i < indexes.size(); ++i) {
         if (keyIndexes.contains(i)) {
             continue;
@@ -546,7 +618,8 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     std::generate(directions.begin(), directions.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keyTypes), std::move(indexes), std::move(representations));
+        return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keys), 
+            std::move(indexes), std::move(representations));
     }
 
     THROW yexception() << "Expected wide flow.";

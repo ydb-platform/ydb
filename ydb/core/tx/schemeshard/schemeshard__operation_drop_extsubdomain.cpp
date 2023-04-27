@@ -47,6 +47,14 @@ public:
         // to make extsubdomain root unresolvable to any external observer
         context.SS->DropNode(targetPath, txState->PlanStep, OperationId.GetTxId(), db, context.Ctx);
 
+        {
+            auto parentDir = context.SS->PathsById.at(targetPath->ParentPathId);
+            ++parentDir->DirAlterVersion;
+            context.SS->PersistPathDirAlterVersion(db, parentDir);
+            context.SS->ClearDescribePathCaches(parentDir);
+            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+        }
+
         context.OnComplete.PublishToSchemeBoard(OperationId, targetPath->PathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
@@ -169,12 +177,6 @@ public:
         auto paths = context.SS->ListSubTree(pathId, context.Ctx);
         paths.erase(pathId);
         context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
-
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-        ++parentDir->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentDir);
-        context.SS->ClearDescribePathCaches(parentDir);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
         for (auto id: paths) {
             context.OnComplete.PublishToSchemeBoard(OperationId, id);

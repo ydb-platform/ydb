@@ -308,6 +308,31 @@ struct TUserTable : public TThrRefBase {
         }
     };
 
+    struct TReplicationConfig {
+        NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
+        NKikimrSchemeOp::TTableReplicationConfig::EConsistency Consistency;
+
+        TReplicationConfig()
+            : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
+            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN)
+        {
+        }
+
+        TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
+            : Mode(config.GetMode())
+            , Consistency(config.GetConsistency())
+        {
+        }
+
+        bool HasWeakConsistency() const {
+            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
+        }
+
+        bool HasStrongConsistency() const {
+            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
+        }
+    };
+
     struct TStats {
         NTable::TStats DataStats;
         ui64 IndexSize = 0;
@@ -358,8 +383,8 @@ struct TUserTable : public TThrRefBase {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
+    TReplicationConfig ReplicationConfig;
     bool IsBackup = false;
-    bool IsReplicated = false;
 
     TMap<TPathId, TTableIndex> Indexes;
     TMap<TPathId, TCdcStream> CdcStreams;
@@ -420,6 +445,8 @@ struct TUserTable : public TThrRefBase {
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
     bool NeedSchemaSnapshots() const;
+
+    bool IsReplicated() const;
 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,

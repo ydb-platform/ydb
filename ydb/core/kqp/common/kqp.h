@@ -127,10 +127,12 @@ private:
 
 struct TKqpQuerySettings {
     bool DocumentApiRestricted = true;
+    bool IsInternalCall = false;
 
     bool operator==(const TKqpQuerySettings& other) const {
         return
-            DocumentApiRestricted == other.DocumentApiRestricted;
+            DocumentApiRestricted == other.DocumentApiRestricted &&
+            IsInternalCall == other.IsInternalCall;
     }
 
     bool operator!=(const TKqpQuerySettings& other) {
@@ -143,7 +145,7 @@ struct TKqpQuerySettings {
     bool operator>=(const TKqpQuerySettings&) = delete;
 
     size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(DocumentApiRestricted);
+        auto tuple = std::make_tuple(DocumentApiRestricted, IsInternalCall);
         return THash<decltype(tuple)>()(tuple);
     }
 };
@@ -446,6 +448,10 @@ struct TEvKqp {
 
         ui64 GetQuerySize() const {
             return RequestCtx ? YqlText.size() : Record.GetRequest().GetQuery().size();
+        }
+
+        bool IsInternalCall() const {
+            return RequestCtx ? RequestCtx->IsInternalCall() : Record.GetRequest().GetIsInternalCall();
         }
 
         ui64 GetParametersSize() const {

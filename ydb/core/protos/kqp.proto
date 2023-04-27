@@ -98,6 +98,7 @@ message TQueryRequest {
     optional TTopicOperations TopicOperations = 22;
     optional bool UsePublicResponseDataFormat = 23;
     map<string, Ydb.TypedValue> YdbParameters = 24;
+    optional bool IsInternalCall = 25;
 }
 
 message TKqpPathIdProto {
@@ -379,6 +380,7 @@ message TEvExecuterTxResponse {
 message TEvExecuterStreamData {
     optional Ydb.ResultSet ResultSet = 1;
     optional uint64 SeqNo = 2;
+    optional uint32 QueryResultIndex = 3;
 };
 
 message TEvExecuterStreamDataAck {

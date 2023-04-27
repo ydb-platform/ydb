@@ -46,10 +46,11 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
-    return std::make_shared<arrow::Schema>(arrow::FieldVector{
+    static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
         arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
         arrow::field(SPEC_COL_TX_ID, arrow::uint64())
     });
+    return result;
 }
 
 bool TIndexInfo::IsSpecialColumn(const arrow::Field& field) {
@@ -59,7 +60,13 @@ bool TIndexInfo::IsSpecialColumn(const arrow::Field& field) {
 }
 
 
-ui32 TIndexInfo::GetColumnId(const TString& name) const {
+ui32 TIndexInfo::GetColumnId(const std::string& name) const {
+    auto id = GetColumnIdOptional(name);
+    Y_VERIFY(!!id);
+    return *id;
+}
+
+std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) const {
     const auto ni = ColumnNames.find(name);
 
     if (ni == ColumnNames.end()) {
@@ -68,7 +75,7 @@ ui32 TIndexInfo::GetColumnId(const TString& name) const {
         } else if (name == SPEC_COL_TX_ID) {
             return ui32(ESpecialColumn::TX_ID);
         }
-        Y_VERIFY(false);
+        return {};
     }
 
     return ni->second;

@@ -1959,6 +1959,8 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
+        ActorIdToProto(target, ev->Record.MutableCancelationActor());
+
         FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,

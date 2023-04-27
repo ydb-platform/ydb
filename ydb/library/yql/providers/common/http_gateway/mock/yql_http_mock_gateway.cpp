@@ -43,9 +43,9 @@ public:
         return std::move(ret);
     }
 
-    void Upload(TString, THeaders, TString, TOnResult, bool, IRetryPolicy<long>::TPtr) {}
+    void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr) final {}
 
-    void Delete(TString, THeaders, TOnResult, IRetryPolicy<long>::TPtr) {}
+    void Delete(TString, THeaders, TOnResult, TRetryPolicy::TPtr) final {}
 
     void Download(
             TString url,
@@ -54,7 +54,7 @@ public:
             std::size_t sizeLimit,
             TOnResult callback,
             TString data,
-            IRetryPolicy<long>::TPtr retryPolicy)
+            TRetryPolicy::TPtr retryPolicy) final 
     {
 
         Y_UNUSED(sizeLimit);

@@ -1,5 +1,5 @@
 {% note info %}
 
-The examples use the `db1` profile. To learn more, see [{#T}](../getting_started/cli.md#profile).
+The examples use the `quickstart` profile. To learn more, see [{#T}](../reference/ydb-cli/profile/create.md#quickstart).
 
 {% endnote %}

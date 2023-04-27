@@ -5,7 +5,7 @@ TArrowFileDesc::TArrowFileDesc(
     const TString& url, 
     IHTTPGateway::TPtr gateway, 
     IHTTPGateway::THeaders headers, 
-    const IRetryPolicy<long>::TPtr& retryPolicy, 
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, 
     size_t size, 
     const TString& format
 )

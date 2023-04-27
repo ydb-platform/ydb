@@ -802,6 +802,7 @@ message TFeatureFlags {
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
+    optional bool EnableScriptExecutionOperations = 92 [default = false];
 }
 
 

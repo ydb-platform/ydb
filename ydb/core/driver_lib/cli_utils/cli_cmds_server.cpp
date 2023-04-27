@@ -317,6 +317,19 @@ protected:
         return 0;
     }
 
+    void AddLabelToAppConfig(const TString& name, const TString& value) {
+        for (auto &label : *RunConfig.AppConfig.MutableLabels()) {
+            if (label.GetName() == name) {
+                label.SetValue(value);
+                return;
+            }
+        }
+
+        auto *label = RunConfig.AppConfig.AddLabels();
+        label->SetName(name);
+        label->SetValue(value);
+    }
+
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
@@ -389,17 +402,8 @@ protected:
         RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
         RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
 
-        NKikimrConfig::TLabel *dynamicLabel = nullptr;
-        NKikimrConfig::TLabel *nodeIdLabel = nullptr;
-
         for (const auto& [name, value] : RunConfig.Labels) {
             auto *label = RunConfig.AppConfig.AddLabels();
-            if (name == "dynamic") {
-                dynamicLabel = label;
-            }
-            if (name == "node_id") {
-                nodeIdLabel = label;
-            }
             label->SetName(name);
             label->SetValue(value);
         }
@@ -418,7 +422,7 @@ protected:
             RegisterDynamicNode();
 
             RunConfig.Labels["node_id"] = ToString(RunConfig.NodeId);
-            nodeIdLabel->SetValue(RunConfig.Labels["node_id"]);
+            AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
 
             if (!HierarchicalCfg && !IgnoreCmsConfigs)
                 LoadConfigForDynamicNode();
@@ -732,7 +736,7 @@ protected:
         if (RunConfig.AppConfig.HasDynamicNameserviceConfig()) {
             bool isDynamic = RunConfig.NodeId > RunConfig.AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
             RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
-            dynamicLabel->SetValue(RunConfig.Labels["dynamic"]);
+            AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
         }
     }
 

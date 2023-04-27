@@ -693,12 +693,7 @@ bool ValidateWideTopKeys(TExprNode& keys, const TTypeAnnotationNode::TListType& 
                 return false;
             }
 
-            const TDataExprType* type = nullptr;
-            if (bool opt; !EnsureDataOrOptionalOfData( item->Head().Pos(), types[index], opt, type, ctx)) {
-                return false;
-            }
-
-            if (!EnsureComparableType(item->Pos(), *type, ctx)) {
+            if (!EnsureComparableType(item->Pos(), *types[index], ctx)) {
                 return false;
             }
         } else {

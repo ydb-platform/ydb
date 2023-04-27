@@ -48,6 +48,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
 
         Record.MutableRequest()->SetDatabase(Database);
         ActorIdToProto(RequestActorId, Record.MutableCancelationActor());
+        ActorIdToProto(RequestActorId, Record.MutableRequestActorId());
 
         if (auto traceId = RequestCtx->GetTraceId()) {
             Record.SetTraceId(traceId.GetRef());
@@ -88,6 +89,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
+        Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
 
         RequestCtx.reset();
     }

@@ -30,13 +30,13 @@ runs:
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=https://nebius.testmo.net" >> $GITHUB_ENV
-      echo "logfilename=${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_OUTPUT
+      echo "logfilename=${{inputs.log_suffix}}-stdout.gz" >> $GITHUB_OUTPUT
   - name: Test history run create
     id: th
     shell: bash
     run: |
       testmo automation:run:create --instance "$TESTMO_URL" --project-id 1 --name "${{ github.run_id }}" \
-        --source "${{inputs.log_suffix}}${{inputs.sanitizer}}" | \
+        --source "${{inputs.log_suffix}}" | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
     shell: bash

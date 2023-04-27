@@ -57,13 +57,13 @@ runs:
       TESTMO_TOKEN: ${{inputs.testman_token}}
     run: |
       testmo automation:run:submit-thread \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.runid}} \
+        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
         --results ../../test_suites/*.xml 
       testmo automation:run:submit-thread \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.runid}} \
+        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
         --results ../../test_suites/*.xml 
       testmo automation:run:complete \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.runid}}
+        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

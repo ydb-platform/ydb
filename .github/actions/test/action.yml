@@ -38,6 +38,7 @@ runs:
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-stdout.gz" >> $GITHUB_OUTPUT
   - name: Test history run create
+    id: th
     if: inputs.testman_token
     shell: bash
     run: |

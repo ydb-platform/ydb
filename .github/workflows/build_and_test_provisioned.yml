@@ -23,9 +23,15 @@ on:
       runner_label:
         required: true
         type: string
+      run_build:
+        type: boolean
+        default: true
       sanitizer:
         required: false
         type: string
+      run_tests:
+        type: boolean
+        default: true
       test_label_regexp:
         required: false
         type: string

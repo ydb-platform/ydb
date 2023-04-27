@@ -179,6 +179,7 @@ public:
         if (arrayCount == 1) {
             Y_VERIFY(arrays->Data);
             DoAddMany(*arrays->Data, indexes, count);
+            CurrLen += count;
         } else {
             const IArrayBuilder::TArrayDataItem* currData = nullptr;
             TVector<ui64> currDataIndexes;
@@ -191,6 +192,7 @@ public:
 
                 if (data != currData) {
                     DoAddMany(*currData->Data, currDataIndexes.data(), currDataIndexes.size());
+                    CurrLen += currDataIndexes.size();
                     currDataIndexes.clear();
                     currData = data;
                 }
@@ -198,9 +200,9 @@ public:
             }
             if (!currDataIndexes.empty()) {
                 DoAddMany(*currData->Data, currDataIndexes.data(), currDataIndexes.size());
+                CurrLen += currDataIndexes.size();
             }
         }
-        CurrLen += count;
     }
 
     arrow::Datum Build(bool finish) final {
@@ -287,6 +289,11 @@ protected:
         return CurrLen;
     }
 
+    void SetCurrLen(size_t len) {
+        Y_VERIFY(len <= MaxLen);
+        CurrLen = len;
+    }
+
     const std::shared_ptr<arrow::DataType> ArrowType;
     arrow::MemoryPool* const Pool;
     const size_t MaxLen;
@@ -310,6 +317,18 @@ public:
         Reserve();
     }
 
+    void UnsafeReserve(size_t length) {
+        SetCurrLen(length);
+    }
+
+    T* MutableData() {
+        return DataPtr;
+    }
+
+    ui8* MutableValidMask() {
+        return NullPtr;
+    }
+
     void DoAdd(NUdf::TUnboxedValuePod value) final {
         if constexpr (Nullable) {
             if (!value) {
@@ -322,14 +341,14 @@ public:
     void DoAdd(TBlockItem value) final {
         if constexpr (Nullable) {
             if (!value) {
-                NullBuilder->UnsafeAppend(0);
-                DataBuilder->UnsafeAppend(T{});
+                NullPtr[GetCurrLen()] = 0;
+                DataPtr[GetCurrLen()] = T{};
                 return;
             }
-            NullBuilder->UnsafeAppend(1);
+            NullPtr[GetCurrLen()] = 1;
         }
 
-        DataBuilder->UnsafeAppend(value.As<T>());
+        DataPtr[GetCurrLen()] = value.As<T>();
     }
 
     void DoAdd(TInputBuffer& input) final {
@@ -343,68 +362,65 @@ public:
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
-            NullBuilder->UnsafeAppend(1);
+            NullPtr[GetCurrLen()] = 1;
         }
-        DataBuilder->UnsafeAppend(T{});
+        DataPtr[GetCurrLen()] = T{};
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_VERIFY(array.buffers.size() > 1);
         if constexpr (Nullable) {
-            Y_VERIFY(NullBuilder->Length() == DataBuilder->Length());
             if (array.buffers.front()) {
-                ui8* dstBitmap = NullBuilder->End();
+                ui8* dstBitmap = NullPtr + GetCurrLen();
                 CompressAsSparseBitmap(array.GetValues<ui8>(0, 0), array.offset, sparseBitmap, dstBitmap, array.length);
-                NullBuilder->UnsafeAdvance(popCount);
             } else {
-                NullBuilder->UnsafeAppend(popCount, 1);
+                ui8* dstBitmap = NullPtr + GetCurrLen();
+                std::fill_n(dstBitmap, popCount, 1);
             }
         }
 
         const T* src = array.GetValues<T>(1);
-        T* dst = DataBuilder->End();
+        T* dst = DataPtr + GetCurrLen();
         CompressArray(src, sparseBitmap, dst, array.length);
-        DataBuilder->UnsafeAdvance(popCount);
     }
 
     void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_VERIFY(array.buffers.size() > 1);
         if constexpr (Nullable) {
-            Y_VERIFY(NullBuilder->Length() == DataBuilder->Length());
             for (size_t i = beginIndex; i < beginIndex + count; ++i) {
-                NullBuilder->UnsafeAppend(!IsNull(array, i));
+                NullPtr[GetCurrLen() + i - beginIndex] = !IsNull(array, i);
             }
         }
 
         const T* values = array.GetValues<T>(1);
         for (size_t i = beginIndex; i < beginIndex + count; ++i) {
-            DataBuilder->UnsafeAppend(T(values[i]));
+            DataPtr[GetCurrLen() + i - beginIndex] = T(values[i]);
         }
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_VERIFY(array.buffers.size() > 1);
         if constexpr (Nullable) {
-            Y_VERIFY(NullBuilder->Length() == DataBuilder->Length());
             for (size_t i = 0; i < count; ++i) {
-                NullBuilder->UnsafeAppend(!IsNull(array, indexes[i]));
+                NullPtr[GetCurrLen() + i] = !IsNull(array, indexes[i]);
             }
         }
 
         const T* values = array.GetValues<T>(1);
         for (size_t i = 0; i < count; ++i) {
-            DataBuilder->UnsafeAppend(T(values[indexes[i]]));
+            DataPtr[GetCurrLen() + i] = T(values[indexes[i]]);
         }
     }
 
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
-        const size_t len = DataBuilder->Length();
+        const size_t len = GetCurrLen();
         std::shared_ptr<arrow::Buffer> nulls;
         if constexpr (Nullable) {
-            Y_VERIFY(NullBuilder->Length() == len);
+            NullBuilder->UnsafeAdvance(len);
             nulls = NullBuilder->Finish();
             nulls = MakeDenseBitmap(nulls->data(), len, Pool);
         }
+        DataBuilder->UnsafeAdvance(len);
         std::shared_ptr<arrow::Buffer> data = DataBuilder->Finish();
 
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
@@ -422,14 +438,18 @@ private:
     void Reserve() {
         DataBuilder = std::make_unique<TTypedBufferBuilder<T>>(Pool);
         DataBuilder->Reserve(MaxLen + 1);
+        DataPtr = DataBuilder->MutableData();
         if constexpr (Nullable) {
             NullBuilder = std::make_unique<TTypedBufferBuilder<ui8>>(Pool);
             NullBuilder->Reserve(MaxLen + 1);
+            NullPtr = NullBuilder->MutableData();
         }
     }
 
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
     std::unique_ptr<TTypedBufferBuilder<T>> DataBuilder;
+    ui8* NullPtr = nullptr;
+    T* DataPtr = nullptr;
 };
 
 template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>

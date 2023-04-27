@@ -9,8 +9,14 @@
 #include <llvm/IR/Module.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/arrow.h>
+
+extern "C" {
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_collation_d.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/fmgrprotos.h>
+}
+
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/minikql/arrow/arrow_util.h>
 
 #include <util/datetime/cputimer.h>
 
@@ -21,11 +27,27 @@ extern "C" {
 extern TExecFunc arrow_date_eq();
 }
 
+enum class EKernelFlavor {
+    DefArg,
+    Cpp,
+    BitCode,
+    Ideal
+};
+
 Y_UNIT_TEST_SUITE(TPgCodegen) {
-    void PgFuncImpl(bool useBC) {
+    void PgFuncImpl(EKernelFlavor flavor, bool constArg) {
         TExecFunc execFunc;
         ICodegen::TPtr codegen;
-        if (useBC) {
+        switch (flavor) {
+        case EKernelFlavor::DefArg: {
+            execFunc = &GenericExec<TPgDirectFunc<&date_eq>, true, true, TDefaultArgsPolicy>;
+            break;
+        }
+        case EKernelFlavor::Cpp: {
+            execFunc = arrow_date_eq();
+            break;
+        }
+        case EKernelFlavor::BitCode: {
             codegen = ICodegen::Make(ETarget::Native);
             auto bitcode = NResource::Find("/llvm_bc/PgFuncs1");
             codegen->LoadBitCode(bitcode, "Funcs");
@@ -38,8 +60,53 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             typedef TExecFunc (*TFunc)();
             auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
             execFunc = funcPtr();
-        } else {        
-            execFunc = arrow_date_eq();
+            break;
+        }
+        case EKernelFlavor::Ideal: {
+            execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                size_t length = batch.values[0].length();
+                //NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
+                NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow::default_memory_pool());
+                NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow::default_memory_pool());
+                dataBuilder.Reserve(length);
+                nullBuilder.Reserve(length);
+                auto out = dataBuilder.MutableData();
+                auto outNulls = nullBuilder.MutableData();
+                NUdf::TFixedSizeBlockReader<ui64, false> reader1;                    
+                NUdf::TFixedSizeBlockReader<ui64, false> reader2;                    
+                const auto& array1 = *batch.values[0].array();
+                const auto ptr1 = array1.GetValues<ui64>(1);                
+                if (batch.values[1].is_array()) {
+                    const auto& array2 = *batch.values[1].array();
+                    const auto ptr2 = array2.GetValues<ui64>(1);
+                    for (size_t i = 0; i < length; ++i) {
+                        //auto x = reader1.GetItem(array1, i).As<ui64>();
+                        //auto y = reader2.GetItem(array2, i).As<ui64>();
+                        auto x = ptr1[i];
+                        auto y = ptr2[i];
+                        out[i] = x == y ? 1 : 0;
+                        outNulls[i] = false;
+                    }
+                } else {
+                    ui64 yConst = reader2.GetScalarItem(*batch.values[1].scalar()).As<ui64>();
+                    for (size_t i = 0; i < length; ++i) {
+                        auto x = ptr1[i];
+                        out[i] = x == yConst ? 1 : 0;
+                        outNulls[i] = false;
+                    }
+                }
+
+                std::shared_ptr<arrow::Buffer> nulls;
+                nulls = nullBuilder.Finish();
+                nulls = NUdf::MakeDenseBitmap(nulls->data(), length, arrow::default_memory_pool());
+                std::shared_ptr<arrow::Buffer> data = dataBuilder.Finish();
+
+                *res = arrow::ArrayData::Make(arrow::uint64(), length ,{ data, nulls});
+                return arrow::Status::OK();
+            };
+
+            break;
+        }
         }
 
         Y_ENSURE(execFunc);
@@ -67,7 +134,13 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
 
         std::shared_ptr<arrow::ArrayData> out;
         ARROW_OK(builder.FinishInternal(&out));
-        arrow::Datum arg1(out), arg2(out);
+        arrow::Datum arg1(out), arg2;
+        if (constArg) {
+            Cout << "with const arg\n";
+            arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
+        } else {
+            arg2 = out;
+        }
 
         {
             Cout << "begin...\n";            
@@ -84,13 +157,25 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         }
     }
 
-    Y_UNIT_TEST(PgFunc) {
-        PgFuncImpl(false);
+    Y_UNIT_TEST(PgFuncIdeal) {
+        PgFuncImpl(EKernelFlavor::Ideal, false);
+        PgFuncImpl(EKernelFlavor::Ideal, true);
     }
+
+    Y_UNIT_TEST(PgFuncCpp) {
+        PgFuncImpl(EKernelFlavor::Cpp, false);
+        PgFuncImpl(EKernelFlavor::Cpp, true);
+    }
+
+    Y_UNIT_TEST(PgFuncDefArg) {
+        PgFuncImpl(EKernelFlavor::DefArg, false);
+        PgFuncImpl(EKernelFlavor::DefArg, true);
+    }    
 
 #if defined(NDEBUG) && !defined(_asan_enabled_)
     Y_UNIT_TEST(PgFuncBC) {
-        PgFuncImpl(true);
+        PgFuncImpl(EKernelFlavor::BitCode, false);
+        PgFuncImpl(EKernelFlavor::BitCode, true);
     }
 #endif
 }

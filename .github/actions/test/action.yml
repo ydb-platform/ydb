@@ -41,7 +41,7 @@ runs:
   - name: Test
     shell: bash
     run: |
-      cd $WORKDIR/build/ydb
+      cd $WORKDIR/../build/ydb
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
 

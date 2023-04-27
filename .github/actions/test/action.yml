@@ -33,7 +33,7 @@ runs:
 
       # Sed removes coloring from the output
       
-      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" UNITTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
+      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" Y_UNITTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
       TESTMO_TOKEN=${{inputs.testman_token}} \
         testmo automation:run:submit \
                --instance https://nebius.testmo.net --project-id 1 --name "Run4" --source Src1 --results ../../test_reports/*.xml

@@ -61,11 +61,11 @@ runs:
     run: |
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results ${{steps.init.outputs.testrepdir}}/unittests/*.xml 
+        --results $TESTREPDIR/unittests/*.xml 
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results ${{steps.init.outputs.testrepdir}}/suites/*.xml \
-        -- cat ${{steps.init.outputs.workdir}}/short.log
+        --results $TESTREPDIR/suites/*.xml \
+        -- cat $WORKDIR/short.log
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master

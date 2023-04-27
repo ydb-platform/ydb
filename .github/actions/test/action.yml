@@ -14,7 +14,13 @@ inputs:
     required: true
     type: string
   testman_token:
-     required: true
+     required: false
+     type: string
+  testman_url:
+     required: false
+     type: string
+  testman_project_id:
+     required: false
      type: string
     
 runs:
@@ -29,13 +35,13 @@ runs:
       echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
-      echo "TESTMO_URL=https://nebius.testmo.net" >> $GITHUB_ENV
+      echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-stdout.gz" >> $GITHUB_OUTPUT
   - name: Test history run create
-    id: th
+    if: inputs.testman_token
     shell: bash
     run: |
-      testmo automation:run:create --instance "$TESTMO_URL" --project-id 1 --name "${{ github.run_id }}" \
+      testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "${{ github.run_id }}" \
         --source "${{inputs.log_suffix}}" | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
@@ -56,7 +62,7 @@ runs:
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log
   - name: Test history upload results
-    if: always()
+    if: always() & inputs.testman_token
     shell: bash
     run: |
       testmo automation:run:submit-thread \

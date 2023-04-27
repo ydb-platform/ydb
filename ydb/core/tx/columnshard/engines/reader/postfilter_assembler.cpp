@@ -47,6 +47,7 @@ TAssembleBatch::TAssembleBatch(TPortionInfo::TPreparedBatchData&& batchConstruct
     , FilterBatch(currentBatch.GetFilterBatch())
     , BatchNo(currentBatch.GetBatchNo())
 {
+    TBase::SetPriority(TBase::EPriority::High);
     Y_VERIFY(currentBatch.GetFilter());
     Y_VERIFY(currentBatch.GetFilterBatch());
     Y_VERIFY(!currentBatch.GetFilteredBatch());

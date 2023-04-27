@@ -85,7 +85,6 @@ void TColumnShardScanIterator::FillReadyResults() {
         if (batch.ResultBatch->num_rows() > limitLeft) {
             // Trim the last batch if total row count exceeds the requested limit
             batch.ResultBatch = batch.ResultBatch->Slice(0, limitLeft);
-            ready.clear();
         }
         limitLeft -= batch.ResultBatch->num_rows();
         ItemsRead += batch.ResultBatch->num_rows();

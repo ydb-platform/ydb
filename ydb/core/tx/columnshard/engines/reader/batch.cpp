@@ -37,7 +37,10 @@ NColumnShard::IDataTasksProcessor::ITask::TPtr TBatch::AssembleTask(NColumnShard
 }
 
 bool TBatch::AskedColumnsAlready(const std::set<ui32>& columnIds) const {
-    if (AskedColumnIds < columnIds) {
+    if (!CurrentColumnIds) {
+        return true;
+    }
+    if (AskedColumnIds.size() < columnIds.size()) {
         return false;
     }
     for (auto&& i : columnIds) {
@@ -68,12 +71,11 @@ void TBatch::Reset(const std::set<ui32>* columnIds) {
     } else {
         CurrentColumnIds = *columnIds;
         Y_VERIFY(CurrentColumnIds->size());
-    }
-    if (CurrentColumnIds) {
         for (auto&& i : *CurrentColumnIds) {
             AskedColumnIds.emplace(i);
         }
     }
+
     Y_VERIFY(WaitIndexed.empty());
     Y_VERIFY(Data.empty());
     WaitingBytes = 0;
@@ -82,6 +84,7 @@ void TBatch::Reset(const std::set<ui32>* columnIds) {
         if (CurrentColumnIds && !CurrentColumnIds->contains(rec.ColumnId)) {
             continue;
         }
+        AskedColumnIds.emplace(rec.ColumnId);
         Y_VERIFY(WaitIndexed.emplace(rec.BlobRange).second);
         Owner->Owner->AddBlobForFetch(rec.BlobRange, *this);
         Y_VERIFY(rec.Portion == Portion);

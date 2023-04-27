@@ -17,7 +17,6 @@ bool TAssembleFilter::DoExecuteImpl() {
         FilteredBatch = nullptr;
         return true;
     }
-#if 1 // optimization
     if (ReadMetadata->Program && AllowEarlyFilter) {
         auto filter = NOlap::EarlyFilter(batch, ReadMetadata->Program);
         Filter->CombineSequential(filter);
@@ -27,10 +26,8 @@ bool TAssembleFilter::DoExecuteImpl() {
             return true;
         }
     }
-#else
-    Y_UNUSED(AllowEarlyFilter);
-#endif
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")("original_count", OriginalCount)("filtered_count", batch->num_rows());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
+        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter);
 
     FilteredBatch = batch;
     return true;

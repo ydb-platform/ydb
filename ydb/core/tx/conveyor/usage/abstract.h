@@ -6,8 +6,15 @@
 namespace NKikimr::NConveyor {
 
 class ITask {
+public:
+    enum EPriority: ui32 {
+        High = 1000,
+        Normal = 500,
+        Low = 0
+    };
 private:
-    TString ErrorMessage;
+    YDB_READONLY_DEF(TString, ErrorMessage);
+    YDB_ACCESSOR(EPriority, Priority, EPriority::Normal);
 protected:
     ITask& SetErrorMessage(const TString& message) {
         ErrorMessage = message;
@@ -20,10 +27,6 @@ public:
 
     bool HasError() const {
         return !!ErrorMessage;
-    }
-
-    const TString& GetErrorMessage() const {
-        return ErrorMessage;
     }
 
     bool Execute();

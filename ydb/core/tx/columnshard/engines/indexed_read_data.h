@@ -226,6 +226,7 @@ struct TPartialReadResult {
 class TIndexedReadData {
 private:
     std::set<ui32> EarlyFilterColumns;
+    std::set<ui32> UsedColumns;
     YDB_READONLY_DEF(std::set<ui32>, PostFilterColumns);
     bool AbortedFlag = false;
     YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);

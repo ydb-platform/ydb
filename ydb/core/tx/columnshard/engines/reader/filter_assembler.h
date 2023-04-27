@@ -31,7 +31,7 @@ namespace NKikimr::NOlap::NIndexedReader {
             , BatchNo(batch.GetBatchNo())
             , AllowEarlyFilter(allowEarlyFilter)
         {
-
+            TBase::SetPriority(TBase::EPriority::Normal);
         }
     };
 

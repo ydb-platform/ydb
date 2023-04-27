@@ -122,11 +122,13 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds(const bool noTrivial) cons
     if (LessPredicate) {
         for (auto&& i : LessPredicate->ColumnNames()) {
             result.emplace(IndexInfo.GetColumnId(i));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
         }
     }
     if (GreaterPredicate) {
         for (auto&& i : GreaterPredicate->ColumnNames()) {
             result.emplace(IndexInfo.GetColumnId(i));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
         }
     }
     if (Program) {
@@ -134,6 +136,7 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds(const bool noTrivial) cons
             auto id = IndexInfo.GetColumnIdOptional(i);
             if (id) {
                 result.emplace(*id);
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
             }
         }
     }
@@ -144,6 +147,7 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds(const bool noTrivial) cons
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
         for (auto&& i : snapSchema->fields()) {
             result.emplace(IndexInfo.GetColumnId(i->name()));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i->name());
         }
     }
     return result;
@@ -154,10 +158,12 @@ std::set<ui32> TReadMetadata::GetUsedColumnIds() const {
     if (PlanStep) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
         for (auto&& i : snapSchema->fields()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("used_column", i->name());
             result.emplace(IndexInfo.GetColumnId(i->name()));
         }
     }
     for (auto&& f : LoadSchema->fields()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("used_column", f->name());
         result.emplace(IndexInfo.GetColumnId(f->name()));
     }
     return result;
@@ -216,7 +222,11 @@ void TIndexedReadData::InitRead(ui32 inputBatch, bool inGranulesOrder) {
         }
 
         NIndexedReader::TBatch& currentBatch = itGranule->second.AddBatch(batchNo, portionInfo);
-        currentBatch.Reset(&EarlyFilterColumns);
+        if (portionInfo.AllowEarlyFilter()) {
+            currentBatch.Reset(&EarlyFilterColumns);
+        } else {
+            currentBatch.Reset(&UsedColumns);
+        }
         Batches[batchNo] = &currentBatch;
         ++batchNo;
     }
@@ -564,6 +574,7 @@ TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
     , FetchBlobsQueue(fetchBlobsQueue)
     , ReadMetadata(readMetadata)
 {
+    UsedColumns = ReadMetadata->GetUsedColumnIds();
     PostFilterColumns = ReadMetadata->GetUsedColumnIds();
     EarlyFilterColumns = ReadMetadata->GetEarlyFilterColumnIds(true);
     if (internalRead || EarlyFilterColumns.empty()) {

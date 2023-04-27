@@ -59,6 +59,8 @@ items:
       href: topic-consumer-add.md
     - name: Удаление читателя топика
       href: topic-consumer-drop.md
+    - name: Сохранение позиции чтения
+      href: topic-consumer-offset-commit.md
     - name: Чтение из топика
       href: topic-read.md
     - name: Запись в топик

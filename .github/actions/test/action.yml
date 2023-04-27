@@ -28,8 +28,8 @@ runs:
       rm -rf artifacts/* tmp/* test_reports/*
       echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
-      echo ${{inputs.testman_token}} >> $GITHUB_ENV
-      echo https://nebius.testmo.net >> $GITHUB_ENV
+      echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
+      echo "TESTMO_URL=https://nebius.testmo.net" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_OUTPUT
   - name: Test history run create
     id: th

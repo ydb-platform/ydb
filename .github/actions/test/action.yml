@@ -66,7 +66,7 @@ runs:
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log
   - name: Test history upload results
-    if: always() & inputs.testman_token
+    if: always() && inputs.testman_token
     shell: bash
     run: |
       testmo automation:run:submit-thread \

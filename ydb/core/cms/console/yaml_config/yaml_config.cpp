@@ -631,7 +631,7 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
 ui64 GetVersion(const TString& config) {
     auto parser = NFyaml::TParser::Create(config);
     auto header = parser.NextDocument();
-    auto str = header->Root().Map().at("version").Scalar();
+    auto str = header ? header->Root().Map().at("version").Scalar() : "";
     ui64 version = 0;
     TryFromString<ui64>(str, version);
     return version;

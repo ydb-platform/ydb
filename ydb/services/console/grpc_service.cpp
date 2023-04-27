@@ -26,6 +26,7 @@ void TGRpcConsoleService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             #NAME, logger, getCounterBlock("console", #NAME))->Run();
 
     ADD_REQUEST(ApplyConfig, DoApplyConfigRequest)
+    ADD_REQUEST(DropConfig, DoDropConfigRequest)
     ADD_REQUEST(AddVolatileConfig, DoAddVolatileConfigRequest)
     ADD_REQUEST(RemoveVolatileConfig, DoRemoveVolatileConfigRequest)
     ADD_REQUEST(GetConfig, DoGetConfigRequest)

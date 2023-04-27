@@ -100,6 +100,7 @@ private:
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvGetConfigRequest, Handle);
             FFunc(TEvConsole::EvApplyConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);

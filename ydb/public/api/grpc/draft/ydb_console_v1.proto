@@ -9,6 +9,7 @@ import "ydb/public/api/protos/draft/ydb_console.proto";
 
 service ConsoleService {
     rpc ApplyConfig(Console.ApplyConfigRequest) returns (Console.ApplyConfigResponse);
+    rpc DropConfig(Console.DropConfigRequest) returns (Console.DropConfigResponse);
     rpc AddVolatileConfig(Console.AddVolatileConfigRequest) returns (Console.AddVolatileConfigResponse);
     rpc RemoveVolatileConfig(Console.RemoveVolatileConfigRequest) returns (Console.RemoveVolatileConfigResponse);
     rpc GetConfig(Console.GetConfigRequest) returns (Console.GetConfigResponse);

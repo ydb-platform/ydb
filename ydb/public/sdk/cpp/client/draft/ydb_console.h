@@ -87,6 +87,12 @@ public:
     // Apply config
     TAsyncStatus ApplyConfig(const TString& config, const TClusterConfigSettings& settings = {});
 
+    // Drop config
+    TAsyncStatus DropConfig(
+        const TString& cluster,
+        ui64 version,
+        const TClusterConfigSettings& settings = {});
+
     // Add volatile config
     TAsyncStatus AddVolatileConfig(
         const TString& config,

@@ -16,6 +16,9 @@ using namespace Ydb;
 using TEvApplyConfigRequest = TGrpcRequestOperationCall<Console::ApplyConfigRequest,
     Console::ApplyConfigResponse>;
 
+using TEvDropConfigRequest = TGrpcRequestOperationCall<Console::DropConfigRequest,
+    Console::DropConfigResponse>;
+
 using TEvAddVolatileConfigRequest = TGrpcRequestOperationCall<Console::AddVolatileConfigRequest,
     Console::AddVolatileConfigResponse>;
 
@@ -163,6 +166,13 @@ void DoApplyConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvi
         new TConsoleRPC<TEvApplyConfigRequest,
                     TEvConsole::TEvApplyConfigRequest,
                     TEvConsole::TEvApplyConfigResponse>(p.release()));
+}
+
+void DoDropConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TConsoleRPC<TEvDropConfigRequest,
+                    TEvConsole::TEvDropConfigRequest,
+                    TEvConsole::TEvDropConfigResponse>(p.release()));
 }
 
 void DoAddVolatileConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {

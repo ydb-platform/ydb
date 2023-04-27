@@ -15,6 +15,16 @@ message ApplyConfigResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message DropConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional string cluster = 2;
+    optional uint32 version = 3;
+}
+
+message DropConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
 message AddVolatileConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     optional uint64 id = 2;

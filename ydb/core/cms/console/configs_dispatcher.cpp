@@ -588,6 +588,10 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         bool wasYamlConfigEnabled = YamlConfigEnabled;
         YamlConfigEnabled = newYamlProtoConfig.HasYamlConfigEnabled() && newYamlProtoConfig.GetYamlConfigEnabled();
         yamlConfigTurnedOff = wasYamlConfigEnabled && !YamlConfigEnabled;
+    } else if (YamlConfig.empty()) {
+        bool wasYamlConfigEnabled = YamlConfigEnabled;
+        YamlConfigEnabled = false;
+        yamlConfigTurnedOff = wasYamlConfigEnabled && !YamlConfigEnabled;
     } else {
         newYamlProtoConfig = YamlProtoConfig;
     }

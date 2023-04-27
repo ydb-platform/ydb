@@ -244,6 +244,15 @@ message TApplyConfigResponse {
     optional Ydb.Console.ApplyConfigResponse Response = 1;
 }
 
+message TDropConfigRequest {
+    optional Ydb.Console.DropConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TDropConfigResponse {
+    optional Ydb.Console.DropConfigResponse Response = 1;
+}
+
 message TAddVolatileConfigRequest {
     optional Ydb.Console.AddVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;

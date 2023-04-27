@@ -306,6 +306,21 @@ inline void CheckApplyConfig(TTenantTestRuntime &runtime,
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
 }
 
+inline void CheckDropConfig(TTenantTestRuntime &runtime,
+                            Ydb::StatusIds::StatusCode code,
+                            TString clusterName,
+                            ui64 version)
+{
+        TAutoPtr<IEventHandle> handle;
+        auto *event = new TEvConsole::TEvDropConfigRequest;
+        event->Record.MutableRequest()->set_cluster(clusterName);
+        event->Record.MutableRequest()->set_version(version);
+        runtime.SendToConsole(event);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvDropConfigResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+}
+
 inline void CheckAddVolatileConfig(TTenantTestRuntime &runtime,
                                    Ydb::StatusIds::StatusCode code,
                                    TString clusterName,

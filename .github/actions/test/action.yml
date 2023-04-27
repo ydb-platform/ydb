@@ -60,7 +60,10 @@ runs:
     run: |
       testmo automation:run:submit-thread \
         --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
-        --results ${{steps.th.outputs.repsdir}}/**/*.xml 
+        --results ${{steps.th.outputs.repsdir}}/unittests/*.xml 
+      testmo automation:run:submit-thread \
+        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
+        --results ${{steps.th.outputs.repsdir}}/suites/*.xml 
       testmo automation:run:complete \
         --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3

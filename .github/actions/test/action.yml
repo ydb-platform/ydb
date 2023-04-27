@@ -23,7 +23,7 @@ runs:
   - name: Test history run create
     id: th
     env: 
-      testmo_token: ${{inputs.testman_token}}
+      TESTMO_TOKEN: ${{inputs.testman_token}}
     shell: bash
     run: |
       testmo automation:run:create --instance https://nebius.testmo.net --project-id 1 --name "${{ github.run_id }}" \
@@ -54,7 +54,7 @@ runs:
   - name: Test history upload results
     shell: bash
     env: 
-      testmo_token: ${{inputs.testman_token}}
+      TESTMO_TOKEN: ${{inputs.testman_token}}
     run: |
       testmo automation:run:submit-thread \
         --instance https://nebius.testmo.net --run-id ${{steps.th.runid}} \

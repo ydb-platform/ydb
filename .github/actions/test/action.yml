@@ -19,53 +19,58 @@ inputs:
     
 runs:
   using: "composite"
+  env: 
+    TESTMO_TOKEN: ${{inputs.testman_token}}
+    TESTMO_URL: https://nebius.testmo.net
   steps:
-  - name: Test history run create
-    id: th
-    env: 
-      TESTMO_TOKEN: ${{inputs.testman_token}}
+  - name: Init
+    id: init
     shell: bash
     run: |
-      testmo automation:run:create --instance https://nebius.testmo.net --project-id 1 --name "${{ github.run_id }}" \
+      mkdir -p artifacts tmp test_reports
+      rm -rf artifacts/* tmp/* test_reports/*
+      echo "workdir=$(pwd)" >> $GITHUB_OUTPUT
+      echo "testrepdir=$(pwd)/test_reports" >> $GITHUB_OUTPUT
+      echo "logfilename=${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_OUTPUT
+  - name: Test history run create
+    id: th
+    shell: bash
+    run: |
+      testmo automation:run:create --project-id 1 --name "${{ github.run_id }}" \
         --source "${{inputs.log_suffix}}${{inputs.sanitizer}}" | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
-      echo "repsdir=$(pwd)/test_reports" >> $GITHUB_OUTPUT
-      rm -rf $(pwd)/test_reports/*
   - name: Test
     shell: bash
     env:
-      REPSDIR: ${{steps.th.outputs.repsdir}}
+      WORKDIR: ${{steps.init.outputs.workdir}}
+      TESTREPDIR: ${{steps.init.outputs.testrepdir}}
     run: |
-      cd ../build/ydb
-      rm -rf $(pwd)/../../tmp/*
-      mkdir -p ../../artifacts
-      rm -rf $(pwd)/../../artifacts/*
+      cd $WORKDIR/build/ydb
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
-      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$REPSDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$REPSDIR/unittests/" \
+      TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
-              --output-junit $REPSDIR/suites/ctest_report.xml \
+              --output-junit $TESTREPDIR/suites/ctest_report.xml \
               -L '${{inputs.test_label_regexp}}' | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > ../../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
+        tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
-        tee -a $GITHUB_STEP_SUMMARY
+        tee $WORKDIR/short.log
   - name: Test history upload results
+    if: always()
     shell: bash
-    env: 
-      TESTMO_TOKEN: ${{inputs.testman_token}}
     run: |
       testmo automation:run:submit-thread \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
-        --results ${{steps.th.outputs.repsdir}}/unittests/*.xml 
+        --run-id ${{steps.th.outputs.runid}} \
+        --results ${{steps.init.outputs.testrepdir}}/unittests/*.xml 
       testmo automation:run:submit-thread \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}} \
-        --results ${{steps.th.outputs.repsdir}}/suites/*.xml 
-      testmo automation:run:complete \
-        --instance https://nebius.testmo.net --run-id ${{steps.th.outputs.runid}}
+        --run-id ${{steps.th.outputs.runid}} \
+        --results ${{steps.init.outputs.testrepdir}}/suites/*.xml \
+        -- cat ${{steps.init.outputs.workdir}}/short.log
+      testmo automation:run:complete --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

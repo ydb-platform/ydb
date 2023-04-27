@@ -22,75 +22,53 @@ View the description of the YQL script command:
 | Name | Description |
 ---|---
 | `--timeout` | The time within which the operation should be completed on the server. |
-| `--stats` | Statistics mode.<br>Acceptable values:<ul><li>`none`: Do not collect statistics.</li><li>`basic`: Collect statistics for basic events.</li><li>`full`: Collect statistics for all events.</li></ul>Defaults to `none`. |
+| `--stats` | Statistics mode.<br>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics for basic events.</li><li>`full`: Collect statistics for all events.</li></ul> |
 | `-s`, `--script` | Text of the YQL query to be executed. |
 | `-f`, `--file` | Path to the text of the YQL query to be executed. |
-| `-p`, `--param` | [Query parameters](../../getting_started/yql.md#param) (for data queries and scan queries).<br>You can specify multiple parameters. To change the input format, use the `--input-format` parameter. |
-| `--input-format` | Input format.<br>Acceptable values:<ul><li>`json-unicode`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} input with binary strings [Unicode]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}-encoded.</li><li>`json-base64`: JSON input with binary strings [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded.</li></ul> |
-| `--format` | Input format.<br>Default value: `pretty`.<br>Acceptable values:<ul><li>`pretty`: A human-readable format.</li><li>`json-unicode`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} output with binary strings [Unicode]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-unicode-array`: JSON output with binary strings Unicode-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li><li>`json-base64`: JSON output with binary strings [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-base64-array`: JSON output with binary strings Base64-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li></ul> |
+| `--format` | Result format.<br>Possible values:<ul><li>`pretty` (default): Human-readable format.</li><li>`json-unicode`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} output with binary strings [Unicode]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-unicode-array`: JSON output with binary strings Unicode-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li><li>`json-base64`: JSON output with binary strings [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-base64-array`: JSON output with binary strings Base64-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li><li>`csv`: Output in [CSV](https://ru.wikipedia.org/wiki/CSV) format.</li><li>`tsv`: Output in [TSV](https://ru.wikipedia.org/wiki/TSV) format.</li></ul> |
+
+### Working with parameterized queries {#parameterized-query}
+
+{% include [parameterized-query](../../_includes/parameterized-query.md) %}
 
 ## Examples {#examples}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-### Running queries with a timeout {#example-timeout}
-
-Run a query with a timeout of 500 ms:
+A script to create a table, populate it with data, and select data from the table:
 
 ```bash
-ydb yql \
-  --script \
-  "CREATE TABLE series ( \
-  series_id Uint64, \
-  title Utf8, \
-  series_info Utf8, \
-  release_date Uint64, \
-  PRIMARY KEY (series_id) \
-  );" \
-  --timeout 500
+{{ ydb-cli }} -p quickstart yql -s '
+    CREATE TABLE series (series_id Uint64, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
+    COMMIT;
+    UPSERT INTO series (series_id, title, series_info, release_date) values (1, "Title1", "Info1", Cast("2023-04-20" as Date));
+    COMMIT;
+    SELECT * from series;
+  '
 ```
 
-If the server couldn't complete the query in 500 ms, it returns an error. If the client couldn't get an error message from the server, the query is interrupted on the client side in 500+200 ms.
-
-### Running a parameterized query {#example-param}
-
-Run the parameterized query with statistics enabled:
-
-```bash
-ydb yql \
-  --stats full \
-  --script \
-  "DECLARE \$myparam AS Uint64; \
-  SELECT * FROM series WHERE series_id=\$myparam;" \
-  --param '$myparam=1'
-```
-
-Result:
+Command output:
 
 ```text
-┌──────────────┬───────────┬──────────────────────────────────────────────────────────────────────────────┬────────────┐
-| release_date | series_id | series_info                                                                  | title      |
-├──────────────┼───────────┼──────────────────────────────────────────────────────────────────────────────┼────────────┤
-| 13182        | 1         | "The IT Crowd is a British sitcom produced by Channel 4, written by Graham L | "IT Crowd" |
-|              |           | inehan, produced by Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Ka |            |
-|              |           | therine Parkinson, and Matt Berry."                                          |            |
-└──────────────┴───────────┴──────────────────────────────────────────────────────────────────────────────┴────────────┘
-
-Statistics:
-query_phases {
-  duration_us: 14294
-  table_access {
-    name: "/my-db/series"
-    reads {
-      rows: 1
-      bytes: 209
-    }
-    partitions_count: 1
-  }
-  cpu_time_us: 783
-  affected_shards: 1
-}
-process_cpu_time_us: 5083
-total_duration_us: 81373
-total_cpu_time_us: 5866
+┌──────────────┬───────────┬─────────────┬──────────┐
+| release_date | series_id | series_info | title    |
+├──────────────┼───────────┼─────────────┼──────────┤
+| "2023-04-20" | 1         | "Info1"     | "Title1" |
+└──────────────┴───────────┴─────────────┴──────────┘
 ```
+
+Running a script from the example above saved as the `script1.yql` file, with results output in `JSON` format:
+
+```bash
+{{ ydb-cli }} -p quickstart yql -f script1.yql --format json-unicode
+```
+
+Command output:
+
+```text
+{"release_date":"2023-04-20","series_id":1,"series_info":"Info1","title":"Title1"}
+```
+
+
+You can find examples of passing parameters to scripts in the [article on how to pass parameters to YQL execution commands](parameterized-queries-cli.md).
+

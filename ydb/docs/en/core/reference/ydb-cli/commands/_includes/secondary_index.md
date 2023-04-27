@@ -41,19 +41,19 @@ To retrieve the status of all index-building operations, use `operation list bui
 
 **Examples**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-Adding a synchronous index built on the `air_date` column from the `episodes` table (see the [YQL article](../../../../getting_started/yql.md) under "Getting started"):
+Adding a synchronous index built on the `air_date` column to the `episodes` table [created previously](../../../../getting_started/yql.md):
 
 ```bash
-{{ ydb-cli }} -p db1 table index add global-sync episodes \
+{{ ydb-cli }} -p quickstart table index add global-sync episodes \
   --index-name idx_aired --columns air_date
 ```
 
-Adding an asynchronous index by the `release_date` and `title` columns, copying the `series_info` column value from the `series` table mentioned in the [YQL section](../../../../getting_started/yql.md) under "Getting started":
+Adding to the [previously created](../../../../getting_started/yql.md) `series` table an asynchronous index built on the `release_date` and `title` columns, copying to the index the `series_info` column value:
 
 ```bash
-{{ ydb-cli }} -p db1 table index add global-async series \
+{{ ydb-cli }} -p quickstart table index add global-async series \
   --index-name idx_rel_title --columns release_date,title --cover series_info
 ```
 
@@ -70,7 +70,7 @@ Result (the actual operation id might differ):
 Getting the operation status (use the actual operation id):
 
 ```bash
-{{ ydb-cli }} -p db1 operation get ydb://buildindex/7?id=281474976866869
+{{ ydb-cli }} -p quickstart operation get ydb://buildindex/7?id=281474976866869
 ```
 
 Returned value:
@@ -85,7 +85,7 @@ Returned value:
 
 Deleting the index-building details (use the actual operation id):
 ```bash
-{{ ydb-cli }} -p db1 operation forget ydb://buildindex/7?id=2814749869
+{{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
 
 ## Deleting a secondary index {#drop}
@@ -98,12 +98,12 @@ Secondary indexes are deleted by the `table index drop` command:
 
 **Example**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 Deleting the `idx_aired` index from the episodes table (see the index-building example above):
 
 ```bash
-{{ ydb-cli }} -p db1 table index drop episodes --index-name idx_aired
+{{ ydb-cli }} -p quickstart table index drop episodes --index-name idx_aired
 ```
 
 ## Renaming a secondary index {#rename}
@@ -124,10 +124,10 @@ To replace your existing index atomically, execute the rename command with the
 
 **Example**
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 Renaming the `idx_aired` index built on the episodes table (see the example of index creation above):
 
 ```bash
-{{ ydb-cli }} -p db1 table index rename episodes --index-name idx_aired --to idx_aired_renamed
+{{ ydb-cli }} -p quickstart table index rename episodes --index-name idx_aired --to idx_aired_renamed
 ```

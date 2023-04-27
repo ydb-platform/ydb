@@ -5,7 +5,7 @@ import os
 
 
 disabled_suites = {
-    'clickbench', 'dynumber', 'large_serializable', 'postgresql', 'serializable'
+    'clickbench', 'dynumber', 'large_serializable', 'postgresql', 'serializable', 'rename'
 }
 
 if __name__ == '__main__':

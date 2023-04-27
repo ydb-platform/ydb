@@ -58,4 +58,4 @@ jobs:
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
         testman_token: ${{secrets.TESTMO_TOKEN}}
         testman_url: ${{vars.TESTMO_URL}}
-        testman_project_if: ${{vars.TESTMO_PROJECT_ID}}
+        testman_project_id: ${{vars.TESTMO_PROJECT_ID}}

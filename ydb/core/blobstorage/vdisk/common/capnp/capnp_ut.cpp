@@ -55,11 +55,7 @@ namespace NKikimr {
             NKikimrCapnProto::TEvVGet::Builder originalObject;
 
             auto originalMsgQoS = originalObject.MutableMsgQoS();
-            originalMsgQoS.SetCost(4242);
-            originalMsgQoS.SetProxyNodeId(91);
-            originalMsgQoS.MutableCostSettings().SetMinREALHugeBlobInBytes(101);
-            originalMsgQoS.MutableCostSettings().SetSeekTimeUs(100500);
-            originalMsgQoS.MutableCostSettings().SetReadSpeedBps(500100);
+            originalMsgQoS.SetExtQueueId(NKikimrCapnProto::EVDiskQueueId::GetDiscover);
 
             // Serialize the object into bytes
             NActors::TAllocChunkSerializer output;

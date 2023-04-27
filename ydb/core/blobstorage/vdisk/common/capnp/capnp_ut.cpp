@@ -49,5 +49,30 @@ namespace NKikimr {
                 UNIT_ASSERT(deserializedObject.GetExtremeQueries(0).GetSize() == 6767);
                 UNIT_ASSERT(deserializedObject.GetExtremeQueries(1).GetSize() == 8989);
         }
+
+        Y_UNIT_TEST(HasMsgQoS) {
+            // Create a Cap'n Proto object and fill MsgQoS
+            NKikimrCapnProto::TEvVGet::Builder originalObject;
+
+            auto originalMsgQoS = originalObject.MutableMsgQoS();
+            originalMsgQoS.SetCost(4242);
+            originalMsgQoS.SetProxyNodeId(91);
+            originalMsgQoS.MutableCostSettings().SetMinREALHugeBlobInBytes(101);
+            originalMsgQoS.MutableCostSettings().SetSeekTimeUs(100500);
+            originalMsgQoS.MutableCostSettings().SetReadSpeedBps(500100);
+
+            // Serialize the object into bytes
+            NActors::TAllocChunkSerializer output;
+            UNIT_ASSERT(originalObject.SerializeToZeroCopyStream(&output));
+            auto data = output.Release({});
+
+            // Deserialize the bytes into a new object
+            NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
+            NKikimrCapnProto::TEvVGet::Reader deserializedObject;
+            UNIT_ASSERT(deserializedObject.ParseFromZeroCopyStream(&input));
+
+            // Check that deserializedObject.HasMsgQoS() == true
+            UNIT_ASSERT(deserializedObject.HasMsgQoS());
+        }
     };
 };

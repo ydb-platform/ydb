@@ -178,6 +178,11 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res, const TVecto
             break;
         }
 
+        case TType::EKind::EmptyList: {
+            res.SetKind(NKikimrMiniKQL::ETypeKind::EmptyList);
+            break;
+        }
+
         case TType::EKind::List: {
             auto listType = static_cast<TListType *>(type);
             res.SetKind(NKikimrMiniKQL::ETypeKind::List);
@@ -200,6 +205,11 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res, const TVecto
             if (tupleType->GetElementsCount()) {
                 ExportTupleTypeToProto(tupleType, *res.MutableTuple());
             }
+            break;
+        }
+
+        case TType::EKind::EmptyDict: {
+            res.SetKind(NKikimrMiniKQL::ETypeKind::EmptyDict);
             break;
         }
 
@@ -1034,6 +1044,9 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
             TType* child = ImportTypeFromProto(protoTaggedType.GetItem());
             return TTaggedType::Create(child, protoTaggedType.GetTag(), env);
         }
+        case NKikimrMiniKQL::ETypeKind::EmptyList: {
+            return env.GetTypeOfEmptyList();
+        }
         case NKikimrMiniKQL::ETypeKind::List: {
             const NKikimrMiniKQL::TListType& protoListType = type.GetList();
             const NKikimrMiniKQL::TType& protoItemType = protoListType.GetItem();
@@ -1048,6 +1061,9 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
         case NKikimrMiniKQL::ETypeKind::Struct: {
             const NKikimrMiniKQL::TStructType& protoStructType = type.GetStruct();
             return ImportStructTypeFromProto(protoStructType);
+        }
+        case NKikimrMiniKQL::ETypeKind::EmptyDict: {
+            return env.GetTypeOfEmptyDict();
         }
         case NKikimrMiniKQL::ETypeKind::Dict: {
             const NKikimrMiniKQL::TDictType& protoDictType = type.GetDict();

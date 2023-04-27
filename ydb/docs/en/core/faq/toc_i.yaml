@@ -10,8 +10,6 @@ items:
   href: errors.md
 - name: YQL
   href: yql.md
-- name: Serverless
-  href: serverless.md
 - name: All questions on one page
   href: all.md
 # Essintial for build with contributors, as it fails without that

@@ -6,7 +6,6 @@ items:
   href: auth.md
 - name: Data model and schema
   include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Serverless and Dedicated operation modes,   href: serverless_and_dedicated.md }
 - { name: Data types,                            href: datatypes.md, hidden: true } # Deprecated
 - { name: Transactions,                             href: transactions.md }
 - { name: Secondary indexes,                      href: secondary_indexes.md }

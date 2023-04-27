@@ -37,7 +37,9 @@ runs:
       TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" Y_UNITTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
       TESTMO_TOKEN=${{inputs.testman_token}} \
         testmo automation:run:submit \
-               --instance https://nebius.testmo.net --project-id 1 --name "Run4" --source "Unittests" --results ../../test_reports/*.xml -- \
+               --instance https://nebius.testmo.net --project-id 1 --name "${{ github.run_id }}" \
+               --source "Unittests" --results ../../test_reports/*.xml \
+               --tags ${{inputs.log_suffix}} ${{inputs.sanitizer}} -- \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
               --output-junit $(pwd)/../../test_suites/ctest_report.xml \
               -L '${{inputs.test_label_regexp}}' | \
@@ -47,7 +49,9 @@ runs:
         tee -a $GITHUB_STEP_SUMMARY
       TESTMO_TOKEN=${{inputs.testman_token}} \
         testmo automation:run:submit \
-               --instance https://nebius.testmo.net --project-id 1 --name "Run4" --source "Suites" --results ../../test_suites/*.xml -- \
+               --instance https://nebius.testmo.net --project-id 1 --name "${{ github.run_id }}" \
+               --source "Suites" --results ../../test_suites/*.xml \
+               --tags ${{inputs.log_suffix}} ${{inputs.sanitizer}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

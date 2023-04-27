@@ -6892,6 +6892,11 @@ TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx)
 
 template <bool Equals>
 TExprNode::TPtr ExpandAggrEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (&node->Head() == &node->Tail()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over same arguments.";
+        return MakeBool<Equals>(node->Pos(), ctx);
+    }
+
     const auto type = node->Head().GetTypeAnn();
     YQL_ENSURE(IsSameAnnotation(*type, *node->Tail().GetTypeAnn()), "Expected same type.");
     switch (type->GetKind()) {
@@ -6926,6 +6931,11 @@ TExprNode::TPtr ExpandAggrEqual(const TExprNode::TPtr& node, TExprContext& ctx) 
 
 template<bool Asc, bool Equals>
 TExprNode::TPtr ExpandAggrCompare(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (&node->Head() == &node->Tail()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over same arguments.";
+        return MakeBool<Equals>(node->Pos(), ctx);
+    }
+
     const auto type = node->Head().GetTypeAnn();
     YQL_ENSURE(IsSameAnnotation(*type, *node->Tail().GetTypeAnn()), "Expected same type.");
     switch (type->GetKind()) {
@@ -7117,12 +7127,6 @@ struct TPeepHoleRules {
         {">", &ExpandSqlCompare<false, false>},
         {"<=", &ExpandSqlCompare<true, true>},
         {">=", &ExpandSqlCompare<false, true>},
-        {"AggrEquals", &ExpandAggrEqual<true>},
-        {"AggrNotEquals", &ExpandAggrEqual<false>},
-        {"AggrLess", &ExpandAggrCompare<true, false>},
-        {"AggrGreater", &ExpandAggrCompare<false, false>},
-        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
-        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
@@ -7210,6 +7214,12 @@ struct TPeepHoleRules {
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
+        {"AggrEquals", &ExpandAggrEqual<true>},
+        {"AggrNotEquals", &ExpandAggrEqual<false>},
+        {"AggrLess", &ExpandAggrCompare<true, false>},
+        {"AggrGreater", &ExpandAggrCompare<false, false>},
+        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
+        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {};

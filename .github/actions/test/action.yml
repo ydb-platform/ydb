@@ -41,8 +41,11 @@ runs:
     if: inputs.testman_token
     shell: bash
     run: |
+      RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
+      testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
       testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "${{ github.run_id }}" \
-        --source "${{inputs.log_suffix}}" | \
+        --source "${{inputs.log_suffix}}" --resources testmo.json | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
     shell: bash

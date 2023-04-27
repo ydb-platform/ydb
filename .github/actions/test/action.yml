@@ -19,9 +19,6 @@ inputs:
     
 runs:
   using: "composite"
-  env: 
-    TESTMO_TOKEN: ${{inputs.testman_token}}
-    TESTMO_URL: https://nebius.testmo.net
   steps:
   - name: Init
     id: init
@@ -29,8 +26,10 @@ runs:
     run: |
       mkdir -p artifacts tmp test_reports
       rm -rf artifacts/* tmp/* test_reports/*
-      echo "workdir=$(pwd)" >> $GITHUB_OUTPUT
-      echo "testrepdir=$(pwd)/test_reports" >> $GITHUB_OUTPUT
+      echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
+      echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
+      echo ${{inputs.testman_token}} >> $GITHUB_ENV
+      echo https://nebius.testmo.net >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_OUTPUT
   - name: Test history run create
     id: th
@@ -41,9 +40,6 @@ runs:
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
     shell: bash
-    env:
-      WORKDIR: ${{steps.init.outputs.workdir}}
-      TESTREPDIR: ${{steps.init.outputs.testrepdir}}
     run: |
       cd $WORKDIR/build/ydb
 

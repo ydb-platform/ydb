@@ -13,6 +13,7 @@ items:
 - { name: Time to Live (TTL),                     href: ttl.md }
 - { name: Scan queries,                           href: scan_query.md }
 - { name: Database limits,                href: limits-ydb.md }
+- { name: Multi-Version Concurrency Control (MVCC), href: mvcc.md }
 - name: YDB cluster
   items:
   - name: Overview

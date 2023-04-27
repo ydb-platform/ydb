@@ -17,9 +17,14 @@ using namespace NYql;
 
 void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx) {
     TxHolders.push_back(tx);
-    TxResults.reserve(TxResults.size() + tx->GetTxResultsMeta().size());
-    for (const auto& txResult : tx->GetTxResultsMeta()) {
-        TxResults.emplace_back(txResult.IsStream, txResult.MkqlItemType, &txResult.ColumnOrder);
+    TxResults.reserve(TxResults.size() + tx->ResultsSize());
+
+    for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
+        const auto& result = tx->GetResults(i);
+        const auto& resultMeta = tx->GetTxResultsMeta()[i];
+
+        TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder,
+            result.GetQueryResultIndex());
     }
 }
 

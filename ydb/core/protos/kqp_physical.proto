@@ -319,6 +319,7 @@ message TKqpPhyResult {
     NKikimrMiniKQL.TType ItemType = 2;
     bool IsStream = 3;
     repeated string ColumnHints = 4;
+    uint32 QueryResultIndex = 5;
 }
 
 message TKqpPhyTx {

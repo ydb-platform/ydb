@@ -1500,14 +1500,32 @@ namespace NKikimr {
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-//            if (queryRecord && queryRecord->HasTimestamps()) {
-//                auto *timestamps = Record.MutableTimestamps();
-//                auto other = queryRecord->GetTimestamps();
-//                timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
-//                timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
-//                timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());
-//                timestamps->SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
-//            }
+
+            // copy cookie if it was set in initial query
+            if (cookie)
+                Record.SetCookie(*cookie);
+
+            if (status == NKikimrProto::OK) {
+                Record.SetIncarnationGuid(incarnationGuid);
+            }
+        }
+
+        TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
+                      ui32 recByteSize, NKikimrCapnProto::TEvVGet::Reader *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                      const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
+                      TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
+                : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
+        {
+            Record.SetStatus(status);
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            if (queryRecord && queryRecord->HasTimestamps()) {
+                auto *timestamps = Record.MutableTimestamps();
+                auto other = queryRecord->GetTimestamps();
+                timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
+                timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
+                timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());
+                timestamps->SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
+            }
 
             // copy cookie if it was set in initial query
             if (cookie)

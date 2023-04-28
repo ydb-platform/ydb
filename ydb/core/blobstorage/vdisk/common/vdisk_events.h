@@ -516,6 +516,7 @@ namespace NKikimr {
             , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
         {
+            Y_VERIFY(queryRecord == nullptr);
             if (queryRecord) {
                 Y_VERIFY(queryRecord->HasMsgQoS());
                 auto *resultQoS = TBase::Record.MutableMsgQoS();

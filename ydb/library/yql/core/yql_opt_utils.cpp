@@ -19,12 +19,12 @@ using namespace NNodes;
 
 namespace {
 
-template<bool Distinct>
-TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
-    if (const auto uniq = src.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
+template<class TConstraint>
+TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TConstraint>()) {
         const auto pos = node->Pos();
         TExprNode::TListType children(1U, std::move(node));
-        for (const auto& set : uniq->GetAllSets()) {
+        for (const auto& set : constraint->GetAllSets()) {
             TExprNode::TListType columns;
             columns.reserve(set.size());
             for (const auto& path : set)
@@ -33,7 +33,7 @@ TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src,
             if (!columns.empty())
                 children.emplace_back(ctx.NewList(pos, std::move(columns)));
         }
-        return ctx.NewCallable(pos, std::conditional_t<Distinct, TCoAssumeDistinct, TCoAssumeUnique>::CallableName(), std::move(children));
+        return ctx.NewCallable(pos, TString("Assume") += TConstraint::Name(), std::move(children));
     }
     return node;
 }
@@ -1764,8 +1764,9 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
 
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
-    res = KeepUniqueConstraint<true>(std::move(res), src, ctx);
-    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
+    res = KeepConstraint<TChoppedConstraintNode>(std::move(res), src, ctx);
+    res = KeepConstraint<TDistinctConstraintNode>(std::move(res), src, ctx);
+    res = KeepConstraint<TUniqueConstraintNode>(std::move(res), src, ctx);
     return res;
 }
 

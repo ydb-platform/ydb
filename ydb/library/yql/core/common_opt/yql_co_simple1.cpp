@@ -6703,7 +6703,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
-            return ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, node->HeadPtr()).Seal().Build();
+            return ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
         }
         return node;
     };

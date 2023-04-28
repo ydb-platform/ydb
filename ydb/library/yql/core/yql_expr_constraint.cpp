@@ -83,6 +83,7 @@ public:
         Functions["AssumeSorted"] = &TCallableConstraintTransformer::SortWrap;
         Functions["AssumeUnique"] = &TCallableConstraintTransformer::AssumeUniqueWrap<false>;
         Functions["AssumeDistinct"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true>;
+        Functions["AssumeChopped"] = &TCallableConstraintTransformer::AssumeChoppedWrap;
         Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["AssumeAllMembersNullableAtOnce"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Top"] = &TCallableConstraintTransformer::TopWrap<false>;
@@ -380,7 +381,7 @@ private:
     TStatus AssumeUniqueWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         typename TUniqueConstraintNodeBase<Distinct>::TFullSetType sets;
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
-            typename TUniqueConstraintNodeBase<Distinct>::TSetType columns;
+            TConstraintNode::TSetType columns;
             columns.reserve(input->Child(i)->ChildrenSize());
             for (const auto& column: input->Child(i)->Children())
                 columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
@@ -388,7 +389,7 @@ private:
         }
 
         if (sets.empty())
-            sets.insert_unique(typename TUniqueConstraintNodeBase<Distinct>::TSetType{TConstraintNode::TPathType()});
+            sets.insert_unique(TConstraintNode::TSetType{TConstraintNode::TPathType()});
 
         auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets));
         if (const auto old = input->Head().GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
@@ -401,6 +402,28 @@ private:
 
         input->AddConstraint(constraint);
         return FromFirst<TPassthroughConstraintNode, TSortedConstraintNode, TChoppedConstraintNode, TUniqueConstraintNodeBase<!Distinct>, TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+    }
+
+    TStatus AssumeChoppedWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        TChoppedConstraintNode::TFullSetType sets;
+        for (auto i = 1U; i < input->ChildrenSize(); ++i) {
+            TConstraintNode::TSetType columns;
+            columns.reserve(input->Child(i)->ChildrenSize());
+            for (const auto& column: input->Child(i)->Children())
+                columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+            sets.insert_unique(std::move(columns));
+        }
+
+        const auto constraint = ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+        if (const auto old = input->Head().GetConstraint<TChoppedConstraintNode>()) {
+            if (old->Equals(*constraint)) {
+                output = input->HeadPtr();
+                return TStatus::Repeat;
+            }
+        }
+
+        input->AddConstraint(constraint);
+        return FromFirst<TPassthroughConstraintNode, TSortedConstraintNode, TDistinctConstraintNode, TUniqueConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
     template <bool UseSort>
@@ -2556,7 +2579,7 @@ private:
                 if (useLeft && !useRight)
                     unique = lUnique->RenameFields(ctx, leftRename);
                 else if (useRight && !useLeft)
-                    unique = lUnique->RenameFields(ctx, leftRename);
+                    unique = rUnique->RenameFields(ctx, rightRename);
                 else if (useLeft && useRight)
                     unique = TUniqueConstraintNode::Merge(lUnique->RenameFields(ctx, leftRename), rUnique->RenameFields(ctx, rightRename), ctx);
             }

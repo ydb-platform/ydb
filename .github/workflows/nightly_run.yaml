@@ -13,7 +13,7 @@ jobs:
     name: Build/test X64
     strategy:
       matrix:
-        sanitizer: [ "", "sanitize=address" ]
+        sanitizer: [ "", "address" ]
       fail-fast: false
 
     uses: ./.github/workflows/build_and_test_ondemand.yml
@@ -26,7 +26,7 @@ jobs:
     name: Build/test ARM64
     strategy:
       matrix:
-        sanitizer: [ "", "sanitize=address" ]
+        sanitizer: [ "", "address" ]
       fail-fast: false
     uses: ./.github/workflows/build_and_test_provisioned.yml
     with:

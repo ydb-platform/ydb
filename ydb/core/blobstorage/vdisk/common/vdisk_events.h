@@ -510,7 +510,7 @@ namespace NKikimr {
 
         TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                                 const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
-                                ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr)
+                                ui32, const TActorIDPtr &skeletonFrontIDPtr)
                 : TBase(now, counterPtr, histoPtr, channel)
                 , MsgCtx(TVMsgContext())
                 , SkeletonFrontIDPtr(skeletonFrontIDPtr)

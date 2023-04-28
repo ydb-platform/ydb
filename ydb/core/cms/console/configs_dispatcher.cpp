@@ -6,6 +6,7 @@
 #include "util.h"
 
 #include <ydb/core/cms/console/util/config_index.h>
+#include <ydb/core/cms/console/yaml_config/util.h>
 #include <ydb/core/cms/console/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
@@ -15,6 +16,7 @@
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -127,7 +129,11 @@ public:
         return NKikimrServices::TActivity::CONFIGS_DISPATCHER_ACTOR;
     }
 
-    TConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels);
+    TConfigsDispatcher(
+        const NKikimrConfig::TAppConfig &config,
+        const TMap<TString, TString> &labels,
+        const NKikimrConfig::TAppConfig &initialCmsConfig,
+        const NKikimrConfig::TAppConfig &initialCmsYamlConfig);
 
     void Bootstrap();
 
@@ -154,6 +160,8 @@ public:
     void Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev);
     void Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
+
+    void ReplyMonJson(TActorId mailbox);
 
     STATEFN(StateInit)
     {
@@ -206,8 +214,10 @@ public:
 
 private:
     TMap<TString, TString> Labels;
-    NKikimrConfig::TAppConfig InitialConfig;
+    const NKikimrConfig::TAppConfig InitialConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    const NKikimrConfig::TAppConfig InitialCmsConfig;
+    const NKikimrConfig::TAppConfig InitialCmsYamlConfig;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -226,11 +236,17 @@ private:
     bool YamlConfigEnabled = false;
 };
 
-TConfigsDispatcher::TConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels)
-    : Labels(labels)
-    , InitialConfig(config)
-    , CurrentConfig(config)
-    , NextRequestCookie(Now().GetValue())
+TConfigsDispatcher::TConfigsDispatcher(
+    const NKikimrConfig::TAppConfig &config,
+    const TMap<TString, TString> &labels,
+    const NKikimrConfig::TAppConfig &initialCmsConfig,
+    const NKikimrConfig::TAppConfig &initialCmsYamlConfig)
+        : Labels(labels)
+        , InitialConfig(config)
+        , CurrentConfig(config)
+        , InitialCmsConfig(initialCmsConfig)
+        , InitialCmsYamlConfig(initialCmsYamlConfig)
+        , NextRequestCookie(Now().GetValue())
 {
 }
 
@@ -327,10 +343,44 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 
 void TConfigsDispatcher::Handle(NMon::TEvHttpInfo::TPtr &ev)
 {
+    if (auto it = ev->Get()->Request.GetHeaders().FindHeader("Content-Type"); it && it->Value() == "application/json") {
+        ReplyMonJson(ev->Sender);
+        return;
+    }
+
     if (HttpRequests.empty())
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes);
 
     HttpRequests.push_back(ev->Sender);
+}
+
+void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
+    TStringStream str;
+    str << NMonitoring::HTTPOKJSON;
+
+    NJson::TJsonValue response;
+    response.SetType(NJson::EJsonValueType::JSON_MAP);
+
+    auto& labels = response["labels"];
+    labels.SetType(NJson::EJsonValueType::JSON_ARRAY);
+    for (auto &[key, value] : Labels) {
+        NJson::TJsonValue label;
+        label.SetType(NJson::EJsonValueType::JSON_MAP);
+        label.InsertValue("name", key);
+        label.InsertValue("value", value);
+        labels.AppendValue(std::move(label));
+    }
+
+    response.InsertValue("yaml_config", YamlConfig);
+    response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
+    response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
+    response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialConfig, NYamlConfig::GetProto2JsonConfig()), true));
+    response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialCmsConfig, NYamlConfig::GetProto2JsonConfig()), true));
+    response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialCmsYamlConfig, NYamlConfig::GetProto2JsonConfig()), true));
+
+    NJson::WriteJson(&str, &response, {});
+
+    Send(mailbox, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
 }
 
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev)
@@ -536,6 +586,14 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("initial-config", "Initial config") {
                     NHttp::OutputConfigHTML(str, InitialConfig);
+                }
+                str << "<br />" << Endl;
+                COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
+                    NHttp::OutputConfigHTML(str, InitialCmsConfig);
+                }
+                str << "<br />" << Endl;
+                COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
+                    NHttp::OutputConfigHTML(str, InitialCmsYamlConfig);
                 }
             }
         }
@@ -850,9 +908,11 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
     
 IActor *CreateConfigsDispatcher(
     const NKikimrConfig::TAppConfig &config,
-    const TMap<TString, TString> &labels)
+    const TMap<TString, TString> &labels,
+    const NKikimrConfig::TAppConfig &initialCmsConfig,
+    const NKikimrConfig::TAppConfig &initialCmsYamlConfig)
 {
-    return new TConfigsDispatcher(config, labels);
+    return new TConfigsDispatcher(config, labels, initialCmsConfig, initialCmsYamlConfig);
 }
 
 } // namespace NKikimr::NConsole

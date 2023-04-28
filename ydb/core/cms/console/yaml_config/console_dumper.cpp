@@ -1,8 +1,9 @@
 #include "console_dumper.h"
 
+#include "util.h"
+
 #include <ydb/core/cms/console/yaml_config/yaml_config.h>
 #include <ydb/core/cms/console/util/config_index.h>
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
 
 namespace NYamlConfig {
@@ -167,14 +168,6 @@ NKikimrConfig::TAppConfig BundleDomainConfig(const TDomainItemsContainer &items)
     }
 
     return config;
-}
-
-NProtobufJson::TProto2JsonConfig GetProto2JsonConfig() {
-    return NProtobufJson::TProto2JsonConfig()
-        .SetFormatOutput(false)
-        .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName)
-        .SetFieldNameMode(NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense)
-        .SetStringifyNumbers(NProtobufJson::TProto2JsonConfig::StringifyLongNumbersForDouble);
 }
 
 TVector<TSelectorData> FillSelectorsData(const TSelectorItemsContainer &items) {

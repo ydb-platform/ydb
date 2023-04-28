@@ -203,17 +203,49 @@ struct TPortionInfo {
         return Meta.ColumnMeta.find(columnId)->second.HasMinMax();
     }
 
+    class TAssembleBlobInfo {
+    private:
+        YDB_READONLY(ui32, NullRowsCount, 0);
+        YDB_READONLY_DEF(TString, Data);
+    public:
+        TAssembleBlobInfo(const ui32 rowsCount)
+            : NullRowsCount(rowsCount) {
+
+        }
+
+        TAssembleBlobInfo(const TString& data)
+            : Data(data) {
+
+        }
+
+        std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(std::shared_ptr<arrow::Schema> schema) const {
+            if (NullRowsCount) {
+                Y_VERIFY(!Data);
+                return NArrow::MakeEmptyBatch(schema, NullRowsCount);
+            } else {
+                Y_VERIFY(Data);
+                return NArrow::DeserializeBatch(Data, schema);
+            }
+        }
+    };
+
     class TPreparedColumn {
     private:
+        YDB_READONLY(ui32, ColumnId, 0);
         std::shared_ptr<arrow::Field> Field;
-        std::vector<TString> Blobs;
+        std::vector<TAssembleBlobInfo> Blobs;
     public:
         const std::string& GetName() const {
             return Field->name();
         }
 
-        TPreparedColumn(const std::shared_ptr<arrow::Field>& field, std::vector<TString>&& blobs)
-            : Field(field)
+        std::shared_ptr<arrow::Field> GetField() const {
+            return Field;
+        }
+
+        TPreparedColumn(const std::shared_ptr<arrow::Field>& field, std::vector<TAssembleBlobInfo>&& blobs, const ui32 columnId)
+            : ColumnId(columnId)
+            , Field(field)
             , Blobs(std::move(blobs))
         {
 
@@ -229,11 +261,26 @@ struct TPortionInfo {
 
     public:
 
+        std::vector<std::string> GetSchemaColumnNames() const {
+            return Schema->field_names();
+        }
+
         class TAssembleOptions {
         private:
             YDB_OPT(ui32, RecordsCountLimit);
             YDB_FLAG_ACCESSOR(ForwardAssemble, true);
+            YDB_OPT(std::set<ui32>, IncludedColumnIds);
+            YDB_OPT(std::set<ui32>, ExcludedColumnIds);
         public:
+            bool IsAcceptedColumn(const ui32 columnId) const {
+                if (IncludedColumnIds && !IncludedColumnIds->contains(columnId)) {
+                    return false;
+                }
+                if (ExcludedColumnIds && ExcludedColumnIds->contains(columnId)) {
+                    return false;
+                }
+                return true;
+            }
         };
 
         size_t GetColumnsCount() const {
@@ -250,9 +297,61 @@ struct TPortionInfo {
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = Default<TAssembleOptions>()) const;
     };
 
+    template <class TExternalBlobInfo>
     TPreparedBatchData PrepareForAssemble(const TIndexInfo& indexInfo,
-                                           const std::shared_ptr<arrow::Schema>& schema,
-                                           const THashMap<TBlobRange, TString>& data, const std::optional<std::set<ui32>>& columnIds) const;
+        const std::shared_ptr<arrow::Schema>& schema,
+        const THashMap<TBlobRange, TExternalBlobInfo>& blobsData, const std::optional<std::set<ui32>>& columnIds) const {
+        // Correct records order
+        TMap<int, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks
+
+        std::vector<std::shared_ptr<arrow::Field>> schemaFields;
+
+        for (auto&& i : schema->fields()) {
+            if (columnIds && !columnIds->contains(indexInfo.GetColumnId(i->name()))) {
+                continue;
+            }
+            schemaFields.emplace_back(i);
+        }
+
+        for (auto& rec : Records) {
+            if (columnIds && !columnIds->contains(rec.ColumnId)) {
+                continue;
+            }
+            ui32 columnId = rec.ColumnId;
+            TString columnName = indexInfo.GetColumnName(columnId);
+            std::string name(columnName.data(), columnName.size());
+            int pos = schema->GetFieldIndex(name);
+            if (pos < 0) {
+                continue; // no such column in schema - do not need it
+            }
+
+            columnChunks[pos][rec.Chunk] = rec.BlobRange;
+        }
+
+        // Make chunked arrays for columns
+        std::vector<TPreparedColumn> columns;
+        columns.reserve(columnChunks.size());
+
+        for (auto& [pos, orderedChunks] : columnChunks) {
+            auto field = schema->field(pos);
+            TVector<TAssembleBlobInfo> blobs;
+            blobs.reserve(orderedChunks.size());
+            ui32 expected = 0;
+            for (auto& [chunk, blobRange] : orderedChunks) {
+                Y_VERIFY(chunk == expected);
+                ++expected;
+
+                auto it = blobsData.find(blobRange);
+                Y_VERIFY(it != blobsData.end());
+                blobs.emplace_back(it->second);
+            }
+
+            columns.emplace_back(TPreparedColumn(field, std::move(blobs), indexInfo.GetColumnId(field->name())));
+        }
+
+        return TPreparedBatchData(std::move(columns), std::make_shared<arrow::Schema>(schemaFields));
+    }
+
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const TIndexInfo& indexInfo,
                                            const std::shared_ptr<arrow::Schema>& schema,
                                            const THashMap<TBlobRange, TString>& data) const {

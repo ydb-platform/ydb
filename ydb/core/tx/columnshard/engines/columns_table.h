@@ -19,6 +19,10 @@ struct TColumnRecord {
     TBlobRange BlobRange;
     TString Metadata;
 
+    ui32 GetRowsCount() const {
+        return 0;
+    }
+
     bool operator == (const TColumnRecord& rec) const {
         return (Granule == rec.Granule) && (ColumnId == rec.ColumnId) &&
             (PlanStep == rec.PlanStep) && (TxId == rec.TxId) && (Portion == rec.Portion) && (Chunk == rec.Chunk);

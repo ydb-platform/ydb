@@ -17,8 +17,6 @@ private:
     THashMap<ui32, TBatch> Batches;
     std::set<ui32> WaitBatches;
     TIndexedReadData* Owner = nullptr;
-    void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
-    friend class NIndexedReader::TBatch;
 public:
     TGranule(const ui64 granuleId, TIndexedReadData& owner)
         : GranuleId(granuleId)
@@ -26,7 +24,11 @@ public:
 
     }
 
+    const std::set<ui32>& GetEarlyFilterColumns() const;
+    void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
     TBatch& AddBatch(const ui32 batchNo, const TPortionInfo& portionInfo);
+    void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) const;
+
 };
 
 }

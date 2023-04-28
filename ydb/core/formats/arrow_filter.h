@@ -40,6 +40,46 @@ private:
 
 public:
 
+    class TIterator {
+    private:
+        ui32 InternalPosition = 0;
+        std::deque<ui32>::const_iterator It;
+        std::deque<ui32>::const_iterator ItEnd;
+        bool CurrentValue;
+    public:
+        TIterator(const std::deque<ui32>& filter, const bool startValue)
+            : It(filter.begin())
+            , ItEnd(filter.end())
+            , CurrentValue(startValue)
+        {
+
+        }
+
+        bool IsBatchForSkip(const ui32 size) const {
+            return !CurrentValue && (*It - InternalPosition) >= size;
+        }
+
+        bool Next(const ui32 size) {
+            ui32 sizeRemain = size;
+            while (It != ItEnd) {
+                if (*It - InternalPosition > sizeRemain) {
+                    InternalPosition += sizeRemain;
+                    return true;
+                } else {
+                    sizeRemain -= *It - InternalPosition;
+                    InternalPosition = 0;
+                    CurrentValue = !CurrentValue;
+                    ++It;
+                }
+            }
+            return false;
+        }
+    };
+
+    TIterator GetIterator() const {
+        return TIterator(Filter, GetStartValue());
+    }
+
     TColumnFilter(std::vector<bool>&& values) {
         const ui32 count = values.size();
         Reset(count, std::move(values));

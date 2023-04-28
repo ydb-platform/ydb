@@ -25,4 +25,12 @@ NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const ui32 batchNo, c
     return infoEmplace.first->second;
 }
 
+void TGranule::AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) const {
+    Owner->AddBlobForFetch(range, batch);
+}
+
+const std::set<ui32>& TGranule::GetEarlyFilterColumns() const {
+    return Owner->GetEarlyFilterColumns();
+}
+
 }

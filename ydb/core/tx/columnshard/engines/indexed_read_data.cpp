@@ -117,7 +117,7 @@ std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(NColum
     return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this(), tasksProcessor, scanCounters);
 }
 
-std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds(const bool noTrivial) const {
+std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     std::set<ui32> result;
     if (LessPredicate) {
         for (auto&& i : LessPredicate->ColumnNames()) {
@@ -139,9 +139,6 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds(const bool noTrivial) cons
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
             }
         }
-    }
-    if (noTrivial && result.empty()) {
-        return result;
     }
     if (PlanStep) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
@@ -195,6 +192,19 @@ void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::
     }
 }
 
+bool TIndexedReadData::PredictManyResultsAfterFilter(const TPortionInfo& portionInfo) const {
+    if (!portionInfo.AllowEarlyFilter()) {
+        return true;
+    }
+    if (EarlyFilterColumns.empty()) {
+        return true;
+    }
+    if (TIndexInfo::IsSpecialColumns(EarlyFilterColumns)) {
+        return true;
+    }
+    return false;
+}
+
 void TIndexedReadData::InitRead(ui32 inputBatch, bool inGranulesOrder) {
     Y_VERIFY(ReadMetadata->BlobSchema);
     Y_VERIFY(ReadMetadata->LoadSchema);
@@ -222,10 +232,10 @@ void TIndexedReadData::InitRead(ui32 inputBatch, bool inGranulesOrder) {
         }
 
         NIndexedReader::TBatch& currentBatch = itGranule->second.AddBatch(batchNo, portionInfo);
-        if (portionInfo.AllowEarlyFilter()) {
-            currentBatch.Reset(&EarlyFilterColumns);
+        if (!OnePhaseReadMode && !PredictManyResultsAfterFilter(portionInfo)) {
+            currentBatch.ResetNoFilter(&EarlyFilterColumns);
         } else {
-            currentBatch.Reset(&UsedColumns);
+            currentBatch.ResetNoFilter(&UsedColumns);
         }
         Batches[batchNo] = &currentBatch;
         ++batchNo;
@@ -573,17 +583,13 @@ TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
     : Counters(counters)
     , FetchBlobsQueue(fetchBlobsQueue)
     , ReadMetadata(readMetadata)
+    , OnePhaseReadMode(internalRead)
 {
     UsedColumns = ReadMetadata->GetUsedColumnIds();
     PostFilterColumns = ReadMetadata->GetUsedColumnIds();
-    EarlyFilterColumns = ReadMetadata->GetEarlyFilterColumnIds(true);
-    if (internalRead || EarlyFilterColumns.empty()) {
-        EarlyFilterColumns = PostFilterColumns;
-        PostFilterColumns.clear();
-    } else {
-        for (auto&& i : EarlyFilterColumns) {
-            PostFilterColumns.erase(i);
-        }
+    EarlyFilterColumns = ReadMetadata->GetEarlyFilterColumnIds();
+    for (auto&& i : EarlyFilterColumns) {
+        PostFilterColumns.erase(i);
     }
     Y_VERIFY(ReadMetadata->SelectInfo);
 }

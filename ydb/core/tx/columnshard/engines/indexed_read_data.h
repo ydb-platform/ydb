@@ -126,7 +126,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
         return result;
     }
 
-    std::set<ui32> GetEarlyFilterColumnIds(const bool noTrivial) const;
+    std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetUsedColumnIds() const;
 
     bool Empty() const {
@@ -225,15 +225,14 @@ struct TPartialReadResult {
 
 class TIndexedReadData {
 private:
-    std::set<ui32> EarlyFilterColumns;
-    std::set<ui32> UsedColumns;
+    YDB_READONLY_DEF(std::set<ui32>, EarlyFilterColumns);
     YDB_READONLY_DEF(std::set<ui32>, PostFilterColumns);
+    std::set<ui32> UsedColumns;
     bool AbortedFlag = false;
     YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
     std::vector<NIndexedReader::TBatch*> Batches;
     TFetchBlobsQueue& FetchBlobsQueue;
-    friend class NIndexedReader::TBatch;
-    friend class NIndexedReader::TGranule;
+    bool PredictManyResultsAfterFilter(const TPortionInfo& portionInfo) const;
 public:
     TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, TFetchBlobsQueue& fetchBlobsQueue, const bool internalRead, const NColumnShard::TScanCounters& counters);
 
@@ -272,17 +271,11 @@ public:
         Y_VERIFY(ReadyGranulesAccumulator.size() == Granules.size());
         Y_VERIFY(!IsInProgress());
     }
-private:
-    NOlap::TReadMetadata::TConstPtr ReadMetadata;
-
-    std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
-
-    void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
-    void OnGranuleReady(NIndexedReader::TGranule& granule) {
-        Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
-        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
+    NOlap::TReadMetadata::TConstPtr GetReadMetadata() const {
+        return ReadMetadata;
     }
 
+    void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
     void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
         if (batch && batch->num_rows()) {
             ReadMetadata->ReadStats->SelectedRows += batch->num_rows();
@@ -294,6 +287,17 @@ private:
             }
         }
     }
+
+    void OnGranuleReady(NIndexedReader::TGranule& granule) {
+        Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
+        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
+    }
+
+private:
+    NOlap::TReadMetadata::TConstPtr ReadMetadata;
+    bool OnePhaseReadMode = false;
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
 
     THashSet<const void*> BatchesToDedup;
     THashMap<TBlobRange, NIndexedReader::TBatch*> IndexedBlobSubscriber; // blobId -> batch

@@ -225,12 +225,12 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
     return *batch;
 }
 
-std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema) {
+std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount) {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(schema->num_fields());
 
     for (auto& field : schema->fields()) {
-        auto result = arrow::MakeArrayOfNull(field->type(), 0);
+        auto result = arrow::MakeArrayOfNull(field->type(), rowsCount);
         Y_VERIFY_OK(result.status());
         columns.emplace_back(*result);
         Y_VERIFY(columns.back());

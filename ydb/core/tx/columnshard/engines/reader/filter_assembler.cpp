@@ -7,7 +7,10 @@ bool TAssembleFilter::DoExecuteImpl() {
     /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto batch = BatchConstructor.Assemble();
+
+    TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+    options.SetIncludedColumnIds(FilterColumnIds);
+    auto batch = BatchConstructor.Assemble(options);
     Y_VERIFY(batch);
     Y_VERIFY(batch->num_rows());
     OriginalCount = batch->num_rows();
@@ -26,8 +29,18 @@ bool TAssembleFilter::DoExecuteImpl() {
             return true;
         }
     }
+
+    if ((size_t)batch->schema()->num_fields() < BatchConstructor.GetColumnsCount()) {
+        TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+        options.SetExcludedColumnIds(FilterColumnIds);
+        auto addBatch = BatchConstructor.Assemble(options);
+        Y_VERIFY(addBatch);
+        Y_VERIFY(Filter->Apply(addBatch));
+        Y_VERIFY(NArrow::MergeBatchColumns({ batch, addBatch }, batch, BatchConstructor.GetSchemaColumnNames(), true));
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
-        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter);
+        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter)
+        ("filter_columns", FilterColumnIds.size());
 
     FilteredBatch = batch;
     return true;
@@ -57,7 +70,13 @@ bool TAssembleFilter::DoApply(TIndexedReadData& owner) const {
             owner.GetCounters().GetTwoPhasesFilterFetchedBytes()->Add(batch.GetFetchedBytes());
             owner.GetCounters().GetTwoPhasesFilterUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
 
-            batch.Reset(&owner.GetPostFilterColumns());
+            batch.ResetWithFilter(&owner.GetPostFilterColumns());
+            if (batch.IsFetchingReady()) {
+                auto processor = GetTasksProcessorContainer();
+                if (auto assembleBatchTask = batch.AssembleTask(processor.GetObject(), owner.GetReadMetadata())) {
+                    processor.Add(owner, assembleBatchTask);
+                }
+            }
 
             owner.GetCounters().GetTwoPhasesCount()->Add(1);
             owner.GetCounters().GetTwoPhasesPostFilterFetchedBytes()->Add(batch.GetWaitingBytes());

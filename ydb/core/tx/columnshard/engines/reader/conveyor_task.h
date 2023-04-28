@@ -8,7 +8,7 @@ class TIndexedReadData;
 
 namespace NKikimr::NColumnShard {
 
-class IDataTasksProcessor;
+class TDataTasksProcessorContainer;
 
 class IDataTasksProcessor {
 private:
@@ -22,6 +22,7 @@ public:
         std::shared_ptr<IDataTasksProcessor> OwnerOperator;
         YDB_READONLY_FLAG(DataProcessed, false);
     protected:
+        TDataTasksProcessorContainer GetTasksProcessorContainer() const;
         virtual bool DoApply(NOlap::TIndexedReadData& indexedDataRead) const = 0;
         virtual bool DoExecuteImpl() = 0;
 

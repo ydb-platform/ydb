@@ -346,7 +346,7 @@ private:
         }
 
         // Switch to the next range if the current one is finished
-        if (ScanIterator && ScanIterator->Finished() && !InFlightReads) {
+        if (ScanIterator && ScanIterator->Finished()) {
             NextReadMetadata();
         }
 

@@ -30,20 +30,20 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilterBatch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
-    THashMap<TBlobRange, TString> Data;
-    TGranule* Owner = nullptr;
+    THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
+    TGranule* Owner;
     const TPortionInfo* PortionInfo = nullptr;
-
-    friend class TGranule;
-    TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionInfo);
 
     YDB_READONLY_DEF(std::optional<std::set<ui32>>, CurrentColumnIds);
     std::set<ui32> AskedColumnIds;
+    void ResetCommon(const std::set<ui32>* columnIds);
 public:
+    TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionInfo);
     bool AddIndexedReady(const TBlobRange& bRange, const TString& blobData);
     bool AskedColumnsAlready(const std::set<ui32>& columnIds) const;
 
-    void Reset(const std::set<ui32>* columnIds);
+    void ResetNoFilter(const std::set<ui32>* columnIds);
+    void ResetWithFilter(const std::set<ui32>* columnIds);
     ui64 GetFetchBytes(const std::set<ui32>* columnIds);
 
     void InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch);

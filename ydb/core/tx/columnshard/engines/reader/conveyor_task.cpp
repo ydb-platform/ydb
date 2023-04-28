@@ -22,6 +22,10 @@ bool IDataTasksProcessor::ITask::Apply(NOlap::TIndexedReadData& indexedDataRead)
     return DoApply(indexedDataRead);
 }
 
+TDataTasksProcessorContainer IDataTasksProcessor::ITask::GetTasksProcessorContainer() const {
+    return TDataTasksProcessorContainer(OwnerOperator);
+}
+
 bool IDataTasksProcessor::Add(ITask::TPtr task) {
     if (IsStopped()) {
         return false;

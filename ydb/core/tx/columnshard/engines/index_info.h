@@ -48,7 +48,17 @@ public:
 
     /// Matches name of the filed with names of the special columns.
     static bool IsSpecialColumn(const arrow::Field& field);
-
+    static bool IsSpecialColumn(const ui32 field);
+    static bool IsSpecialColumn(const std::string& fieldName);
+    template <class TContainer>
+    static bool IsSpecialColumns(const TContainer& c) {
+        for (auto&& i : c) {
+            if (!IsSpecialColumn(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
 public:
     TIndexInfo(const TString& name, ui32 id);
 

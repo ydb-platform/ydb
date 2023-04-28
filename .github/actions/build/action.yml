@@ -23,7 +23,7 @@ runs:
         ../ydb
   - name: Configure
     shell: bash
-    if: !inputs.sanitizer
+    if: ${{!inputs.sanitizer}}
     run: |
       mkdir -p ../build
       cd ../build

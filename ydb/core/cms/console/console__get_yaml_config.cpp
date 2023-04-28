@@ -35,14 +35,17 @@ public:
         Response->Record.MutableResponse()->set_version(Self->YamlVersion);
 
         if (!rowset.EndOfSet()) {
-            auto config = rowset.template GetValue<Schema::YamlConfig::Config>();
-            Response->Record.MutableResponse()->set_config(config);
-        }
+            bool dropped = rowset.template GetValue<Schema::YamlConfig::Dropped>();
+            if (!dropped) {
+                auto config = rowset.template GetValue<Schema::YamlConfig::Config>();
+                Response->Record.MutableResponse()->set_config(config);
 
-        for (auto &[id, cfg] : Self->VolatileYamlConfigs) {
-            auto *config = Response->Record.MutableResponse()->add_volatile_configs();
-            config->set_id(id);
-            config->set_config(cfg);
+                for (auto &[id, cfg] : Self->VolatileYamlConfigs) {
+                    auto *config = Response->Record.MutableResponse()->add_volatile_configs();
+                    config->set_id(id);
+                    config->set_config(cfg);
+                }
+            }
         }
 
         return true;

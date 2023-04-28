@@ -26,7 +26,7 @@ class TListEndpointsRPC : public TActorBootstrapped<TListEndpointsRPC> {
     const TActorId CacheId;
     TActorId Discoverer;
 
-    THolder<TEvStateStorage::TEvBoardInfo> LookupResponse;
+    THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
     THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
 
 public:
@@ -60,13 +60,14 @@ public:
 
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(TEvDiscovery::TEvDiscoveryData, Handle);
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvDiscovery::TEvError, Handle);
         }
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr &ev) {
+    void Handle(TEvDiscovery::TEvDiscoveryData::TPtr &ev) {
+        Y_VERIFY(ev->Get()->CachedMessageData);
         Discoverer = {};
 
         LookupResponse.Reset(ev->Release().Release());
@@ -122,113 +123,39 @@ public:
         if (!NameserviceResponse || !LookupResponse)
             return;
 
-        Y_VERIFY(LookupResponse->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        Y_VERIFY(LookupResponse->CachedMessageData->Info &&
+            LookupResponse->CachedMessageData->Info->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
-        TStackVec<const TString*> entries;
-        entries.reserve(LookupResponse->InfoEntries.size());
-        for (auto &xpair : LookupResponse->InfoEntries)
-            entries.emplace_back(&xpair.second.Payload);
-        Shuffle(entries.begin(), entries.end());
+        const TSet<TString> services(
+            Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
 
-        auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(Request);
-        result->mutable_endpoints()->Reserve(LookupResponse->InfoEntries.size());
+        TString cachedMessage, cachedMessageSsl;
 
-        const TSet<TString> services(Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
-        const bool sslServer = Request->SslServer();
-
-        using TEndpointKey = std::pair<TString, ui32>;
-        struct TEndpointState {
-            int Index = -1;
-            int Count = 0;
-            float LoadFactor = 0;
-            THashSet<TString> Locations;
-            THashSet<TString> Services;
-        };
-        THashMap<TEndpointKey, TEndpointState> states;
-
-        NKikimrStateStorage::TEndpointBoardEntry entry;
-        for (const TString *xpayload : entries) {
-            Y_PROTOBUF_SUPPRESS_NODISCARD entry.ParseFromString(*xpayload);
-            if (!CheckServices(services, entry))
-                continue;
-
-            if (entry.GetSsl() != sslServer)
-                continue;
-
-            Ydb::Discovery::EndpointInfo *xres;
-
-            auto& state = states[TEndpointKey(entry.GetAddress(), entry.GetPort())];
-            if (state.Index >= 0) {
-                xres = result->mutable_endpoints(state.Index);
-                ++state.Count;
-                // FIXME: do we want a mean or a sum here?
-                // xres->set_load_factor(xres->load_factor() + (entry.GetLoad() - xres->load_factor()) / state.Count);
-                xres->set_load_factor(xres->load_factor() + entry.GetLoad());
-            } else {
-                state.Index = result->endpoints_size();
-                state.Count = 1;
-                xres = result->add_endpoints();
-                xres->set_address(entry.GetAddress());
-                xres->set_port(entry.GetPort());
-                if (entry.GetSsl())
-                    xres->set_ssl(true);
-                xres->set_load_factor(entry.GetLoad());
-                xres->set_node_id(entry.GetNodeId());
-                if (entry.AddressesV4Size()) {
-                    xres->mutable_ip_v4()->Reserve(entry.AddressesV4Size());
-                    for (const auto& addr : entry.GetAddressesV4()) {
-                        xres->add_ip_v4(addr);
-                    }
-                }
-                if (entry.AddressesV6Size()) {
-                    xres->mutable_ip_v6()->Reserve(entry.AddressesV6Size());
-                    for (const auto& addr : entry.GetAddressesV6()) {
-                        xres->add_ip_v6(addr);
-                    }
-                }
-                xres->set_ssl_target_name_override(entry.GetTargetNameOverride());
-            }
-
-            if (IsSafeLocationMarker(entry.GetDataCenter())) {
-                if (state.Locations.insert(entry.GetDataCenter()).second) {
-                    if (xres->location().empty()) {
-                        xres->set_location(entry.GetDataCenter());
-                    } else {
-                        xres->set_location(xres->location() + "/" + entry.GetDataCenter());
-                    }
-                }
-            }
-
-            for (auto &service : entry.GetServices()) {
-                if (state.Services.insert(service).second) {
-                    xres->add_service(service);
-                }
-            }
+        if (services.empty() && !LookupResponse->CachedMessageData->CachedMessage.empty() &&
+                !LookupResponse->CachedMessageData->CachedMessageSsl.empty()) {
+            cachedMessage = LookupResponse->CachedMessageData->CachedMessage;
+            cachedMessageSsl = LookupResponse->CachedMessageData->CachedMessageSsl;
+        } else {
+            std::tie(cachedMessage, cachedMessageSsl) = NDiscovery::CreateSerializedMessage(
+                LookupResponse->CachedMessageData->Info, std::move(services), NameserviceResponse);
         }
 
-        auto &nodeInfo = NameserviceResponse->Node;
-        if (nodeInfo && nodeInfo->Location.GetDataCenterId()) {
-            const auto &location = nodeInfo->Location.GetDataCenterId();
-            if (IsSafeLocationMarker(location))
-                result->set_self_location(location);
+        if (Request->SslServer()) {
+            ReplySerialized(std::move(cachedMessageSsl), Ydb::StatusIds::SUCCESS);
+        } else {
+            ReplySerialized(std::move(cachedMessage), Ydb::StatusIds::SUCCESS);
         }
+    }
 
-        Reply(*result, Ydb::StatusIds::SUCCESS);
+    void ReplySerialized(TString message, Ydb::StatusIds::StatusCode status) {
+        Request->SendSerializedResult(std::move(message), status);
+        PassAway();
     }
 
     template <typename... Args>
     void Reply(Args&&... args) {
         Request->SendResult(std::forward<Args>(args)...);
         PassAway();
-    }
-
-    bool IsSafeLocationMarker(TStringBuf location) {
-        const ui8* isrc = reinterpret_cast<const ui8*>(location.data());
-        for (auto idx : xrange(location.size())) {
-            if (isrc[idx] >= 0x80)
-                return false;
-        }
-        return true;
     }
 };
 

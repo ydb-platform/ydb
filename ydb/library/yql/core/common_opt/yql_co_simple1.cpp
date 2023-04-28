@@ -399,7 +399,7 @@ TExprNode::TPtr HandleEmptyListInJoin(const TExprNode::TPtr& node, TExprContext&
         }
 
         if (IsRequiredSide(joinTree, *labels, inputIndex).first) {
-            return ctx.NewCallable(node->Pos(), "List", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+            return KeepConstraints(ctx.NewCallable(node->Pos(), "List", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
         }
     }
 

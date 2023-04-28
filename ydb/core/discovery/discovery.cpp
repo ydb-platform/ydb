@@ -4,10 +4,14 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
+
+#include <util/generic/xrange.h>
+#include <util/random/shuffle.h>
 
 #define LOG_T(service, stream) LOG_TRACE_S(*TlsActivationContext, service, stream)
 #define LOG_D(service, stream) LOG_DEBUG_S(*TlsActivationContext, service, stream)
@@ -19,6 +23,151 @@
 #define DLOG_D(stream) LOG_D(NKikimrServices::DISCOVERY, stream)
 
 namespace NKikimr {
+
+namespace NDiscovery {
+    using TEndpointKey = std::pair<TString, ui32>;
+    struct TEndpointState {
+        int Index = -1;
+        int Count = 0;
+        float LoadFactor = 0;
+        THashSet<TString> Locations;
+        THashSet<TString> Services;
+    };
+
+    bool CheckServices(const TSet<TString> &req, const NKikimrStateStorage::TEndpointBoardEntry &entry) {
+        if (req.empty())
+            return true;
+
+        for (const auto &x : entry.GetServices())
+            if (req.count(x))
+                return true;
+
+        return false;
+    }
+
+    bool IsSafeLocationMarker(TStringBuf location) {
+        const ui8* isrc = reinterpret_cast<const ui8*>(location.data());
+        for (auto idx : xrange(location.size())) {
+            if (isrc[idx] >= 0x80)
+                return false;
+        }
+        return true;
+    }
+
+    void AddEndpoint(
+            Ydb::Discovery::ListEndpointsResult& result,
+            THashMap<TEndpointKey, TEndpointState>& states,
+            const NKikimrStateStorage::TEndpointBoardEntry& entry) {
+        Ydb::Discovery::EndpointInfo *xres;
+
+        auto& state = states[TEndpointKey(entry.GetAddress(), entry.GetPort())];
+        if (state.Index >= 0) {
+            xres = result.mutable_endpoints(state.Index);
+            ++state.Count;
+            // FIXME: do we want a mean or a sum here?
+            // xres->set_load_factor(xres->load_factor() + (entry.GetLoad() - xres->load_factor()) / state.Count);
+            xres->set_load_factor(xres->load_factor() + entry.GetLoad());
+        } else {
+            state.Index = result.endpoints_size();
+            state.Count = 1;
+            xres = result.add_endpoints();
+            xres->set_address(entry.GetAddress());
+            xres->set_port(entry.GetPort());
+            if (entry.GetSsl())
+                xres->set_ssl(true);
+            xres->set_load_factor(entry.GetLoad());
+            xres->set_node_id(entry.GetNodeId());
+            if (entry.AddressesV4Size()) {
+                xres->mutable_ip_v4()->Reserve(entry.AddressesV4Size());
+                for (const auto& addr : entry.GetAddressesV4()) {
+                    xres->add_ip_v4(addr);
+                }
+            }
+            if (entry.AddressesV6Size()) {
+                xres->mutable_ip_v6()->Reserve(entry.AddressesV6Size());
+                for (const auto& addr : entry.GetAddressesV6()) {
+                    xres->add_ip_v6(addr);
+                }
+            }
+            xres->set_ssl_target_name_override(entry.GetTargetNameOverride());
+        }
+
+        if (IsSafeLocationMarker(entry.GetDataCenter())) {
+            if (state.Locations.insert(entry.GetDataCenter()).second) {
+                if (xres->location().empty()) {
+                    xres->set_location(entry.GetDataCenter());
+                } else {
+                    xres->set_location(xres->location() + "/" + entry.GetDataCenter());
+                }
+            }
+        }
+
+        for (auto &service : entry.GetServices()) {
+            if (state.Services.insert(service).second) {
+                xres->add_service(service);
+            }
+        }
+    }
+
+    TString SerializeResult(const Ydb::Discovery::ListEndpointsResult& result) {
+        Ydb::Discovery::ListEndpointsResponse response;
+        TString out;
+        auto deferred = response.mutable_operation();
+        deferred->set_ready(true);
+        deferred->set_status(Ydb::StatusIds::SUCCESS);
+
+        auto data = deferred->mutable_result();
+        data->PackFrom(result);
+
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+        return out;
+    }
+
+    std::pair<TString, TString> CreateSerializedMessage(
+                const THolder<TEvStateStorage::TEvBoardInfo>& info,
+                TSet<TString> services,
+                const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse) {
+        TStackVec<const TString*> entries;
+        entries.reserve(info->InfoEntries.size());
+        for (auto &xpair : info->InfoEntries)
+            entries.emplace_back(&xpair.second.Payload);
+        Shuffle(entries.begin(), entries.end());
+
+        Ydb::Discovery::ListEndpointsResult result;
+        result.mutable_endpoints()->Reserve(info->InfoEntries.size());
+
+        Ydb::Discovery::ListEndpointsResult resultSsl;
+        resultSsl.mutable_endpoints()->Reserve(info->InfoEntries.size());
+
+        THashMap<TEndpointKey, TEndpointState> states;
+        THashMap<TEndpointKey, TEndpointState> statesSsl;
+
+        NKikimrStateStorage::TEndpointBoardEntry entry;
+        for (const TString *xpayload : entries) {
+            Y_PROTOBUF_SUPPRESS_NODISCARD entry.ParseFromString(*xpayload);
+            if (!CheckServices(services, entry)) {
+                continue;
+            }
+
+            if (entry.GetSsl()) {
+                AddEndpoint(resultSsl, statesSsl, entry);
+            } else {
+                AddEndpoint(result, states, entry);
+            }
+        }
+
+        const auto &nodeInfo = nameserviceResponse->Node;
+        if (nodeInfo && nodeInfo->Location.GetDataCenterId()) {
+            const auto &location = nodeInfo->Location.GetDataCenterId();
+            if (IsSafeLocationMarker(location)) {
+                result.set_self_location(location);
+                resultSsl.set_self_location(location);
+            }
+        }
+
+        return {SerializeResult(result), SerializeResult(resultSsl)};
+    }
+}
 
 namespace NDiscoveryPrivate {
     struct TEvPrivate {
@@ -39,9 +188,10 @@ namespace NDiscoveryPrivate {
         };
     };
 
-    class TDiscoveryCache: public TActor<TDiscoveryCache> {
-        THashMap<TString, THolder<TEvStateStorage::TEvBoardInfo>> OldInfo;
-        THashMap<TString, THolder<TEvStateStorage::TEvBoardInfo>> NewInfo;
+    class TDiscoveryCache: public TActorBootstrapped<TDiscoveryCache> {
+        THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> NewCachedMessages;
+        THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages;
+        THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
 
         struct TWaiter {
             TActorId ActorId;
@@ -67,22 +217,37 @@ namespace NDiscoveryPrivate {
             it->second.push_back(waiter);
         }
 
+        void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
+            NameserviceResponse.Reset(ev->Release().Release());
+        }
+
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
             CLOG_T("Handle " << ev->Get()->ToString());
 
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
             const auto& path = msg->Path;
 
-            if (auto it = Requested.find(path); it != Requested.end()) {
-                for (const auto& waiter : it->second) {
-                    Send(waiter.ActorId, new TEvStateStorage::TEvBoardInfo(*msg), 0, waiter.Cookie);
-                }
+            auto newCachedData = std::make_shared<NDiscovery::TCachedMessageData>();
 
-                Requested.erase(it);
+            if (NameserviceResponse) {
+                auto result = NDiscovery::CreateSerializedMessage(msg, {}, NameserviceResponse);
+
+                newCachedData->CachedMessage = result.first;
+                newCachedData->CachedMessageSsl = result.second;
             }
 
-            OldInfo.erase(path);
-            NewInfo.emplace(path, std::move(msg));
+            newCachedData->Info = std::move(msg);
+
+            OldCachedMessages.erase(path);
+            NewCachedMessages.emplace(path, newCachedData);
+
+            if (auto it = Requested.find(path); it != Requested.end()) {
+                for (const auto& waiter : it->second) {
+                    Send(waiter.ActorId,
+                        new TEvDiscovery::TEvDiscoveryData(newCachedData), 0, waiter.Cookie);
+                }
+                Requested.erase(it);
+            }
 
             if (!Scheduled) {
                 Scheduled = true;
@@ -91,10 +256,10 @@ namespace NDiscoveryPrivate {
         }
 
         void Wakeup() {
-            OldInfo.swap(NewInfo);
-            NewInfo.clear();
+            OldCachedMessages.swap(NewCachedMessages);
+            NewCachedMessages.clear();
 
-            if (!OldInfo.empty()) {
+            if (!OldCachedMessages.empty()) {
                 Scheduled = true;
                 Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
             } else {
@@ -107,18 +272,17 @@ namespace NDiscoveryPrivate {
 
             const auto* msg = ev->Get();
 
-            if (const auto* x = NewInfo.FindPtr(msg->Database)) {
-                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
-                return;
-            }
-
-            if (const auto* x = OldInfo.FindPtr(msg->Database)) {
+            const auto* cachedData = NewCachedMessages.FindPtr(msg->Database);
+            if (cachedData == nullptr) {
+                cachedData = OldCachedMessages.FindPtr(msg->Database);
+                if (cachedData == nullptr) {
+                    Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
+                    return;
+                }
                 Request(msg->Database, msg->StateStorageId);
-                Send(ev->Sender, new TEvStateStorage::TEvBoardInfo(**x), 0, ev->Cookie);
-                return;
             }
 
-            Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
+            Send(ev->Sender, new TEvDiscovery::TEvDiscoveryData(*cachedData), 0, ev->Cookie);
         }
 
     public:
@@ -126,15 +290,17 @@ namespace NDiscoveryPrivate {
             return NKikimrServices::TActivity::DISCOVERY_CACHE_ACTOR;
         }
 
-        TDiscoveryCache()
-            : TActor(&TThis::StateWork)
-        {
+        void Bootstrap() {
+            Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
+
+            Become(&TThis::StateWork);
         }
 
         STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvRequest, Handle);
                 hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+                hFunc(TEvInterconnect::TEvNodeInfo, Handle);
                 sFunc(TEvents::TEvWakeup, Wakeup);
                 sFunc(TEvents::TEvPoison, PassAway);
             }
@@ -148,7 +314,7 @@ class TDiscoverer: public TActorBootstrapped<TDiscoverer> {
     const TActorId ReplyTo;
     const TActorId CacheId;
 
-    THolder<TEvStateStorage::TEvBoardInfo> LookupResponse;
+    THolder<TEvDiscovery::TEvDiscoveryData> LookupResponse;
     THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult> SchemeCacheResponse;
 
     bool ResolveResources = false;
@@ -164,7 +330,9 @@ public:
         return NKikimrServices::TActivity::DISCOVERY_ACTOR;
     }
 
-    explicit TDiscoverer(TLookupPathFunc f, const TString& database, const TActorId& replyTo, const TActorId& cacheId)
+    explicit TDiscoverer(
+            TLookupPathFunc f, const TString& database,
+            const TActorId& replyTo, const TActorId& cacheId)
         : MakeLookupPath(f)
         , Database(database)
         , ReplyTo(replyTo)
@@ -181,15 +349,19 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(TEvDiscovery::TEvDiscoveryData, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        DLOG_T("Handle " << LookupResponse->ToString()
-            << ": cookie# " << ev->Cookie);
+    void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
+        Y_VERIFY(ev->Get()->CachedMessageData);
+
+        if (ev->Get()->CachedMessageData->Info) {
+            DLOG_T("Handle " << ev->Get()->CachedMessageData->Info->ToString()
+                << ": cookie# " << ev->Cookie);
+        }
 
         if (ev->Cookie != LookupCookie) {
             DLOG_D("Stale lookup response"
@@ -270,14 +442,15 @@ public:
             }
         }
 
-        if (LookupResponse->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+        if (LookupResponse->CachedMessageData->Info &&
+                LookupResponse->CachedMessageData->Info->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
             DLOG_D("Lookup error"
-                << ": status# " << ui64(LookupResponse->Status));
+                << ": status# " << ui64(LookupResponse->CachedMessageData->Info->Status));
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::RESOLVE_ERROR,
                 "Database nodes resolve failed with no certain result"));
         }
 
-        Reply(new TEvStateStorage::TEvBoardInfo(*LookupResponse));
+        Reply(LookupResponse.Release());
     }
 
     void Lookup(const TString& db) {
@@ -336,7 +509,11 @@ public:
     }
 };
 
-IActor* CreateDiscoverer(TLookupPathFunc f, const TString& database, const TActorId& replyTo, const TActorId& cacheId) {
+IActor* CreateDiscoverer(
+        TLookupPathFunc f,
+        const TString& database,
+        const TActorId& replyTo,
+        const TActorId& cacheId) {
     return new TDiscoverer(f, database, replyTo, cacheId);
 }
 

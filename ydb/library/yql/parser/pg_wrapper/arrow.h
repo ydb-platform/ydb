@@ -4,6 +4,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
 #include <arrow/compute/kernel.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/arrow/arrow_util.h>
 
 extern "C" {
 #include "postgres.h"
@@ -97,24 +98,95 @@ constexpr bool constexpr_for_tuple(F&& f, Tuple&& tuple) {
     });
 }
 
-template <typename TFunc, bool IsStrict, bool IsFixedResult, bool HasScalars, bool HasNulls, typename TArgsPolicy, typename TBuilder>
-void GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, TBuilder& builder, FunctionCallInfo fcinfo) {
+enum class EScalarArgBinary {
+    Unknown,
+    First,
+    Second
+};
+
+template <typename TFunc, bool IsStrict, bool IsFixedResult, bool HasScalars, bool HasNulls, typename TArgsPolicy, EScalarArgBinary ScalarArgBinary, typename TBuilder>
+Y_NO_INLINE arrow::Datum GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, TBuilder& builder) {
+    LOCAL_FCINFO(fcinfo, FUNC_MAX_ARGS);    
+	fcinfo->flinfo = state.flinfo;
+	fcinfo->context = state.context;
+	fcinfo->resultinfo = state.resultinfo;
+	fcinfo->fncollation = state.fncollation;
+    fcinfo->nargs = batch.values.size();    
+
+    std::array<NullableDatum, TArgsPolicy::IsFixedArg.size()> scalars;
+    std::array<bool, TArgsPolicy::IsFixedArg.size()> isScalar;
+    std::array<ui64, TArgsPolicy::IsFixedArg.size()> offsets;
+    std::array<const ui8*, TArgsPolicy::IsFixedArg.size()> validMasks;
+    std::array<ui64, TArgsPolicy::IsFixedArg.size()> validOffsetMask;
+    ui8 fakeValidByte = 0xFF;
+    std::array<const ui64*, TArgsPolicy::IsFixedArg.size()> fixedArrays;
+    std::array<const ui32*, TArgsPolicy::IsFixedArg.size()> stringOffsetsArrays;
+    std::array<const ui8*, TArgsPolicy::IsFixedArg.size()> stringDataArrays;
+    if constexpr (!TArgsPolicy::VarArgs) {
+        for (size_t j = 0; j < TArgsPolicy::IsFixedArg.size(); ++j) {
+            isScalar[j] = batch.values[j].is_scalar();
+            if (isScalar[j]) {
+                const auto& scalar = *batch.values[j].scalar();
+                if (!scalar.is_valid) {
+                    scalars[j].isnull = true;
+                } else {
+                    scalars[j].isnull = false;
+                    if (TArgsPolicy::IsFixedArg[j]) {
+                        scalars[j].value = (Datum)*static_cast<const ui64*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data());
+                    } else {
+                        auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
+                        scalars[j].value = (Datum)buffer->data();
+                    }
+                }
+            } else {
+                const auto& array = *batch.values[j].array();
+                offsets[j] = array.offset;
+                validMasks[j] = array.GetValues<ui8>(0, 0);
+                if (validMasks[j]) {
+                    validOffsetMask[j] = ~0ull;
+                } else {
+                    validOffsetMask[j] = 0ull;
+                    validMasks[j] = &fakeValidByte;                    
+                }
+                if (TArgsPolicy::IsFixedArg[j]) {
+                    fixedArrays[j] = array.GetValues<ui64>(1);
+                } else {
+                    stringOffsetsArrays[j] = array.GetValues<ui32>(1);
+                    stringDataArrays[j] = array.GetValues<ui8>(2);
+                }
+            }
+        }
+    }
+
+    ui64* fixedResultData = nullptr;
+    ui8* fixedResultValidMask = nullptr;
+    if constexpr (IsFixedResult) {
+        builder.UnsafeReserve(length);
+        fixedResultData = builder.MutableData();
+        fixedResultValidMask = builder.MutableValidMask();
+    }
+
     for (size_t i = 0; i < length; ++i) {
         Datum ret;
         if constexpr (!TArgsPolicy::VarArgs) {
             if (!constexpr_for_tuple([&](auto const& j, auto const& v) {
                 NullableDatum d;
-                if (HasScalars && batch.values[j].is_scalar()) {
-                    if (v) {
-                        FillScalarItem<HasNulls, true>(*batch.values[j].scalar(), d);
-                    } else {
-                        FillScalarItem<HasNulls, false>(*batch.values[j].scalar(), d);
-                    }
+                if (HasScalars && (
+                    (ScalarArgBinary == EScalarArgBinary::First && j == 0) || 
+                    (ScalarArgBinary == EScalarArgBinary::Second && j == 1) || 
+                    isScalar[j])) {
+                    d = scalars[j];
                 } else {
+                    d.isnull = false;                    
+                    if constexpr (HasNulls) {
+                        ui64 fullIndex = (i + offsets[j]) & validOffsetMask[j];
+                        d.isnull = ((validMasks[j][fullIndex >> 3] >> (fullIndex & 0x07)) & 1) == 0;
+                    }
+
                     if (v) {
-                        FillArrayItem<HasNulls, true>(*batch.values[j].array(), i, d);
+                        d.value = (Datum)fixedArrays[j][i];
                     } else {
-                        FillArrayItem<HasNulls, false>(*batch.values[j].array(), i, d);
+                        d.value = (Datum)(stringOffsetsArrays[j][i] + stringDataArrays[j]);
                     }
                 }
 
@@ -125,10 +197,15 @@ void GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, cons
                 fcinfo->args[j] = d;
                 return true;            
             }, TArgsPolicy::IsFixedArg)) {
+                if constexpr (IsFixedResult) {
+                    fixedResultValidMask[i] = 0;
+                } else {
+                    builder.Add(NUdf::TBlockItem{});
+                }
                 goto SkipCall;
             }
         } else {
-            for (size_t j = 0; j < batch.values.size(); ++i) {
+            for (size_t j = 0; j < batch.values.size(); ++j) {
                 NullableDatum d;
                 if (HasScalars && batch.values[j].is_scalar()) {
                     if (state.IsFixedArg[j]) {
@@ -145,7 +222,11 @@ void GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, cons
                 }
 
                 if (HasNulls && IsStrict && d.isnull) {
-                    builder.Add(NUdf::TBlockItem{});
+                    if constexpr (IsFixedResult) {
+                        fixedResultValidMask[i] = 0;
+                    } else {
+                        builder.Add(NUdf::TBlockItem{});
+                    }
                     goto SkipCall;
                 }
 
@@ -156,11 +237,8 @@ void GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, cons
         fcinfo->isnull = false;
         ret = TFunc()(fcinfo);
         if constexpr (IsFixedResult) {
-            if (fcinfo->isnull) {
-                builder.Add(NUdf::TBlockItem{});
-            } else {
-                builder.Add(NUdf::TBlockItem(ui64(ret)));
-            }
+            fixedResultData[i] = ui64(ret);
+            fixedResultValidMask[i] = !fcinfo->isnull;
         } else {
             if (fcinfo->isnull) {
                 builder.Add(NUdf::TBlockItem{});
@@ -172,54 +250,64 @@ void GenericExecImpl(const arrow::compute::ExecBatch& batch, size_t length, cons
         }
 SkipCall:;
     }
+
+    return builder.Build(true);    
+}
+
+template <typename TFunc, bool IsStrict, bool IsFixedResult, bool HasScalars, bool HasNulls, typename TArgsPolicy, typename TBuilder>
+Y_NO_INLINE arrow::Datum GenericExecImpl3(const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, TBuilder& builder) {
+    if constexpr (!TArgsPolicy::VarArgs) {
+        if (TArgsPolicy::IsFixedArg.size() == 2) {
+            if (batch.values[0].is_scalar()) {
+                return GenericExecImpl<TFunc, IsStrict, IsFixedResult, HasScalars, HasNulls, TArgsPolicy, EScalarArgBinary::First, TBuilder>(batch, length, state, builder);                
+            }
+
+            if (batch.values[1].is_scalar()) {
+                return GenericExecImpl<TFunc, IsStrict, IsFixedResult, HasScalars, HasNulls, TArgsPolicy, EScalarArgBinary::Second, TBuilder>(batch, length, state, builder);                
+            }
+        }
+    }
+
+    return GenericExecImpl<TFunc, IsStrict, IsFixedResult, HasScalars, HasNulls, TArgsPolicy, EScalarArgBinary::Unknown, TBuilder>(batch, length, state, builder);
 }
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy>
-void GenericExecImpl2(bool hasScalars, bool hasNulls, arrow::compute::KernelContext* ctx,
-    const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state,
-    FunctionCallInfo fcinfo, arrow::Datum* res) {
+Y_NO_INLINE void GenericExecImpl2(bool hasScalars, bool hasNulls, arrow::compute::KernelContext* ctx,
+    const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, arrow::Datum* res) {
     if (hasScalars) {
         if (hasNulls) {
             if constexpr (IsFixedResult) {
                 NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, true, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, true, true, TArgsPolicy>(batch, length, state, builder);
             } else {
                 NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, true, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, true, true, TArgsPolicy>(batch, length, state, builder);
             }
         } else {
             if constexpr (IsFixedResult) {
                 NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, false, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, true, false, TArgsPolicy>(batch, length, state, builder);
             } else {
                 NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, true, false, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, true, false, TArgsPolicy>(batch, length, state, builder);
             }
         }
     } else {
         if (hasNulls) {
             if constexpr (IsFixedResult) {
                 NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, false, true, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, false, true, TArgsPolicy>(batch, length, state, builder);
             } else {
                 NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, false, true, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, false, true, TArgsPolicy>(batch, length, state, builder);
             }
         } else {
             if constexpr (IsFixedResult) {
                 NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, false, false, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, false, false, TArgsPolicy>(batch, length, state, builder);
             } else {
                 NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
-                GenericExecImpl<TFunc, IsStrict, IsFixedResult, false, false, TArgsPolicy>(batch, length, state, builder, fcinfo);
-                *res = builder.Build(true);
+                *res = GenericExecImpl3<TFunc, IsStrict, IsFixedResult, false, false, TArgsPolicy>(batch, length, state, builder);
             }
         }
     }
@@ -233,14 +321,8 @@ struct TDefaultArgsPolicy {
 extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
-arrow::Status GenericExec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-    LOCAL_FCINFO(fcinfo, FUNC_MAX_ARGS);
+Y_NO_INLINE arrow::Status GenericExec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
     const auto& state = GetPGKernelState(ctx);
-	fcinfo->flinfo = state.flinfo;
-	fcinfo->context = state.context;
-	fcinfo->resultinfo = state.resultinfo;
-	fcinfo->fncollation = state.fncollation;
-    fcinfo->nargs = batch.values.size();    
     if constexpr (!TArgsPolicy::VarArgs) {
         Y_ENSURE(batch.values.size() == TArgsPolicy::IsFixedArg.size());
         Y_ENSURE(state.IsFixedArg.size() == TArgsPolicy::IsFixedArg.size());
@@ -272,7 +354,7 @@ arrow::Status GenericExec(arrow::compute::KernelContext* ctx, const arrow::compu
     Y_ENSURE(hasArrays);
     Y_ENSURE(state.flinfo->fn_strict == IsStrict);
     Y_ENSURE(state.IsFixedResult == IsFixedResult);
-    GenericExecImpl2<TFunc, IsStrict, IsFixedResult, TArgsPolicy>(hasScalars, hasNulls, ctx, batch, length, state, fcinfo, res);
+    GenericExecImpl2<TFunc, IsStrict, IsFixedResult, TArgsPolicy>(hasScalars, hasNulls, ctx, batch, length, state, res);
     return arrow::Status::OK();
 }
 

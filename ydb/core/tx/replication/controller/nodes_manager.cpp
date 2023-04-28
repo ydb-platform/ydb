@@ -16,11 +16,14 @@ const THashSet<ui32>& TNodesManager::GetNodes(const TString& tenant) const {
 
 void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, const TActorContext& ctx) {
     TenantNodes.emplace(tenant, THashSet<ui32>());
-    NodeDiscoverers.emplace(ctx.Register(CreateDiscoverer(&NService::MakeDiscoveryPath, tenant, ctx.SelfID, cache)), tenant);
+    NodeDiscoverers.emplace(
+        ctx.Register(CreateDiscoverer(&NService::MakeDiscoveryPath, tenant, ctx.SelfID, cache)), tenant
+    );
 }
 
-void TNodesManager::ProcessResponse(TEvStateStorage::TEvBoardInfo::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+void TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
+    Y_VERIFY(ev->Get()->CachedMessageData && ev->Get()->CachedMessageData->Info);
+    Y_VERIFY(ev->Get()->CachedMessageData->Info->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
     auto it = NodeDiscoverers.find(ev->Sender);
     if (it == NodeDiscoverers.end()) {
@@ -30,7 +33,7 @@ void TNodesManager::ProcessResponse(TEvStateStorage::TEvBoardInfo::TPtr& ev, con
     auto& nodes = TenantNodes[it->second];
     nodes.clear();
 
-    for (const auto& [actorId, _] : ev->Get()->InfoEntries) {
+    for (const auto& [actorId, _] : ev->Get()->CachedMessageData->Info->InfoEntries) {
         nodes.insert(actorId.NodeId());
     }
 

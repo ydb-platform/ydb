@@ -6,16 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(restricted-boost-endian INTERFACE)
-target_include_directories(restricted-boost-endian INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/endian/include
-)
-target_link_libraries(restricted-boost-endian INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-static_assert
-  restricted-boost-type_traits
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+endif()

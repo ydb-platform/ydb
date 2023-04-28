@@ -59,7 +59,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
-        HFunc(TEvStateStorage::TEvBoardInfo, Handle);
+        HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
         HFunc(TEvents::TEvPoison, Handle);
     }
@@ -175,8 +175,11 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
     }
 }
 
-void TController::Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
+    Y_VERIFY(ev->Get()->CachedMessageData && ev->Get()->CachedMessageData->Info);
+
+    CLOG_T(ctx, "Handle " << ev->Get()->CachedMessageData->Info->ToString());
+
     NodesManager.ProcessResponse(ev, ctx);
 }
 

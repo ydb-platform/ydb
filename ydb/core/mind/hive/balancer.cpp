@@ -280,7 +280,9 @@ protected:
                 }
             }
         }
-        return PassAway();
+        if (KickInFlight == 0) {
+            return PassAway();
+        }
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {

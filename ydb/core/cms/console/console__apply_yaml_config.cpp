@@ -24,7 +24,7 @@ public:
 
         auto config = req.GetRequest().config();
 
-        if (config != Self->YamlConfig) {
+        if (config != Self->YamlConfig || Self->YamlDropped) {
             Modify = true;
 
             try {
@@ -65,7 +65,8 @@ public:
             }
 
             db.Table<Schema::YamlConfig>().Key(Version)
-                .Update<Schema::YamlConfig::Config>(config);
+                .Update<Schema::YamlConfig::Config>(config)
+                .Update<Schema::YamlConfig::Dropped>(false);
 
             /* Later we shift this boundary to support rollback and history */
             db.Table<Schema::YamlConfig>().Key(Version - 1)
@@ -91,6 +92,7 @@ public:
         if (!Error && Modify) {
             Self->YamlVersion = Version;
             Self->YamlConfig = req.GetRequest().config();
+            Self->YamlDropped = false;
 
             Self->VolatileYamlConfigs.clear();
 

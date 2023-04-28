@@ -121,6 +121,9 @@ struct TKikimrRunConfig {
 
     TString                    ClusterName;
 
+    NKikimrConfig::TAppConfig  InitialCmsConfig;
+    NKikimrConfig::TAppConfig  InitialCmsYamlConfig;
+
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});
 };

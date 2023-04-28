@@ -113,6 +113,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-cpp-resource
   library-cpp-yson
   library-yql-core
+  yql-minikql-arrow
   yql-minikql-computation
   yql-parser-pg_catalog
   providers-common-codec

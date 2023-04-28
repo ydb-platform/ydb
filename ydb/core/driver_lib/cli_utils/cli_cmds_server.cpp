@@ -790,6 +790,11 @@ protected:
                             yamlConfig);
                     }
 
+                    RunConfig.InitialCmsConfig.CopyFrom(appConfig);
+
+                    RunConfig.InitialCmsYamlConfig.CopyFrom(yamlConfig);
+                    NYamlConfig::ReplaceUnmanagedKinds(appConfig, RunConfig.InitialCmsYamlConfig);
+
                     if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
                         BaseConfig.Swap(&yamlConfig);
                         NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), BaseConfig);
@@ -1112,6 +1117,11 @@ protected:
                 RunConfig.Labels,
                 yamlConfig);
         }
+
+        RunConfig.InitialCmsConfig.CopyFrom(result.GetConfig());
+
+        RunConfig.InitialCmsYamlConfig.CopyFrom(yamlConfig);
+        NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), RunConfig.InitialCmsYamlConfig);
 
         if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
             appConfig = yamlConfig;

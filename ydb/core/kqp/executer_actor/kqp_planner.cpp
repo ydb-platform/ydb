@@ -167,6 +167,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN);
         request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
         request.MutableRuntimeSettings()->SetUseLLVM(enableLlvm);
+        request.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
         request.SetStartAllOrFail(true);
     }
 

@@ -79,20 +79,6 @@ std::string MapBindingType(const FederatedQuery::BindingSetting::BindingCase& bi
     }
 }
 
-// void FillSubjectType(::yandex::cloud::events::Authentication* authentication, TAuthentication::ESubjectType subjectType) {
-//     switch (subjectType) {
-//     case TAuthentication::ESubjectType::SERVICE_ACCOUNT:
-//         authentication->set_subject_type(::yandex::cloud::events::Authentication::SERVICE_ACCOUNT);
-//         return;
-//     case TAuthentication::ESubjectType::FEDERATED_USER_ACCOUNT:
-//         authentication->set_subject_type(::yandex::cloud::events::Authentication::FEDERATED_USER_ACCOUNT);
-//         return;
-//     case TAuthentication::ESubjectType::PASSPORT_USER_ACCOUNT:
-//         authentication->set_subject_type(::yandex::cloud::events::Authentication::YANDEX_PASSPORT_USER_ACCOUNT);
-//         return;
-//     }
-// }
-
 TString MaybeRemoveSuffix(const TString& token) {
     const TString suffix = "@as";
     return token.EndsWith(suffix)
@@ -100,10 +86,19 @@ TString MaybeRemoveSuffix(const TString& token) {
         : token;
 }
 
+::yandex::cloud::events::Authentication::SubjectType GetCloudSubjectType(const TString& subjectType) {
+    static const TMap<TString, ::yandex::cloud::events::Authentication::SubjectType> Types {
+        {"service_account", ::yandex::cloud::events::Authentication::SERVICE_ACCOUNT},
+        {"federated_account", ::yandex::cloud::events::Authentication::FEDERATED_USER_ACCOUNT},
+        {"user_account", ::yandex::cloud::events::Authentication::YANDEX_PASSPORT_USER_ACCOUNT},
+    };
+    return Types.Value(subjectType, ::yandex::cloud::events::Authentication::SUBJECT_TYPE_UNSPECIFIED);
+}
+
 void FillAuthentication(::yandex::cloud::events::Authentication& authentication, const NFq::TEvAuditService::TExtraInfo& info) {
     authentication.set_authenticated(true);
     authentication.set_subject_id(MaybeRemoveSuffix(info.User));
-    authentication.set_subject_type(::yandex::cloud::events::Authentication::FEDERATED_USER_ACCOUNT); // TODO:
+    authentication.set_subject_type(GetCloudSubjectType(info.SubjectType));
 }
 
 void FillAuthorization(::yandex::cloud::events::Authorization& authorization, const NYql::TIssues& issues) {

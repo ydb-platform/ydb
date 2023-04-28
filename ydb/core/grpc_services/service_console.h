@@ -10,6 +10,8 @@ class IFacilityProvider;
 
 void DoApplyConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
+void DoDropConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+
 void DoAddVolatileConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
 void DoRemoveVolatileConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);

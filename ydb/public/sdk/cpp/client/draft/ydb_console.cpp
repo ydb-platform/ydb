@@ -22,6 +22,18 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
+    TAsyncStatus DropConfig(const TString& cluster, ui64 version, const TClusterConfigSettings& settings = {}) {
+        auto request = MakeOperationRequest<Ydb::Console::DropConfigRequest>(settings);
+
+        request.set_cluster(cluster);
+        request.set_version(version);
+
+        return RunSimple<Ydb::Console::V1::ConsoleService, Ydb::Console::DropConfigRequest, Ydb::Console::DropConfigResponse>(
+            std::move(request),
+            &Ydb::Console::V1::ConsoleService::Stub::AsyncDropConfig,
+            TRpcRequestSettings::Make(settings));
+    }
+
     TAsyncStatus AddVolatileConfig(const TString& config, ui64 id, ui64 version, const TString& cluster, const TClusterConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Console::AddVolatileConfigRequest>(settings);
         request.set_config(config);
@@ -163,6 +175,13 @@ TAsyncStatus TConsoleClient::ApplyConfig(
     const TString& config,
     const TClusterConfigSettings& settings) {
     return Impl_->ApplyConfig(config, settings);
+}
+
+TAsyncStatus TConsoleClient::DropConfig(
+    const TString& cluster,
+    ui64 version,
+    const TClusterConfigSettings& settings) {
+    return Impl_->DropConfig(cluster, version, settings);
 }
 
 TAsyncStatus TConsoleClient::AddVolatileConfig(

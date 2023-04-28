@@ -42,6 +42,7 @@ runs:
     with:
       node-version: 19
   - name: Install Testmo CLI
+    shell: bash
     run: npm install -g @testmo/testmo-cli
   - name: Test history run create
     id: th

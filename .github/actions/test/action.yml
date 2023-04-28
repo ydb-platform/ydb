@@ -41,12 +41,12 @@ runs:
     uses: actions/setup-node@v3
     with:
       node-version: 19
-      cache: npm
   - name: Test history run create
     id: th
     if: inputs.testman_token
     shell: bash
     run: |
+      npm ci
       npm install --no-save @testmo/testmo-cli
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       npx testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json

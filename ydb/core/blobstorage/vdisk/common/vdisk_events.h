@@ -508,6 +508,16 @@ namespace NKikimr {
             return TInstant::MicroSeconds(queryRecord->GetMsgQoS().GetExecTimeStats().GetReceivedTimestamp());
         }
 
+        TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+                                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
+                                ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr)
+                : TBase(now, counterPtr, histoPtr, channel)
+                , MsgCtx(TVMsgContext())
+                , SkeletonFrontIDPtr(skeletonFrontIDPtr)
+        {
+            Y_VERIFY(!SkeletonFrontIDPtr);
+        }
+
         template<typename TQueryRecord>
         TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
                 const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
@@ -516,7 +526,6 @@ namespace NKikimr {
             , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
         {
-            Y_VERIFY(queryRecord == nullptr);
             if (queryRecord) {
                 Y_VERIFY(queryRecord->HasMsgQoS());
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
@@ -1484,21 +1493,21 @@ namespace NKikimr {
         TEvVGetResult() = default;
 
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                      ui32 recByteSize, NKikimrCapnProto::TEvVGet::Reader *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                      ui32 recByteSize, const TActorIDPtr &skeletonFrontIDPtr,
                       const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
                       TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
-                : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
+                : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (queryRecord && queryRecord->HasTimestamps()) {
-                auto *timestamps = Record.MutableTimestamps();
-                auto other = queryRecord->GetTimestamps();
-                timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
-                timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
-                timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());
-                timestamps->SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
-            }
+//            if (queryRecord && queryRecord->HasTimestamps()) {
+//                auto *timestamps = Record.MutableTimestamps();
+//                auto other = queryRecord->GetTimestamps();
+//                timestamps->SetSentByDSProxyUs(other.GetSentByDSProxyUs());
+//                timestamps->SetReceivedByVDiskUs(other.GetReceivedByVDiskUs());
+//                timestamps->SetSentByVDiskUs(other.GetSentByVDiskUs());
+//                timestamps->SetReceivedByDSProxyUs(other.GetReceivedByDSProxyUs());
+//            }
 
             // copy cookie if it was set in initial query
             if (cookie)

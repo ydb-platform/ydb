@@ -9,6 +9,22 @@ on:
       test_label_regexp:
         required: false
         type: string
+      image:
+        type: string
+        required: false
+        default: fd8snjpoq85qqv0mk9gi
+  workflow_dispatch:
+    inputs: 
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
+      image:
+        type: string
+        required: false
+        default: fd8snjpoq85qqv0mk9gi
     
 jobs:
 
@@ -28,7 +44,7 @@ jobs:
           yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           folder-id: ${{secrets.YC_FOLDER}}
-          image-id: fd8snjpoq85qqv0mk9gi
+          image-id: ${{inputs.image}}
           disk-size: 930GB
           disk-type: network-ssd-nonreplicated
           cores: 32
@@ -68,10 +84,13 @@ jobs:
     - name: Test
       uses: ./.github/actions/test
       with: 
-        log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
+        log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        testman_token: ${{secrets.TESTMO_TOKEN}}
+        testman_url: ${{vars.TESTMO_URL}}
+        testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
 
   release-runner:
     name: Release self-hosted YC runner if provided on-demand
@@ -89,4 +108,4 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           label: ${{ needs.provide-runner.outputs.label }}
           instance-id: ${{ needs.provide-runner.outputs.instance-id }}
-  
+          

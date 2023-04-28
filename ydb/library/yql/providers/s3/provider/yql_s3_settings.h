@@ -20,6 +20,7 @@ struct TS3Settings {
     NCommon::TConfSetting<bool, false> ArrowThreadPool;
     NCommon::TConfSetting<ui64, false> ArrowParallelRowGroupCount; // Number of parquet row groups to read in parallel, min == 1
     NCommon::TConfSetting<bool, false> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK
+    NCommon::TConfSetting<ui64, false> ParallelDownloadCount;      // Number of files to read in parallel, min == 1
     NCommon::TConfSetting<bool, false> UseBlocksSource;            // Use blocks source (if exists) for scalar MKQL mode
     NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
     NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;

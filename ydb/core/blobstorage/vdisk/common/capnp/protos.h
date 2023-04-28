@@ -15,14 +15,16 @@
 namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;
 
+    const uint64_t DEFAULT_UINT64 = 18446744073709547382ull;
+
     struct TMessageId {
         struct Reader : private NKikimrCapnProto_::TMessageId::Reader {
             Reader(NKikimrCapnProto_::TMessageId::Reader r) : NKikimrCapnProto_::TMessageId::Reader(r) {}
             Reader() = default;
             uint64_t GetSequenceId() const { return getSequenceId(); }
             uint64_t GetMsgId() const { return getMsgId(); }
-            bool HasSequenceId() const { return getSequenceId() != 0; }
-            bool HasMsgId() const { return getMsgId() != 0; }
+            bool HasSequenceId() const { return getSequenceId() != DEFAULT_UINT64; }
+            bool HasMsgId() const { return getMsgId() != DEFAULT_UINT64; }
             const NKikimrCapnProto_::TMessageId::Reader& GetCapnpBase() const { return *this; }
 
             std::string ShortDebugString() const {
@@ -40,6 +42,7 @@ namespace NKikimrCapnProto {
 
         public:
             Builder(NKikimrCapnProto_::TMessageId::Builder b) : NKikimrCapnProto_::TMessageId::Builder(b), Reader(b.asReader()) {}
+
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
@@ -709,6 +712,10 @@ namespace NKikimrCapnProto {
             , builder(message->initRoot<NKikimrCapnProto_::TEvVGet>())
             {
                 static_cast<Reader&>(*this) = builder.asReader();
+
+                // TODO(stetsyuk): define default values in capnp schema
+                MutableMsgQoS().MutableMsgId().SetMsgId(DEFAULT_UINT64);
+                MutableMsgQoS().MutableMsgId().SetSequenceId(DEFAULT_UINT64);
             }
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : Reader(b.asReader()), builder(b) {}
             Builder* operator->() { return this; }

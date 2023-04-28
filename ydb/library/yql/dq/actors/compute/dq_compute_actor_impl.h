@@ -1309,7 +1309,7 @@ private:
 
         i64 remains = toSend;
         while (remains > 0 && (!outputChannel.Finished || Checkpoints)) {
-            ui32 sent = this->SendChannelDataChunk(outputChannel, remains);
+            ui32 sent = this->SendChannelDataChunk(outputChannel);
             if (sent == 0) {
                 break;
             }
@@ -1321,14 +1321,14 @@ private:
         ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || remains != toSend;
     }
 
-    ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel, ui64 bytes) {
+    ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel) {
         auto channel = outputChannel.Channel;
 
         NDqProto::TData data;
         NDqProto::TWatermark watermark;
         NDqProto::TCheckpoint checkpoint;
 
-        bool hasData = channel->Pop(data, bytes);
+        bool hasData = channel->Pop(data);
         bool hasWatermark = channel->Pop(watermark);
         bool hasCheckpoint = channel->Pop(checkpoint);
         if (!hasData && !hasWatermark && !hasCheckpoint) {

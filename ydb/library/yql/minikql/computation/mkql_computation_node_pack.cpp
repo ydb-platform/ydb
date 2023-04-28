@@ -927,7 +927,7 @@ void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFacto
         len = NDetails::GetRawData<ui64>(buf);
     }
 
-    result.reserve(len);
+    result.reserve(len + result.size());
     for (ui64 i = 0; i < len; ++i) {
         result.emplace_back(UnpackFromContigousBuffer<Fast>(itemType, buf, topLength, holderFactory, s));
     }
@@ -962,12 +962,6 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TU
             State_.OptionalUsageMask.Reset();
             Buffer_.ReserveHeader(sizeof(ui32) + State_.OptionalMaskReserve + MAX_PACKED64_SIZE);
         }
-        Rollback_.ConstructInPlace();
-    }
-
-    Rollback_->BufferSize = Buffer_.Size();
-    if constexpr (!Fast) {
-        Rollback_->OptionalCount = State_.OptionalUsageMask.GetOptionalCount();
     }
 
     PackImpl<Fast, false>(itemType, Buffer_, value, State_);
@@ -976,14 +970,9 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TU
 }
 
 template<bool Fast>
-void TValuePackerTransport<Fast>::Rollback(NUdf::TUnboxedValuePod& value) {
-    MKQL_ENSURE(Rollback_.Defined() && ItemCount_ > 0, "AddItem() was never called or RemoveLastItem() is called twice in a row");
-    Buffer_.Resize(Rollback_->BufferSize);
-    if constexpr (!Fast) {
-        State_.OptionalUsageMask.Shrink(Rollback_->OptionalCount);
-    }
-    --ItemCount_;
-    Rollback_ = {};
+void TValuePackerTransport<Fast>::Clear() {
+    Buffer_.Clear();
+    ItemCount_ = 0;
 }
 
 template<bool Fast>
@@ -997,7 +986,6 @@ const TPagedBuffer& TValuePackerTransport<Fast>::Finish() {
         BuildMeta(true);
     }
     ItemCount_ = 0;
-    Rollback_ = {};
     return Buffer_;
 }
 

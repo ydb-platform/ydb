@@ -43,7 +43,7 @@ public:
     virtual ~IOutputChannel() = default;
 
     [[nodiscard]]
-    virtual NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64 bytes) = 0;
+    virtual NDqProto::TPopResponse Pop(NDqProto::TData& data) = 0;
 
     virtual bool IsFinished() const = 0;
 };

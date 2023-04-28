@@ -125,13 +125,6 @@ NDqProto::TData TDqDataSerializer::SerializeParamValue(const TType* type, const 
     return data;
 }
 
-ui64 TDqDataSerializer::CalcSerializedSize(NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* itemType) const {
-    auto data = Serialize(value, itemType);
-    // YQL-9648
-    Deserialize(data, itemType, value);
-    return data.GetRaw().size();
-}
-
 namespace {
 
 std::optional<ui64> EstimateIntegralDataSize(const TDataType* dataType) {

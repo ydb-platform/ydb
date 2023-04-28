@@ -194,8 +194,11 @@ std::pair<bool, bool> TKqpTasksRunner::TransferData(ui64 fromTask, ui64 fromChan
     bool finished = false;
 
     // todo: transfer data as-is from input- to output- channel (KIKIMR-10658)
-    NDqProto::TData data;
-    if (src->Pop(data, std::numeric_limits<ui64>::max())) {
+    for (;;) {
+        NDqProto::TData data;
+        if (!src->Pop(data)) {
+            break;
+        }
         transferred = true;
         dst->Push(std::move(data));
     }

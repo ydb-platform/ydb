@@ -196,7 +196,6 @@ void TKqpScanComputeActor::DoBootstrap() {
     settings.CollectProfileStats = GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
     settings.OptLLVM = TBase::GetUseLLVM() ? "--compile-options=disable-opt" : "OFF";
     settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
-    settings.AllowGeneratorsInUnboxedValues = false;
 
     for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
         settings.TaskParams[paramsName] = paramsValue;

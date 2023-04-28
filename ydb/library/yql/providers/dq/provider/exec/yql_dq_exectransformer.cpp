@@ -139,7 +139,6 @@ public:
         settings.SecureParams = secureParams;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
-        settings.AllowGeneratorsInUnboxedValues = true;
         auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
 
         {
@@ -154,9 +153,12 @@ public:
 
             NDq::ERunStatus status;
             while ((status = runner->Run()) == NDq::ERunStatus::PendingOutput || status == NDq::ERunStatus::Finished) {
-                NDqProto::TData data;
-                if (runner->GetOutputChannel(0)->PopAll(data) && !fillSettings.Discard) {
-                    rows.push_back(data);
+                if (!fillSettings.Discard) {
+                    NDqProto::TData data;
+                    while (runner->GetOutputChannel(0)->Pop(data)) {
+                        rows.push_back(std::move(data));
+                        data = {};
+                    }
                 }
                 if (status == NDq::ERunStatus::Finished) {
                     break;

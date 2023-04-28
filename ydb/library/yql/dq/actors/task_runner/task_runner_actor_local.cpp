@@ -330,7 +330,7 @@ private:
         TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing();
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
             NDqProto::TData data;
-            hasData = channel->Pop(data, remain);
+            hasData = channel->Pop(data);
 
             NDqProto::TWatermark poppedWatermark;
             bool hasWatermark = channel->Pop(poppedWatermark);

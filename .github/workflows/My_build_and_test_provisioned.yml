@@ -38,6 +38,7 @@ jobs:
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
     - name: Launch functional tests
       if: ${{ inputs.launch_functional_tests }}
       uses: ./.github/actions/test_python
@@ -46,3 +47,4 @@ jobs:
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}

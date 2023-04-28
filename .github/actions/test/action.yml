@@ -11,9 +11,12 @@ inputs:
     required: true
     type: string
   aws_key_value: 
-    required: trye
+    required: true
     type: string
-    
+  aws_bucket:
+    required: true
+    type: string
+
 runs:
   using: "composite"
   steps:
@@ -41,9 +44,9 @@ runs:
     uses: shallwefootball/s3-upload-action@master
     if: always()
     with:
-      aws_key_id: ${{inputs.AWS_KEY_ID }}
-      aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
-      aws_bucket: ydb-tech-ci
+      aws_key_id: ${{inputs.aws_key_id}}
+      aws_secret_access_key: ${{inputs.aws_key_value}}
+      aws_bucket: ${{inputs.aws_bucket}}
       source_dir: ../artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: https://storage.yandexcloud.net

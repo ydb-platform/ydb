@@ -35,12 +35,6 @@ jobs:
       run: |
         wget https://github.com/allure-framework/allurectl/releases/latest/download/allurectl_linux_386 -O ~/allurectl
         chmod +x ~/allurectl
-    - name: Install Node required for Testmo CLI
-      uses: actions/setup-node@v3
-      with:
-        node-version: 19
-    - name: Install Testmo CLI
-      run: npm install -g @testmo/testmo-cli
     - name: Checkout ccache
       uses: actions/checkout@v3
       with:

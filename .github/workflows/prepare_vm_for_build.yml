@@ -40,7 +40,7 @@ jobs:
       with:
         node-version: 19
     - name: Install Testmo CLI
-      run: npm install --no-save @testmo/testmo-cli
+      run: npm install -g @testmo/testmo-cli
     - name: Checkout ccache
       uses: actions/checkout@v3
       with:

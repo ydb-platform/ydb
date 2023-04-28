@@ -25,8 +25,8 @@ runs:
     run: |
       export source_root=$(pwd)
       export build_root=$(pwd)/../build/
-      mkdir -p ../../artifacts
-      rm -rf $(pwd)/../../artifacts/*
+      mkdir -p ../artifacts
+      rm -rf ../artifacts/*
       source ${source_root}/ydb/tests/oss/launch/prepare.sh
       rm -rf ${source_root}/ydb/tests/functional/test-results/
 

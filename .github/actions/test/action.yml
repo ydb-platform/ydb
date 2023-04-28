@@ -42,6 +42,7 @@ runs:
     if: inputs.testman_token
     shell: bash
     run: |
+      npm install --no-save @testmo/testmo-cli
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       npx testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
       npx testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json

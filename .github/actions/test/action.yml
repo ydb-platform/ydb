@@ -43,9 +43,9 @@ runs:
     shell: bash
     run: |
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-      testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
-      testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
-      testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "${{ github.run_id }}" \
+      npx testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
+      npx testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
+      npx testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "${{ github.run_id }}" \
         --source "${{inputs.log_suffix}}" --resources testmo.json | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
@@ -70,14 +70,14 @@ runs:
     if: always() && inputs.testman_token
     shell: bash
     run: |
-      testmo automation:run:submit-thread \
+      npx testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
         --results $TESTREPDIR/unittests/*.xml 
-      testmo automation:run:submit-thread \
+      npx testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
         --results $TESTREPDIR/suites/*.xml \
         -- cat $WORKDIR/short.log
-      testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
+      npx testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

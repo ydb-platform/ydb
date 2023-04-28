@@ -92,6 +92,6 @@ runs:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
       aws_bucket: ydb-tech-ci
-      source_dir: ../artifacts
+      source_dir: $WORKDIR/artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: https://storage.yandexcloud.net

@@ -249,7 +249,7 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
     TVDiskState *from = &subgroup[vDiskIdx];
 
     std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, from->VDiskId,
-        TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, {}, 0U, 0U));
+        TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr, {}, 0U, 0U));
 
     SetPredictedDelaysForAllQueues({});
     ui64 queryCookie = from->QueryCookies.size() ? from->QueryCookies[0] : 0;
@@ -289,7 +289,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
             || status == NKikimrProto::TRYLATER_SIZE || status == NKikimrProto::TRYLATER_TIME
             || status == NKikimrProto::VDISK_ERROR_STATE) {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-            status, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
+            status, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr,
             {}, 0U, 0U));
         for (auto it = request.Queries.begin(); it != request.Queries.end(); ++it) {
             result->AddResult(status, it->LogoBlobId, &it->QueryCookie);
@@ -302,7 +302,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
     } else if (status == NKikimrProto::NODATA) {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
             NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0,
-            nullptr, nullptr, nullptr, {}, 0U, 0U));
+            nullptr, nullptr, nullptr, nullptr, {}, 0U, 0U));
         for (auto it = request.Queries.begin(); it != request.Queries.end(); ++it) {
             result->AddResult(status, it->LogoBlobId, &it->QueryCookie);
             TLogoBlobID id(it->LogoBlobId);
@@ -315,8 +315,8 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         return;
     } else if (status == NKikimrProto::OK) {
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-            NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0,
-            nullptr, nullptr, nullptr, {}, 0U, 0U));
+            NKikimrProto::OK, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
+   nullptr, nullptr, nullptr, {}, 0U, 0U));
         for (auto it = request.Queries.begin(); it != request.Queries.end(); ++it) {
             TString data;
             ui32 partIdx = 0;
@@ -1214,7 +1214,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(
                     new TEvBlobStorage::TEvVGetResult(
                         NKikimrProto::OK, theRequest.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-                        nullptr, nullptr, {}, 0U, 0U));
+                        nullptr, nullptr, nullptr, {}, 0U, 0U));
                 result->AddResult(
                     NKikimrProto::OK, id, query.Shift, resultData.data(),
                     resultData.size(), &query.QueryCookie);
@@ -1243,7 +1243,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                     const auto &request = item.second;
                     std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
                         NKikimrProto::RACE, request.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-                        nullptr, nullptr, {}, 0U, 0U));
+                        nullptr, nullptr, nullptr, {}, 0U, 0U));
                     result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
                     result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
                     result->Record.SetCookie(request.RecordCookie);
@@ -1302,7 +1302,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         TGetRequest &req = lastRequest[firstHandoffActorId];
         TGetRangeQuery &query = req.RangeQueries[0];
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr,
+                NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
                 nullptr, {}, 0U, 0U));
         TIngress ingress;
         for (ui32 partIdx = 0; partIdx < 6; ++partIdx) {

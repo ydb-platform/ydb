@@ -60,6 +60,10 @@ namespace NKikimr {
             originalMsgQoS.MutableCostSettings().SetMinREALHugeBlobInBytes(101);
             originalMsgQoS.MutableCostSettings().SetSeekTimeUs(100500);
 
+            auto& id = *originalMsgQoS.MutableMsgId();
+            id.SetMsgId(1234);
+            id.SetSequenceId(1234);
+
             // Serialize the object into bytes
             NActors::TAllocChunkSerializer output;
             UNIT_ASSERT(originalObject.SerializeToZeroCopyStream(&output));
@@ -72,6 +76,9 @@ namespace NKikimr {
 
             // Check that deserializedObject.HasMsgQoS() == true
             UNIT_ASSERT(deserializedObject.HasMsgQoS());
+            UNIT_ASSERT(deserializedObject.GetMsgQoS().HasMsgId());
+            UNIT_ASSERT(deserializedObject.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
+            UNIT_ASSERT(deserializedObject.GetMsgQoS().GetMsgId().GetSequenceId() == 1234);
         }
 
         Y_UNIT_TEST(HasMsgQoSOnlyEnumSet) {

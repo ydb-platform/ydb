@@ -9,6 +9,7 @@
 #ifndef BOOST_RATIO_CONFIG_HPP
 #define BOOST_RATIO_CONFIG_HPP
 
+#include <boost/ratio/detail/requires_cxx11.hpp>
 #include <boost/config.hpp>
 #include <boost/cstdint.hpp>
 

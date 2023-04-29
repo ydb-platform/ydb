@@ -47,8 +47,14 @@ namespace NKikimrCapnProto {
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
-            void SetSequenceId(const uint64_t& value) { return setSequenceId(value); }
-            void SetMsgId(const uint64_t& value) { return setMsgId(value); }
+            void SetSequenceId(const uint64_t& value) {
+                std::cerr << "\n\n=======\n\nsetting sequenceId to " << value << "\n\n=========\n\n";
+                return setSequenceId(value);
+            }
+            void SetMsgId(const uint64_t& value) {
+                std::cerr << "\n\n=======\n\nsetting msgId to " << value << "\n\n=========\n\n";
+                return setMsgId(value);
+            }
             const NKikimrCapnProto_::TMessageId::Builder& GetCapnpBase() const { return *this; }
         };
     };

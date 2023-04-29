@@ -716,6 +716,7 @@ namespace NKikimrCapnProto {
                 // TODO(stetsyuk): define default values in capnp schema
                 MutableMsgQoS().MutableMsgId().SetMsgId(DEFAULT_UINT64);
                 MutableMsgQoS().MutableMsgId().SetSequenceId(DEFAULT_UINT64);
+                SetIndexOnly(false);
             }
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : Reader(b.asReader()), builder(b) {}
             Builder* operator->() { return this; }
@@ -741,7 +742,23 @@ namespace NKikimrCapnProto {
 
             void CopyFrom(const Builder& other) {
                 // TODO(stetsyuk): think of a better solution
-                builder = other.builder;
+                SetRangeQuery(other.GetRangeQuery());
+                elements = other.elements;
+                SetVDiskID(other.GetVDiskID());
+                SetNotifyIfNotReady(other.GetNotifyIfNotReady());
+                SetShowInternals(other.GetShowInternals());
+                SetCookie(other.GetCookie());
+                SetMsgQoS(other.GetMsgQoS());
+                SetIndexOnly(other.GetIndexOnly());
+                SetHandleClass(other.GetHandleClass());
+                SetSuppressBarrierCheck(other.GetSuppressBarrierCheck());
+                SetTabletId(other.GetTabletId());
+                SetAcquireBlockedGeneration(other.GetAcquireBlockedGeneration());
+                SetTimestamps(other.GetTimestamps());
+                SetForceBlockedGeneration(other.GetForceBlockedGeneration());
+                SetReaderTabletData(other.GetReaderTabletData());
+                SetForceBlockTabletData(other.GetForceBlockTabletData());
+                SetSnapshotId(other.GetSnapshotId());
             }
 
             bool SerializeToZeroCopyStream(NActors::TChunkSerializer *output) const {

@@ -4,7 +4,6 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #define BOOST_DETAIL_NO_CONTAINER_FWD
 
 // Need _wfopen which is an extension on MinGW but not on MinGW-w64
@@ -20,9 +19,9 @@
 #include <boost/locale/gnu_gettext.hpp>
 #include <boost/locale/hold_ptr.hpp>
 #include <boost/locale/message.hpp>
-#include <boost/locale/util/string.hpp>
 #include "boost/locale/shared/mo_hash.hpp"
 #include "boost/locale/shared/mo_lambda.hpp"
+#include "boost/locale/util/encoding.hpp"
 #include <boost/version.hpp>
 #include <algorithm>
 #include <cstdio>
@@ -204,7 +203,7 @@ namespace boost { namespace locale { namespace gnu_gettext {
         {
             uint32_t magic = 0;
             // if the size is wrong magic would be wrong
-            // ok to ingnore fread result
+            // ok to ignore fread result
             size_t four_bytes = fread(&magic, 4, 1, file);
             (void)four_bytes; // shut GCC
 
@@ -525,27 +524,6 @@ namespace boost { namespace locale { namespace gnu_gettext {
         }
 
     private:
-        int compare_encodings(const std::string& left, const std::string& right)
-        {
-            return convert_encoding_name(left).compare(convert_encoding_name(right));
-        }
-
-        std::string convert_encoding_name(const std::string& in)
-        {
-            std::string result;
-            for(unsigned i = 0; i < in.size(); i++) {
-                char c = in[i];
-                if('A' <= c && c <= 'Z')
-                    c = c - 'A' + 'a';
-                else if(('a' <= c && c <= 'z') || ('0' <= c && c <= '9'))
-                    ;
-                else
-                    continue;
-                result += c;
-            }
-            return result;
-        }
-
         bool load_file(const std::string& file_name,
                        const std::string& locale_encoding,
                        const std::string& key_encoding,
@@ -555,7 +533,8 @@ namespace boost { namespace locale { namespace gnu_gettext {
             locale_encoding_ = locale_encoding;
             key_encoding_ = key_encoding;
 
-            key_conversion_required_ = sizeof(CharType) == 1 && compare_encodings(locale_encoding, key_encoding) != 0;
+            key_conversion_required_ =
+              sizeof(CharType) == 1 && !util::are_encodings_equal(locale_encoding, key_encoding);
 
             std::shared_ptr<mo_file> mo;
 
@@ -613,9 +592,9 @@ namespace boost { namespace locale { namespace gnu_gettext {
             BOOST_LOCALE_END_CONST_CONDITION
             if(!mo.has_hash())
                 return false;
-            if(compare_encodings(mo_encoding, locale_encoding_) != 0)
+            if(!util::are_encodings_equal(mo_encoding, locale_encoding_))
                 return false;
-            if(compare_encodings(mo_encoding, key_encoding_) == 0) {
+            if(util::are_encodings_equal(mo_encoding, key_encoding_)) {
                 return true;
             }
             for(unsigned i = 0; i < mo.size(); i++) {

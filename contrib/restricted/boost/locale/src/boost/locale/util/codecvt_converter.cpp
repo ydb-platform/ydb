@@ -4,7 +4,6 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #include <boost/locale/encoding.hpp>
 #include <boost/locale/generator.hpp>
 #include <boost/locale/utf8_codecvt.hpp>
@@ -14,6 +13,7 @@
 #include <cstring>
 
 #include "boost/locale/encoding/conv.hpp"
+#include "boost/locale/util/encoding.hpp"
 
 #ifdef BOOST_MSVC
 #    pragma warning(disable : 4244) // loose data
@@ -188,7 +188,7 @@ namespace boost { namespace locale { namespace util {
 
     bool check_is_simple_encoding(const std::string& encoding)
     {
-        std::string norm = conv::impl::normalize_encoding(encoding.c_str());
+        std::string norm = util::normalize_encoding(encoding);
         return std::binary_search<const char**>(simple_encoding_table,
                                                 simple_encoding_table
                                                   + sizeof(simple_encoding_table) / sizeof(const char*),

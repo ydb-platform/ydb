@@ -3,9 +3,8 @@
 
 #include <boost/locale/config.hpp>
 #include <cstring>
-#include <string>
 
-namespace boost { namespace locale { namespace conv { namespace impl {
+namespace boost { namespace locale { namespace util {
 
     struct windows_encoding {
         const char* name;
@@ -177,6 +176,6 @@ namespace boost { namespace locale { namespace conv { namespace impl {
       {"xmacturkish", 10081, 0},
       {"xmacukrainian", 10017, 0},
     };
-}}}} // namespace boost::locale::conv::impl
+}}} // namespace boost::locale::util
 
 #endif

@@ -4,11 +4,11 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #include "boost/locale/std/std_backend.hpp"
 #include <boost/locale/gnu_gettext.hpp>
 #include <boost/locale/localization_backend.hpp>
 #include <boost/locale/util.hpp>
+#include <boost/locale/util/locale_data.hpp>
 #include <algorithm>
 #include <iterator>
 #include <vector>
@@ -18,12 +18,12 @@
 #        define NOMINMAX
 #    endif
 #    include "boost/locale/encoding/conv.hpp"
+#    include "boost/locale/util/encoding.hpp"
 #    include "boost/locale/win32/lcid.hpp"
 #    include <windows.h>
 #endif
 #include "boost/locale/std/all_generator.hpp"
 #include "boost/locale/util/gregorian.hpp"
-#include "boost/locale/util/locale_data.hpp"
 
 namespace boost { namespace locale { namespace impl_std {
 
@@ -77,12 +77,11 @@ namespace boost { namespace locale { namespace impl_std {
             const int win_codepage = wl_inf.second;
 #endif
 
-            if(!data_.utf8) {
+            if(!data_.is_utf8()) {
                 if(loadable(lid))
                     name_ = lid;
 #if defined(BOOST_WINDOWS)
-                else if(loadable(win_name)
-                        && win_codepage == conv::impl::encoding_to_windows_codepage(data_.encoding.c_str()))
+                else if(loadable(win_name) && win_codepage == util::encoding_to_windows_codepage(data_.encoding()))
                     name_ = win_name;
 #endif
                 utf_mode_ = utf8_support::none;
@@ -154,13 +153,13 @@ namespace boost { namespace locale { namespace impl_std {
                 case category_t::formatting: return create_formatting(base, name_, type, utf_mode_);
                 case category_t::parsing: return create_parsing(base, name_, type, utf_mode_);
                 case category_t::codepage: return create_codecvt(base, name_, type, utf_mode_);
-                case category_t::calendar: return util::install_gregorian_calendar(base, data_.country);
+                case category_t::calendar: return util::install_gregorian_calendar(base, data_.country());
                 case category_t::message: {
                     gnu_gettext::messages_info minf;
-                    minf.language = data_.language;
-                    minf.country = data_.country;
-                    minf.variant = data_.variant;
-                    minf.encoding = data_.encoding;
+                    minf.language = data_.language();
+                    minf.country = data_.country();
+                    minf.variant = data_.variant();
+                    minf.encoding = data_.encoding();
                     std::copy(domains_.begin(),
                               domains_.end(),
                               std::back_inserter<gnu_gettext::messages_info::domains_type>(minf.domains));

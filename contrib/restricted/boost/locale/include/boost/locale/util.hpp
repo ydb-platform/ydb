@@ -22,19 +22,18 @@ namespace boost { namespace locale {
 
         /// \brief Return default system locale name in POSIX format.
         ///
-        /// This function tries to detect the locale using, LC_CTYPE, LC_ALL and LANG environment
-        /// variables in this order and if all of them unset, in POSIX platforms it returns "C"
-        ///
-        /// On Windows additionally to check the above environment variables, this function
-        /// tries to creates locale name from ISO-339 and ISO-3199 country codes defined
-        /// for user default locale.
-        /// If \a use_utf8_on_windows is true it sets the encoding to UTF-8, otherwise, if system
-        /// locale supports ANSI code-page it defines the ANSI encoding like windows-1252, otherwise it fall-backs
-        /// to UTF-8 encoding if ANSI code-page is not available.
+        /// This function tries to detect the locale using LC_ALL, LC_CTYPE and LANG environment
+        /// variables in this order and if all of them are unset, on POSIX platforms it returns "C".
+        /// On Windows additionally to the above environment variables, this function
+        /// tries to create the locale name from ISO-639 and ISO-3166 country codes defined
+        /// for the users default locale.
+        /// If \a use_utf8_on_windows is true it sets the encoding to UTF-8,
+        /// otherwise, if the system locale supports ANSI codepages it defines the ANSI encoding, e.g. windows-1252,
+        /// otherwise (if ANSI codepage is not available) it uses UTF-8 encoding.
         BOOST_LOCALE_DECL
         std::string get_system_locale(bool use_utf8_on_windows = false);
 
-        /// \brief Installs information facet to locale in based on locale name \a name
+        /// \brief Installs information facet to locale \a in based on locale name \a name
         ///
         /// This function installs boost::locale::info facet into the locale \a in and returns
         /// newly created locale.
@@ -43,7 +42,7 @@ namespace boost { namespace locale {
         ///
         /// The name has following format: language[_COUNTRY][.encoding][\@variant]
         /// Where language is ISO-639 language code like "en" or "ru", COUNTRY is ISO-3166
-        /// country identifier like "US" or "RU". the Encoding is a charracter set name
+        /// country identifier like "US" or "RU". the Encoding is a character set name
         /// like UTF-8 or ISO-8859-1. Variant is backend specific variant like \c euro or
         /// calendar=hebrew.
         ///

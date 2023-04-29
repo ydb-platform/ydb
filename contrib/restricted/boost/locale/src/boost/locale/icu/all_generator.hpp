@@ -11,13 +11,13 @@
 
 namespace boost { namespace locale { namespace impl_icu {
     struct cdata;
-    std::locale create_convert(const std::locale&, const cdata&, char_facet_t);                // ok
-    std::locale create_collate(const std::locale&, const cdata&, char_facet_t);                // ok
-    std::locale create_formatting(const std::locale&, const cdata&, char_facet_t);             // ok
-    std::locale create_parsing(const std::locale&, const cdata&, char_facet_t);                // ok
-    std::locale create_codecvt(const std::locale&, const std::string& encoding, char_facet_t); // ok
-    std::locale create_boundary(const std::locale&, const cdata&, char_facet_t);               // ok
-    std::locale create_calendar(const std::locale&, const cdata&);                             // ok
+    std::locale create_convert(const std::locale&, const cdata&, char_facet_t);
+    std::locale create_collate(const std::locale&, const cdata&, char_facet_t);
+    std::locale create_formatting(const std::locale&, const cdata&, char_facet_t);
+    std::locale create_parsing(const std::locale&, const cdata&, char_facet_t);
+    std::locale create_codecvt(const std::locale&, const std::string& encoding, char_facet_t);
+    std::locale create_boundary(const std::locale&, const cdata&, char_facet_t);
+    std::locale create_calendar(const std::locale&, const cdata&);
 
 }}} // namespace boost::locale::impl_icu
 

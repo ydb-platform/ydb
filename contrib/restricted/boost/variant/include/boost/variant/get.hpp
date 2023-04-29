@@ -4,7 +4,7 @@
 //-----------------------------------------------------------------------------
 //
 // Copyright (c) 2003 Eric Friedman, Itay Maman
-// Copyright (c) 2014-2022 Antony Polukhin
+// Copyright (c) 2014-2023 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -16,10 +16,10 @@
 #include <exception>
 
 #include <boost/config.hpp>
+#include <boost/core/addressof.hpp>
 #include <boost/detail/workaround.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/throw_exception.hpp>
-#include <boost/utility/addressof.hpp>
 #include <boost/variant/variant_fwd.hpp>
 #include <boost/variant/detail/element_index.hpp>
 #include <boost/variant/detail/move.hpp>

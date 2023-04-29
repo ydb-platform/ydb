@@ -1327,7 +1327,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
         //TGetRangeQuery &query = req.RangeQueries[0];
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
                 NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
-                {}, 0U, 0U));
+                nullptr, {}, 0U, 0U));
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
         runtime.Send(

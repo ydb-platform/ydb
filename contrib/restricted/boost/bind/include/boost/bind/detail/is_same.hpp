@@ -1,5 +1,5 @@
-#ifndef BOOST_CORE_DETAIL_IS_SAME_HPP_INCLUDED
-#define BOOST_CORE_DETAIL_IS_SAME_HPP_INCLUDED
+#ifndef BOOST_BIND_DETAIL_IS_SAME_HPP_INCLUDED
+#define BOOST_BIND_DETAIL_IS_SAME_HPP_INCLUDED
 
 // is_same<T1,T2>::value is true when T1 == T2
 //
@@ -17,9 +17,7 @@
 
 namespace boost
 {
-namespace core
-{
-namespace detail
+namespace _bi
 {
 
 template< class T1, class T2 > struct is_same
@@ -32,8 +30,7 @@ template< class T > struct is_same< T, T >
     BOOST_STATIC_CONSTANT( bool, value = true );
 };
 
-} // namespace detail
-} // namespace core
+} // namespace _bi
 } // namespace boost
 
-#endif // #ifndef BOOST_CORE_DETAIL_IS_SAME_HPP_INCLUDED
+#endif // #ifndef BOOST_BIND_DETAIL_IS_SAME_HPP_INCLUDED

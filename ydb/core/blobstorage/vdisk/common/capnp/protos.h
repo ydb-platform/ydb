@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include "tevvget.capnp.h"
+#include "protos.capnp.h"
 #include "util.h"
 #include <library/cpp/actors/core/event_pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -15,7 +15,8 @@
 namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;
 
-    const uint64_t DEFAULT_UINT64 = 18446744073709547382ull;
+    const uint64_t UNSET_UINT64 = 18446744073699546569ull;
+    const uint32_t UNSET_UINT32 = 4294866749ll;
 
     struct TMessageId {
         struct Reader : private NKikimrCapnProto_::TMessageId::Reader {
@@ -23,8 +24,8 @@ namespace NKikimrCapnProto {
             Reader() = default;
             uint64_t GetSequenceId() const { return getSequenceId(); }
             uint64_t GetMsgId() const { return getMsgId(); }
-            bool HasSequenceId() const { return getSequenceId() != DEFAULT_UINT64; }
-            bool HasMsgId() const { return getMsgId() != DEFAULT_UINT64; }
+            bool HasSequenceId() const { return getSequenceId() != UNSET_UINT64; }
+            bool HasMsgId() const { return getMsgId() != UNSET_UINT64; }
             const NKikimrCapnProto_::TMessageId::Reader& GetCapnpBase() const { return *this; }
 
             std::string ShortDebugString() const {
@@ -238,7 +239,6 @@ namespace NKikimrCapnProto {
         End,
     };
 
-
     enum class EVDiskInternalQueueId {
         IntUnknown,
         IntBegin,
@@ -296,10 +296,10 @@ namespace NKikimrCapnProto {
             uint32_t GetDeadlineSeconds() const { return getDeadlineSeconds(); }
             uint64_t GetCost() const { return getCost(); }
             bool GetSendMeCostSettings() const { return getSendMeCostSettings(); }
-            uint32_t GetProxyNodeId() const { return getProxyNodeId(); }
-            uint32_t GetReplVDiskId() const { return getReplVDiskId(); }
-            uint64_t GetVDiskLoadId() const { return getVDiskLoadId(); }
-            uint32_t GetVPatchVDiskId() const { return getVPatchVDiskId(); }
+            uint32_t GetProxyNodeId() const { return getClientID().getProxyNodeId(); }
+            uint32_t GetReplVDiskId() const { return getClientID().getReplVDiskId(); }
+            uint64_t GetVDiskLoadId() const { return getClientID().getVDiskLoadId(); }
+            uint32_t GetVPatchVDiskId() const { return getClientID().getVPatchVDiskId(); }
             TMessageId::Reader GetMsgId() const { return getMsgId(); }
             TVDiskCostSettings::Reader GetCostSettings() const { return getCostSettings(); }
             TWindowFeedback::Reader GetWindow() const { return getWindow(); }
@@ -327,10 +327,10 @@ namespace NKikimrCapnProto {
             bool HasDeadlineSeconds() const { return getDeadlineSeconds() != 0; }
             bool HasCost() const { return getCost() != 0; }
             bool HasSendMeCostSettings() const { return getSendMeCostSettings() != 0; }
-            bool HasProxyNodeId() const { return getProxyNodeId() != 0; }
-            bool HasReplVDiskId() const { return getReplVDiskId() != 0; }
-            bool HasVDiskLoadId() const { return getVDiskLoadId() != 0; }
-            bool HasVPatchVDiskId() const { return getVPatchVDiskId() != 0; }
+            bool HasProxyNodeId() const { return getClientID().isProxyNodeId(); }
+            bool HasReplVDiskId() const { return getClientID().isReplVDiskId(); }
+            bool HasVDiskLoadId() const { return getClientID().isVDiskLoadId(); }
+            bool HasVPatchVDiskId() const { return getClientID().isVPatchVDiskId(); }
             const NKikimrCapnProto_::TMsgQoS::Reader& GetCapnpBase() const { return *this; }
 
             std::string ShortDebugString() const {
@@ -354,6 +354,7 @@ namespace NKikimrCapnProto {
         struct Builder : private NKikimrCapnProto_::TMsgQoS::Builder, public Reader {
         private:
             using NKikimrCapnProto_::TMsgQoS::Builder::getMsgId;
+            using NKikimrCapnProto_::TMsgQoS::Builder::getClientID;
             using NKikimrCapnProto_::TMsgQoS::Builder::getCostSettings;
             using NKikimrCapnProto_::TMsgQoS::Builder::getWindow;
             using NKikimrCapnProto_::TMsgQoS::Builder::getExecTimeStats;
@@ -367,10 +368,10 @@ namespace NKikimrCapnProto {
             void SetDeadlineSeconds(const uint32_t& value) { return setDeadlineSeconds(value); }
             void SetCost(const uint64_t& value) { return setCost(value); }
             void SetSendMeCostSettings(const bool& value) { return setSendMeCostSettings(value); }
-            void SetProxyNodeId(const uint32_t& value) { return setProxyNodeId(value); }
-            void SetReplVDiskId(const uint32_t& value) { return setReplVDiskId(value); }
-            void SetVDiskLoadId(const uint64_t& value) { return setVDiskLoadId(value); }
-            void SetVPatchVDiskId(const uint32_t& value) { return setVPatchVDiskId(value); }
+            void SetProxyNodeId(const uint32_t& value) { return getClientID().setProxyNodeId(value); }
+            void SetReplVDiskId(const uint32_t& value) { return getClientID().setReplVDiskId(value); }
+            void SetVDiskLoadId(const uint64_t& value) { return getClientID().setVDiskLoadId(value); }
+            void SetVPatchVDiskId(const uint32_t& value) { return getClientID().setVPatchVDiskId(value); }
             void SetMsgId(const TMessageId::Reader& value) { return setMsgId(value.GetCapnpBase()); }
             void SetCostSettings(const TVDiskCostSettings::Reader& value) { return setCostSettings(value.GetCapnpBase()); }
             void SetWindow(const TWindowFeedback::Reader& value) { return setWindow(value.GetCapnpBase()); }
@@ -714,15 +715,16 @@ namespace NKikimrCapnProto {
                 static_cast<Reader&>(*this) = builder.asReader();
 
                 // TODO(stetsyuk): define default values in capnp schema
-                MutableMsgQoS().MutableMsgId().SetMsgId(DEFAULT_UINT64);
-                MutableMsgQoS().MutableMsgId().SetSequenceId(DEFAULT_UINT64);
+                MutableMsgQoS().MutableMsgId().SetMsgId(UNSET_UINT64);
+                MutableMsgQoS().MutableMsgId().SetSequenceId(UNSET_UINT64);
                 SetIndexOnly(false);
             }
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : Reader(b.asReader()), builder(b) {}
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
-            bool ParseFromString(TString) {
+            bool ParseFromString(TString s) {
+                Y_VERIFY(s.Empty());
                 return true;
             }
 

@@ -291,9 +291,9 @@ template<class Q, class... L> using mp_product_q = typename detail::mp_product_i
 namespace detail
 {
 
-template<class L, class L2> struct mp_drop_impl;
+template<class L, class L2, class En> struct mp_drop_impl;
 
-template<template<class...> class L, class... T, template<class...> class L2, class... U> struct mp_drop_impl<L<T...>, L2<U...>>
+template<template<class...> class L, class... T, template<class...> class L2, class... U> struct mp_drop_impl<L<T...>, L2<U...>, mp_true>
 {
     template<class... W> static mp_identity<L<W...>> f( U*..., mp_identity<W>*... );
 
@@ -304,9 +304,9 @@ template<template<class...> class L, class... T, template<class...> class L2, cl
 
 } // namespace detail
 
-template<class L, std::size_t N> using mp_drop_c = typename detail::mp_drop_impl<L, mp_repeat_c<mp_list<void>, N>>::type;
+template<class L, std::size_t N> using mp_drop_c = typename detail::mp_drop_impl<L, mp_repeat_c<mp_list<void>, N>, mp_bool<N <= mp_size<L>::value>>::type;
 
-template<class L, class N> using mp_drop = typename detail::mp_drop_impl<L, mp_repeat<mp_list<void>, N>>::type;
+template<class L, class N> using mp_drop = mp_drop_c<L, std::size_t{ N::value }>;
 
 // mp_from_sequence<S>
 namespace detail

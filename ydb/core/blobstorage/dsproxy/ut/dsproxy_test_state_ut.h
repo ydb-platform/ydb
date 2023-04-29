@@ -223,7 +223,7 @@ struct TTestState {
     {
         TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Record.GetVDiskID());
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
-                status, vDiskId, TAppData::TimeProvider->Now(), 0,
+                status, vDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
                 nullptr, nullptr, nullptr, {}, 0U, 0U));
         return result;
     }

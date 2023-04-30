@@ -119,7 +119,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(SendToVDiskScenario) {
-            std::unique_ptr<TEvBlobStorage::TEvVGet> tevvget;
+            auto tevvget = std::make_unique<TEvBlobStorage::TEvVGet>();
             uint64_t msgId = 1234;
             uint64_t sequenceId = 4321;
 

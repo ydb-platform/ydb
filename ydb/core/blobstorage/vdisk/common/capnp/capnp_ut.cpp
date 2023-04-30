@@ -1,5 +1,8 @@
 #include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/blobstorage/backpressure/event.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+
 
 namespace NKikimr {
     NKikimrCapnProto::TEvVGet::Reader reserialize(const NKikimrCapnProto::TEvVGet::Builder & original) {
@@ -113,6 +116,43 @@ namespace NKikimr {
 
             UNIT_ASSERT(reserializedTo.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
             UNIT_ASSERT(reserializedTo.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
+        }
+
+        Y_UNIT_TEST(SendToVDiskScenario) {
+            std::unique_ptr<TEvBlobStorage::TEvVGet> tevvget;
+            uint64_t msgId = 1234;
+            uint64_t sequenceId = 4321;
+
+            auto processMsgQoS = [&](auto& record) {
+                // prepare extra buffer with some changed params
+                auto& msgQoS = *record.MutableMsgQoS();
+                auto& id = *msgQoS.MutableMsgId();
+                id.SetMsgId(msgId);
+                id.SetSequenceId(sequenceId);
+            };
+
+            auto callback = [&](auto *ev) -> std::unique_ptr<NActors::IEventBase> {
+                using T = std::remove_pointer_t<decltype(ev)>;
+                processMsgQoS(ev->Record);
+                auto clone = std::make_unique<T>();
+                clone->Record.CopyFrom(ev->Record);
+                for (ui32 i = 0, count = ev->GetPayloadCount(); i < count; ++i) {
+                    clone->AddPayload(TRope(ev->GetPayload(i)));
+                }
+                return clone;
+            };
+
+            auto tevvgetClone = callback(static_cast<TEvBlobStorage::TEvVGet*>(tevvget.get()));
+
+            NActors::TAllocChunkSerializer output;
+            UNIT_ASSERT(tevvgetClone->SerializeToArcadiaStream(&output));
+            auto data = output.Release({});
+            NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
+            NKikimrCapnProto::TEvVGet::Reader tevvgetCloneDeserialized;
+            tevvgetCloneDeserialized.ParseFromZeroCopyStream(&input);
+
+            UNIT_ASSERT(tevvgetCloneDeserialized.GetMsgQoS().GetMsgId().GetMsgId() == msgId);
+            UNIT_ASSERT(tevvgetCloneDeserialized.GetMsgQoS().GetMsgId().GetSequenceId() == sequenceId);
         }
     };
 };

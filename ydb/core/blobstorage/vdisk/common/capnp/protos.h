@@ -384,7 +384,6 @@ namespace NKikimrCapnProto {
             void SetSenderActorId(const TActorId::Reader& value) { return setSenderActorId(value.GetCapnpBase()); }
             void SetExtQueueId(EVDiskQueueId value) { return setExtQueueId(static_cast<NKikimrCapnProto_::EVDiskQueueId>(static_cast<size_t>(value) + 1)); }
             void SetIntQueueId(EVDiskInternalQueueId value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
-            void SetIntQueueId(size_t value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(value + 1)); }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }
             TVDiskCostSettings::Builder MutableCostSettings() { return getCostSettings(); }
             TWindowFeedback::Builder MutableWindow() { return getWindow(); }

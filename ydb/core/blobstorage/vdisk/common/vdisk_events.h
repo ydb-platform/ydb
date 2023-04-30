@@ -519,155 +519,25 @@ namespace NKikimr {
             if (queryRecord) {
                 Y_VERIFY(queryRecord->HasMsgQoS());
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
-                // TODO(stetsyuk): implement Swap method
-                // resultQoS->Swap(queryRecord->MutableMsgQoS());
-                if (queryRecord->GetMsgQoS().HasDeadlineSeconds()) {
-                    resultQoS->SetDeadlineSeconds(queryRecord->GetMsgQoS().GetDeadlineSeconds());
-                }
-                if (queryRecord->GetMsgQoS().HasCost()) {
-                    resultQoS->SetCost(queryRecord->GetMsgQoS().GetCost());
-                }
-                if (queryRecord->GetMsgQoS().HasSendMeCostSettings()) {
-                    resultQoS->SetSendMeCostSettings(queryRecord->GetMsgQoS().GetSendMeCostSettings());
-                }
-                if (queryRecord->GetMsgQoS().HasProxyNodeId()) {
-                    resultQoS->SetProxyNodeId(queryRecord->GetMsgQoS().GetProxyNodeId());
-                }
-                if (queryRecord->GetMsgQoS().HasReplVDiskId()) {
-                    resultQoS->SetReplVDiskId(queryRecord->GetMsgQoS().GetReplVDiskId());
-                }
-                if (queryRecord->GetMsgQoS().HasVDiskLoadId()) {
-                    resultQoS->SetVDiskLoadId(queryRecord->GetMsgQoS().GetVDiskLoadId());
-                }
-                if (queryRecord->GetMsgQoS().HasVPatchVDiskId()) {
-                    resultQoS->SetVPatchVDiskId(queryRecord->GetMsgQoS().GetVPatchVDiskId());
-                }
+                resultQoS->Swap(queryRecord->MutableMsgQoS());
+                resultQoS->ClearDeadlineSeconds();
+                resultQoS->ClearSendMeCostSettings();
+            } else {
+                Y_VERIFY(!SkeletonFrontIDPtr);
+            }
+        }
 
-
-                {
-                    auto resMsg = resultQoS->MutableMsgId();
-                    auto queryMsg = queryRecord->MutableMsgQoS()->MutableMsgId();
-
-                    auto querySeqIdTmp = queryMsg->GetSequenceId();
-                    auto queryMsgIdTmp = queryMsg->GetMsgId();
-
-                    auto resSeqIdTmp = resMsg->GetSequenceId();
-                    auto resMsgIdTmp = resMsg->GetMsgId();
-
-                    queryMsg->SetSequenceId(resSeqIdTmp);
-                    queryMsg->SetMsgId(resMsgIdTmp);
-
-                    resMsg->SetSequenceId(querySeqIdTmp);
-                    resMsg->SetMsgId(queryMsgIdTmp);
-                }
-
-                if (queryRecord->GetMsgQoS().HasCostSettings()) {
-                    auto resMsg = resultQoS->MutableCostSettings();
-                    auto queryMsg = queryRecord->GetMsgQoS().GetCostSettings();
-
-                    if (queryMsg.HasSeekTimeUs()) {
-                        resMsg->SetSeekTimeUs(queryMsg.GetSeekTimeUs());
-                    }
-
-                    if (queryMsg.HasReadSpeedBps()) {
-                        resMsg->SetReadSpeedBps(queryMsg.GetReadSpeedBps());
-                    }
-
-                    if (queryMsg.HasWriteSpeedBps()) {
-                        resMsg->SetWriteSpeedBps(queryMsg.GetWriteSpeedBps());
-                    }
-
-                    if (queryMsg.HasReadBlockSize()) {
-                        resMsg->SetReadBlockSize(queryMsg.GetReadBlockSize());
-                    }
-
-                    if (queryMsg.HasWriteBlockSize()) {
-                        resMsg->SetWriteBlockSize(queryMsg.GetWriteBlockSize());
-                    }
-
-                    if (queryMsg.HasMinREALHugeBlobInBytes()) {
-                        resMsg->SetMinREALHugeBlobInBytes(queryMsg.GetMinREALHugeBlobInBytes());
-                    }
-                }
-
-                if (queryRecord->GetMsgQoS().HasWindow()) {
-                    auto resMsg = resultQoS->MutableWindow();
-                    auto queryMsg = queryRecord->GetMsgQoS().GetWindow();
-
-                    if (queryMsg.HasActualWindowSize()) {
-                        resMsg->SetActualWindowSize(queryMsg.GetActualWindowSize());
-                    }
-
-                    if (queryMsg.HasMaxWindowSize()) {
-                        resMsg->SetMaxWindowSize(queryMsg.GetMaxWindowSize());
-                    }
-
-                    if (queryMsg.HasFailedMsgId()) {
-                        if (queryMsg.GetFailedMsgId().HasSequenceId()) {
-                            resMsg->MutableFailedMsgId()->SetSequenceId(queryMsg.GetFailedMsgId().GetSequenceId());
-                        }
-                        if (queryMsg.GetFailedMsgId().HasMsgId()) {
-                            resMsg->MutableFailedMsgId()->SetMsgId(queryMsg.GetFailedMsgId().GetMsgId());
-                        }
-                    }
-                    if (queryMsg.HasExpectedMsgId()) {
-                        if (queryMsg.GetExpectedMsgId().HasSequenceId()) {
-                            resMsg->MutableExpectedMsgId()->SetSequenceId(queryMsg.GetExpectedMsgId().GetSequenceId());
-                        }
-                        if (queryMsg.GetExpectedMsgId().HasMsgId()) {
-                            resMsg->MutableExpectedMsgId()->SetMsgId(queryMsg.GetExpectedMsgId().GetMsgId());
-                        }
-                    }
-
-                    if (queryMsg.HasStatus()) {
-                        resMsg->SetStatus(NKikimrCapnProtoUtil::convertToProtobuf(queryMsg.GetStatus()));
-                    }
-                }
-
-                if (queryRecord->GetMsgQoS().HasExecTimeStats()) {
-                    auto resMsg = resultQoS->MutableExecTimeStats();
-                    auto queryMsg = queryRecord->GetMsgQoS().GetExecTimeStats();
-
-                    if (queryMsg.HasSubmitTimestamp()) {
-                        resMsg->SetSubmitTimestamp(queryMsg.GetSubmitTimestamp());
-                    }
-
-                    if (queryMsg.HasTotal()) {
-                        resMsg->SetTotal(queryMsg.GetTotal());
-                    }
-
-                    if (queryMsg.HasInQueue()) {
-                        resMsg->SetInQueue(queryMsg.GetInQueue());
-                    }
-
-                    if (queryMsg.HasExecution()) {
-                        resMsg->SetExecution(queryMsg.GetExecution());
-                    }
-
-                    if (queryMsg.HasHugeWriteTime()) {
-                        resMsg->SetHugeWriteTime(queryMsg.GetHugeWriteTime());
-                    }
-                }
-
-                if (queryRecord->GetMsgQoS().HasSenderActorId()) {
-                    auto resMsg = resultQoS->MutableSenderActorId();
-                    auto queryMsg = queryRecord->GetMsgQoS().GetSenderActorId();
-
-                    if (queryMsg.HasRawX1()) {
-                        resMsg->SetRawX1(queryMsg.GetRawX1());
-                    }
-
-                    if (queryMsg.HasRawX2()) {
-                        resMsg->SetRawX2(queryMsg.GetRawX2());
-                    }
-                }
-
-                if (queryRecord->GetMsgQoS().HasExtQueueId()) {
-                    resultQoS->SetExtQueueId(NKikimrCapnProtoUtil::convertToProtobuf(queryRecord->GetMsgQoS().GetExtQueueId()));
-                }
-                if (queryRecord->GetMsgQoS().HasIntQueueId()) {
-                    resultQoS->SetIntQueueId(NKikimrCapnProtoUtil::convertToProtobuf(queryRecord->GetMsgQoS().GetIntQueueId()));
-                }
+        TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
+                                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
+                                ui32 recByteSize, NKikimrCapnProto::TEvVGet::Builder *queryRecord, const TActorIDPtr &skeletonFrontIDPtr)
+                : TBase(queryRecord ? GetReceivedTimestamp(queryRecord) : now, counterPtr, histoPtr, channel)
+                , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
+                , SkeletonFrontIDPtr(skeletonFrontIDPtr)
+        {
+            if (queryRecord) {
+                Y_VERIFY(queryRecord->HasMsgQoS());
+                auto *resultQoS = TBase::Record.MutableMsgQoS();
+                Swap(*resultQoS, *queryRecord->MutableMsgQoS());
 
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
@@ -714,6 +584,157 @@ namespace NKikimr {
         NKikimrBlobStorage::TExecTimeStats *GetExecTimeStats() {
             auto *msgQoS = TBase::Record.MutableMsgQoS();
             return msgQoS->HasExecTimeStats() ? msgQoS->MutableExecTimeStats() : nullptr;
+        }
+
+        void Swap(NKikimrBlobStorage::TMsgQoS& lhs, NKikimrCapnProto::TMsgQoS::Builder& rhs) {
+            // Swap primitive fields
+            uint32_t tempDeadlineSeconds = lhs.GetDeadlineSeconds();
+            lhs.SetDeadlineSeconds(rhs.GetDeadlineSeconds());
+            rhs.SetDeadlineSeconds(tempDeadlineSeconds);
+
+            uint64_t tempCost = lhs.GetCost();
+            lhs.SetCost(rhs.GetCost());
+            rhs.SetCost(tempCost);
+
+            bool tempSendMeCostSettings = lhs.GetSendMeCostSettings();
+            lhs.SetSendMeCostSettings(rhs.GetSendMeCostSettings());
+            rhs.SetSendMeCostSettings(tempSendMeCostSettings);
+
+            uint32_t tempProxyNodeId = lhs.GetProxyNodeId();
+            lhs.SetProxyNodeId(rhs.GetProxyNodeId());
+            rhs.SetProxyNodeId(tempProxyNodeId);
+
+            uint32_t tempReplVDiskId = lhs.GetReplVDiskId();
+            lhs.SetReplVDiskId(rhs.GetReplVDiskId());
+            rhs.SetReplVDiskId(tempReplVDiskId);
+
+            uint64_t tempVDiskLoadId = lhs.GetVDiskLoadId();
+            lhs.SetVDiskLoadId(rhs.GetVDiskLoadId());
+            rhs.SetVDiskLoadId(tempVDiskLoadId);
+
+            uint32_t tempVPatchVDiskId = lhs.GetVPatchVDiskId();
+            lhs.SetVPatchVDiskId(rhs.GetVPatchVDiskId());
+            rhs.SetVPatchVDiskId(tempVPatchVDiskId);
+
+            // Swap all other fields
+            Swap(*lhs.MutableMsgId(), *rhs.MutableMsgId());
+            Swap(*lhs.MutableCostSettings(), *rhs.MutableCostSettings());
+            Swap(*lhs.MutableWindow(), *rhs.MutableWindow());
+            Swap(*lhs.MutableExecTimeStats(), *rhs.MutableExecTimeStats());
+            Swap(*lhs.MutableSenderActorId(), *rhs.MutableSenderActorId());
+
+            // Swap enums
+            NKikimrCapnProto::EVDiskQueueId tempExtQueueId = NKikimrCapnProtoUtil::convertToCapnProto(lhs.GetExtQueueId());
+            lhs.SetExtQueueId(NKikimrCapnProtoUtil::convertToProtobuf(lhs.GetExtQueueId()));
+            rhs.SetExtQueueId(tempExtQueueId);
+
+            NKikimrCapnProto::EVDiskInternalQueueId tempIntQueueId = NKikimrCapnProtoUtil::convertToCapnProto(lhs.GetIntQueueId());
+            lhs.SetIntQueueId(NKikimrCapnProtoUtil::convertToProtobuf(lhs.GetIntQueueId()));
+            rhs.SetIntQueueId(tempIntQueueId);
+        }
+
+        void Swap(NKikimrBlobStorage::TMessageId& lhs, NKikimrCapnProto::TMessageId::Builder& rhs) {
+            // Swap sequenceId
+            uint64_t tempSequenceId = lhs.GetSequenceId();
+            lhs.SetSequenceId(rhs.GetSequenceId());
+            rhs.SetSequenceId(tempSequenceId);
+
+            // Swap msgId
+            uint64_t tempMsgId = lhs.GetMsgId();
+            lhs.SetMsgId(rhs.GetMsgId());
+            rhs.SetMsgId(tempMsgId);
+        }
+
+        void Swap(NKikimrBlobStorage::TVDiskCostSettings& lhs, NKikimrCapnProto::TVDiskCostSettings::Builder& rhs) {
+            // Swap all fields
+            uint64_t tempSeekTimeUs = lhs.GetSeekTimeUs();
+            lhs.SetSeekTimeUs(rhs.GetSeekTimeUs());
+            rhs.SetSeekTimeUs(tempSeekTimeUs);
+
+            uint64_t tempReadSpeedBps = lhs.GetReadSpeedBps();
+            lhs.SetReadSpeedBps(rhs.GetReadSpeedBps());
+            rhs.SetReadSpeedBps(tempReadSpeedBps);
+
+            uint64_t tempWriteSpeedBps = lhs.GetWriteSpeedBps();
+            lhs.SetWriteSpeedBps(rhs.GetWriteSpeedBps());
+            rhs.SetWriteSpeedBps(tempWriteSpeedBps);
+
+            uint64_t tempReadBlockSize = lhs.GetReadBlockSize();
+            lhs.SetReadBlockSize(rhs.GetReadBlockSize());
+            rhs.SetReadBlockSize(tempReadBlockSize);
+
+            uint64_t tempWriteBlockSize = lhs.GetWriteBlockSize();
+            lhs.SetWriteBlockSize(rhs.GetWriteBlockSize());
+            rhs.SetWriteBlockSize(tempWriteBlockSize);
+
+            uint32_t tempMinREALHugeBlobInBytes = lhs.GetMinREALHugeBlobInBytes();
+            lhs.SetMinREALHugeBlobInBytes(rhs.GetMinREALHugeBlobInBytes());
+            rhs.SetMinREALHugeBlobInBytes(tempMinREALHugeBlobInBytes);
+        }
+
+        void Swap(NKikimrBlobStorage::TWindowFeedback& lhs, NKikimrCapnProto::TWindowFeedback::Builder& rhs) {
+            // Swap status
+            NKikimrCapnProto::EStatus tempStatus = NKikimrCapnProtoUtil::convertToCapnProto(lhs.GetStatus());
+            lhs.SetStatus(NKikimrCapnProtoUtil::convertToProtobuf(lhs.GetStatus()));
+            rhs.SetStatus(tempStatus);
+
+            // Swap actualWindowSize
+            uint64_t tempActualWindowSize = lhs.GetActualWindowSize();
+            lhs.SetActualWindowSize(rhs.GetActualWindowSize());
+            rhs.SetActualWindowSize(tempActualWindowSize);
+
+            // Swap maxWindowSize
+            uint64_t tempMaxWindowSize = lhs.GetMaxWindowSize();
+            lhs.SetMaxWindowSize(rhs.GetMaxWindowSize());
+            rhs.SetMaxWindowSize(tempMaxWindowSize);
+
+            // Swap expectedMsgId
+            Swap(*lhs.MutableExpectedMsgId(), *rhs.MutableExpectedMsgId());
+            // Swap failedMsgId
+            Swap(*lhs.MutableFailedMsgId(), *rhs.MutableFailedMsgId());
+        }
+
+        void Swap(NKikimrBlobStorage::TExecTimeStats& lhs, NKikimrCapnProto::TExecTimeStats::Builder& rhs) {
+            // Swap all fields
+            uint64_t tempSubmitTimestamp = lhs.GetSubmitTimestamp();
+            lhs.SetSubmitTimestamp(rhs.GetSubmitTimestamp());
+            rhs.SetSubmitTimestamp(tempSubmitTimestamp);
+
+            uint64_t tempInSenderQueue = lhs.GetInSenderQueue();
+            lhs.SetInSenderQueue(rhs.GetInSenderQueue());
+            rhs.SetInSenderQueue(tempInSenderQueue);
+
+            uint64_t tempReceivedTimestamp = lhs.GetReceivedTimestamp();
+            lhs.SetReceivedTimestamp(rhs.GetReceivedTimestamp());
+            rhs.SetReceivedTimestamp(tempReceivedTimestamp);
+
+            uint64_t tempTotal = lhs.GetTotal();
+            lhs.SetTotal(rhs.GetTotal());
+            rhs.SetTotal(tempTotal);
+
+            uint64_t tempInQueue = lhs.GetInQueue();
+            lhs.SetInQueue(rhs.GetInQueue());
+            rhs.SetInQueue(tempInQueue);
+
+            uint64_t tempExecution = lhs.GetExecution();
+            lhs.SetExecution(rhs.GetExecution());
+            rhs.SetExecution(tempExecution);
+
+            uint64_t tempHugeWriteTime = lhs.GetHugeWriteTime();
+            lhs.SetHugeWriteTime(rhs.GetHugeWriteTime());
+            rhs.SetHugeWriteTime(tempHugeWriteTime);
+        }
+
+        void Swap(NActorsProto::TActorId& lhs, NKikimrCapnProto::TActorId::Builder& rhs) {
+            // Swap rawX1
+            uint64_t tempRawX1 = lhs.GetRawX1();
+            lhs.SetRawX1(rhs.GetRawX1());
+            rhs.SetRawX1(tempRawX1);
+
+            // Swap rawX2
+            uint64_t tempRawX2 = lhs.GetRawX2();
+            lhs.SetRawX2(rhs.GetRawX2());
+            rhs.SetRawX2(tempRawX2);
         }
     };
 

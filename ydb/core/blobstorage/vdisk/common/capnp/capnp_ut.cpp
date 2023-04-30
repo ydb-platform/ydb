@@ -2,6 +2,20 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
+    NKikimrCapnProto::TEvVGet::Reader reserialize(const NKikimrCapnProto::TEvVGet::Builder & original) {
+        NActors::TAllocChunkSerializer output;
+        UNIT_ASSERT(original.SerializeToZeroCopyStream(&output));
+        auto data = output.Release({});
+
+        // Deserialize the bytes into a new object
+        NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
+        NKikimrCapnProto::TEvVGet::Reader deserializedObject;
+        deserializedObject.ParseFromZeroCopyStream(&input);
+
+        return deserializedObject;
+    }
+
+
     Y_UNIT_TEST_SUITE(CapnpTests) {
         Y_UNIT_TEST(TEvVGetBasic) {
                 // Create a Cap'n Proto object and fill some fields
@@ -22,15 +36,7 @@ namespace NKikimr {
                 originalObject.AddExtremeQueries().SetSize(8989);
 
 
-                // Serialize the object into bytes
-                NActors::TAllocChunkSerializer output;
-                UNIT_ASSERT(originalObject.SerializeToZeroCopyStream(&output));
-                auto data = output.Release({});
-
-                // Deserialize the bytes into a new object
-                NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
-                NKikimrCapnProto::TEvVGet::Reader deserializedObject;
-                UNIT_ASSERT(deserializedObject.ParseFromZeroCopyStream(&input));
+                NKikimrCapnProto::TEvVGet::Reader deserializedObject = reserialize(originalObject);
 
                 // Check that the new object has the correct fields
                 UNIT_ASSERT(deserializedObject.GetAcquireBlockedGeneration() == true);
@@ -64,15 +70,7 @@ namespace NKikimr {
             id.SetMsgId(1234);
             id.SetSequenceId(1234);
 
-            // Serialize the object into bytes
-            NActors::TAllocChunkSerializer output;
-            UNIT_ASSERT(originalObject.SerializeToZeroCopyStream(&output));
-            auto data = output.Release({});
-
-            // Deserialize the bytes into a new object
-            NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
-            NKikimrCapnProto::TEvVGet::Reader deserializedObject;
-            UNIT_ASSERT(deserializedObject.ParseFromZeroCopyStream(&input));
+            NKikimrCapnProto::TEvVGet::Reader deserializedObject = reserialize(originalObject);
 
             // Check that deserializedObject.HasMsgQoS() == true
             UNIT_ASSERT(deserializedObject.HasMsgQoS());
@@ -88,15 +86,7 @@ namespace NKikimr {
             auto originalMsgQoS = originalObject.MutableMsgQoS();
             originalMsgQoS.SetExtQueueId(NKikimrCapnProto::EVDiskQueueId::GetDiscover);
 
-            // Serialize the object into bytes
-            NActors::TAllocChunkSerializer output;
-            UNIT_ASSERT(originalObject.SerializeToZeroCopyStream(&output));
-            auto data = output.Release({});
-
-            // Deserialize the bytes into a new object
-            NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
-            NKikimrCapnProto::TEvVGet::Reader deserializedObject;
-            UNIT_ASSERT(deserializedObject.ParseFromZeroCopyStream(&input));
+            NKikimrCapnProto::TEvVGet::Reader deserializedObject = reserialize(originalObject);
 
             // Check that deserializedObject.HasMsgQoS() == true
             UNIT_ASSERT(deserializedObject.HasMsgQoS());
@@ -112,6 +102,17 @@ namespace NKikimr {
 
             UNIT_ASSERT(to.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
             UNIT_ASSERT(to.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
+
+            UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
+            UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
+
+            NKikimrCapnProto::TEvVGet::Reader reserializedFrom = reserialize(from), reserializedTo = reserialize(to);
+
+            UNIT_ASSERT(reserializedFrom.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
+            UNIT_ASSERT(reserializedFrom.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
+
+            UNIT_ASSERT(reserializedTo.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
+            UNIT_ASSERT(reserializedTo.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
         }
     };
 };

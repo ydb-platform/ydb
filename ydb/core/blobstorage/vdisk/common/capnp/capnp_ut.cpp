@@ -101,5 +101,17 @@ namespace NKikimr {
             // Check that deserializedObject.HasMsgQoS() == true
             UNIT_ASSERT(deserializedObject.HasMsgQoS());
         }
+
+        Y_UNIT_TEST(CopyFrom) {
+            NKikimrCapnProto::TEvVGet::Builder from, to;
+
+            from.MutableMsgQoS().MutableMsgId().SetMsgId(1234);
+            from.MutableMsgQoS().MutableMsgId().SetSequenceId(4321);
+
+            to.CopyFrom(from);
+
+            UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
+            UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
+        }
     };
 };

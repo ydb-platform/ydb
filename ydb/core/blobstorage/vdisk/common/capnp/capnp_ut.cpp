@@ -153,6 +153,9 @@ namespace NKikimr {
 
             UNIT_ASSERT(tevvgetCloneDeserialized.GetMsgQoS().GetMsgId().GetMsgId() == msgId);
             UNIT_ASSERT(tevvgetCloneDeserialized.GetMsgQoS().GetMsgId().GetSequenceId() == sequenceId);
+
+            UNIT_ASSERT(tevvget->Record.GetMsgQoS().GetMsgId().GetMsgId() == msgId);
+            UNIT_ASSERT(tevvget->Record.GetMsgQoS().GetMsgId().GetSequenceId() == sequenceId);
         }
     };
 };

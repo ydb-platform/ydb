@@ -110,8 +110,8 @@ namespace NKikimr {
 
             to.CopyFrom(from);
 
-            UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
-            UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
+            UNIT_ASSERT(to.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
+            UNIT_ASSERT(to.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
         }
     };
 };

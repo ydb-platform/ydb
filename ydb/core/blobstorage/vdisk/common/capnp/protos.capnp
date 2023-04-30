@@ -4,8 +4,8 @@ using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("NKikimrCapnProto_");
 
 struct TMessageId {
-    sequenceId @0 :UInt64;
-    msgId @1 :UInt64;
+    sequenceId @0 :UInt64 = 18446744073699546569;
+    msgId @1 :UInt64 = 18446744073699546569;
 }
 
 struct TTimestamps {

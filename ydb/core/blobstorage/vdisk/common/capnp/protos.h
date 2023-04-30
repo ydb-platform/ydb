@@ -16,7 +16,6 @@ namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;
 
     const uint64_t UNSET_UINT64 = 18446744073699546569ull;
-    const uint32_t UNSET_UINT32 = 4294866749ll;
 
     struct TMessageId {
         struct Reader : private NKikimrCapnProto_::TMessageId::Reader {
@@ -719,11 +718,6 @@ namespace NKikimrCapnProto {
             , builder(message->initRoot<NKikimrCapnProto_::TEvVGet>())
             {
                 static_cast<Reader&>(*this) = builder.asReader();
-
-                // TODO(stetsyuk): define default values in capnp schema
-                MutableMsgQoS().MutableMsgId().SetMsgId(UNSET_UINT64);
-                MutableMsgQoS().MutableMsgId().SetSequenceId(UNSET_UINT64);
-                SetIndexOnly(false);
             }
             Builder(NKikimrCapnProto_::TEvVGet::Builder b) : Reader(b.asReader()), builder(b) {}
             Builder* operator->() { return this; }

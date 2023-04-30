@@ -1808,30 +1808,30 @@ private:
 
 inline  ::uint64_t TMessageId::Reader::getSequenceId() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TMessageId::Builder::getSequenceId() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 inline void TMessageId::Builder::setSequenceId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TMessageId::Reader::getMsgId() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TMessageId::Builder::getMsgId() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 inline void TMessageId::Builder::setMsgId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TTimestamps::Reader::getSentByDSProxyUs() const {

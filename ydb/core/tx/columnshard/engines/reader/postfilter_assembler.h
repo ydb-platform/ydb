@@ -20,7 +20,7 @@ private:
 
     const ui32 BatchNo;
 protected:
-    virtual bool DoApply(TIndexedReadData& owner) const override;
+    virtual bool DoApply(TGranulesFillingContext& owner) const override;
     virtual bool DoExecuteImpl() override;
 public:
     TAssembleBatch(TPortionInfo::TPreparedBatchData&& batchConstructor,

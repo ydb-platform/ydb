@@ -12,7 +12,7 @@ bool IDataTasksProcessor::ITask::DoExecute() {
     }
 }
 
-bool IDataTasksProcessor::ITask::Apply(NOlap::TIndexedReadData& indexedDataRead) const {
+bool IDataTasksProcessor::ITask::Apply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const {
     if (OwnerOperator) {
         OwnerOperator->ReplyReceived();
         if (OwnerOperator->IsStopped()) {
@@ -38,12 +38,12 @@ bool IDataTasksProcessor::Add(ITask::TPtr task) {
 }
 
 
-void TDataTasksProcessorContainer::Add(NOlap::TIndexedReadData& indexedDataRead, IDataTasksProcessor::ITask::TPtr task) {
+void TDataTasksProcessorContainer::Add(NOlap::NIndexedReader::TGranulesFillingContext& context, IDataTasksProcessor::ITask::TPtr task) {
     if (Object) {
         Object->Add(task);
     } else {
         task->Execute();
-        task->Apply(indexedDataRead);
+        task->Apply(context);
     }
 }
 

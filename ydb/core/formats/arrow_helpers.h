@@ -130,6 +130,8 @@ std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& colu
 std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
 bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 

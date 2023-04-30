@@ -62,6 +62,11 @@ struct TPortionInfo {
     bool CanIntersectOthers() const { return !Valid() || IsInserted(); }
     size_t NumRecords() const { return Records.size(); }
 
+    bool IsSortableInGranule() const {
+        return Meta.Produced == TPortionMeta::COMPACTED
+            || Meta.Produced == TPortionMeta::SPLIT_COMPACTED;
+    }
+
     bool AllowEarlyFilter() const {
         return Meta.Produced == TPortionMeta::COMPACTED
             || Meta.Produced == TPortionMeta::SPLIT_COMPACTED;
@@ -201,6 +206,51 @@ struct TPortionInfo {
             return false;
         }
         return Meta.ColumnMeta.find(columnId)->second.HasMinMax();
+    }
+private:
+    class TMinGetter {
+    public:
+        static std::shared_ptr<arrow::Scalar> Get(const TPortionInfo& portionInfo, const ui32 columnId) {
+            return portionInfo.MinValue(columnId);
+        }
+    };
+
+    class TMaxGetter {
+    public:
+        static std::shared_ptr<arrow::Scalar> Get(const TPortionInfo& portionInfo, const ui32 columnId) {
+            return portionInfo.MaxValue(columnId);
+        }
+    };
+
+    template <class TSelfGetter, class TItemGetter = TSelfGetter>
+    int CompareByColumnIdsImpl(const TPortionInfo& item, const TVector<ui32>& columnIds) const {
+        for (auto&& i : columnIds) {
+            std::shared_ptr<arrow::Scalar> valueSelf = TSelfGetter::Get(*this, i);
+            std::shared_ptr<arrow::Scalar> valueItem = TItemGetter::Get(item, i);
+            if (!!valueSelf && !!valueItem) {
+                const int cmpResult = NArrow::ScalarCompare(valueSelf, valueItem);
+                if (cmpResult) {
+                    return cmpResult;
+                }
+            } else if (!!valueSelf) {
+                return 1;
+            } else if (!!valueItem) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+public:
+    int CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
+        return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
+    }
+
+    int CompareMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
+        return CompareMinByColumnIds(item, info.KeyColumns);
+    }
+
+    int CompareMinByColumnIds(const TPortionInfo& item, const TVector<ui32>& columnIds) const {
+        return CompareByColumnIdsImpl<TMinGetter>(item, columnIds);
     }
 
     class TAssembleBlobInfo {

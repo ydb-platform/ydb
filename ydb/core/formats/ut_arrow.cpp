@@ -632,10 +632,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         const NArrow::TColumnFilter gt = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER);
         const NArrow::TColumnFilter ge = NArrow::TColumnFilter::MakePredicateFilter(table, border, NArrow::ECompareType::GREATER_OR_EQUAL);
 
-        UNIT_ASSERT(CheckFilter(lt.BuildFilter(), 234, true));
-        UNIT_ASSERT(CheckFilter(le.BuildFilter(), 235, true));
-        UNIT_ASSERT(CheckFilter(gt.BuildFilter(), 235, false));
-        UNIT_ASSERT(CheckFilter(ge.BuildFilter(), 234, false));
+        UNIT_ASSERT(CheckFilter(lt.BuildSimpleFilter(), 234, true));
+        UNIT_ASSERT(CheckFilter(le.BuildSimpleFilter(), 235, true));
+        UNIT_ASSERT(CheckFilter(gt.BuildSimpleFilter(), 235, false));
+        UNIT_ASSERT(CheckFilter(ge.BuildSimpleFilter(), 234, false));
     }
 
     Y_UNIT_TEST(SortWithCompositeKey) {

@@ -46,49 +46,12 @@ bool TAssembleFilter::DoExecuteImpl() {
     return true;
 }
 
-bool TAssembleFilter::DoApply(TIndexedReadData& owner) const {
+bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
     TBatch& batch = owner.GetBatchInfo(BatchNo);
     Y_VERIFY(OriginalCount);
     owner.GetCounters().GetOriginalRowsCount()->Add(OriginalCount);
-    batch.InitFilter(Filter, FilteredBatch);
     owner.GetCounters().GetAssembleFilterCount()->Add(1);
-    if (!FilteredBatch || FilteredBatch->num_rows() == 0) {
-        owner.GetCounters().GetEmptyFilterCount()->Add(1);
-        owner.GetCounters().GetEmptyFilterFetchedBytes()->Add(batch.GetFetchedBytes());
-        owner.GetCounters().GetSkippedBytes()->Add(batch.GetFetchBytes(&owner.GetPostFilterColumns()));
-        batch.InitBatch(FilteredBatch);
-    } else {
-        owner.GetCounters().GetFilteredRowsCount()->Add(FilteredBatch->num_rows());
-        if (batch.AskedColumnsAlready(owner.GetPostFilterColumns())) {
-            owner.GetCounters().GetFilterOnlyCount()->Add(1);
-            owner.GetCounters().GetFilterOnlyFetchedBytes()->Add(batch.GetFetchedBytes());
-            owner.GetCounters().GetFilterOnlyUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
-            owner.GetCounters().GetSkippedBytes()->Add(batch.GetFetchBytes(&owner.GetPostFilterColumns()));
-
-            batch.InitBatch(FilteredBatch);
-        } else {
-            owner.GetCounters().GetTwoPhasesFilterFetchedBytes()->Add(batch.GetFetchedBytes());
-            owner.GetCounters().GetTwoPhasesFilterUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
-
-            batch.ResetWithFilter(&owner.GetPostFilterColumns());
-            if (batch.IsFetchingReady()) {
-                auto processor = GetTasksProcessorContainer();
-                if (auto assembleBatchTask = batch.AssembleTask(processor.GetObject(), owner.GetReadMetadata())) {
-                    processor.Add(owner, assembleBatchTask);
-                }
-            }
-
-            owner.GetCounters().GetTwoPhasesCount()->Add(1);
-            owner.GetCounters().GetTwoPhasesPostFilterFetchedBytes()->Add(batch.GetWaitingBytes());
-            owner.GetCounters().GetTwoPhasesPostFilterUsefulBytes()->Add(batch.GetWaitingBytes() * FilteredBatch->num_rows() / OriginalCount);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "additional_data")
-                ("filtered_count", FilteredBatch->num_rows())
-                ("blobs_count", batch.GetWaitingBlobs().size())
-                ("columns_count", batch.GetCurrentColumnIds()->size())
-                ("fetch_size", batch.GetWaitingBytes())
-                ;
-        }
-    }
+    batch.InitFilter(Filter, FilteredBatch, OriginalCount);
     return true;
 }
 

@@ -116,11 +116,11 @@ public:
 
     void CutInactiveHead();
 
-    std::vector<bool> BuildFilter() const;
+    std::vector<bool> BuildSimpleFilter() const;
 
     TColumnFilter() = default;
 
-    std::shared_ptr<arrow::BooleanArray> MakeFilter() const;
+    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter() const;
 
     bool IsTotalAllowFilter() const;
 

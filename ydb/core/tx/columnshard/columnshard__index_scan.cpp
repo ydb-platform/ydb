@@ -7,7 +7,7 @@ namespace NKikimr::NColumnShard {
 TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata,
     NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TScanCounters& scanCounters)
     : ReadMetadata(readMetadata)
-    , IndexedData(ReadMetadata, FetchBlobsQueue, false, scanCounters)
+    , IndexedData(ReadMetadata, FetchBlobsQueue, false, scanCounters, processor)
     , DataTasksProcessor(processor)
     , ScanCounters(scanCounters)
 {
@@ -21,7 +21,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
         auto& blobId = cmtBlob.BlobId;
         FetchBlobsQueue.emplace_back(TBlobRange(blobId, 0, blobId.BlobSize()));
     }
-    IndexedData.InitRead(batchNo, true);
+    IndexedData.InitRead(batchNo);
     // Add cached batches without read
     for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
         auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
@@ -42,7 +42,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
 void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data) {
     const auto& blobId = blobRange.BlobId;
     if (IndexedData.IsIndexedBlob(blobRange)) {
-        IndexedData.AddIndexed(blobRange, data, DataTasksProcessor);
+        IndexedData.AddIndexed(blobRange, data);
     } else {
         auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
         if (cmt.empty()) {
@@ -115,7 +115,7 @@ void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
     if (!task->IsDataProcessed() || DataTasksProcessor.IsStopped()) {
         return;
     }
-    Y_VERIFY(task->Apply(IndexedData));
+    Y_VERIFY(task->Apply(IndexedData.GetGranulesContext()));
 }
 
 }

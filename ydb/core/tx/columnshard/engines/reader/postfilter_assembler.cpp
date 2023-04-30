@@ -31,7 +31,7 @@ bool TAssembleBatch::DoExecuteImpl() {
     return true;
 }
 
-bool TAssembleBatch::DoApply(TIndexedReadData& owner) const {
+bool TAssembleBatch::DoApply(TGranulesFillingContext& owner) const {
     TBatch& batch = owner.GetBatchInfo(BatchNo);
     batch.InitBatch(FullBatch);
     return true;

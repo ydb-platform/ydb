@@ -21,7 +21,7 @@ namespace NKikimr::NOlap::NIndexedReader {
         bool AllowEarlyFilter = false;
         std::set<ui32> FilterColumnIds;
     protected:
-        virtual bool DoApply(TIndexedReadData& owner) const override;
+        virtual bool DoApply(TGranulesFillingContext& owner) const override;
         virtual bool DoExecuteImpl() override;
     public:
         TAssembleFilter(TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,

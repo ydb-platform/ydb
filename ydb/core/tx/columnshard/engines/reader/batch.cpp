@@ -51,10 +51,10 @@ bool TBatch::AskedColumnsAlready(const std::set<ui32>& columnIds) const {
     return true;
 }
 
-ui64 TBatch::GetFetchBytes(const std::set<ui32>* columnIds) {
+ui64 TBatch::GetFetchBytes(const std::set<ui32>& columnIds) {
     ui64 result = 0;
     for (const NOlap::TColumnRecord& rec : PortionInfo->Records) {
-        if (columnIds && !columnIds->contains(rec.ColumnId)) {
+        if (!columnIds.contains(rec.ColumnId)) {
             continue;
         }
         Y_VERIFY(rec.Portion == Portion);
@@ -65,15 +65,11 @@ ui64 TBatch::GetFetchBytes(const std::set<ui32>* columnIds) {
     return result;
 }
 
-void TBatch::ResetCommon(const std::set<ui32>* columnIds) {
-    if (!columnIds) {
-        CurrentColumnIds.reset();
-    } else {
-        CurrentColumnIds = *columnIds;
-        Y_VERIFY(CurrentColumnIds->size());
-        for (auto&& i : *CurrentColumnIds) {
-            AskedColumnIds.emplace(i);
-        }
+void TBatch::ResetCommon(const std::set<ui32>& columnIds) {
+    CurrentColumnIds = columnIds;
+    Y_VERIFY(CurrentColumnIds->size());
+    for (auto&& i : *CurrentColumnIds) {
+        Y_VERIFY(AskedColumnIds.emplace(i).second);
     }
 
     Y_VERIFY(WaitIndexed.empty());
@@ -82,14 +78,13 @@ void TBatch::ResetCommon(const std::set<ui32>* columnIds) {
     FetchedBytes = 0;
 }
 
-void TBatch::ResetNoFilter(const std::set<ui32>* columnIds) {
+void TBatch::ResetNoFilter(const std::set<ui32>& columnIds) {
     Y_VERIFY(!Filter);
     ResetCommon(columnIds);
     for (const NOlap::TColumnRecord& rec : PortionInfo->Records) {
         if (CurrentColumnIds && !CurrentColumnIds->contains(rec.ColumnId)) {
             continue;
         }
-        AskedColumnIds.emplace(rec.ColumnId);
         Y_VERIFY(WaitIndexed.emplace(rec.BlobRange).second);
         Owner->AddBlobForFetch(rec.BlobRange, *this);
         Y_VERIFY(rec.Portion == Portion);
@@ -99,7 +94,7 @@ void TBatch::ResetNoFilter(const std::set<ui32>* columnIds) {
     }
 }
 
-void TBatch::ResetWithFilter(const std::set<ui32>* columnIds) {
+void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
     Y_VERIFY(Filter);
     ResetCommon(columnIds);
     std::map<ui32, std::map<ui16, const TColumnRecord*>> orderedObjects;
@@ -107,7 +102,6 @@ void TBatch::ResetWithFilter(const std::set<ui32>* columnIds) {
         if (CurrentColumnIds && !CurrentColumnIds->contains(rec.ColumnId)) {
             continue;
         }
-        AskedColumnIds.emplace(rec.ColumnId);
         orderedObjects[rec.ColumnId][rec.Chunk] = &rec;
         Y_VERIFY(rec.Valid());
         Y_VERIFY(Portion == rec.Portion);
@@ -122,29 +116,31 @@ void TBatch::ResetWithFilter(const std::set<ui32>* columnIds) {
         for (auto&& [chunk, rec] : columnInfo.second) {
             Y_VERIFY(!itFinished);
             Y_VERIFY(expected++ == chunk);
-            if (!rec->GetRowsCount()) {
+            if (!rec->GetChunkRowsCount()) {
                 undefinedShift = true;
             }
-            if (!undefinedShift && it.IsBatchForSkip(rec->GetRowsCount())) {
-                Data.emplace(rec->BlobRange, TPortionInfo::TAssembleBlobInfo(rec->GetRowsCount()));
+            if (!undefinedShift && it.IsBatchForSkip(*rec->GetChunkRowsCount())) {
+                Data.emplace(rec->BlobRange, TPortionInfo::TAssembleBlobInfo(*rec->GetChunkRowsCount()));
             } else {
                 Y_VERIFY(WaitIndexed.emplace(rec->BlobRange).second);
                 Owner->AddBlobForFetch(rec->BlobRange, *this);
                 WaitingBytes += rec->BlobRange.Size;
             }
             if (!undefinedShift) {
-                itFinished = !it.Next(rec->GetRowsCount());
+                itFinished = !it.Next(*rec->GetChunkRowsCount());
             }
         }
     }
 }
 
-void TBatch::InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch) {
+bool TBatch::InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch, const ui32 originalRecordsCount) {
     Y_VERIFY(filter);
     Y_VERIFY(!Filter);
     Y_VERIFY(!FilterBatch);
     Filter = filter;
     FilterBatch = filterBatch;
+    OriginalRecordsCount = originalRecordsCount;
+    return Owner->OnFilterReady(*this);
 }
 
 void TBatch::InitBatch(std::shared_ptr<arrow::RecordBatch> batch) {
@@ -162,6 +158,30 @@ bool TBatch::AddIndexedReady(const TBlobRange& bRange, const TString& blobData) 
     FetchedBytes += bRange.Size;
     Data.emplace(bRange, TPortionInfo::TAssembleBlobInfo(blobData));
     return true;
+}
+
+bool TBatch::NeedAdditionalData() const {
+    if (!Filter) {
+        return true;
+    }
+    if (!FilteredBatch || !FilteredBatch->num_rows()) {
+        return false;
+    }
+    if (AskedColumnsAlready(Owner->GetOwner().GetPostFilterColumns())) {
+        return false;
+    }
+    return true;
+}
+
+ui64 TBatch::GetUsefulBytes(const ui64 bytes) const {
+    if (!FilteredBatch || !FilteredBatch->num_rows()) {
+        return 0;
+    }
+    Y_VERIFY_DEBUG(OriginalRecordsCount);
+    if (!OriginalRecordsCount) {
+        return 0;
+    }
+    return bytes * FilteredBatch->num_rows() / OriginalRecordsCount;
 }
 
 }

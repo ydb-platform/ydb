@@ -708,9 +708,13 @@ bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<a
 }
 
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) < 0;
+}
+
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
     Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
 
-    return SwitchType(x.type->id(), [&](const auto& type) {
+    return SwitchTypeImpl<int, 0>(x.type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
@@ -722,16 +726,34 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
             Y_VERIFY(yval);
             TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());
             TStringBuf yBuf(reinterpret_cast<const char*>(yval->data()), yval->size());
-            return xBuf < yBuf;
+            if (xBuf < yBuf) {
+                return -1;
+            } else if (yBuf < xBuf) {
+                return 1;
+            } else {
+                return 0;
+            }
         }
         if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            return xval < yval;
+            if (xval < yval) {
+                return -1;
+            } else if (yval < xval) {
+                return 1;
+            } else {
+                return 0;
+            }
         }
         Y_VERIFY(false); // TODO: non primitive types
-        return false;
+        return 0;
     });
+}
+
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_VERIFY(x);
+    Y_VERIFY(y);
+    return ScalarCompare(*x, *y);
 }
 
 std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {

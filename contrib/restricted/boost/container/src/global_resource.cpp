@@ -11,7 +11,6 @@
 #define BOOST_CONTAINER_SOURCE
 #include <boost/container/pmr/memory_resource.hpp>
 #include <boost/container/pmr/global_resource.hpp>
-#include <boost/core/no_exceptions_support.hpp>
 #include <boost/container/throw_exception.hpp>
 #include <boost/container/detail/dlmalloc.hpp>  //For global lock
 #include <boost/container/detail/singleton.hpp>
@@ -128,7 +127,7 @@ namespace container {
 namespace pmr {
 
 std::atomic<memory_resource*>& default_memory_resource_instance() {
-    static std::atomic<memory_resource*> instance = new_delete_resource();
+    static std::atomic<memory_resource*> instance(new_delete_resource());
     return instance;
 }
 

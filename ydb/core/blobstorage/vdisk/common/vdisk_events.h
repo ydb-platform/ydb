@@ -520,7 +520,7 @@ namespace NKikimr {
                 Y_VERIFY(queryRecord->HasMsgQoS());
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
                 // TODO(stetsyuk): implement Swap method
-                // resultQoS->Swap(queryRecord->GetMsgQoS());
+                // resultQoS->Swap(queryRecord->MutableMsgQoS());
                 if (queryRecord->GetMsgQoS().HasDeadlineSeconds()) {
                     resultQoS->SetDeadlineSeconds(queryRecord->GetMsgQoS().GetDeadlineSeconds());
                 }
@@ -544,17 +544,21 @@ namespace NKikimr {
                 }
 
 
-                if (queryRecord->GetMsgQoS().HasMsgId()) {
+                {
                     auto resMsg = resultQoS->MutableMsgId();
-                    auto queryMsg = queryRecord->GetMsgQoS().GetMsgId();
+                    auto queryMsg = queryRecord->MutableMsgQoS()->MutableMsgId();
 
-                    if (queryMsg.HasSequenceId()) {
-                        resMsg->SetSequenceId(queryMsg.GetSequenceId());
-                    }
+                    auto querySeqIdTmp = queryMsg->GetSequenceId();
+                    auto queryMsgIdTmp = queryMsg->GetMsgId();
 
-                    if (queryMsg.HasMsgId()) {
-                        resMsg->SetMsgId(queryMsg.GetMsgId());
-                    }
+                    auto resSeqIdTmp = resMsg->GetSequenceId();
+                    auto resMsgIdTmp = resMsg->GetMsgId();
+
+                    queryMsg->SetSequenceId(resSeqIdTmp);
+                    queryMsg->SetMsgId(resMsgIdTmp);
+
+                    resMsg->SetSequenceId(querySeqIdTmp);
+                    resMsg->SetMsgId(queryMsgIdTmp);
                 }
 
                 if (queryRecord->GetMsgQoS().HasCostSettings()) {
@@ -1483,7 +1487,7 @@ namespace NKikimr {
         TEvVGetResult() = default;
 
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                      ui32 recByteSize, NKikimrCapnProto::TEvVGet::Reader *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
+                      ui32 recByteSize, NKikimrCapnProto::TEvVGet::Builder *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
                       const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
                       TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
                 : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)

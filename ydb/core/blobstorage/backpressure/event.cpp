@@ -56,8 +56,11 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
             using T = std::remove_pointer_t<decltype(ev)>;
             processMsgQoS(ev->Record);
             auto clone = std::make_unique<T>();
+            std::cerr << "before clone: " << clone->Record.ShortDebugString() << "\n\n\n";
             clone->Record.CopyFrom(ev->Record);
+            std::cerr << "after clone: " << clone->Record.ShortDebugString() << "\n\n\n";
             processMsgQoS(clone->Record);
+            std::cerr << "after re-processMsgQoS: " << clone->Record.ShortDebugString() << "\n\n\n";
             for (ui32 i = 0, count = ev->GetPayloadCount(); i < count; ++i) {
                 clone->AddPayload(TRope(ev->GetPayload(i)));
             }

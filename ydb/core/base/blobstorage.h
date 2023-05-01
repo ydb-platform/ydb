@@ -7,7 +7,6 @@
 #include "logoblob.h"
 #include "pathid.h"
 
-#include <ydb/core/blobstorage/vdisk/common/raw_serialization.h>
 #include <ydb/core/blobstorage/vdisk/common/capnp/protos.h>
 
 

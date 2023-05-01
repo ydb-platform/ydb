@@ -1,6 +1,5 @@
 #pragma once
 #include "defs.h"
-#include "raw_serialization.h"
 #include "capnp/protos.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_syncstate.h>

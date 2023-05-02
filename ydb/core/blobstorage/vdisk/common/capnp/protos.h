@@ -467,9 +467,9 @@ namespace NKikimrCapnProto {
         struct Reader : private NKikimrCapnProto_::TLogoBlobID::Reader {
             Reader(NKikimrCapnProto_::TLogoBlobID::Reader r) : NKikimrCapnProto_::TLogoBlobID::Reader(r) {}
             Reader() = default;
-            int64_t GetRawX1() const { return getRawX1(); }
-            int64_t GetRawX2() const { return getRawX2(); }
-            int64_t GetRawX3() const { return getRawX3(); }
+            uint64_t GetRawX1() const { return getRawX1(); }
+            uint64_t GetRawX2() const { return getRawX2(); }
+            uint64_t GetRawX3() const { return getRawX3(); }
             bool HasRawX1() const { return getRawX1() != 0; }
             bool HasRawX2() const { return getRawX2() != 0; }
             bool HasRawX3() const { return getRawX3() != 0; }
@@ -494,9 +494,9 @@ namespace NKikimrCapnProto {
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
-            void SetRawX1(const int64_t& value) { return setRawX1(value); }
-            void SetRawX2(const int64_t& value) { return setRawX2(value); }
-            void SetRawX3(const int64_t& value) { return setRawX3(value); }
+            void SetRawX1(const uint64_t& value) { return setRawX1(value); }
+            void SetRawX2(const uint64_t& value) { return setRawX2(value); }
+            void SetRawX3(const uint64_t& value) { return setRawX3(value); }
             const NKikimrCapnProto_::TLogoBlobID::Builder& GetCapnpBase() const { return *this; }
         };
     };

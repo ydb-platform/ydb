@@ -401,12 +401,11 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             << " NodeId# " << Info->GetActorId(vdisk).NodeId()
             << " ev# " << ev->Get()->ToString());
 
-        A_LOG_NOTICE_S("BSD07", "Handle TEvVGetResult"
+        std::cout << "BSD07 " <<  " Handle TEvVGetResult"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId()
-            << " ev# " << ev->Get()->ToString()
-        );
+            << " ev# " << ev->Get()->ToString() << "\n\n";
 
         vDiskData.IsResponsive = true;
 

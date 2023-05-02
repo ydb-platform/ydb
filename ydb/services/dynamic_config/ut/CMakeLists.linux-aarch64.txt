@@ -7,19 +7,19 @@
 
 
 
-add_executable(ydb-services-console-ut)
-target_compile_options(ydb-services-console-ut PRIVATE
+add_executable(ydb-services-dynamic_config-ut)
+target_compile_options(ydb-services-dynamic_config-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-services-console-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/console
+target_include_directories(ydb-services-dynamic_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config
 )
-target_link_libraries(ydb-services-console-ut PUBLIC
+target_link_libraries(ydb-services-dynamic_config-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
-  ydb-services-console
+  ydb-services-dynamic_config
   library-cpp-getopt
   cpp-grpc-client
   cpp-regex-pcre
@@ -27,7 +27,7 @@ target_link_libraries(ydb-services-console-ut PUBLIC
   core-testlib-default
   ydb-services-cms
 )
-target_link_options(ydb-services-console-ut PRIVATE
+target_link_options(ydb-services-dynamic_config-ut PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -37,21 +37,21 @@ target_link_options(ydb-services-console-ut PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-services-console-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/console/console_ut.cpp
+target_sources(ydb-services-dynamic_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config/dynamic_config_ut.cpp
 )
 set_property(
   TARGET
-  ydb-services-console-ut
+  ydb-services-dynamic_config-ut
   PROPERTY
   SPLIT_FACTOR
   10
 )
 add_yunittest(
   NAME
-  ydb-services-console-ut
+  ydb-services-dynamic_config-ut
   TEST_TARGET
-  ydb-services-console-ut
+  ydb-services-dynamic_config-ut
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -61,19 +61,19 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-services-console-ut
+  ydb-services-dynamic_config-ut
   PROPERTY
   LABELS
   SMALL
 )
 set_yunittest_property(
   TEST
-  ydb-services-console-ut
+  ydb-services-dynamic_config-ut
   PROPERTY
   PROCESSORS
   1
 )
-target_allocator(ydb-services-console-ut
+target_allocator(ydb-services-dynamic_config-ut
   cpp-malloc-jemalloc
 )
-vcs_info(ydb-services-console-ut)
+vcs_info(ydb-services-dynamic_config-ut)

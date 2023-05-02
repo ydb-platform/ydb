@@ -1,54 +1,54 @@
-#include "ydb_console.h"
+#include "ydb_dynamic_config.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 
-namespace NYdb::NConsole {
+namespace NYdb::NDynamicConfig {
 
-class TConsoleClient::TImpl : public TClientImplCommon<TConsoleClient::TImpl> {
+class TDynamicConfigClient::TImpl : public TClientImplCommon<TDynamicConfigClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections)
-        : TClientImplCommon(std::move(connections), TConsoleClientSettings{})
+        : TClientImplCommon(std::move(connections), TDynamicConfigClientSettings{})
     {
     }
 
     TAsyncStatus ApplyConfig(const TString& config, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::ApplyConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::ApplyConfigRequest>(settings);
         request.set_config(config);
 
-        return RunSimple<Ydb::Console::V1::ConsoleService, Ydb::Console::ApplyConfigRequest, Ydb::Console::ApplyConfigResponse>(
+        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ApplyConfigRequest, Ydb::DynamicConfig::ApplyConfigResponse>(
             std::move(request),
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncApplyConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncApplyConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus DropConfig(const TString& cluster, ui64 version, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::DropConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::DropConfigRequest>(settings);
 
         request.set_cluster(cluster);
         request.set_version(version);
 
-        return RunSimple<Ydb::Console::V1::ConsoleService, Ydb::Console::DropConfigRequest, Ydb::Console::DropConfigResponse>(
+        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::DropConfigRequest, Ydb::DynamicConfig::DropConfigResponse>(
             std::move(request),
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncDropConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncDropConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus AddVolatileConfig(const TString& config, ui64 id, ui64 version, const TString& cluster, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::AddVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::AddVolatileConfigRequest>(settings);
         request.set_config(config);
         request.set_id(id);
         request.set_version(version);
         request.set_cluster(cluster);
 
-        return RunSimple<Ydb::Console::V1::ConsoleService, Ydb::Console::AddVolatileConfigRequest, Ydb::Console::AddVolatileConfigResponse>(
+        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::AddVolatileConfigRequest, Ydb::DynamicConfig::AddVolatileConfigResponse>(
             std::move(request),
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncAddVolatileConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncAddVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncStatus RemoveVolatileConfig(const TString& cluster, ui64 version, const TVector<ui64>& ids, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::RemoveVolatileConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::RemoveVolatileConfigRequest>(settings);
 
         request.set_cluster(cluster);
         request.set_version(version);
@@ -57,14 +57,14 @@ public:
             request.add_ids(id);
         }
 
-        return RunSimple<Ydb::Console::V1::ConsoleService, Ydb::Console::RemoveVolatileConfigRequest, Ydb::Console::RemoveVolatileConfigResponse>(
+        return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::RemoveVolatileConfigRequest, Ydb::DynamicConfig::RemoveVolatileConfigResponse>(
             std::move(request),
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncRemoveVolatileConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncRemoveVolatileConfig,
             TRpcRequestSettings::Make(settings));
     }
 
     TAsyncGetConfigResult GetConfig(const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::GetConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::GetConfigRequest>(settings);
 
         auto promise = NThreading::NewPromise<TGetConfigResult>();
 
@@ -73,7 +73,7 @@ public:
                 ui64 version = 0;
                 TString config;
                 TMap<ui64, TString> volatileConfigs;
-                if (Ydb::Console::GetConfigResponse result; any && any->UnpackTo(&result)) {
+                if (Ydb::DynamicConfig::GetConfigResponse result; any && any->UnpackTo(&result)) {
                     clusterName = result.cluster();
                     version = result.version();
                     config = result.config();
@@ -86,10 +86,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Console::V1::ConsoleService, Ydb::Console::GetConfigRequest, Ydb::Console::GetConfigResponse>(
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::GetConfigRequest, Ydb::DynamicConfig::GetConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncGetConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -98,7 +98,7 @@ public:
     }
 
     TAsyncResolveConfigResult ResolveConfig(const TString& config, const TMap<ui64, TString>& volatileConfigs, const TMap<TString, TString>& labels, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::ResolveConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::ResolveConfigRequest>(settings);
         request.set_config(config);
         for (auto& [id, volatileConfig] : volatileConfigs) {
             auto* proto = request.add_volatile_configs();
@@ -115,7 +115,7 @@ public:
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 TString config;
-                if (Ydb::Console::ResolveConfigResponse result; any && any->UnpackTo(&result)) {
+                if (Ydb::DynamicConfig::ResolveConfigResponse result; any && any->UnpackTo(&result)) {
                     config = result.config();
                 }
 
@@ -123,10 +123,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Console::V1::ConsoleService, Ydb::Console::ResolveConfigRequest, Ydb::Console::ResolveConfigResponse>(
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ResolveConfigRequest, Ydb::DynamicConfig::ResolveConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncResolveConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -135,7 +135,7 @@ public:
     }
 
     TAsyncResolveConfigResult ResolveConfig(const TString& config, const TMap<ui64, TString>& volatileConfigs, const TClusterConfigSettings& settings = {}) {
-        auto request = MakeOperationRequest<Ydb::Console::ResolveAllConfigRequest>(settings);
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::ResolveAllConfigRequest>(settings);
         request.set_config(config);
         for (auto& [id, volatileConfig] : volatileConfigs) {
             auto* proto = request.add_volatile_configs();
@@ -147,7 +147,7 @@ public:
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 TString config;
-                if (Ydb::Console::ResolveAllConfigResponse result; any && any->UnpackTo(&result)) {
+                if (Ydb::DynamicConfig::ResolveAllConfigResponse result; any && any->UnpackTo(&result)) {
                     config = result.config();
                 }
 
@@ -155,10 +155,10 @@ public:
                 promise.SetValue(std::move(val));
             };
 
-        Connections_->RunDeferred<Ydb::Console::V1::ConsoleService, Ydb::Console::ResolveAllConfigRequest, Ydb::Console::ResolveAllConfigResponse>(
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ResolveAllConfigRequest, Ydb::DynamicConfig::ResolveAllConfigResponse>(
             std::move(request),
             extractor,
-            &Ydb::Console::V1::ConsoleService::Stub::AsyncResolveAllConfig,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncResolveAllConfig,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -167,24 +167,24 @@ public:
     }
 };
 
-TConsoleClient::TConsoleClient(const TDriver& driver)
-    : Impl_(new TConsoleClient::TImpl(CreateInternalInterface(driver)))
+TDynamicConfigClient::TDynamicConfigClient(const TDriver& driver)
+    : Impl_(new TDynamicConfigClient::TImpl(CreateInternalInterface(driver)))
 {}
 
-TAsyncStatus TConsoleClient::ApplyConfig(
+TAsyncStatus TDynamicConfigClient::ApplyConfig(
     const TString& config,
     const TClusterConfigSettings& settings) {
     return Impl_->ApplyConfig(config, settings);
 }
 
-TAsyncStatus TConsoleClient::DropConfig(
+TAsyncStatus TDynamicConfigClient::DropConfig(
     const TString& cluster,
     ui64 version,
     const TClusterConfigSettings& settings) {
     return Impl_->DropConfig(cluster, version, settings);
 }
 
-TAsyncStatus TConsoleClient::AddVolatileConfig(
+TAsyncStatus TDynamicConfigClient::AddVolatileConfig(
     const TString& config,
     ui64 id,
     ui64 version,
@@ -193,7 +193,7 @@ TAsyncStatus TConsoleClient::AddVolatileConfig(
     return Impl_->AddVolatileConfig(config, id, version, cluster, settings);
 }
 
-TAsyncStatus TConsoleClient::RemoveVolatileConfig(
+TAsyncStatus TDynamicConfigClient::RemoveVolatileConfig(
     const TString& cluster,
     ui64 version,
     const TVector<ui64>& ids,
@@ -201,11 +201,11 @@ TAsyncStatus TConsoleClient::RemoveVolatileConfig(
     return Impl_->RemoveVolatileConfig(cluster, version, ids, settings);
 }
 
-TAsyncGetConfigResult TConsoleClient::GetConfig(const TClusterConfigSettings& settings) {
+TAsyncGetConfigResult TDynamicConfigClient::GetConfig(const TClusterConfigSettings& settings) {
     return Impl_->GetConfig(settings);
 }
 
-TAsyncResolveConfigResult TConsoleClient::ResolveConfig(
+TAsyncResolveConfigResult TDynamicConfigClient::ResolveConfig(
     const TString& config,
     const TMap<ui64, TString>& volatileConfigs,
     const TMap<TString, TString>& labels,
@@ -213,11 +213,11 @@ TAsyncResolveConfigResult TConsoleClient::ResolveConfig(
     return Impl_->ResolveConfig(config, volatileConfigs, labels, settings);
 }
 
-TAsyncResolveConfigResult TConsoleClient::ResolveConfig(
+TAsyncResolveConfigResult TDynamicConfigClient::ResolveConfig(
     const TString& config,
     const TMap<ui64, TString>& volatileConfigs,
     const TClusterConfigSettings& settings) {
     return Impl_->ResolveConfig(config, volatileConfigs, settings);
 }
 
-} // namespace NYdb::NConsole
+} // namespace NYdb::NDynamicConfig

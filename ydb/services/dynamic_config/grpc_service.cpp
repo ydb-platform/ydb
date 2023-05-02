@@ -1,13 +1,13 @@
 #include "grpc_service.h"
 
-#include <ydb/core/grpc_services/service_console.h>
+#include <ydb/core/grpc_services/service_dynamic_config.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
-void TGRpcConsoleService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcDynamicConfigService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     using namespace Ydb;
 
@@ -15,14 +15,14 @@ void TGRpcConsoleService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, CB)                                                                         \
-    MakeIntrusive<TGRpcRequest<Console::NAME##Request, Console::NAME##Response, TGRpcConsoleService>> \
+    MakeIntrusive<TGRpcRequest<DynamicConfig::NAME##Request, DynamicConfig::NAME##Response, TGRpcDynamicConfigService>> \
         (this, &Service_, CQ_,                                                                        \
             [this](NGrpc::IRequestContextBase *ctx) {                                                 \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                      \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                               \
-                    new TGrpcRequestOperationCall<Console::NAME##Request, Console::NAME##Response>    \
+                    new TGrpcRequestOperationCall<DynamicConfig::NAME##Request, DynamicConfig::NAME##Response>    \
                         (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));   \
-            }, &Console::V1::ConsoleService::AsyncService::Request ## NAME,                           \
+            }, &DynamicConfig::V1::DynamicConfigService::AsyncService::Request ## NAME,                           \
             #NAME, logger, getCounterBlock("console", #NAME))->Run();
 
     ADD_REQUEST(ApplyConfig, DoApplyConfigRequest)

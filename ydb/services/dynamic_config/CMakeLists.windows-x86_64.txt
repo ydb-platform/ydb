@@ -8,9 +8,8 @@
 
 add_subdirectory(ut)
 
-add_library(ydb-services-console)
-target_link_libraries(ydb-services-console PUBLIC
-  contrib-libs-linux-headers
+add_library(ydb-services-dynamic_config)
+target_link_libraries(ydb-services-dynamic_config PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-grpc-server
@@ -21,6 +20,6 @@ target_link_libraries(ydb-services-console PUBLIC
   public-lib-operation_id
   cpp-client-resources
 )
-target_sources(ydb-services-console PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/console/grpc_service.cpp
+target_sources(ydb-services-dynamic_config PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config/grpc_service.cpp
 )

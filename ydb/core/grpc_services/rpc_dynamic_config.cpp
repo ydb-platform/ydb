@@ -1,11 +1,11 @@
-#include "service_console.h"
+#include "service_dynamic_config.h"
 #include "rpc_deferrable.h"
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/public/api/protos/draft/ydb_console.pb.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -13,36 +13,36 @@ using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
 
-using TEvApplyConfigRequest = TGrpcRequestOperationCall<Console::ApplyConfigRequest,
-    Console::ApplyConfigResponse>;
+using TEvApplyConfigRequest = TGrpcRequestOperationCall<DynamicConfig::ApplyConfigRequest,
+    DynamicConfig::ApplyConfigResponse>;
 
-using TEvDropConfigRequest = TGrpcRequestOperationCall<Console::DropConfigRequest,
-    Console::DropConfigResponse>;
+using TEvDropConfigRequest = TGrpcRequestOperationCall<DynamicConfig::DropConfigRequest,
+    DynamicConfig::DropConfigResponse>;
 
-using TEvAddVolatileConfigRequest = TGrpcRequestOperationCall<Console::AddVolatileConfigRequest,
-    Console::AddVolatileConfigResponse>;
+using TEvAddVolatileConfigRequest = TGrpcRequestOperationCall<DynamicConfig::AddVolatileConfigRequest,
+    DynamicConfig::AddVolatileConfigResponse>;
 
-using TEvRemoveVolatileConfigRequest = TGrpcRequestOperationCall<Console::RemoveVolatileConfigRequest,
-    Console::RemoveVolatileConfigResponse>;
+using TEvRemoveVolatileConfigRequest = TGrpcRequestOperationCall<DynamicConfig::RemoveVolatileConfigRequest,
+    DynamicConfig::RemoveVolatileConfigResponse>;
 
-using TEvGetConfigRequest = TGrpcRequestOperationCall<Console::GetConfigRequest,
-    Console::GetConfigResponse>;
+using TEvGetConfigRequest = TGrpcRequestOperationCall<DynamicConfig::GetConfigRequest,
+    DynamicConfig::GetConfigResponse>;
 
-using TEvResolveConfigRequest = TGrpcRequestOperationCall<Console::ResolveConfigRequest,
-    Console::ResolveConfigResponse>;
+using TEvResolveConfigRequest = TGrpcRequestOperationCall<DynamicConfig::ResolveConfigRequest,
+    DynamicConfig::ResolveConfigResponse>;
 
-using TEvResolveAllConfigRequest = TGrpcRequestOperationCall<Console::ResolveAllConfigRequest,
-    Console::ResolveAllConfigResponse>;
+using TEvResolveAllConfigRequest = TGrpcRequestOperationCall<DynamicConfig::ResolveAllConfigRequest,
+    DynamicConfig::ResolveAllConfigResponse>;
 
 template <typename TRequest, typename TConsoleRequest, typename TConsoleResponse>
-class TConsoleRPC : public TRpcOperationRequestActor<TConsoleRPC<TRequest, TConsoleRequest, TConsoleResponse>, TRequest> {
-    using TThis = TConsoleRPC<TRequest, TConsoleRequest, TConsoleResponse>;
+class TDynamicConfigRPC : public TRpcOperationRequestActor<TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>, TRequest> {
+    using TThis = TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>;
     using TBase = TRpcOperationRequestActor<TThis, TRequest>;
 
     TActorId ConsolePipe;
 
 public:
-    TConsoleRPC(IRequestOpCtx* msg)
+    TDynamicConfigRPC(IRequestOpCtx* msg)
         : TBase(msg)
     {
     }
@@ -163,49 +163,49 @@ private:
 
 void DoApplyConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvApplyConfigRequest,
+        new TDynamicConfigRPC<TEvApplyConfigRequest,
                     TEvConsole::TEvApplyConfigRequest,
                     TEvConsole::TEvApplyConfigResponse>(p.release()));
 }
 
 void DoDropConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvDropConfigRequest,
+        new TDynamicConfigRPC<TEvDropConfigRequest,
                     TEvConsole::TEvDropConfigRequest,
                     TEvConsole::TEvDropConfigResponse>(p.release()));
 }
 
 void DoAddVolatileConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvAddVolatileConfigRequest,
+        new TDynamicConfigRPC<TEvAddVolatileConfigRequest,
                     TEvConsole::TEvAddVolatileConfigRequest,
                     TEvConsole::TEvAddVolatileConfigResponse>(p.release()));
 }
 
 void DoRemoveVolatileConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvRemoveVolatileConfigRequest,
+        new TDynamicConfigRPC<TEvRemoveVolatileConfigRequest,
                     TEvConsole::TEvRemoveVolatileConfigRequest,
                     TEvConsole::TEvRemoveVolatileConfigResponse>(p.release()));
 }
 
 void DoGetConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvGetConfigRequest,
+        new TDynamicConfigRPC<TEvGetConfigRequest,
                     TEvConsole::TEvGetAllConfigsRequest,
                     TEvConsole::TEvGetAllConfigsResponse>(p.release()));
 }
 
 void DoResolveConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvResolveConfigRequest,
+        new TDynamicConfigRPC<TEvResolveConfigRequest,
                     TEvConsole::TEvResolveConfigRequest,
                     TEvConsole::TEvResolveConfigResponse>(p.release()));
 }
 
 void DoResolveAllConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TConsoleRPC<TEvResolveAllConfigRequest,
+        new TDynamicConfigRPC<TEvResolveAllConfigRequest,
                     TEvConsole::TEvResolveAllConfigRequest,
                     TEvConsole::TEvResolveAllConfigResponse>(p.release()));
 }

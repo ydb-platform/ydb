@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/grpc/draft/ydb_console_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/settings.h>
@@ -13,7 +13,7 @@
 
 #include <memory>
 
-namespace NYdb::NConsole {
+namespace NYdb::NDynamicConfig {
 
 struct TGetConfigResult : public TStatus {
     TGetConfigResult(
@@ -72,17 +72,17 @@ private:
 
 using TAsyncResolveConfigResult = NThreading::TFuture<TResolveConfigResult>;
 
-struct TConsoleClientSettings : public TCommonClientSettingsBase<TConsoleClientSettings> {
-    using TSelf = TConsoleClientSettings;
+struct TDynamicConfigClientSettings : public TCommonClientSettingsBase<TDynamicConfigClientSettings> {
+    using TSelf = TDynamicConfigClientSettings;
 };
 
 struct TClusterConfigSettings : public NYdb::TOperationRequestSettings<TClusterConfigSettings> {};
 
-class TConsoleClient {
+class TDynamicConfigClient {
 public:
     class TImpl;
 
-    explicit TConsoleClient(const TDriver& driver);
+    explicit TDynamicConfigClient(const TDriver& driver);
 
     // Apply config
     TAsyncStatus ApplyConfig(const TString& config, const TClusterConfigSettings& settings = {});
@@ -127,4 +127,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::NConsole
+} // namespace NYdb::NDynamicConfig

@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(compilation)
+add_subdirectory(events)
+add_subdirectory(simple)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
@@ -30,6 +33,9 @@ target_link_libraries(core-kqp-common PUBLIC
   ydb-core-base
   ydb-core-engine
   core-kqp-expr_nodes
+  kqp-common-simple
+  kqp-common-compilation
+  kqp-common-events
   core-kqp-provider
   tx-long_tx_service-public
   core-tx-sharding

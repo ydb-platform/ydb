@@ -1,6 +1,11 @@
 #pragma once
 
 #include "kqp_event_ids.h"
+#include "simple/helpers.h"
+#include "simple/query_id.h"
+#include "simple/settings.h"
+#include "events/process_response.h"
+#include "compilation/result.h"
 
 #include <library/cpp/lwtrace/shuttle.h>
 
@@ -8,7 +13,6 @@
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -30,12 +34,6 @@ inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {
         ConvertKqpQueryResultToDbResult(result, to->add_result_sets());
     }
 }
-
-enum class ETableReadType {
-    Other = 0,
-    Scan = 1,
-    FullScan = 2,
-};
 
 const TStringBuf DefaultKikimrPublicClusterName = "db";
 
@@ -125,136 +123,11 @@ private:
     TIntrusivePtr<TKqpShutdownState> ShutdownState_;
 };
 
-struct TKqpQuerySettings {
-    bool DocumentApiRestricted = true;
-    bool IsInternalCall = false;
-
-    bool operator==(const TKqpQuerySettings& other) const {
-        return
-            DocumentApiRestricted == other.DocumentApiRestricted &&
-            IsInternalCall == other.IsInternalCall;
-    }
-
-    bool operator!=(const TKqpQuerySettings& other) {
-        return !(*this == other);
-    }
-
-    bool operator<(const TKqpQuerySettings&) = delete;
-    bool operator>(const TKqpQuerySettings&) = delete;
-    bool operator<=(const TKqpQuerySettings&) = delete;
-    bool operator>=(const TKqpQuerySettings&) = delete;
-
-    size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(DocumentApiRestricted, IsInternalCall);
-        return THash<decltype(tuple)>()(tuple);
-    }
-};
-
-bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType);
-
-struct TKqpQueryId {
-    TString Cluster;
-    TString Database;
-    TString UserSid;
-    TString Text;
-    TKqpQuerySettings Settings;
-    NKikimrKqp::EQueryType QueryType;
-
-public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, NKikimrKqp::EQueryType type)
-        : Cluster(cluster)
-        , Database(database)
-        , Text(text)
-        , QueryType(type)
-    {
-        switch (QueryType) {
-            case NKikimrKqp::QUERY_TYPE_SQL_DML:
-            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-            case NKikimrKqp::QUERY_TYPE_AST_DML:
-            case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
-                break;
-
-            default:
-                Y_ENSURE(false, "Unsupported request type");
-        }
-
-    }
-
-    bool IsSql() const {
-        return IsSqlQuery(QueryType);
-    }
-
-    bool operator==(const TKqpQueryId& other) const {
-        return
-            Cluster == other.Cluster &&
-            Database == other.Database &&
-            UserSid == other.UserSid &&
-            Text == other.Text &&
-            Settings == other.Settings &&
-            QueryType == other.QueryType;
-    }
-
-    bool operator!=(const TKqpQueryId& other) {
-        return !(*this == other);
-    }
-
-    bool operator<(const TKqpQueryId&) = delete;
-    bool operator>(const TKqpQueryId&) = delete;
-    bool operator<=(const TKqpQueryId&) = delete;
-    bool operator>=(const TKqpQueryId&) = delete;
-
-    size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, QueryType);
-        return THash<decltype(tuple)>()(tuple);
-    }
-};
-
-struct TKqpCompileResult {
-    using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
-
-    TKqpCompileResult(const TString& uid, TKqpQueryId&& query, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues, ETableReadType maxReadType)
-        : Status(status)
-        , Issues(issues)
-        , Query(std::move(query))
-        , Uid(uid)
-        , MaxReadType(maxReadType) {}
-
-    TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues,
-        ETableReadType maxReadType)
-        : Status(status)
-        , Issues(issues)
-        , Uid(uid)
-        , MaxReadType(maxReadType) {}
-
-    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, TKqpQueryId&& query,
-        const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues, ETableReadType maxReadType)
-    {
-        return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues, maxReadType);
-    }
-
-    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues, ETableReadType maxReadType)
-    {
-        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType);
-    }
-
-    Ydb::StatusIds::StatusCode Status;
-    NYql::TIssues Issues;
-
-    TMaybe<TKqpQueryId> Query;
-    TString Uid;
-
-    ETableReadType MaxReadType;
-
-    TPreparedQueryHolder::TConstPtr PreparedQuery;
-};
-
 struct TEvKqp {
     struct TEvQueryRequestRemote : public TEventPB<TEvQueryRequestRemote, NKikimrKqp::TEvQueryRequest,
         TKqpEvents::EvQueryRequest> {};
+
+    using TEvProcessResponse = NPrivateEvents::TEvProcessResponse;
 
     struct TEvQueryRequest : public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
     public:
@@ -543,23 +416,6 @@ struct TEvKqp {
     };
 
     struct TEvContinueShutdown : public TEventLocal<TEvContinueShutdown, TKqpEvents::EvContinueShutdown> {};
-
-    struct TEvProcessResponse : public TEventPB<TEvProcessResponse, NKikimrKqp::TEvProcessResponse,
-        TKqpEvents::EvProcessResponse>
-    {
-        static THolder<TEvProcessResponse> Error(Ydb::StatusIds::StatusCode ydbStatus, const TString& error) {
-            auto ev = MakeHolder<TEvProcessResponse>();
-            ev->Record.SetYdbStatus(ydbStatus);
-            ev->Record.SetError(error);
-            return ev;
-        }
-
-        static THolder<TEvProcessResponse> Success() {
-            auto ev = MakeHolder<TEvProcessResponse>();
-            ev->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-            return ev;
-        }
-    };
 
     struct TEvDataQueryStreamPart : public TEventPB<TEvDataQueryStreamPart,
         NKikimrKqp::TEvDataQueryStreamPart, TKqpEvents::EvDataQueryStreamPart> {};
@@ -889,17 +745,3 @@ static inline IOutputStream& operator<<(IOutputStream& stream, const TKqpRequest
 
 } // namespace NKqp
 } // namespace NKikimr
-
-template<>
-struct THash<NKikimr::NKqp::TKqpQuerySettings> {
-    inline size_t operator()(const NKikimr::NKqp::TKqpQuerySettings& settings) const {
-        return settings.GetHash();
-    }
-};
-
-template<>
-struct THash<NKikimr::NKqp::TKqpQueryId> {
-    inline size_t operator()(const NKikimr::NKqp::TKqpQueryId& query) const {
-        return query.GetHash();
-    }
-};

@@ -133,7 +133,7 @@ namespace boost
             >::type
          >::type;
 
-#ifdef BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS
+#if defined(BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS)
          //
          // Guard against use of long double if it's not supported:
          //

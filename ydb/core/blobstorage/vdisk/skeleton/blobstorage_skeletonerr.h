@@ -305,11 +305,14 @@ namespace NKikimr {
         }
 
         static inline std::unique_ptr<IEventBase>
-        ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
+        ErroneousResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
                         TEvBlobStorage::TEvVGet::TPtr &ev, const TInstant &now, const TActorIDPtr &skeletonFrontIDPtr,
                         const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid,
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
         {
+            std::cout << "[ErroneousResult] " << errorReason << "\n\n";
+            std::cerr << "[ErroneousResult] " << errorReason << "\n\n";
+
             auto& record = ev->Get()->Record;
             TMaybe<ui64> cookie;
             if (record.HasCookie())

@@ -1,12 +1,12 @@
 #pragma once
 #include "kqp_compute_events.h"
 #include <ydb/core/base/events.h>
-#include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
@@ -91,14 +91,14 @@ struct TEvScanExchange {
     public:
         TEvTerminateFromFetcher(NYql::TIssuesIds::EIssueCode issueCode, const TString& message) {
             NYql::TIssue issue(message);
-            SetIssueCode(issueCode, issue);
+            NYql::SetIssueCode(issueCode, issue);
             Issues = { issue };
             StatusCode = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
         }
 
         TEvTerminateFromFetcher(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssuesIds::EIssueCode issueCode, const TString& message) {
             NYql::TIssue issue(message);
-            SetIssueCode(issueCode, issue);
+            NYql::SetIssueCode(issueCode, issue);
             Issues = { issue };
             StatusCode = statusCode;
         }

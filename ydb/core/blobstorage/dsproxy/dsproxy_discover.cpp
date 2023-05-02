@@ -395,7 +395,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
         TVDiskInfo &vDiskData = VDiskInfo.at(TVDiskIdShort(vdisk).GetRaw());
 
-        A_LOG_LOG_S(false, PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
+        A_LOG_LOG_S(true, PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
             << " NodeId# " << Info->GetActorId(vdisk).NodeId()

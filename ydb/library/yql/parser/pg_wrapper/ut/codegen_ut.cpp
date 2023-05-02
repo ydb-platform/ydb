@@ -5,6 +5,7 @@
 
 #include <arrow/compute/kernel.h>
 #include <arrow/array/builder_primitive.h>
+#include <arrow/array/builder_binary.h>
 
 #include <llvm/IR/Module.h>
 
@@ -24,7 +25,7 @@ using namespace NYql;
 using namespace NYql::NCodegen;
 
 extern "C" {
-extern TExecFunc arrow_date_eq();
+#include <ydb/library/yql/parser/pg_wrapper/pg_kernels_fwd.inc>
 }
 
 enum class EKernelFlavor {
@@ -35,23 +36,28 @@ enum class EKernelFlavor {
 };
 
 Y_UNIT_TEST_SUITE(TPgCodegen) {
-    void PgFuncImpl(EKernelFlavor flavor, bool constArg) {
+    void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
+        const TString& name = fixed ? "date_eq" : "textout";
         TExecFunc execFunc;
         ICodegen::TPtr codegen;
         switch (flavor) {
         case EKernelFlavor::DefArg: {
-            execFunc = &GenericExec<TPgDirectFunc<&date_eq>, true, true, TDefaultArgsPolicy>;
+            if (fixed) {
+                execFunc = &GenericExec<TPgDirectFunc<&date_eq>, true, true, TDefaultArgsPolicy>;
+            } else {
+                execFunc = &GenericExec<TPgDirectFunc<&textout>, true, false, TDefaultArgsPolicy>;
+            }
             break;
         }
         case EKernelFlavor::Cpp: {
-            execFunc = arrow_date_eq();
+            execFunc = fixed ? arrow_date_eq() : arrow_textout();
             break;
         }
         case EKernelFlavor::BitCode: {
             codegen = ICodegen::Make(ETarget::Native);
-            auto bitcode = NResource::Find("/llvm_bc/PgFuncs1");
+            auto bitcode = NResource::Find(fixed ? "/llvm_bc/PgFuncs1" : "/llvm_bc/PgFuncs3");
             codegen->LoadBitCode(bitcode, "Funcs");
-            auto func = codegen->GetModule().getFunction("arrow_date_eq");
+            auto func = codegen->GetModule().getFunction(std::string("arrow_" + name));
             codegen->AddGlobalMapping("GetPGKernelState", (const void*)&GetPGKernelState);
             codegen->Verify();
             codegen->ExportSymbol(func);
@@ -63,46 +69,68 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             break;
         }
         case EKernelFlavor::Ideal: {
-            execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-                size_t length = batch.values[0].length();
-                //NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
-                NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow::default_memory_pool());
-                NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow::default_memory_pool());
-                dataBuilder.Reserve(length);
-                nullBuilder.Reserve(length);
-                auto out = dataBuilder.MutableData();
-                auto outNulls = nullBuilder.MutableData();
-                NUdf::TFixedSizeBlockReader<ui64, false> reader1;                    
-                NUdf::TFixedSizeBlockReader<ui64, false> reader2;                    
-                const auto& array1 = *batch.values[0].array();
-                const auto ptr1 = array1.GetValues<ui64>(1);                
-                if (batch.values[1].is_array()) {
-                    const auto& array2 = *batch.values[1].array();
-                    const auto ptr2 = array2.GetValues<ui64>(1);
-                    for (size_t i = 0; i < length; ++i) {
-                        //auto x = reader1.GetItem(array1, i).As<ui64>();
-                        //auto y = reader2.GetItem(array2, i).As<ui64>();
-                        auto x = ptr1[i];
-                        auto y = ptr2[i];
-                        out[i] = x == y ? 1 : 0;
-                        outNulls[i] = false;
+            if (fixed) {
+                execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                    size_t length = batch.values[0].length();
+                    //NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
+                    NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow::default_memory_pool());
+                    NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow::default_memory_pool());
+                    dataBuilder.Reserve(length);
+                    nullBuilder.Reserve(length);
+                    auto out = dataBuilder.MutableData();
+                    auto outNulls = nullBuilder.MutableData();
+                    NUdf::TFixedSizeBlockReader<ui64, false> reader1;                    
+                    NUdf::TFixedSizeBlockReader<ui64, false> reader2;                    
+                    const auto& array1 = *batch.values[0].array();
+                    const auto ptr1 = array1.GetValues<ui64>(1);                
+                    if (batch.values[1].is_array()) {
+                        const auto& array2 = *batch.values[1].array();
+                        const auto ptr2 = array2.GetValues<ui64>(1);
+                        for (size_t i = 0; i < length; ++i) {
+                            //auto x = reader1.GetItem(array1, i).As<ui64>();
+                            //auto y = reader2.GetItem(array2, i).As<ui64>();
+                            auto x = ptr1[i];
+                            auto y = ptr2[i];
+                            out[i] = x == y ? 1 : 0;
+                            outNulls[i] = false;
+                        }
+                    } else {
+                        ui64 yConst = reader2.GetScalarItem(*batch.values[1].scalar()).As<ui64>();
+                        for (size_t i = 0; i < length; ++i) {
+                            auto x = ptr1[i];
+                            out[i] = x == yConst ? 1 : 0;
+                            outNulls[i] = false;
+                        }
                     }
-                } else {
-                    ui64 yConst = reader2.GetScalarItem(*batch.values[1].scalar()).As<ui64>();
+
+                    std::shared_ptr<arrow::Buffer> nulls;
+                    nulls = nullBuilder.Finish();
+                    nulls = NUdf::MakeDenseBitmap(nulls->data(), length, arrow::default_memory_pool());
+                    std::shared_ptr<arrow::Buffer> data = dataBuilder.Finish();
+
+                    *res = arrow::ArrayData::Make(arrow::uint64(), length ,{ data, nulls});
+                    return arrow::Status::OK();
+                };
+            } else {
+                execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                    size_t length = batch.values[0].length();
+                    NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+                    NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+                    const auto& array = *batch.values[0].array();
                     for (size_t i = 0; i < length; ++i) {
-                        auto x = ptr1[i];
-                        out[i] = x == yConst ? 1 : 0;
-                        outNulls[i] = false;
+                        auto item = reader.GetItem(array, i);
+                        if (!item) {
+                            builder.Add(NUdf::TBlockItem{});
+                        } else {
+                            auto s = item.AsStringRef();
+                            size_t len = s.Size() - VARHDRSZ;
+                            const char* ptr = s.Data() + VARHDRSZ;
+                            builder.Add(NUdf::TBlockItem{NUdf::TStringRef(ptr, len)});
+                        }
                     }
-                }
 
-                std::shared_ptr<arrow::Buffer> nulls;
-                nulls = nullBuilder.Finish();
-                nulls = NUdf::MakeDenseBitmap(nulls->data(), length, arrow::default_memory_pool());
-                std::shared_ptr<arrow::Buffer> data = dataBuilder.Finish();
-
-                *res = arrow::ArrayData::Make(arrow::uint64(), length ,{ data, nulls});
-                return arrow::Status::OK();
+                    return arrow::Status::OK();
+                };
             };
 
             break;
@@ -116,66 +144,116 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         kernelCtx.SetState(&state);
         FmgrInfo finfo;
         Zero(finfo);
-        fmgr_info(NPg::LookupProc("date_eq", { 0, 0}).ProcId, &finfo);
+        if (fixed) {
+            fmgr_info(NPg::LookupProc("date_eq", { 0, 0}).ProcId, &finfo);
+        } else {
+            fmgr_info(NPg::LookupProc("textout", { 0} ).ProcId, &finfo);
+        }
+
         state.flinfo = &finfo;
         state.context = nullptr;
         state.resultinfo = nullptr;
         state.fncollation = DEFAULT_COLLATION_OID;
-        state.IsCStringResult = false;
-        state.IsFixedResult = true;
-        state.IsFixedArg.push_back(true);
-        state.IsFixedArg.push_back(true);
-        const size_t N = 10000;
-        arrow::UInt64Builder builder;
-        ARROW_OK(builder.Reserve(N));
-        for (size_t i = 0; i < N; ++i) {
-            builder.UnsafeAppend(i);
+        state.IsCStringResult = true;
+        if (fixed) {
+            state.IsFixedResult = true;
+            state.IsFixedArg.push_back(true);
+            state.IsFixedArg.push_back(true);
+        } else {
+            state.IsFixedResult = false;
+            state.IsFixedArg.push_back(false);
         }
 
-        std::shared_ptr<arrow::ArrayData> out;
-        ARROW_OK(builder.FinishInternal(&out));
-        arrow::Datum arg1(out), arg2;
-        if (constArg) {
-            Cout << "with const arg\n";
-            arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
+        const size_t N = 10000;
+        std::vector<arrow::Datum> batchArgs;
+        if (fixed) {
+            arrow::UInt64Builder builder;
+            ARROW_OK(builder.Reserve(N));
+            for (size_t i = 0; i < N; ++i) {
+                builder.UnsafeAppend(i);
+            }
+
+            std::shared_ptr<arrow::ArrayData> out;
+            ARROW_OK(builder.FinishInternal(&out));
+            arrow::Datum arg1(out), arg2;
+            if (constArg) {
+                Cout << "with const arg\n";
+                arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
+            } else {
+                arg2 = out;
+            }
+
+            batchArgs.push_back(arg1);
+            batchArgs.push_back(arg2);
         } else {
-            arg2 = out;
+            arrow::BinaryBuilder builder;
+            ARROW_OK(builder.Reserve(N));
+            for (size_t i = 0; i < N; ++i) {
+                std::string s(VARHDRSZ + 500, 'A' + i % 26);
+                auto t = (text*)s.data();
+                SET_VARSIZE(t, VARHDRSZ + 500);
+                builder.Append(s);
+            }
+
+            std::shared_ptr<arrow::ArrayData> out;
+            ARROW_OK(builder.FinishInternal(&out));
+            arrow::Datum arg1(out);
+            batchArgs.push_back(arg1);
         }
+
+        arrow::compute::ExecBatch batch(std::move(batchArgs), N);
 
         {
             Cout << "begin...\n";            
             TSimpleTimer timer;
-            for (size_t count = 0; count < 10000; ++count) {
-                arrow::compute::ExecBatch batch({ arg1, arg2}, N);
+            for (size_t count = 0; count < (fixed ? 10000 : 1000); ++count) {
                 arrow::Datum res;
                 ARROW_OK(execFunc(&kernelCtx, batch, &res));
-                Y_ENSURE(res.is_array());
-                Y_ENSURE(res.array()->length == N);
+                Y_ENSURE(res.length() == N);
             }
 
             Cout << "done, elapsed: " << timer.Get() << "\n";
         }
     }
 
-    Y_UNIT_TEST(PgFuncIdeal) {
-        PgFuncImpl(EKernelFlavor::Ideal, false);
-        PgFuncImpl(EKernelFlavor::Ideal, true);
+    Y_UNIT_TEST(PgFixedFuncIdeal) {
+        PgFuncImpl(EKernelFlavor::Ideal, false, true);
+        PgFuncImpl(EKernelFlavor::Ideal, true, true);
     }
 
-    Y_UNIT_TEST(PgFuncCpp) {
-        PgFuncImpl(EKernelFlavor::Cpp, false);
-        PgFuncImpl(EKernelFlavor::Cpp, true);
+    Y_UNIT_TEST(PgFixedFuncCpp) {
+        PgFuncImpl(EKernelFlavor::Cpp, false, true);
+        PgFuncImpl(EKernelFlavor::Cpp, true, true);
     }
 
-    Y_UNIT_TEST(PgFuncDefArg) {
-        PgFuncImpl(EKernelFlavor::DefArg, false);
-        PgFuncImpl(EKernelFlavor::DefArg, true);
+    Y_UNIT_TEST(PgFixedFuncDefArg) {
+        PgFuncImpl(EKernelFlavor::DefArg, false, true);
+        PgFuncImpl(EKernelFlavor::DefArg, true, true);
+    }
+
+#if defined(NDEBUG) && !defined(_asan_enabled_)
+    Y_UNIT_TEST(PgFixedFuncBC) {
+        PgFuncImpl(EKernelFlavor::BitCode, false, true);
+        PgFuncImpl(EKernelFlavor::BitCode, true, true);
+    }
+#endif
+
+    Y_UNIT_TEST(PgStrFuncIdeal) {
+        PgFuncImpl(EKernelFlavor::DefArg, false, false);
+    }        
+
+    Y_UNIT_TEST(PgStrFuncCpp) {
+        PgFuncImpl(EKernelFlavor::Cpp, false, false);
+    }
+
+    Y_UNIT_TEST(PgStrFuncDefArg) {
+        PgFuncImpl(EKernelFlavor::DefArg, false, false);
     }    
 
 #if defined(NDEBUG) && !defined(_asan_enabled_)
-    Y_UNIT_TEST(PgFuncBC) {
-        PgFuncImpl(EKernelFlavor::BitCode, false);
-        PgFuncImpl(EKernelFlavor::BitCode, true);
+    Y_UNIT_TEST(PgStrFuncBC) {
+        PgFuncImpl(EKernelFlavor::BitCode, false, false);
     }
 #endif
+
 }

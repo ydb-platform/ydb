@@ -6,6 +6,8 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 
+#include "arena_ctx.h"
+
 extern "C" {
 #include "postgres.h"
 #include "fmgr.h"
@@ -244,7 +246,7 @@ Y_NO_INLINE arrow::Datum GenericExecImpl(const arrow::compute::ExecBatch& batch,
                 builder.Add(NUdf::TBlockItem{});
             } else {
                 auto ptr = (const char*)ret;
-                auto len = state.IsCStringResult ? 1 + strlen(ptr) : VARSIZE((const text*)ptr);
+                auto len = state.IsCStringResult ? 1 + strlen(ptr) : VARHDRSZ + VARSIZE((const text*)ptr);
                 builder.Add(NUdf::TBlockItem(NUdf::TStringRef(ptr, len)));
             }
         }
@@ -354,6 +356,7 @@ Y_NO_INLINE arrow::Status GenericExec(arrow::compute::KernelContext* ctx, const 
     Y_ENSURE(hasArrays);
     Y_ENSURE(state.flinfo->fn_strict == IsStrict);
     Y_ENSURE(state.IsFixedResult == IsFixedResult);
+    TArenaMemoryContext arena;
     GenericExecImpl2<TFunc, IsStrict, IsFixedResult, TArgsPolicy>(hasScalars, hasNulls, ctx, batch, length, state, res);
     return arrow::Status::OK();
 }

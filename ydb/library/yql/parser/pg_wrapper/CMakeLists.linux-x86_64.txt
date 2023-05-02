@@ -129,6 +129,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(yql-parser-pg_wrapper PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arena_ctx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/parser.cpp

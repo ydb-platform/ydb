@@ -1140,7 +1140,7 @@ namespace NKikimr {
         void FillInCostSettingsAndTimestampIfRequired(TProtoMsgQoS *qos, TInstant now) const {
             qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue());
             if (qos->GetSendMeCostSettings() && CostModel) {
-                auto settings = *qos->MutableCostSettings();
+                auto &settings = *qos->MutableCostSettings();
                 CostModel->FillInSettings(settings);
             }
         }

@@ -16,6 +16,7 @@ namespace NKikimrCapnProto {
     using namespace NKikimrCapnProto_;
 
     const uint64_t UNSET_UINT64 = 18446744073699546569ull;
+    const uint32_t UNSET_UINT32 = 4294866787u;
 
     struct TMessageId {
         struct Reader : private NKikimrCapnProto_::TMessageId::Reader {
@@ -369,7 +370,6 @@ namespace NKikimrCapnProto {
             Builder* operator->() { return this; }
             Builder& operator*() { return *this; }
 
-
             void SetDeadlineSeconds(const uint32_t& value) { return setDeadlineSeconds(value); }
             void SetCost(const uint64_t& value) { return setCost(value); }
             void SetSendMeCostSettings(const bool& value) { return setSendMeCostSettings(value); }
@@ -426,11 +426,11 @@ namespace NKikimrCapnProto {
             uint32_t GetRing() const { return getRing(); }
             uint32_t GetDomain() const { return getDomain(); }
             uint32_t GetVDisk() const { return getVDisk(); }
-            bool HasGroupID() const { return getGroupID() != 0; }
-            bool HasGroupGeneration() const { return getGroupGeneration() != 0; }
-            bool HasRing() const { return getRing() != 0; }
-            bool HasDomain() const { return getDomain() != 0; }
-            bool HasVDisk() const { return getVDisk() != 0; }
+            bool HasGroupID() const { return getGroupID() != UNSET_UINT32; }
+            bool HasGroupGeneration() const { return getGroupGeneration() != UNSET_UINT32; }
+            bool HasRing() const { return getRing() != UNSET_UINT32; }
+            bool HasDomain() const { return getDomain() != UNSET_UINT32; }
+            bool HasVDisk() const { return getVDisk() != UNSET_UINT32; }
             const NKikimrCapnProto_::TVDiskID::Reader& GetCapnpBase() const { return *this; }
 
             std::string ShortDebugString() const {

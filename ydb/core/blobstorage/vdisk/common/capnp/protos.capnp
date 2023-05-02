@@ -115,11 +115,11 @@ struct TMsgQoS {
 }
 
 struct TVDiskID {
-    groupID @0 :UInt32;
-    groupGeneration @1 :UInt32;
-    ring @2 :UInt32;
-    domain @3 :UInt32;
-    vDisk @4 :UInt32;
+    groupID @0 :UInt32 = 4294866787;
+    groupGeneration @1 :UInt32 = 4294866787;
+    ring @2 :UInt32 = 4294866787;
+    domain @3 :UInt32 = 4294866787;
+    vDisk @4 :UInt32 = 4294866787;
 }
 
 struct TLogoBlobID {

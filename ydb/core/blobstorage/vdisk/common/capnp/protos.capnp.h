@@ -2617,72 +2617,72 @@ inline void TMsgQoS::ClientID::Builder::setVPatchVDiskId( ::uint32_t value) {
 
 inline  ::uint32_t TVDiskID::Reader::getGroupID() const {
   return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Builder::getGroupID() {
   return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, 4294866787u);
 }
 inline void TVDiskID::Builder::setGroupID( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Reader::getGroupGeneration() const {
   return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Builder::getGroupGeneration() {
   return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, 4294866787u);
 }
 inline void TVDiskID::Builder::setGroupGeneration( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Reader::getRing() const {
   return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Builder::getRing() {
   return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, 4294866787u);
 }
 inline void TVDiskID::Builder::setRing( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Reader::getDomain() const {
   return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Builder::getDomain() {
   return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, 4294866787u);
 }
 inline void TVDiskID::Builder::setDomain( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, value, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Reader::getVDisk() const {
   return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, 4294866787u);
 }
 
 inline  ::uint32_t TVDiskID::Builder::getVDisk() {
   return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, 4294866787u);
 }
 inline void TVDiskID::Builder::setVDisk( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, value, 4294866787u);
 }
 
 inline  ::uint64_t TLogoBlobID::Reader::getRawX1() const {

@@ -59,11 +59,21 @@ SIMPLE_UDF(TNormalize, TOptional<char*>(TOptional<char*>)) {
                 : TUnboxedValue();
 }
 
-SIMPLE_UDF(TGetScheme, char*(TAutoMap<char*>)) {
+BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetScheme, char*(TAutoMap<char*>)) {
     const std::string_view url(args[0].AsStringRef());
     const std::string_view prefix(GetSchemePrefix(url));
     return valueBuilder->SubString(args[0], std::distance(url.begin(), prefix.begin()), prefix.size());
 }
+struct TGetSchemeKernelExec : public TUnaryKernelExec<TGetSchemeKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        const std::string_view url(arg.AsStringRef());
+        const std::string_view prefix(GetSchemePrefix(url));
+        const std::string_view scheme = url.substr(std::distance(url.begin(), prefix.begin()), prefix.size());
+        sink(TBlockItem(scheme));
+    }
+};
+END_SIMPLE_ARROW_UDF(TGetScheme, TGetSchemeKernelExec::Do);
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHost, GetOnlyHost)
 

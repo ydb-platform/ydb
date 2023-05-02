@@ -15,6 +15,7 @@ add_library(yql-parser-pg_wrapper)
 target_compile_options(yql-parser-pg_wrapper PRIVATE
   -DHAVE__GET_CPUID=1
   -DUSE_SSE42_CRC32C_WITH_RUNTIME_CHECK=1
+  -DUSE_SLOW_PG_KERNELS
   -DDLSUFFIX=".so"
   -Wno-ignored-attributes
   -Wno-unused-parameter

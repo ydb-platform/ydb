@@ -29,6 +29,7 @@ extern "C" {
 }
 
 enum class EKernelFlavor {
+    Indirect,
     DefArg,
     Cpp,
     BitCode,
@@ -38,14 +39,22 @@ enum class EKernelFlavor {
 Y_UNIT_TEST_SUITE(TPgCodegen) {
     void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
         const TString& name = fixed ? "date_eq" : "textout";
-        TExecFunc execFunc;
         ICodegen::TPtr codegen;
+        TExecFunc execFunc;        
         switch (flavor) {
+        case EKernelFlavor::Indirect: {
+            if (fixed) {
+                execFunc = MakeIndirectExec<true, true>(&date_eq);
+            } else {
+                execFunc = MakeIndirectExec<true, false>(&textout);
+            }
+            break;
+        }
         case EKernelFlavor::DefArg: {
             if (fixed) {
-                execFunc = &GenericExec<TPgDirectFunc<&date_eq>, true, true, TDefaultArgsPolicy>;
+                execFunc = TGenericExec<TPgDirectFunc<&date_eq>, true, true, TDefaultArgsPolicy>({});
             } else {
-                execFunc = &GenericExec<TPgDirectFunc<&textout>, true, false, TDefaultArgsPolicy>;
+                execFunc = TGenericExec<TPgDirectFunc<&textout>, true, false, TDefaultArgsPolicy>({});
             }
             break;
         }
@@ -55,14 +64,15 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         }
         case EKernelFlavor::BitCode: {
             codegen = ICodegen::Make(ETarget::Native);
-            auto bitcode = NResource::Find(fixed ? "/llvm_bc/PgFuncs1" : "/llvm_bc/PgFuncs3");
+            auto bitcode = NResource::Find(fixed ? "/llvm_bc/PgFuncs1" : "/llvm_bc/PgFuncs1");
             codegen->LoadBitCode(bitcode, "Funcs");
             auto func = codegen->GetModule().getFunction(std::string("arrow_" + name));
+            Y_ENSURE(func);
             codegen->AddGlobalMapping("GetPGKernelState", (const void*)&GetPGKernelState);
             codegen->Verify();
             codegen->ExportSymbol(func);
             codegen->Compile();
-            //codegen->ShowGeneratedFunctions(&Cerr);        
+            //codegen->ShowGeneratedFunctions(&Cerr);
             typedef TExecFunc (*TFunc)();
             auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
             execFunc = funcPtr();
@@ -129,6 +139,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
                         }
                     }
 
+                    *res = builder.Build(true);
                     return arrow::Status::OK();
                 };
             };
@@ -164,7 +175,11 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             state.IsFixedArg.push_back(false);
         }
 
+#ifdef NDEBUG
         const size_t N = 10000;
+#else
+        const size_t N = 1000;
+#endif
         std::vector<arrow::Datum> batchArgs;
         if (fixed) {
             arrow::UInt64Builder builder;
@@ -221,36 +236,45 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         PgFuncImpl(EKernelFlavor::Ideal, true, true);
     }
 
-    Y_UNIT_TEST(PgFixedFuncCpp) {
-        PgFuncImpl(EKernelFlavor::Cpp, false, true);
-        PgFuncImpl(EKernelFlavor::Cpp, true, true);
-    }
-
     Y_UNIT_TEST(PgFixedFuncDefArg) {
         PgFuncImpl(EKernelFlavor::DefArg, false, true);
         PgFuncImpl(EKernelFlavor::DefArg, true, true);
     }
 
-#if defined(NDEBUG) && !defined(_asan_enabled_)
+    Y_UNIT_TEST(PgFixedFuncIndirect) {
+        PgFuncImpl(EKernelFlavor::Indirect, false, true);
+        PgFuncImpl(EKernelFlavor::Indirect, true, true);
+    }    
+
+#if !defined(USE_SLOW_PG_KERNELS)
+    Y_UNIT_TEST(PgFixedFuncCpp) {
+        PgFuncImpl(EKernelFlavor::Cpp, false, true);
+        PgFuncImpl(EKernelFlavor::Cpp, true, true);
+    }
+
     Y_UNIT_TEST(PgFixedFuncBC) {
         PgFuncImpl(EKernelFlavor::BitCode, false, true);
         PgFuncImpl(EKernelFlavor::BitCode, true, true);
     }
-#endif
+#endif    
 
     Y_UNIT_TEST(PgStrFuncIdeal) {
-        PgFuncImpl(EKernelFlavor::DefArg, false, false);
+        PgFuncImpl(EKernelFlavor::Ideal, false, false);
     }        
-
-    Y_UNIT_TEST(PgStrFuncCpp) {
-        PgFuncImpl(EKernelFlavor::Cpp, false, false);
-    }
 
     Y_UNIT_TEST(PgStrFuncDefArg) {
         PgFuncImpl(EKernelFlavor::DefArg, false, false);
     }    
 
-#if defined(NDEBUG) && !defined(_asan_enabled_)
+    Y_UNIT_TEST(PgStrFuncIndirect) {
+        PgFuncImpl(EKernelFlavor::Indirect, false, false);
+    }
+
+#if !defined(USE_SLOW_PG_KERNELS)
+    Y_UNIT_TEST(PgStrFuncCpp) {
+        PgFuncImpl(EKernelFlavor::Cpp, false, false);
+    }
+
     Y_UNIT_TEST(PgStrFuncBC) {
         PgFuncImpl(EKernelFlavor::BitCode, false, false);
     }

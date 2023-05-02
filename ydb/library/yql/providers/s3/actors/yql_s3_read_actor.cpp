@@ -2679,8 +2679,8 @@ private:
         if (it == RetryStuffForFile.end()) {
             return;
         }
-        RetryStuffForFile.erase(it);
         auto size = it->second->SizeLimit;
+        RetryStuffForFile.erase(it);
         if (DownloadSize < size) {
             DownloadSize = 0;
         } else {

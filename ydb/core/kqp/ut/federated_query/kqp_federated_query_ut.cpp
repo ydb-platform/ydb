@@ -77,7 +77,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto db = kikimr.GetQueryClient();
 
         auto executeScrptsResult = db.ExecuteScript(R"(
-            SELECT * FROM bindings.test_binding
+            PRAGMA s3.AtomicUploadCommit = "1";  --Check that pragmas are OK
+            SELECT * FROM bindings.test_binding;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(executeScrptsResult.Status().GetStatus(), EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
         UNIT_ASSERT(executeScrptsResult.Metadata().ExecutionId);

@@ -141,6 +141,18 @@ std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, 
     return first;
 }
 
+std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, bool isNestedOptional) {
+    Y_ENSURE(data.GetNullCount() == 0);
+    if (isNestedOptional) {
+        Y_ENSURE(data.buffers.size() == 1);
+        Y_ENSURE(data.child_data.size() == 1);
+        return data.child_data.front();
+    }
+    auto result = data.Copy();
+    result->buffers.front().reset();
+    return result;
+}
+
 void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func) {
     Y_ENSURE(datum.is_arraylike(), "Expected array");
     if (datum.is_array()) {

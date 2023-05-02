@@ -27,6 +27,7 @@ public:
     virtual size_t MaxLength() const = 0;
     virtual void Add(NUdf::TUnboxedValuePod value) = 0;
     virtual void Add(TBlockItem value) = 0;
+    virtual void Add(TBlockItem value, size_t count) = 0;
     virtual void Add(TInputBuffer& input) = 0;
     virtual void AddMany(const arrow::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) = 0;
     virtual void AddMany(const TArrayDataItem* arrays, size_t arrayCount, ui64 beginIndex, size_t count) = 0;
@@ -95,26 +96,31 @@ public:
     }
 
     void Add(NUdf::TUnboxedValuePod value) final {
-        Y_VERIFY(CurrLen < MaxLen);
+        Y_VERIFY_DEBUG(CurrLen < MaxLen);
         DoAdd(value);
         CurrLen++;
     }
 
     void Add(TBlockItem value) final {
-        Y_VERIFY(CurrLen < MaxLen);
+        Y_VERIFY_DEBUG(CurrLen < MaxLen);
         DoAdd(value);
         CurrLen++;
     }
 
+    void Add(TBlockItem value, size_t count) final {
+        Y_VERIFY_DEBUG(CurrLen + count <= MaxLen);
+        DoAdd(value, count);
+        CurrLen += count;
+    }
 
     void Add(TInputBuffer& input) final {
-        Y_VERIFY(CurrLen < MaxLen);
+        Y_VERIFY_DEBUG(CurrLen < MaxLen);
         DoAdd(input);
         CurrLen++;
     }
 
     void AddDefault() {
-        Y_VERIFY(CurrLen < MaxLen);
+        Y_VERIFY_DEBUG(CurrLen < MaxLen);
         DoAddDefault();
         CurrLen++;
     }
@@ -223,6 +229,11 @@ public:
 protected:
     virtual void DoAdd(NUdf::TUnboxedValuePod value) = 0;
     virtual void DoAdd(TBlockItem value) = 0;
+    virtual void DoAdd(TBlockItem value, size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            DoAdd(value);
+        }
+    }
     virtual void DoAdd(TInputBuffer& input) = 0;
     virtual void DoAddDefault() = 0;
     virtual void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) = 0;
@@ -351,7 +362,20 @@ public:
         DataPtr[GetCurrLen()] = value.As<T>();
     }
 
-    void DoAdd(TInputBuffer& input) final {
+    void DoAdd(TBlockItem value, size_t count) final {
+        if constexpr (Nullable) {
+            if (!value) {
+                std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 0);
+                std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, T{});
+                return;
+            }
+            std::fill(NullPtr + GetCurrLen(), NullPtr + GetCurrLen() + count, 1);
+        }
+
+        std::fill(DataPtr + GetCurrLen(), DataPtr + GetCurrLen() + count, value.As<T>());
+    }
+
+    void DoAdd(TInputBuffer &input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
                 return DoAdd(TBlockItem{});

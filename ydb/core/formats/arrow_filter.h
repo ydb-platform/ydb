@@ -38,32 +38,45 @@ private:
         return value;
     }
 
-public:
-
-    class TIterator {
+    template <class TIterator>
+    class TIteratorImpl {
     private:
         ui32 InternalPosition = 0;
-        std::deque<ui32>::const_iterator It;
-        std::deque<ui32>::const_iterator ItEnd;
+        ui32 CurrentRemainVolume = 0;
+        TIterator It;
+        TIterator ItEnd;
         bool CurrentValue;
     public:
-        TIterator(const std::deque<ui32>& filter, const bool startValue)
-            : It(filter.begin())
-            , ItEnd(filter.end())
-            , CurrentValue(startValue)
-        {
+        TIteratorImpl(TIterator itBegin, TIterator itEnd, const bool startValue)
+            : It(itBegin)
+            , ItEnd(itEnd)
+            , CurrentValue(startValue) {
+            if (It != ItEnd) {
+                CurrentRemainVolume = *It;
+            }
+        }
 
+        bool GetCurrentAcceptance() const {
+            Y_VERIFY_DEBUG(CurrentRemainVolume);
+            return CurrentValue;
         }
 
         bool IsBatchForSkip(const ui32 size) const {
-            return !CurrentValue && (*It - InternalPosition) >= size;
+            Y_VERIFY_DEBUG(CurrentRemainVolume);
+            return !CurrentValue && CurrentRemainVolume >= size;
         }
 
         bool Next(const ui32 size) {
+            if (CurrentRemainVolume > size) {
+                InternalPosition += size;
+                CurrentRemainVolume -= size;
+                return true;
+            }
             ui32 sizeRemain = size;
             while (It != ItEnd) {
                 if (*It - InternalPosition > sizeRemain) {
-                    InternalPosition += sizeRemain;
+                    InternalPosition = sizeRemain;
+                    CurrentRemainVolume = *It - InternalPosition - sizeRemain;
                     return true;
                 } else {
                     sizeRemain -= *It - InternalPosition;
@@ -72,12 +85,39 @@ public:
                     ++It;
                 }
             }
+            CurrentRemainVolume = 0;
             return false;
         }
     };
 
+public:
+
+    using TIterator = TIteratorImpl<std::deque<ui32>::const_iterator>;
+    using TReverseIterator = TIteratorImpl<std::deque<ui32>::const_reverse_iterator>;
+
+    template <bool ForReverse>
+    class TIteratorSelector {
+
+    };
+
+    template <>
+    class TIteratorSelector<true> {
+    public:
+        using TIterator = TReverseIterator;
+    };
+
+    template <>
+    class TIteratorSelector<false> {
+    public:
+        using TIterator = TIterator;
+    };
+
     TIterator GetIterator() const {
-        return TIterator(Filter, GetStartValue());
+        return TIterator(Filter.cbegin(), Filter.cend(), GetStartValue());
+    }
+
+    TReverseIterator GetReverseIterator() const {
+        return TReverseIterator(Filter.crbegin(), Filter.crend(), CurrentValue);
     }
 
     TColumnFilter(std::vector<bool>&& values) {

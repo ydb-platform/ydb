@@ -42,6 +42,14 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     return result;
 }
 
+std::set<ui32> TReadMetadata::GetPKColumnIds() const {
+    std::set<ui32> result;
+    for (auto&& i : IndexInfo.GetPrimaryKey()) {
+        Y_VERIFY(result.emplace(IndexInfo.GetColumnId(i.first)).second);
+    }
+    return result;
+}
+
 std::set<ui32> TReadMetadata::GetUsedColumnIds() const {
     std::set<ui32> result;
     if (PlanStep) {
@@ -54,6 +62,9 @@ std::set<ui32> TReadMetadata::GetUsedColumnIds() const {
     for (auto&& f : LoadSchema->fields()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("used_column", f->name());
         result.emplace(IndexInfo.GetColumnId(f->name()));
+    }
+    for (auto&& i : IndexInfo.GetPrimaryKey()) {
+        Y_VERIFY(result.contains(IndexInfo.GetColumnId(i.first)));
     }
     return result;
 }

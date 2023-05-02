@@ -16,6 +16,7 @@ namespace NKikimr::NOlap::NIndexedReader {
         std::shared_ptr<arrow::RecordBatch> FilteredBatch;
         NOlap::TReadMetadata::TConstPtr ReadMetadata;
         std::shared_ptr<NArrow::TColumnFilter> Filter;
+        std::shared_ptr<NArrow::TColumnFilter> EarlyFilter;
         const ui32 BatchNo;
         ui32 OriginalCount = 0;
         bool AllowEarlyFilter = false;

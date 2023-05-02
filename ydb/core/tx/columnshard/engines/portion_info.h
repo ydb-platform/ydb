@@ -63,8 +63,7 @@ struct TPortionInfo {
     size_t NumRecords() const { return Records.size(); }
 
     bool IsSortableInGranule() const {
-        return Meta.Produced == TPortionMeta::COMPACTED
-            || Meta.Produced == TPortionMeta::SPLIT_COMPACTED;
+        return !CanIntersectOthers();
     }
 
     bool AllowEarlyFilter() const {

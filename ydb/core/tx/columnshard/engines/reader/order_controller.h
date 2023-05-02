@@ -1,6 +1,7 @@
 #pragma once
 #include "granule.h"
 #include "read_metadata.h"
+#include "read_filter_merger.h"
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -20,6 +21,10 @@ protected:
 public:
     using TPtr = std::shared_ptr<IOrderPolicy>;
     virtual ~IOrderPolicy() = default;
+
+    virtual std::set<ui32> GetFilterStageColumns() {
+        return ReadMetadata->GetEarlyFilterColumnIds();
+    }
 
     IOrderPolicy(TReadMetadata::TConstPtr readMetadata)
         : ReadMetadata(readMetadata)
@@ -84,26 +89,44 @@ public:
     }
 };
 
+class TGranuleScanInfo {
+private:
+    YDB_ACCESSOR(bool, Started, false);
+    YDB_ACCESSOR_DEF(std::deque<TBatch*>, Batches);
+public:
+    TGranuleScanInfo(std::deque<TBatch*>&& batches)
+        : Batches(std::move(batches))
+    {
+
+    }
+};
+
 class TPKSortingWithLimit: public IOrderPolicy {
 private:
     using TBase = IOrderPolicy;
     std::deque<TGranule*> GranulesOutOrder;
     std::deque<TGranule*> GranulesOutOrderForPortions;
-    THashMap<ui64, std::deque<TBatch*>> OrderedBatches;
+    THashMap<ui64, TGranuleScanInfo> OrderedBatches;
     ui32 CurrentItemsLimit = 0;
+    TMergePartialStream MergeStream;
 protected:
     virtual void DoFill(TGranulesFillingContext& context) override;
     virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) override;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) override;
 public:
+    virtual std::set<ui32> GetFilterStageColumns() override {
+        std::set<ui32> result = ReadMetadata->GetEarlyFilterColumnIds();
+        for (auto&& i : ReadMetadata->GetPKColumnIds()) {
+            result.emplace(i);
+        }
+        return result;
+    }
+
     virtual bool CanInterrupt() const override {
         return true;
     }
 
-    TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata)
-        :TBase(readMetadata) {
-        CurrentItemsLimit = ReadMetadata->Limit;
-    }
+    TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata);
     virtual bool ReadyForAddNotIndexedToEnd() const override {
         return ReadMetadata->IsDescSorted() && GranulesOutOrder.empty();
     }

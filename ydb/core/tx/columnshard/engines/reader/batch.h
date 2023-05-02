@@ -29,6 +29,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilteredBatch);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilterBatch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, FutureFilter);
+    
     ui32 OriginalRecordsCount = 0;
 
     YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
@@ -73,7 +75,8 @@ public:
             return FilterBatch->num_rows();
         }
     }
-    bool InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch, const ui32 originalRecordsCount);
+    bool InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch,
+        const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> futureFilter);
     void InitBatch(std::shared_ptr<arrow::RecordBatch> batch);
 
     NColumnShard::IDataTasksProcessor::ITask::TPtr AssembleTask(NColumnShard::IDataTasksProcessor::TPtr processor, std::shared_ptr<const NOlap::TReadMetadata> readMetadata);

@@ -28,11 +28,10 @@ private:
     bool OnePhaseReadMode = false;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
 
-    THashSet<const void*> BatchesToDedup;
     THashMap<TBlobRange, NIndexedReader::TBatch*> IndexedBlobSubscriber; // blobId -> batch
     THashSet<TBlobRange> IndexedBlobs;
     ui32 ReadyNotIndexed{ 0 };
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> OutNotIndexed; // granule -> not indexed to append
+    std::shared_ptr<arrow::RecordBatch> NotIndexedOutscopeBatch; // outscope granules batch
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
 
 public:
@@ -80,15 +79,9 @@ public:
     }
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
-    void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
+    void OnBatchReady(const NIndexedReader::TBatch& /*batchInfo*/, std::shared_ptr<arrow::RecordBatch> batch) {
         if (batch && batch->num_rows()) {
             ReadMetadata->ReadStats->SelectedRows += batch->num_rows();
-            if (batchInfo.IsDuplicationsAvailable()) {
-                Y_VERIFY(batchInfo.GetOwner().IsDuplicationsAvailable());
-                BatchesToDedup.insert(batch.get());
-            } else {
-                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, IndexInfo().GetReplaceKey(), false));
-            }
         }
     }
 

@@ -133,13 +133,15 @@ void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
     }
 }
 
-bool TBatch::InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch, const ui32 originalRecordsCount) {
+bool TBatch::InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch,
+    const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> futureFilter) {
     Y_VERIFY(filter);
     Y_VERIFY(!Filter);
     Y_VERIFY(!FilterBatch);
     Filter = filter;
     FilterBatch = filterBatch;
     OriginalRecordsCount = originalRecordsCount;
+    FutureFilter = futureFilter;
     return Owner->OnFilterReady(*this);
 }
 

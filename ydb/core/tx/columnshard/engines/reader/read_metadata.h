@@ -117,6 +117,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetUsedColumnIds() const;
+    std::set<ui32> GetPKColumnIds() const;
 
     bool Empty() const {
         Y_VERIFY(SelectInfo);

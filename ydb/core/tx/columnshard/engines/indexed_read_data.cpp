@@ -232,7 +232,14 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
             marksGranules.MakePrecedingMark(IndexInfo());
             Y_VERIFY(!marksGranules.Empty());
 
-            OutNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
+            auto outNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
+            GranulesContext->AddNotIndexedBatches(outNotIndexed);
+            Y_VERIFY(outNotIndexed.size() <= 1);
+            if (outNotIndexed.size() == 1) {
+                auto it = outNotIndexed.find(0);
+                Y_VERIFY(it != outNotIndexed.end());
+                NotIndexedOutscopeBatch = it->second;
+            }
         }
         NotIndexed.clear();
         ReadyNotIndexed = 0;
@@ -260,37 +267,26 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
     out.reserve(ready.size() + 1);
 
     // Prepend not indexed data (less then first granule) before granules for ASC sorting
-    if (ReadMetadata->IsAscSorted() && OutNotIndexed.count(0)) {
+    if (ReadMetadata->IsAscSorted() && NotIndexedOutscopeBatch) {
         out.push_back({});
-        out.back().push_back(OutNotIndexed[0]);
-        OutNotIndexed.erase(0);
+        out.back().push_back(NotIndexedOutscopeBatch);
+        NotIndexedOutscopeBatch = nullptr;
     }
 
     for (auto&& granule : ready) {
-        bool canHaveDups = granule->IsDuplicationsAvailable();
         std::vector<std::shared_ptr<arrow::RecordBatch>> inGranule = granule->GetReadyBatches();
-        // Append not indexed data to granules
-        auto itNotIndexed = OutNotIndexed.find(granule->GetGranuleId());
-        if (itNotIndexed != OutNotIndexed.end()) {
-            auto batch = itNotIndexed->second;
-            if (batch && batch->num_rows()) { // TODO: check why it could be empty
-                inGranule.push_back(batch);
-                canHaveDups = true;
-            }
-            OutNotIndexed.erase(granule->GetGranuleId());
-        }
 
         if (inGranule.empty()) {
             continue;
         }
 
-        if (canHaveDups) {
+        if (granule->IsDuplicationsAvailable()) {
             for (auto& batch : inGranule) {
                 Y_VERIFY(batch->num_rows());
                 Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortReplaceDescription->ReplaceKey));
             }
 #if 1 // optimization
-            auto deduped = SpecialMergeSorted(inGranule, IndexInfo(), SortReplaceDescription, BatchesToDedup);
+            auto deduped = SpecialMergeSorted(inGranule, IndexInfo(), SortReplaceDescription, granule->GetBatchesToDedup());
             out.emplace_back(std::move(deduped));
 #else
             out.push_back({});
@@ -302,10 +298,10 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
     }
 
     // Append not indexed data (less then first granule) after granules for DESC sorting
-    if (GranulesContext->GetSortingPolicy()->ReadyForAddNotIndexedToEnd() && OutNotIndexed.count(0)) {
+    if (GranulesContext->GetSortingPolicy()->ReadyForAddNotIndexedToEnd() && NotIndexedOutscopeBatch) {
         out.push_back({});
-        out.back().push_back(OutNotIndexed[0]);
-        OutNotIndexed.erase(0);
+        out.back().push_back(NotIndexedOutscopeBatch);
+        NotIndexedOutscopeBatch = nullptr;
     }
 
     return out;

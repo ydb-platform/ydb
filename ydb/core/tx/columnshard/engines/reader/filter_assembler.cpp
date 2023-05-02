@@ -20,13 +20,17 @@ bool TAssembleFilter::DoExecuteImpl() {
         FilteredBatch = nullptr;
         return true;
     }
-    if (ReadMetadata->Program && AllowEarlyFilter) {
-        auto filter = NOlap::EarlyFilter(batch, ReadMetadata->Program);
-        Filter->CombineSequential(filter);
-        if (!filter.Apply(batch)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
-            FilteredBatch = nullptr;
-            return true;
+    if (ReadMetadata->Program) {
+        auto earlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
+        if (AllowEarlyFilter) {
+            Filter->CombineSequential(*earlyFilter);
+            if (!earlyFilter->Apply(batch)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
+                FilteredBatch = nullptr;
+                return true;
+            }
+        } else {
+            EarlyFilter = earlyFilter;
         }
     }
 
@@ -51,7 +55,7 @@ bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
     Y_VERIFY(OriginalCount);
     owner.GetCounters().GetOriginalRowsCount()->Add(OriginalCount);
     owner.GetCounters().GetAssembleFilterCount()->Add(1);
-    batch.InitFilter(Filter, FilteredBatch, OriginalCount);
+    batch.InitFilter(Filter, FilteredBatch, OriginalCount, EarlyFilter);
     return true;
 }
 

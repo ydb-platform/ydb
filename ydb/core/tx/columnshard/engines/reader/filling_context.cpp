@@ -14,9 +14,11 @@ TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMe
     SortingPolicy = InternalReading ? std::make_shared<TNonSorting>(ReadMetadata) : ReadMetadata->BuildSortingPolicy();
 
     UsedColumns = ReadMetadata->GetUsedColumnIds();
-    PostFilterColumns = ReadMetadata->GetUsedColumnIds();
     EarlyFilterColumns = ReadMetadata->GetEarlyFilterColumnIds();
-    for (auto&& i : EarlyFilterColumns) {
+    FilterStageColumns = SortingPolicy->GetFilterStageColumns();
+
+    PostFilterColumns = ReadMetadata->GetUsedColumnIds();
+    for (auto&& i : FilterStageColumns) {
         PostFilterColumns.erase(i);
     }
 }
@@ -51,6 +53,24 @@ NKikimr::NOlap::NIndexedReader::TBatch& TGranulesFillingContext::GetBatchInfo(co
 
 NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::GetTasksProcessor() const {
     return Owner.GetTasksProcessor();
+}
+
+void TGranulesFillingContext::AddNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>& batches) {
+    std::shared_ptr<arrow::RecordBatch> externalBatch;
+    for (auto it = batches.begin(); it != batches.end(); ++it) {
+        if (!it->first) {
+            externalBatch = it->second;
+            continue;
+        }
+        auto itGranule = Granules.find(it->first);
+        Y_VERIFY(itGranule != Granules.end());
+        itGranule->second.AddNotIndexedBatch(it->second);
+    }
+    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> resultLocal;
+    if (externalBatch) {
+        resultLocal.emplace(0, externalBatch);
+    }
+    std::swap(batches, resultLocal);
 }
 
 }

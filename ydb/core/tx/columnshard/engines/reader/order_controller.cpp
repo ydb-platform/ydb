@@ -46,28 +46,34 @@ bool TPKSortingWithLimit::DoOnFilterReady(TBatch& /*batchInfo*/, const TGranule&
     }
     while (GranulesOutOrderForPortions.size()) {
         auto it = OrderedBatches.find(GranulesOutOrderForPortions.front()->GetGranuleId());
+        auto g = GranulesOutOrderForPortions.front();
         Y_VERIFY(it != OrderedBatches.end());
-        while (it->second.size() && it->second.front()->IsFiltered() && CurrentItemsLimit) {
-            auto b = it->second.front();
+        if (!it->second.GetStarted()) {
+            MergeStream.AddIndependentSource(g->GetNotIndexedBatch(), g->GetNotIndexedBatchFutureFilter());
+            it->second.SetStarted(true);
+        }
+        auto& batches = it->second.MutableBatches();
+        while (batches.size() && batches.front()->IsFiltered() && CurrentItemsLimit) {
+            auto b = batches.front();
             if (b->IsSortableInGranule()) {
-                if (CurrentItemsLimit <= b->GetFilteredRecordsCount()) {
-                    CurrentItemsLimit = 0;
-                } else {
-                    CurrentItemsLimit -= b->GetFilteredRecordsCount();
-                }
+                MergeStream.AddPoolSource(0, b->GetFilterBatch());
             } else {
-                CurrentItemsLimit += b->GetFilteredRecordsCount();
+                MergeStream.AddIndependentSource(b->GetFilterBatch(), b->GetFutureFilter());
             }
             OnBatchFilterInitialized(*b, context);
-
-            it->second.pop_front();
+            batches.pop_front();
         }
-        if (!CurrentItemsLimit || it->second.empty()) {
-            while (it->second.size()) {
-                auto b = it->second.front();
+        if (MergeStream.IsValid()) {
+            while ((batches.empty() || MergeStream.HasRecordsInPool(0)) && CurrentItemsLimit && MergeStream.Next()) {
+                --CurrentItemsLimit;
+            }
+        }
+        if (!CurrentItemsLimit || batches.empty()) {
+            while (batches.size()) {
+                auto b = batches.front();
                 context.GetCounters().GetSkippedBytes()->Add(b->GetFetchBytes(context.GetPostFilterColumns()));
                 b->InitBatch(nullptr);
-                it->second.pop_front();
+                batches.pop_front();
             }
             OrderedBatches.erase(it);
             GranulesOutOrderForPortions.pop_front();
@@ -83,7 +89,7 @@ void TPKSortingWithLimit::DoFill(TGranulesFillingContext& context) {
     for (ui64 granule : granulesOrder) {
         TGranule& g = context.GetGranuleVerified(granule);
         GranulesOutOrder.emplace_back(&g);
-        Y_VERIFY(OrderedBatches.emplace(granule, g.SortBatchesByPK(ReadMetadata->IsDescSorted(), ReadMetadata)).second);
+        Y_VERIFY(OrderedBatches.emplace(granule, TGranuleScanInfo(g.SortBatchesByPK(ReadMetadata->IsDescSorted(), ReadMetadata))).second);
     }
     GranulesOutOrderForPortions = GranulesOutOrder;
 }
@@ -100,6 +106,13 @@ std::vector<TGranule*> TPKSortingWithLimit::DoDetachReadyGranules(THashMap<ui64,
         GranulesOutOrder.pop_front();
     }
     return result;
+}
+
+TPKSortingWithLimit::TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata)
+    :TBase(readMetadata)
+    , MergeStream(readMetadata->IndexInfo.GetReplaceKey(), readMetadata->IsDescSorted())
+{
+    CurrentItemsLimit = ReadMetadata->Limit;
 }
 
 void IOrderPolicy::OnBatchFilterInitialized(TBatch& batch, TGranulesFillingContext& context) {

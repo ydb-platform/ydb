@@ -21,6 +21,7 @@ private:
     THashMap<ui64, NIndexedReader::TGranule> Granules;
     YDB_READONLY_DEF(std::set<ui32>, EarlyFilterColumns);
     YDB_READONLY_DEF(std::set<ui32>, PostFilterColumns);
+    std::set<ui32> FilterStageColumns;
     std::set<ui32> UsedColumns;
     YDB_READONLY_DEF(IOrderPolicy::TPtr, SortingPolicy);
     YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
@@ -33,6 +34,7 @@ public:
 
     NColumnShard::TDataTasksProcessorContainer GetTasksProcessor() const;
 
+    void AddNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>& batches);
     TBatch& GetBatchInfo(const ui32 batchNo);
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
@@ -48,7 +50,7 @@ public:
 
     void OnNewBatch(TBatch& batch) {
         if (!InternalReading && PredictEmptyAfterFilter(batch.GetPortionInfo())) {
-            batch.ResetNoFilter(EarlyFilterColumns);
+            batch.ResetNoFilter(FilterStageColumns);
         } else {
             batch.ResetNoFilter(UsedColumns);
         }

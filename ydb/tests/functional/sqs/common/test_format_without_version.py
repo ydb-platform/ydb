@@ -23,7 +23,7 @@ class QueueWithoutVersionTest(KikimrSqsTestBase):
             if info.TabletId not in self.used_tablets:
                 self.used_tablets.append(info.TabletId)
                 return info.TabletId
-        assert(False)
+        assert False
 
     def get_table_path(self, table=None):
         table_path = f'{self.sqs_root}/{self._username}/{self.queue_name}'

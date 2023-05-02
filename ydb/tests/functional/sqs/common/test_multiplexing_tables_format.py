@@ -20,7 +20,7 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
             self.create_queue(is_fifo)
         except yatest.common.process.ExecutionError:
             return
-        assert(False)
+        assert False
 
     def create_queue_with_wrong_tables_format(self, tables_format):
         self._set_tables_format(tables_format='qwerty')

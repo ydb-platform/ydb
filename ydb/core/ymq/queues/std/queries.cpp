@@ -576,7 +576,7 @@ const char* const ListQueuesQuery = R"__(
         (let queuesRange '(
             '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
-        (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards))
+        (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards 'TablesFormat))
         (let queues (Member (SelectRange queuesTable queuesRange queueSelect '()) 'List))
 
         (let filtered (Filter queues (lambda '(item) (block '(

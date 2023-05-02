@@ -422,7 +422,11 @@ void TWriteSessionImpl::InitImpl() {
     auto* init = req.mutable_init_request();
     init->set_path(Settings.Path_);
     init->set_producer_id(Settings.ProducerId_);
-    init->set_message_group_id(Settings.MessageGroupId_);
+    
+    if (Settings.PartitionId_.Defined())
+        init->set_partition_id(*Settings.PartitionId_);
+    else
+        init->set_message_group_id(Settings.MessageGroupId_);
 
     for (const auto& attr : Settings.Meta_.Fields) {
         (*init->mutable_write_session_meta())[attr.first] = attr.second;

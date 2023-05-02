@@ -169,6 +169,8 @@ template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
 template <bool WithOptional, bool WithList = true, bool WithStream = true>
 bool EnsureNewSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, const TTypeAnnotationNode** itemType = nullptr);
+bool EnsureAnySeqType(const TExprNode& node, TExprContext& ctx);
+bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx);
 bool EnsureDependsOnTail(const TExprNode& node, TExprContext& ctx, unsigned requiredArgumentCount, unsigned requiredDependsOnCount = 0);
 
@@ -291,8 +293,9 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 
 bool IsSystemMember(const TStringBuf& memberName);
 
-IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
-    bool deduplicte = true);
+template<bool Deduplicte = true, bool OrListsOfAtoms = false>
+IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext& ctx, bool deduplicate = false);
 

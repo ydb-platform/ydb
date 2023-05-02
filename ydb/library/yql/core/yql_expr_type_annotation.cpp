@@ -3498,6 +3498,37 @@ template bool EnsureNewSeqType<true, true, true>(const TExprNode& node, TExprCon
 template bool EnsureNewSeqType<false, true, true>(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType);
 template bool EnsureNewSeqType<false, true, false>(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType);
 
+bool EnsureAnySeqType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Expected flow, list, stream or dict, but got lambda."));
+        return false;
+    }
+
+    return EnsureAnySeqType(node.Pos(), *node.GetTypeAnn(), ctx);
+}
+
+bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::Flow:
+        case ETypeAnnotationKind::Stream:
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+            return true;
+        default: break;
+    }
+    ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected flow, list, stream or dict, but got: "  << type));
+    return false;
+}
+
 bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
@@ -5239,39 +5270,69 @@ bool IsSystemMember(const TStringBuf& memberName) {
     return memberName.StartsWith(TStringBuf("_yql_"));
 }
 
-IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
-    bool deduplicate)
+template<bool Deduplicte, bool OrListsOfAtoms>
+IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx)
 {
-    if (!EnsureTupleOfAtoms(*input->Child(index), ctx)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    auto atomList = input->Child(index)->ChildrenList();
+    auto children = input->Child(index)->ChildrenList();
     bool needRestart = false;
-    auto getKey = [](const auto& node) { return node->Content(); };
-    auto cmp = [&getKey](const auto& a, const auto& b) { return getKey(a) < getKey(b); };
-    if (!IsSorted(atomList.begin(), atomList.end(), cmp)) {
-        if (deduplicate) {
-            SortUniqueBy(atomList, getKey);
-        } else {
-            Sort(atomList, cmp);
+
+    if constexpr (OrListsOfAtoms) {
+        if (!EnsureTuple(*input->Child(index), ctx))
+            return IGraphTransformer::TStatus::Error;
+
+        for (auto i = 0U; i < children.size(); ++i) {
+            if (const auto item = input->Child(index)->Child(i); item->IsList()) {
+                if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
+                    needRestart = true;
+                    children[i] = item->HeadPtr();
+                } else if (!EnsureTupleOfAtoms(*item, ctx))
+                    return IGraphTransformer::TStatus::Error;
+            } else if (!EnsureAtom(*item, ctx))
+                return IGraphTransformer::TStatus::Error;
         }
+    } else if (!EnsureTupleOfAtoms(*input->Child(index), ctx))
+        return IGraphTransformer::TStatus::Error;
+
+    const auto getKey = [](const TExprNode::TPtr& node) {
+        if constexpr (OrListsOfAtoms) {
+            using TKeyType = TSmallVec<std::string_view>;
+            if (node->IsAtom())
+                return TKeyType(1U, node->Content());
+
+            TKeyType result(node->ChildrenSize());
+            std::transform(node->Children().cbegin(), node->Children().cend(), result.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); });
+            return result;
+        } else
+            return node->Content();
+    };
+    const auto cmp = [&getKey](const TExprNode::TPtr& a, const TExprNode::TPtr& b) { return getKey(a) < getKey(b); };
+    if (std::is_sorted(children.cbegin(), children.cend(), cmp)) {
+        if constexpr (Deduplicte) {
+            if (const auto dups = UniqueBy(children.begin(), children.end(), getKey); children.cend() != dups) {
+                needRestart = true;
+                children.erase(dups, children.cend());
+            }
+        }
+    } else {
         needRestart = true;
-    } else if (deduplicate) {
-        auto dups = UniqueBy(atomList.begin(), atomList.end(), getKey);
-        if (dups != atomList.end()) {
-            needRestart = true;
-            atomList.erase(dups, atomList.end());
+        if constexpr (Deduplicte) {
+            SortUniqueBy(children, getKey);
+        } else {
+            SortBy(children, getKey);
         }
     }
 
     if (needRestart) {
-        output = ctx.ChangeChild(*input, index, ctx.NewList(input->Child(index)->Pos(), std::move(atomList)));
+        output = ctx.ChangeChild(*input, index, ctx.NewList(input->Child(index)->Pos(), std::move(children)));
         return IGraphTransformer::TStatus::Repeat;
     }
 
     return IGraphTransformer::TStatus::Ok;
 }
+
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, true>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, false>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, false>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext &ctx, bool deduplicate)
@@ -5474,7 +5535,7 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
             if (name == "sum") {
                 return input->GetTypeAnn();
             }
-            
+
             const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
             stateValueType = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
         } else if (IsDataTypeInterval(lambdaTypeSlot)) {

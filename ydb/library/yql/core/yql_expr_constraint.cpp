@@ -384,8 +384,15 @@ private:
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
             TConstraintNode::TSetType columns;
             columns.reserve(input->Child(i)->ChildrenSize());
-            for (const auto& column: input->Child(i)->Children())
-                columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+            for (const auto& column: input->Child(i)->Children()) {
+                if (column->IsAtom())
+                    columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+                else if (column->IsList()) {
+                    TConstraintNode::TPathType path(column->ChildrenSize());
+                    std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
+                    columns.insert_unique(std::move(path));
+                }
+            }
             sets.insert_unique(std::move(columns));
         }
 
@@ -393,6 +400,12 @@ private:
             sets.insert_unique(TConstraintNode::TSetType{TConstraintNode::TPathType()});
 
         auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets));
+        if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
+                << " is not applicable to " << *input->GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (const auto old = input->Head().GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
             if (old->Includes(*constraint)) {
                 output = input->HeadPtr();
@@ -410,12 +423,25 @@ private:
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
             TConstraintNode::TSetType columns;
             columns.reserve(input->Child(i)->ChildrenSize());
-            for (const auto& column: input->Child(i)->Children())
-                columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+            for (const auto& column: input->Child(i)->Children()) {
+                if (column->IsAtom())
+                    columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+                else if (column->IsList()) {
+                    TConstraintNode::TPathType path(column->ChildrenSize());
+                    std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
+                    columns.insert_unique(std::move(path));
+                }
+            }
             sets.insert_unique(std::move(columns));
         }
 
         const auto constraint = ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
+        if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
+                << " is not applicable to " << *input->GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (const auto old = input->Head().GetConstraint<TChoppedConstraintNode>()) {
             if (old->Equals(*constraint)) {
                 output = input->HeadPtr();

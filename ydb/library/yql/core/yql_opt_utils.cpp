@@ -27,11 +27,16 @@ TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExpr
         for (const auto& set : constraint->GetAllSets()) {
             TExprNode::TListType columns;
             columns.reserve(set.size());
-            for (const auto& path : set)
+            for (const auto& path : set) {
                 if (1U == path.size())
                     columns.emplace_back(ctx.NewAtom(pos, path.front()));
-            if (!columns.empty())
-                children.emplace_back(ctx.NewList(pos, std::move(columns)));
+                else {
+                    TExprNode::TListType atoms(path.size());
+                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(pos, name); });
+                    columns.emplace_back(ctx.NewList(pos, std::move(atoms)));
+                }
+            }
+            children.emplace_back(ctx.NewList(pos, std::move(columns)));
         }
         return ctx.NewCallable(pos, TString("Assume") += TConstraint::Name(), std::move(children));
     }
@@ -1149,7 +1154,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
 
     TExprNode::TPtr tuple;
     if (tupleItems.size() == 0) {
-        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, "0").Seal().Build();
+        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, 0U).Seal().Build();
     } else if (tupleItems.size() == 1) {
         tuple = tupleItems[0];
     } else {

@@ -65,8 +65,8 @@ namespace {
             elemsCount = 1;
         }
 
-        auto atom0 = ctx.NewAtom(node.Pos(), "0");
-        auto atom1 = ctx.NewAtom(node.Pos(), "1");
+        auto atom0 = ctx.NewAtom(node.Pos(), 0U);
+        auto atom1 = ctx.NewAtom(node.Pos(), 1U);
         TExprNode::TPtr initArg1 = ctx.NewArgument(node.Pos(), "item");
         TExprNode::TPtr initArg2 = ctx.NewArgument(node.Pos(), "parent");
         TExprNode::TListType initBodyArgs;
@@ -4355,29 +4355,14 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* inputItemType = nullptr;
-        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &inputItemType)) {
+        if (!EnsureAnySeqType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         if (input->ChildrenSize() > 1U) {
-            if (!EnsureStaticContainerType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
             for (auto i = 1U; i < input->ChildrenSize(); ++i) {
-                if (const auto status = NormalizeTupleOfAtoms(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                if (const auto status = NormalizeTupleOfAtoms<true, true>(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                     return status;
-                }
-
-                if (ETypeAnnotationKind::Struct == inputItemType->GetKind()) {
-                    const auto structType = inputItemType->Cast<TStructExprType>();
-                    for (const auto& x : input->Child(i)->Children()) {
-                        YQL_ENSURE(x->IsAtom());
-                        if (!FindOrReportMissingMember(x->Content(), x->Pos(), *structType, ctx.Expr)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-                    }
                 }
             }
         }
@@ -5331,7 +5316,7 @@ namespace {
             }
 
             if (hasOriginalType) {
-                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
                 if (!ApplyOriginalType(input, isMany, originalExtractorType, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -5351,7 +5336,7 @@ namespace {
             }
 
             if (hasOriginalType) {
-                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
                 if (!ApplyOriginalType(input, isMany, originalExtractorType, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -6034,7 +6019,7 @@ namespace {
 
         auto status = NormalizeTupleOfAtoms(input, 1, output, ctx.Expr);
         if (isSession) {
-            status = status.Combine(NormalizeTupleOfAtoms(input, 5, output, ctx.Expr, /*deduplicate=*/false));
+            status = status.Combine(NormalizeTupleOfAtoms<false>(input, 5, output, ctx.Expr));
         }
 
         if (status != IGraphTransformer::TStatus::Ok) {
@@ -6099,8 +6084,7 @@ namespace {
                 calc = ctx.Expr.ChangeChildren(*calc, std::move(calcItems));
                 status = status.Combine(IGraphTransformer::TStatus::Repeat);
             } else {
-                status = status.Combine(NormalizeTupleOfAtoms(calc, TCoCalcOverWindowTuple::idx_SessionColumns, calc,
-                    ctx.Expr, /*deduplicate=*/false));
+                status = status.Combine(NormalizeTupleOfAtoms<false>(calc, TCoCalcOverWindowTuple::idx_SessionColumns, calc, ctx.Expr));
             }
 
             if (status.Level == IGraphTransformer::TStatus::Error) {

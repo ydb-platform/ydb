@@ -2131,7 +2131,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 
         if (!overloadedNodes.empty()) {
             BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
-            StartHiveBalancer(CurrentConfig.GetMaxMovementsOnAutoBalancer(), CurrentConfig.GetContinueAutoBalancer(), overloadedNodes);
+            StartHiveBalancer(CurrentConfig.GetMaxMovementsOnEmergencyBalancer(), CurrentConfig.GetContinueEmergencyBalancer(), GetEmergencyBalancerInflight(), overloadedNodes);
             return;
         }
     }
@@ -2143,7 +2143,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     if (stats.Scatter >= GetMinScatterToBalance()) {
         BLOG_TRACE("Scatter " << stats.Scatter << " over limit "
                    << GetMinScatterToBalance() << " - starting balancer");
-        StartHiveBalancer(CurrentConfig.GetMaxMovementsOnAutoBalancer(), CurrentConfig.GetContinueAutoBalancer());
+        StartHiveBalancer(CurrentConfig.GetMaxMovementsOnAutoBalancer(), CurrentConfig.GetContinueAutoBalancer(), GetBalancerInflight());
     }
 }
 

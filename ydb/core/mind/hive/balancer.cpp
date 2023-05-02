@@ -118,6 +118,7 @@ protected:
     THive* Hive;
     using TTabletId = TFullTabletId;
     ui64 KickInFlight;
+    ui64 MaxKickInFlight;
     int Movements;
     int MaxMovements;
     bool RecheckOnFinish;
@@ -157,7 +158,7 @@ protected:
     }
 
     bool CanKickNextTablet() const {
-        return KickInFlight < Hive->GetBalancerInflight();
+        return KickInFlight < MaxKickInFlight;
     }
 
     void UpdateProgress() {
@@ -300,9 +301,10 @@ public:
         return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
-    THiveBalancer(THive* hive, int maxMovements = 0, bool recheckOnFinish = false, const std::vector<TNodeId>& filterNodeIds = {})
+    THiveBalancer(THive* hive, int maxMovements = 0, bool recheckOnFinish = false, ui64 maxInFlight = 1, const std::vector<TNodeId>& filterNodeIds = {})
         : Hive(hive)
         , KickInFlight(0)
+        , MaxKickInFlight(maxInFlight)
         , Movements(0)
         , MaxMovements(maxMovements)
         , RecheckOnFinish(recheckOnFinish)
@@ -325,9 +327,9 @@ public:
     }
 };
 
-void THive::StartHiveBalancer(int maxMovements, bool recheckOnFinish, const std::vector<TNodeId>& filterNodeIds) {
+void THive::StartHiveBalancer(int maxMovements, bool recheckOnFinish, ui64 maxInFlight, const std::vector<TNodeId>& filterNodeIds) {
     if (BalancerProgress == -1) {
-        auto* balancer = new THiveBalancer(this, maxMovements, recheckOnFinish, filterNodeIds);
+        auto* balancer = new THiveBalancer(this, maxMovements, recheckOnFinish, maxInFlight, filterNodeIds);
         SubActors.emplace_back(balancer);
         BalancerProgress = -2;
         RegisterWithSameMailbox(balancer);

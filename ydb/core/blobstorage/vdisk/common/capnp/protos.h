@@ -635,7 +635,7 @@ namespace NKikimrCapnProto {
             Reader() = default;
 
             bool HasExtremeQueries() const { return !elements.empty(); }
-            TExtremeQuery::Reader GetExtremeQueries(int idx) const { return elements[idx]; }
+            TExtremeQuery::Reader GetExtremeQueries(uint32_t idx) const { return elements[idx]; }
             const std::vector<TExtremeQuery::Reader>& GetExtremeQueries() const {
                 return elements;
             }
@@ -766,9 +766,17 @@ namespace NKikimrCapnProto {
             }
 
             void CopyFrom(const Builder& other) {
-                // TODO(stetsyuk): think of a better solution
                 SetRangeQuery(other.GetRangeQuery());
-                elements = other.elements;
+
+                for (auto from : other.elements) {
+                    auto to = AddExtremeQueries();
+
+                    to.SetId(from.GetId());
+                    to.SetCookie(from.GetCookie());
+                    to.SetSize(from.GetSize());
+                    to.SetShift(from.GetShift());
+                }
+
                 SetVDiskID(other.GetVDiskID());
                 SetNotifyIfNotReady(other.GetNotifyIfNotReady());
                 SetShowInternals(other.GetShowInternals());

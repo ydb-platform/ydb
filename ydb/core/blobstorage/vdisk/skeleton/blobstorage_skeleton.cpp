@@ -887,18 +887,18 @@ namespace NKikimr {
 
             // FIXME: check PartId() is not null and is not too large
 
-            std::cout << "[handle TEvVGet] TEvVGet: " << TEvBlobStorage::TEvVGet::ToString(record)
-                    << " Marker# BSVS14" << "\n\n";
+            std::cerr << "[handle TEvVGet] TEvVGet: " << TEvBlobStorage::TEvVGet::ToString(record)
+                      << " Marker# BSVS14" << "\n\n";
 
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
-                std::cout << "[handle TEvVGet] " << "group generation mismatch" << "\n";
+                std::cerr << "[handle TEvVGet] " << "group generation mismatch" << "\n";
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
             } else if (!CheckVGetQuery(record)) {
-                std::cout << "[handle TEvVGet] " << "get query is invalid" << "\n";
+                std::cerr << "[handle TEvVGet] " << "get query is invalid" << "\n";
                 ReplyError(NKikimrProto::ERROR, "get query is invalid", ev, ctx, now);
             } else if (record.HasReaderTabletData()
                     && Hull->IsBlocked(record.GetReaderTabletData().GetId(), {record.GetReaderTabletData().GetGeneration(), 0}).Status != TBlocksCache::EStatus::OK) {
-                std::cout << "[handle TEvVGet] " << "tablet's generation is blocked" << "\n";
+                std::cerr << "[handle TEvVGet] " << "tablet's generation is blocked" << "\n";
                 ReplyError(NKikimrProto::BLOCKED, "tablet's generation is blocked", ev, ctx, now);
             } else {
                 if (ev->Get()->Record.HasForceBlockTabletData() && ev->Get()->Record.GetForceBlockTabletData().GetGeneration() > 0) {
@@ -927,7 +927,7 @@ namespace NKikimr {
                 if (record.HasSnapshotId()) {
                     const auto it = Snapshots.find(record.GetSnapshotId());
                     if (it == Snapshots.end()) {
-                        std::cout << "[handle TEvVGet] " << "snapshot not found" << "\n";
+                        std::cerr << "[handle TEvVGet] " << "snapshot not found" << "\n";
                         return ReplyError(NKikimrProto::ERROR, "snapshot not found", ev, ctx, now);
                     } else {
                         fullSnap.emplace(*it->second.Snap);
@@ -965,7 +965,7 @@ namespace NKikimr {
                     ActiveActors.Insert(aid);
                 } else {
                     auto res = std::make_unique<TEvBlobStorage::TEvVGetResult>();
-                    std::cout << "[handle TEvVGet] " << "incorrect query" << "\n";
+                    std::cerr << "[handle TEvVGet] " << "incorrect query" << "\n";
                     res->MakeError(NKikimrProto::ERROR, "incorrect query", record);
                     ctx.Send(ev->Sender, res.release(), 0, ev->Cookie);
                 }

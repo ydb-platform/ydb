@@ -22,7 +22,11 @@ inputs:
   testman_project_id:
      required: false
      type: string
-    
+    type: string
+  aws_bucket:
+    required: true
+    type: string
+
 runs:
   using: "composite"
   steps:
@@ -92,7 +96,7 @@ runs:
     with:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
-      aws_bucket: ydb-tech-ci
+      aws_bucket: ${{inputs.aws_bucket}}
       source_dir: artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: https://storage.yandexcloud.net

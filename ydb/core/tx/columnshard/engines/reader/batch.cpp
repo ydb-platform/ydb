@@ -15,9 +15,11 @@ TBatch::TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionI
     Y_VERIFY(portionInfo.Records.size());
 
     if (portionInfo.CanIntersectOthers()) {
+        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "intersect_portion");
         Owner->SetDuplicationsAvailable(true);
         if (portionInfo.CanHaveDups()) {
-            SetDuplicationsAvailable(true);
+            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "dup_portion");
+            DuplicationsAvailableFlag = true;
         }
     }
 }

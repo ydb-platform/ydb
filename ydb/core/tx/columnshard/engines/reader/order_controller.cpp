@@ -63,10 +63,8 @@ bool TPKSortingWithLimit::DoOnFilterReady(TBatch& /*batchInfo*/, const TGranule&
             OnBatchFilterInitialized(*b, context);
             batches.pop_front();
         }
-        if (MergeStream.IsValid()) {
-            while ((batches.empty() || MergeStream.HasRecordsInPool(0)) && CurrentItemsLimit && MergeStream.Next()) {
-                --CurrentItemsLimit;
-            }
+        while ((batches.empty() || MergeStream.HasRecordsInPool(0)) && CurrentItemsLimit && MergeStream.DrainCurrent()) {
+            --CurrentItemsLimit;
         }
         if (!CurrentItemsLimit || batches.empty()) {
             while (batches.size()) {

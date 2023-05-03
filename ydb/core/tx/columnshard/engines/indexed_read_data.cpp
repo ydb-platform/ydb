@@ -72,7 +72,7 @@ GroupInKeyRanges(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
 std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const TIndexInfo& indexInfo,
                                                                     const std::shared_ptr<NArrow::TSortDescription>& description,
-                                                                    const THashSet<const void*> batchesToDedup) {
+                                                                    const THashSet<const void*>& batchesToDedup) {
     auto rangesSlices = GroupInKeyRanges(batches, indexInfo);
 
     // Merge slices in ranges

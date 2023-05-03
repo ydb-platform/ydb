@@ -33,7 +33,7 @@ private:
     
     ui32 OriginalRecordsCount = 0;
 
-    YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
+    YDB_READONLY_FLAG(DuplicationsAvailable, false);
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
     TGranule* Owner;
     const TPortionInfo* PortionInfo = nullptr;

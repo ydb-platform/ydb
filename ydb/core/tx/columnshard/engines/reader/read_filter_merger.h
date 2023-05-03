@@ -84,6 +84,37 @@ private:
             return NArrow::ColumnsCompare(Columns, GetLastPosition(), nextIterator.Columns, 0) * ReverseSortKff < 0;
         }
 
+        class TPosition {
+        private:
+            const TBatchIterator* Owner;
+            ui32 Position = 0;
+            bool DeletedFlag = false;
+        public:
+            bool IsDeleted() const {
+                return DeletedFlag;
+            }
+
+            void TakeIfMoreActual(const TBatchIterator& anotherIterator) {
+                if (NArrow::ColumnsCompare(Owner->VersionColumns, Position, anotherIterator.VersionColumns, anotherIterator.Position) < 0) {
+                    Owner = &anotherIterator;
+                    Position = anotherIterator.Position;
+                    DeletedFlag = Owner->IsDeleted();
+                }
+            }
+
+            TPosition(const TBatchIterator& owner)
+                : Owner(&owner)
+                , Position(Owner->Position)
+            {
+                DeletedFlag = Owner->IsDeleted();
+            }
+
+            int CompareNoVersion(const TBatchIterator& item) const {
+                Y_VERIFY_DEBUG(item.Columns.size() == Owner->Columns.size());
+                return NArrow::ColumnsCompare(Owner->Columns, Position, item.Columns, item.Position);
+            }
+        };
+
         int CompareNoVersion(const TBatchIterator& item) const {
             Y_VERIFY_DEBUG(item.Columns.size() == Columns.size());
             return NArrow::ColumnsCompare(Columns, Position, item.Columns, item.Position);
@@ -117,7 +148,7 @@ private:
         bool operator<(const TBatchIterator& item) const {
             const int result = CompareNoVersion(item) * ReverseSortKff;
             if (result == 0) {
-                return NArrow::ColumnsCompare(VersionColumns, Position, item.VersionColumns, item.Position) > 0;
+                return NArrow::ColumnsCompare(VersionColumns, Position, item.VersionColumns, item.Position) < 0;
             } else {
                 return result > 0;
             }
@@ -157,6 +188,20 @@ private:
     std::vector<TBatchIterator> SortHeap;
     std::shared_ptr<arrow::Schema> SortSchema;
     const bool Reverse;
+
+    TBatchIterator::TPosition DrainCurrentPosition() {
+        Y_VERIFY(SortHeap.size());
+        auto position = TBatchIterator::TPosition(SortHeap.front());
+        bool isFirst = true;
+        while (SortHeap.size() && (isFirst || !position.CompareNoVersion(SortHeap.front()))) {
+            if (!isFirst) {
+                position.TakeIfMoreActual(SortHeap.front());
+            }
+            NextInHeap(true);
+            isFirst = false;
+        }
+        return position;
+    }
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, const bool reverse)
         : SortSchema(sortSchema)
@@ -207,24 +252,18 @@ public:
         }
     }
 
-
-
-    bool Next() {
-        while (SortHeap.size()) {
-            std::pop_heap(SortHeap.begin(), SortHeap.end());
-            TBatchIterator mainIterator = std::move(SortHeap.back());
-            SortHeap.pop_back();
-            while (SortHeap.size() && !mainIterator.CompareNoVersion(SortHeap.front())) {
-                NextInHeap(true);
-            }
-            const bool isDeleted = mainIterator.IsDeleted();
-            SortHeap.emplace_back(std::move(mainIterator));
-            NextInHeap(false);
-            if (!isDeleted) {
-                break;
-            }
+    bool DrainCurrent() {
+        if (SortHeap.empty()) {
+            return false;
         }
-        return SortHeap.size();
+        while (SortHeap.size()) {
+            auto currentPosition = DrainCurrentPosition();
+            if (currentPosition.IsDeleted()) {
+                continue;
+            }
+            return true;
+        }
+        return false;
     }
 };
 

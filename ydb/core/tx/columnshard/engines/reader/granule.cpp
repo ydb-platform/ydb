@@ -17,9 +17,16 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
     if (batch && batch->num_rows()) {
         if (batchInfo.IsSortableInGranule()) {
             SortableBatches.emplace_back(batch);
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
         } else {
             NonSortableBatches.emplace_back(batch);
+        }
+
+        if (!batchInfo.IsDuplicationsAvailable()) {
+            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
+        } else {
+            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "dup_portion_on_ready");
+            Y_VERIFY_DEBUG(NArrow::IsSorted(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
+            Y_VERIFY(IsDuplicationsAvailable());
             BatchesToDedup.insert(batch.get());
         }
     }
@@ -91,6 +98,7 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
     if (!batch || !batch->num_rows()) {
         return;
     }
+    AFL_ERROR(NKikimrServices::KQP_COMPUTE)("event", "add_not_indexed_batch");
     Y_VERIFY(NonSortableBatches.empty());
     Y_VERIFY(SortableBatches.empty());
     Y_VERIFY(!NotIndexedBatch);

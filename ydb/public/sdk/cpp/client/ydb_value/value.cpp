@@ -83,7 +83,7 @@ public:
     TImpl(Ydb::Type&& typeProto)
         : ProtoType_(std::move(typeProto)) {}
 
-    const Ydb::Type ProtoType_;
+    Ydb::Type ProtoType_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,6 +103,11 @@ void TType::Out(IOutputStream& o) const {
 }
 
 const Ydb::Type& TType::GetProto() const {
+    return Impl_->ProtoType_;
+}
+
+Ydb::Type& TType::GetProto()
+{
     return Impl_->ProtoType_;
 }
 
@@ -745,6 +750,10 @@ public:
         GetProto().CopyFrom(TProtoAccessor::GetProto(type));
     }
 
+    void SetType(TType&& type) {
+        GetProto() = std::move(type.GetProto());
+    }
+
 private:
     void AddPosition(Ydb::Type* type) {
         Path_.emplace_back(TProtoPosition{type});
@@ -1014,7 +1023,6 @@ TString TUuidValue::ToString() const {
     std::memcpy(dw, Buf_.Bytes, sizeof(dw));
     NKikimr::NUuid::UuidToString(dw, s);
     return s.Str();
-  
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1029,8 +1037,8 @@ public:
         : Type_(type)
         , ProtoValue_(std::move(valueProto)) {}
 
-    const TType Type_;
-    const Ydb::Value ProtoValue_;
+    TType Type_;
+    Ydb::Value ProtoValue_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1045,7 +1053,15 @@ const TType& TValue::GetType() const {
     return Impl_->Type_;
 }
 
+TType & TValue::GetType() {
+    return Impl_->Type_;
+}
+
 const Ydb::Value& TValue::GetProto() const {
+    return Impl_->ProtoValue_;
+}
+
+Ydb::Value& TValue::GetProto() {
     return Impl_->ProtoValue_;
 }
 
@@ -2225,6 +2241,17 @@ public:
         SetProtoValue(itemValue);
     }
 
+    void AddListItem(TValue&& itemValue) {
+        CheckContainerKind(ETypeKind::List);
+        PopPath();
+        PushPath(*GetValue().add_items());
+
+        if (!CheckType(itemValue.GetType())) {
+            TypeBuilder_.SetType(std::move(itemValue.GetType()));
+        }
+        SetProtoValue(std::move(itemValue));
+    }
+
     void EmptyList(const TType& itemType) {
         BeginList(itemType);
         EndList();
@@ -2291,6 +2318,16 @@ public:
         }
 
         SetProtoValue(memberValue);
+    }
+
+    void AddMember(const TString& memberName, TValue&& memberValue) {
+        AddMember(memberName);
+
+        if (!CheckType(memberValue.GetType())) {
+            TypeBuilder_.SetType(std::move(memberValue.GetType()));
+        }
+
+        SetProtoValue(std::move(memberValue));
     }
 
     void EndStruct() {
@@ -2492,6 +2529,10 @@ private:
         GetValue().CopyFrom(TProtoAccessor::GetProto(value));
     }
 
+    void SetProtoValue(TValue&& value) {
+        GetValue() = std::move(value.GetProto());
+    }
+
     bool GetBuildType() {
         return PathTop().BuildType;
     }
@@ -2546,7 +2587,7 @@ private:
             return false;
         }
 
-        if (!TypesEqual(GetType(), type)) {
+        if (!TypesEqual(GetType(), type.GetProto())) {
             FatalError(TStringBuilder() << "Type mismatch, expected: " << FormatType(GetType())
                 << ", actual: " << FormatType(type));
             return false;
@@ -3040,6 +3081,12 @@ TDerived& TValueBuilderBase<TDerived>::AddListItem(const TValue& itemValue) {
 }
 
 template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::AddListItem(TValue&& itemValue) {
+    Impl_->AddListItem(std::move(itemValue));
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::EmptyList(const TType& itemType) {
     Impl_->EmptyList(itemType);
     return static_cast<TDerived&>(*this);
@@ -3066,6 +3113,12 @@ TDerived& TValueBuilderBase<TDerived>::AddMember(const TString& memberName) {
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::AddMember(const TString& memberName, const TValue& memberValue) {
     Impl_->AddMember(memberName, memberValue);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::AddMember(const TString& memberName, TValue&& memberValue) {
+    Impl_->AddMember(memberName, std::move(memberValue));
     return static_cast<TDerived&>(*this);
 }
 

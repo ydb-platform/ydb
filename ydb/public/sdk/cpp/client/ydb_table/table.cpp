@@ -2352,9 +2352,7 @@ public:
         auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
         request.set_table(table);
         *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-
-        // TODO: move protobuf instead of copying it!!!!111
-        *request.mutable_rows()->mutable_value() = TProtoAccessor::GetProto(rows);
+        *request.mutable_rows()->mutable_value() = std::move(rows.GetProto());
 
         auto promise = NewPromise<TBulkUpsertResult>();
 

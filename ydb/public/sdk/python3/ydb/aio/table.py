@@ -3,11 +3,11 @@ import logging
 import time
 import typing
 
-import ydb
+from ydb.public.sdk.python3 import ydb
 
-from ydb import issues, settings as settings_impl, table
+from .. import issues, settings as settings_impl, table
 
-from ydb.table import (
+from ..table import (
     BaseSession,
     BaseTableClient,
     _scan_query_request_factory,
@@ -15,7 +15,7 @@ from ydb.table import (
     BaseTxContext,
 )
 from . import _utilities
-from ydb import _apis, _session_impl
+from .. import _apis, _session_impl
 
 logger = logging.getLogger(__name__)
 

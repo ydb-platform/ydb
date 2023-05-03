@@ -54,7 +54,7 @@ jobs:
       if: inputs.run_build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Test
+    - name: Run unit tests
       uses: ./.github/actions/test
       if: inputs.run_unit_tests
       with: 

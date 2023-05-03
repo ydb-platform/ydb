@@ -13,6 +13,12 @@ on:
         type: string
         required: false
         default: fd8snjpoq85qqv0mk9gi
+      run_unit_tests:
+        required: true
+        type: boolean
+      run_functional_tests:
+        required: true
+        type: boolean
   workflow_dispatch:
     inputs: 
       sanitizer:
@@ -25,6 +31,12 @@ on:
         type: string
         required: false
         default: fd8snjpoq85qqv0mk9gi
+      run_unit_tests:
+        required: true
+        type: boolean
+      run_functional_tests:
+        required: true
+        type: boolean
     
 jobs:
 
@@ -81,16 +93,27 @@ jobs:
       uses: ./.github/actions/build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Test
+    - name: Run unit tests
+      if: inputs.run_unit_tests
       uses: ./.github/actions/test
-      with: 
+      with:
         log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
         testman_token: ${{secrets.TESTMO_TOKEN}}
         testman_url: ${{vars.TESTMO_URL}}
         testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
+    - name: Run functional tests
+      if: inputs.run_functional_tests
+      uses: ./.github/actions/test_python
+      with:
+        log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
 
   release-runner:
     name: Release self-hosted YC runner if provided on-demand

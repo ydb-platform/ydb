@@ -436,7 +436,7 @@ private:
     void NextReadMetadata() {
         auto g = Stats.MakeGuard("NextReadMetadata");
         ScanIterator.reset();
-
+        Stats.NextReadMetadata();
         ++ReadMetadataIndex;
 
         if (ReadMetadataIndex == ReadMetadataRanges.size()) {
@@ -640,7 +640,13 @@ private:
         THashMap<TString, TInstant> StartGuards;
         THashMap<TString, TInstant> SectionFirst;
         THashMap<TString, TInstant> SectionLast;
+        bool FirstMetadataCurrently = true;
     public:
+
+        void NextReadMetadata() {
+            StartBlobRequest.clear();
+            FirstMetadataCurrently = false;
+        }
 
         TString DebugString() const {
             const TInstant now = TInstant::Now();
@@ -722,7 +728,11 @@ private:
 
         void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
             auto it = StartBlobRequest.find(br);
-            Y_VERIFY(it != StartBlobRequest.end());
+            if (FirstMetadataCurrently) {
+                Y_VERIFY(it != StartBlobRequest.end());
+            } else if (it == StartBlobRequest.end()) {
+                return;
+            }
             const TDuration d = replyInstant - it->second;
             if (fromCache) {
                 CacheBlobs.Received(br, d);

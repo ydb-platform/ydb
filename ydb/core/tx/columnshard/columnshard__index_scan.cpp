@@ -46,7 +46,7 @@ void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data
     } else {
         auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
         if (cmt.empty()) {
-            return; // ignore duplicates
+            return; // ignore duplicates from another read metadata ranges
         }
         const NOlap::TCommittedBlob& cmtBlob = cmt.key();
         ui32 batchNo = cmt.mapped();
@@ -112,7 +112,7 @@ TColumnShardScanIterator::~TColumnShardScanIterator() {
 }
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
-    if (!task->IsDataProcessed() || DataTasksProcessor.IsStopped()) {
+    if (!task->IsDataProcessed() || DataTasksProcessor.IsStopped() || !task->IsSameProcessor(DataTasksProcessor)) {
         return;
     }
     Y_VERIFY(task->Apply(IndexedData.GetGranulesContext()));

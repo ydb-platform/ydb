@@ -26,6 +26,10 @@ TDataTasksProcessorContainer IDataTasksProcessor::ITask::GetTasksProcessorContai
     return TDataTasksProcessorContainer(OwnerOperator);
 }
 
+bool IDataTasksProcessor::ITask::IsSameProcessor(const TDataTasksProcessorContainer& receivedProcessor) const {
+    return receivedProcessor.IsSameProcessor(GetTasksProcessorContainer());
+}
+
 bool IDataTasksProcessor::Add(ITask::TPtr task) {
     if (IsStopped()) {
         return false;

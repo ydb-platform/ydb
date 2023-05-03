@@ -32,6 +32,9 @@ public:
             : OwnerOperator(ownerOperator) {
 
         }
+
+        bool IsSameProcessor(const TDataTasksProcessorContainer& receivedProcessor) const;
+
         using TPtr = std::shared_ptr<ITask>;
         virtual ~ITask() = default;
         bool Apply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const;
@@ -68,6 +71,10 @@ public:
         : Object(object)
     {
 
+    }
+
+    bool IsSameProcessor(const TDataTasksProcessorContainer& container) const {
+        return (ui64)Object.get() == (ui64)container.Object.get();
     }
 
     void Stop() {

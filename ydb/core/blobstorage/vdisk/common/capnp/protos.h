@@ -386,26 +386,26 @@ namespace NKikimrCapnProto {
             void SetIntQueueId(EVDiskInternalQueueId value) { return setIntQueueId(static_cast<NKikimrCapnProto_::EVDiskInternalQueueId>(static_cast<size_t>(value) + 1)); }
             void SetIntQueueId(NKikimrBlobStorage::EVDiskInternalQueueId value) {
                 switch (value) {
-                    case NKikimrBlobStorage::IntUnknown:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntUnknown);
-                    case NKikimrBlobStorage::IntBegin:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntBegin:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntBegin);
-                    case NKikimrBlobStorage::IntGetFast:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetFast:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntGetFast);
-                    case NKikimrBlobStorage::IntPutLog:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutLog:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntPutLog);
-                    case NKikimrBlobStorage::IntPutHugeForeground:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeForeground:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeForeground);
-                    case NKikimrBlobStorage::IntPutHugeBackground:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeBackground);
-                    case NKikimrBlobStorage::IntGetDiscover:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetDiscover:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntGetDiscover);
-                    case NKikimrBlobStorage::IntLowRead:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntLowRead);
-                    case NKikimrBlobStorage::IntEnd:
+                    case NKikimrBlobStorage::EVDiskInternalQueueId::IntEnd:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntEnd);
                     default:
-                        throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));
+                        throw std::runtime_error("invalid protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)) + " --> " + NKikimrBlobStorage::EVDiskInternalQueueId_Name(value).data());
                 }
             }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }

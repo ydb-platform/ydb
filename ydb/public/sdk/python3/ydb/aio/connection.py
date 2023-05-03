@@ -5,9 +5,9 @@ from typing import Any, Tuple, Callable, Iterable
 import collections
 import grpc
 
-from .. import _apis, _utilities
+from ydb import _apis, _utilities
 
-from ..connection import (
+from ydb.connection import (
     _log_request,
     _log_response,
     _rpc_error_handler,
@@ -21,15 +21,15 @@ from ..connection import (
     YDB_REQUEST_TYPE_HEADER,
     EndpointKey,
 )
-from ..driver import DriverConfig
-from ..settings import BaseRequestSettings
-from .. import issues
+from ydb.driver import DriverConfig
+from ydb.settings import BaseRequestSettings
+from ydb import issues
 
 # Workaround for good IDE and universal for runtime
 if typing.TYPE_CHECKING:
-    from .._grpc.v4 import ydb_topic_v1_pb2_grpc
+    from ydb._grpc.v4 import ydb_topic_v1_pb2_grpc
 else:
-    from .._grpc.common import ydb_topic_v1_pb2_grpc
+    from ydb._grpc.common import ydb_topic_v1_pb2_grpc
 
 
 _stubs_list = (

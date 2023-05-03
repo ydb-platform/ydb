@@ -1,7 +1,7 @@
 from . import pool, scheme, table
-from ydb.public.sdk.python3 import ydb
+import ydb
 from .. import _utilities
-from ..driver import get_config, default_credentials
+from ydb.driver import get_config, default_credentials
 
 
 class DriverConfig(ydb.DriverConfig):

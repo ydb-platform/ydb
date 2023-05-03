@@ -1,7 +1,7 @@
 from . import connection as conn_impl
 
-from .. import _apis, settings as settings_impl
-from ..resolver import (
+from ydb import _apis, settings as settings_impl
+from ydb.resolver import (
     DiscoveryResult,
     DiscoveryEndpointsResolver as _DiscoveryEndpointsResolver,
     _list_endpoints_request_factory,

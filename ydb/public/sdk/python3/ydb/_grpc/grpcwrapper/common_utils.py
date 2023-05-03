@@ -23,7 +23,7 @@ from google.protobuf.message import Message
 from google.protobuf.duration_pb2 import Duration as ProtoDuration
 from google.protobuf.timestamp_pb2 import Timestamp as ProtoTimeStamp
 
-from ydb.public.sdk.python3 import ydb
+import ydb.aio
 
 # Workaround for good IDE and universal for runtime
 if typing.TYPE_CHECKING:

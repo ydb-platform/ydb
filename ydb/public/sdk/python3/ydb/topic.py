@@ -44,7 +44,7 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     RetryPolicy as TopicWriterRetryPolicy,
 )
 
-from ._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
+from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 from ._topic_writer.topic_writer_sync import WriterSync as TopicWriter
 
 from ._topic_common.common import (

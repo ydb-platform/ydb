@@ -9,7 +9,7 @@ from typing import List, Union, Optional, Any, Dict
 
 import typing
 
-from ydb.public.sdk.python3 import ydb
+import ydb.aio
 from .._grpc.grpcwrapper.ydb_topic import StreamWriteMessage
 from .._grpc.grpcwrapper.common_utils import IToProto
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec

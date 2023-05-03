@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 import datetime
 from typing import Union, Any, List, Dict, Deque, Optional
 
-from .._grpc.grpcwrapper.ydb_topic import OffsetsRange, Codec
-from . import topic_reader_asyncio
+from ydb._grpc.grpcwrapper.ydb_topic import OffsetsRange, Codec
+from ydb._topic_reader import topic_reader_asyncio
 
 
 class ICommittable(abc.ABC):

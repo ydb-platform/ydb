@@ -1,4 +1,4 @@
-from .. import scheme
+from ydb import scheme
 
 
 class SchemeClient(scheme.BaseSchemeClient):

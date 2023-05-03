@@ -55,7 +55,7 @@ constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
 TKqpPlanner::TKqpPlanner(const TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, TVector<ui64>&& computeTasks,
     THashMap<ui64, TVector<ui64>>&& tasksPerNode, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
@@ -69,8 +69,6 @@ TKqpPlanner::TKqpPlanner(const TKqpTasksGraph& graph, ui64 txId, const TActorId&
     , UserToken(userToken)
     , Deadline(deadline)
     , StatsMode(statsMode)
-    , DisableLlvmForUdfStages(disableLlvmForUdfStages)
-    , EnableLlvm(enableLlvm)
     , WithSpilling(withSpilling)
     , RlPath(rlPath)
     , ResourcesSnapshot(std::move(resourcesSnapshot))
@@ -147,27 +145,19 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.MutableRuntimeSettings()->SetTimeoutMs(timeout.MilliSeconds());
     }
 
-    bool enableLlvm = EnableLlvm;
-
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
         auto serializedTask = SerializeTaskToProto(TasksGraph, task);
-        if (DisableLlvmForUdfStages && serializedTask.GetProgram().GetSettings().GetHasUdf()) {
-            enableLlvm = false;
-        }
         request.AddTasks()->Swap(&serializedTask);
     }
 
+    request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
+    request.SetStartAllOrFail(true);
     if (IsDataQuery) {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
-        request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-        request.MutableRuntimeSettings()->SetUseLLVM(false);
-        request.SetStartAllOrFail(true);
     } else {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN);
-        request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-        request.MutableRuntimeSettings()->SetUseLLVM(enableLlvm);
-        request.SetStartAllOrFail(true);
+        request.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
     }
 
     if (RlPath) {
@@ -361,13 +351,13 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(const TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
     THashMap<ui64, TVector<ui64>>&& tasksPerNode, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     bool isDataQuery)
 {
     return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, std::move(tasks), std::move(tasksPerNode), snapshot,
-        database, userToken, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath, executerSpan,
+        database, userToken, deadline, statsMode, withSpilling, rlPath, executerSpan,
         std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery);
 }
 

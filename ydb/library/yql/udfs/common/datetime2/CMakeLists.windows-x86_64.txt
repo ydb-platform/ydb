@@ -23,7 +23,7 @@ target_link_libraries(datetime2_udf INTERFACE
 add_global_library_for(datetime2_udf.global datetime2_udf)
 target_compile_options(datetime2_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=29
+  -DUDF_ABI_VERSION_MINOR=33
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(datetime2_udf.global PUBLIC

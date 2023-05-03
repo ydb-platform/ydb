@@ -24,6 +24,7 @@ struct TEvAuditService {
         TString PeerName;
         TString UserAgent;
         TString RequestId;
+        TString SubjectType;
     };
 
     // Event ids.

@@ -92,6 +92,24 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        ui64, ui64, ui64> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TPathRec MakePathRec(const TPathId& pathId, const TPathId& parentPathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId, parentPathId,
+            rowSet.template GetValue<typename SchemaTable::Name>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::Owner>(),
+            static_cast<TPathElement::EPathType>(rowSet.template GetValue<typename SchemaTable::PathType>()),
+            rowSet.template GetValueOrDefault<typename SchemaTable::StepCreated>(InvalidStepId),
+            rowSet.template GetValue<typename SchemaTable::CreateTxId>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::StepDropped>(InvalidStepId),
+            rowSet.template GetValueOrDefault<typename SchemaTable::DropTxId>(InvalidTxId),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ACL>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::LastTxId>(InvalidTxId),
+            rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
+            rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0)
+        );
+    }
+
     TPathElement::TPtr MakePathElement(const TPathRec& rec) const {
         TPathId pathId = std::get<0>(rec);
         TPathId parentPathId = std::get<1>(rec);
@@ -141,92 +159,55 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
     bool LoadPaths(NIceDb::TNiceDb& db, TPathRows& pathRows) const {
         {
-            {
-                auto rows = db.Table<Schema::MigratedPaths>().Range().Select();
-                if (!rows.IsReady()) {
+            auto rows = db.Table<Schema::MigratedPaths>().Range().Select();
+            if (!rows.IsReady()) {
+                return false;
+            }
+            while (!rows.EndOfSet()) {
+                const auto pathId = TPathId(
+                    rows.GetValue<Schema::MigratedPaths::OwnerPathId>(),
+                    rows.GetValue<Schema::MigratedPaths::LocalPathId>()
+                );
+                const auto parentPathId = TPathId(
+                    rows.GetValue<Schema::MigratedPaths::ParentOwnerId>(),
+                    rows.GetValue<Schema::MigratedPaths::ParentLocalId>()
+                );
+                pathRows.push_back(MakePathRec<Schema::MigratedPaths>(pathId, parentPathId, rows));
+
+                if (!rows.Next()) {
                     return false;
                 }
-                while (!rows.EndOfSet()) {
-                    TPathId pathId = TPathId(rows.GetValue<Schema::MigratedPaths::OwnerPathId>(), rows.GetValue<Schema::MigratedPaths::LocalPathId>());
-                    TPathId parentPathId = TPathId(rows.GetValue<Schema::MigratedPaths::ParentOwnerId>(), rows.GetValue<Schema::MigratedPaths::ParentLocalId>());
-
-                    TString name = rows.GetValue<Schema::MigratedPaths::Name>();
-
-                    TPathElement::EPathType pathType = (TPathElement::EPathType)rows.GetValue<Schema::MigratedPaths::PathType>();
-
-                    TStepId stepCreated = rows.GetValueOrDefault<Schema::MigratedPaths::StepCreated>(InvalidStepId);
-                    TTxId txIdCreated = rows.GetValue<Schema::MigratedPaths::CreateTxId>();
-
-                    TStepId stepDropped = rows.GetValueOrDefault<Schema::MigratedPaths::StepDropped>(InvalidStepId);
-                    TTxId txIdDropped = rows.GetValueOrDefault<Schema::MigratedPaths::DropTxId>(InvalidTxId);
-
-                    TString owner = rows.GetValueOrDefault<Schema::MigratedPaths::Owner>();
-                    TString acl = rows.GetValueOrDefault<Schema::MigratedPaths::ACL>();
-
-                    TTxId lastTxId =  rows.GetValueOrDefault<Schema::MigratedPaths::LastTxId>(InvalidTxId);
-
-                    ui64 dirAlterVer = rows.GetValueOrDefault<Schema::MigratedPaths::DirAlterVersion>(1);
-                    ui64 userAttrsAlterVer = rows.GetValueOrDefault<Schema::MigratedPaths::UserAttrsAlterVersion>(1);
-                    ui64 aclAlterVer = rows.GetValueOrDefault<Schema::MigratedPaths::ACLVersion>(0);
-
-                    pathRows.emplace_back(pathId, parentPathId, name, owner, pathType,
-                                            stepCreated, txIdCreated, stepDropped, txIdDropped,
-                                            acl, lastTxId, dirAlterVer, userAttrsAlterVer, aclAlterVer);
-
-                    if (!rows.Next()) {
-                        return false;
-                    }
-                }
-
             }
-
-
+        }
+        {
             auto rows = db.Table<Schema::Paths>().Range().Select();
             if (!rows.IsReady()) {
                 return false;
             }
             while (!rows.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rows.GetValue<Schema::Paths::Id>());
-                TPathId parentPathId = TPathId(rows.GetValueOrDefault<Schema::Paths::ParentOwnerId>(Self->TabletID()),
-                                               rows.GetValue<Schema::Paths::ParentId>());
-
-                TString name = rows.GetValue<Schema::Paths::Name>();
+                const auto pathId = Self->MakeLocalId(rows.GetValue<Schema::Paths::Id>());
+                const auto parentPathId = TPathId(
+                    rows.GetValueOrDefault<Schema::Paths::ParentOwnerId>(Self->TabletID()),
+                    rows.GetValue<Schema::Paths::ParentId>()
+                );
 
                 if (pathId.LocalPathId == 0) {
+                    const auto name = rows.GetValue<Schema::Paths::Name>();
                     // Skip special incompatibility marker
                     Y_VERIFY_S(parentPathId.LocalPathId == 0 && name == "/incompatible/",
                         "Unexpected row PathId# " << pathId << " ParentPathId# " << parentPathId << " Name# " << name);
+
                     if (!rows.Next()) {
                         return false;
                     }
+
                     continue;
                 }
 
-                TPathElement::EPathType pathType = (TPathElement::EPathType)rows.GetValue<Schema::Paths::PathType>();
-
-                TStepId stepCreated = rows.GetValueOrDefault<Schema::Paths::StepCreated>(InvalidStepId);
-                TTxId txIdCreated = rows.GetValue<Schema::Paths::CreateTxId>();
-
-                TStepId stepDropped = rows.GetValueOrDefault<Schema::Paths::StepDropped>(InvalidStepId);
-                TTxId txIdDropped = rows.GetValueOrDefault<Schema::Paths::DropTxId>(InvalidTxId);
-
-                TString owner = rows.GetValueOrDefault<Schema::Paths::Owner>();
-                TString acl = rows.GetValueOrDefault<Schema::Paths::ACL>();
-
-                TTxId lastTxId =  rows.GetValueOrDefault<Schema::Paths::LastTxId>(InvalidTxId);
-
-                ui64 dirAlterVer = rows.GetValueOrDefault<Schema::Paths::DirAlterVersion>(1);
-                ui64 userAttrsAlterVer = rows.GetValueOrDefault<Schema::Paths::UserAttrsAlterVersion>(1);
-                ui64 aclAlterVer = rows.GetValueOrDefault<Schema::Paths::ACLVersion>(0);
-
                 if (pathId == parentPathId) {
-                    pathRows.emplace_front(pathId, parentPathId, name, owner, pathType,
-                                            stepCreated, txIdCreated, stepDropped, txIdDropped,
-                                            acl, lastTxId, dirAlterVer, userAttrsAlterVer, aclAlterVer);
+                    pathRows.push_front(MakePathRec<Schema::Paths>(pathId, parentPathId, rows));
                 } else {
-                    pathRows.emplace_back(pathId, parentPathId, name, owner, pathType,
-                                            stepCreated, txIdCreated, stepDropped, txIdDropped,
-                                            acl, lastTxId, dirAlterVer, userAttrsAlterVer, aclAlterVer);
+                    pathRows.push_back(MakePathRec<Schema::Paths>(pathId, parentPathId, rows));
                 }
 
                 if (!rows.Next()) {
@@ -241,6 +222,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, TString, TString> TUserAttrsRec;
     typedef TDeque<TUserAttrsRec> TUserAttrsRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TUserAttrsRec MakeUserAttrsRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::AttrName>(),
+            rowSet.template GetValue<typename SchemaTable::AttrValue>()
+        );
+    }
+
     bool LoadUserAttrs(NIceDb::TNiceDb& db, TUserAttrsRows& userAttrsRows) const {
         {
             auto rowSet = db.Table<Schema::UserAttributes>().Range().Select();
@@ -248,32 +237,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::UserAttributes::PathId>());
-
-                TString name = rowSet.GetValue<Schema::UserAttributes::AttrName>();
-                TString value = rowSet.GetValue<Schema::UserAttributes::AttrValue>();
-
-                userAttrsRows.emplace_back(pathId, name, value);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::UserAttributes::PathId>());
+                userAttrsRows.push_back(MakeUserAttrsRec<Schema::UserAttributes>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedUserAttributes>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = TPathId(rowSet.GetValue<Schema::MigratedUserAttributes::OwnerPathId>(),
-                                         rowSet.GetValue<Schema::MigratedUserAttributes::LocalPathId>());
-
-                TString name = rowSet.GetValue<Schema::MigratedUserAttributes::AttrName>();
-                TString value = rowSet.GetValue<Schema::MigratedUserAttributes::AttrValue>();
-
-                userAttrsRows.emplace_back(pathId, name, value);
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedUserAttributes::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedUserAttributes::LocalPathId>()
+                );
+                userAttrsRows.push_back(MakeUserAttrsRec<Schema::MigratedUserAttributes>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -291,32 +273,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::UserAttributesAlterData::PathId>());
-
-                TString name = rowSet.GetValue<Schema::UserAttributesAlterData::AttrName>();
-                TString value = rowSet.GetValue<Schema::UserAttributesAlterData::AttrValue>();
-
-                userAttrsRows.emplace_back(pathId, name, value);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::UserAttributesAlterData::PathId>());
+                userAttrsRows.push_back(MakeUserAttrsRec<Schema::UserAttributesAlterData>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedUserAttributesAlterData>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = TPathId(rowSet.GetValue<Schema::MigratedUserAttributesAlterData::OwnerPathId>(),
-                                         rowSet.GetValue<Schema::MigratedUserAttributesAlterData::LocalPathId>());
-
-                TString name = rowSet.GetValue<Schema::MigratedUserAttributesAlterData::AttrName>();
-                TString value = rowSet.GetValue<Schema::MigratedUserAttributesAlterData::AttrValue>();
-
-                userAttrsRows.emplace_back(pathId, name, value);
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedUserAttributesAlterData::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedUserAttributesAlterData::LocalPathId>()
+                );
+                userAttrsRows.push_back(MakeUserAttrsRec<Schema::MigratedUserAttributesAlterData>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -327,8 +302,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
+
+    template <typename SchemaTable, typename TRowSet>
+    static TTableRec MakeTableRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::NextColId>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::AlterVersion>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::PartitionConfig>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::AlterTableFull>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::AlterTable>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::PartitioningVersion>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TTLSettings>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>()
+        );
+    }
 
     bool LoadTables(NIceDb::TNiceDb& db, TTableRows& tableRows) const {
         {
@@ -337,47 +327,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::Tables::TabId>());
-
-                ui32 nextCollId = rowSet.GetValue<Schema::Tables::NextColId>();
-                ui64 alterVersion = rowSet.GetValueOrDefault<Schema::Tables::AlterVersion>(0);
-                TString partitionConfig = rowSet.GetValueOrDefault<Schema::Tables::PartitionConfig>();
-                TString alterTabletFull = rowSet.GetValueOrDefault<Schema::Tables::AlterTableFull>();
-                TString alterTabletDiff = rowSet.GetValueOrDefault<Schema::Tables::AlterTable>();
-                ui64 partitionVersion = rowSet.GetValueOrDefault<Schema::Tables::PartitioningVersion>(0);
-                TString ttlSettings = rowSet.GetValueOrDefault<Schema::Tables::TTLSettings>();
-                bool isBackup = rowSet.GetValueOrDefault<Schema::Tables::IsBackup>(false);
-
-                tableRows.emplace_back(pathId,
-                                       nextCollId, alterVersion, partitionConfig, alterTabletFull, alterTabletDiff, partitionVersion, ttlSettings, isBackup);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::Tables::TabId>());
+                tableRows.push_back(MakeTableRec<Schema::Tables>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedTables>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = TPathId(
+                const auto pathId = TPathId(
                     rowSet.GetValue<Schema::MigratedTables::OwnerPathId>(),
-                    rowSet.GetValue<Schema::MigratedTables::LocalPathId>());
-
-                ui32 nextCollId = rowSet.GetValue<Schema::MigratedTables::NextColId>();
-                ui64 alterVersion = rowSet.GetValueOrDefault<Schema::MigratedTables::AlterVersion>(0);
-                TString partitionConfig = rowSet.GetValueOrDefault<Schema::MigratedTables::PartitionConfig>();
-                TString alterTabletFull = rowSet.GetValueOrDefault<Schema::MigratedTables::AlterTableFull>();
-                TString alterTabletDiff = rowSet.GetValueOrDefault<Schema::MigratedTables::AlterTable>();
-                ui64 partitionVersion = rowSet.GetValueOrDefault<Schema::MigratedTables::PartitioningVersion>(0);
-                TString ttlSettings = rowSet.GetValueOrDefault<Schema::MigratedTables::TTLSettings>();
-                bool isBackup = rowSet.GetValueOrDefault<Schema::MigratedTables::IsBackup>(false);
-
-                tableRows.emplace_back(pathId,
-                                       nextCollId, alterVersion, partitionConfig, alterTabletFull, alterTabletDiff, partitionVersion, ttlSettings, isBackup);
+                    rowSet.GetValue<Schema::MigratedTables::LocalPathId>()
+                );
+                tableRows.push_back(MakeTableRec<Schema::MigratedTables>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -391,84 +359,60 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
     typedef TDeque<TColumnRec> TColumnRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TColumnRec MakeColumnRec(const TPathId& pathId, TRowSet& rowSet) {
+        const auto typeId = static_cast<NScheme::TTypeId>(rowSet.template GetValue<typename SchemaTable::ColType>());
+        NScheme::TTypeInfoMod typeInfoMod;
+
+        if (const TString typeData = rowSet.template GetValueOrDefault<typename SchemaTable::ColTypeData>("")) {
+            NKikimrProto::TTypeInfo protoType;
+            Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
+            typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
+        } else {
+            typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
+        }
+
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::ColId>(),
+            rowSet.template GetValue<typename SchemaTable::ColName>(),
+            typeInfoMod.TypeInfo,
+            typeInfoMod.TypeMod,
+            rowSet.template GetValue<typename SchemaTable::ColKeyOrder>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::CreateVersion>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::DeleteVersion>(-1),
+            rowSet.template GetValueOrDefault<typename SchemaTable::Family>(0),
+            rowSet.template GetValue<typename SchemaTable::DefaultKind>(),
+            rowSet.template GetValue<typename SchemaTable::DefaultValue>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::NotNull>(false)
+        );
+    }
+
     bool LoadColumns(NIceDb::TNiceDb& db, TColumnRows& columnRows) const {
         {
             auto rowSet = db.Table<Schema::Columns>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::Columns::TabId>());
-
-                ui32 colId = rowSet.GetValue<Schema::Columns::ColId>();
-                TString colName = rowSet.GetValue<Schema::Columns::ColName>();
-                NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::Columns::ColType>();
-                TString typeData = rowSet.GetValueOrDefault<Schema::Columns::ColTypeData>("");
-                ui32 keyOrder = rowSet.GetValue<Schema::Columns::ColKeyOrder>();
-                ui64 createVersion = rowSet.GetValueOrDefault<Schema::Columns::CreateVersion>(0);
-                ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::Columns::DeleteVersion>(-1);
-                ui32 family = rowSet.GetValueOrDefault<Schema::Columns::Family>(0);
-                auto defaultKind = rowSet.GetValue<Schema::Columns::DefaultKind>();
-                auto defaultValue = rowSet.GetValue<Schema::Columns::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::Columns::NotNull>(false);
-
-                NScheme::TTypeInfoMod typeInfoMod;
-                if (typeData) {
-                    NKikimrProto::TTypeInfo protoType;
-                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
-                } else {
-                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
-                }
-
-                columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
-                                        keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::Columns::TabId>());
+                columnRows.push_back(MakeColumnRec<Schema::Columns>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedColumns>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = TPathId(
+                const auto pathId = TPathId(
                     rowSet.GetValue<Schema::MigratedColumns::OwnerPathId>(),
-                    rowSet.GetValue<Schema::MigratedColumns::LocalPathId>());
-
-                ui32 colId = rowSet.GetValue<Schema::MigratedColumns::ColId>();
-                TString colName = rowSet.GetValue<Schema::MigratedColumns::ColName>();
-                NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::MigratedColumns::ColType>();
-                TString typeData = rowSet.GetValueOrDefault<Schema::MigratedColumns::ColTypeData>("");
-                ui32 keyOrder = rowSet.GetValue<Schema::MigratedColumns::ColKeyOrder>();
-                ui64 createVersion = rowSet.GetValueOrDefault<Schema::MigratedColumns::CreateVersion>(0);
-                ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::MigratedColumns::DeleteVersion>(-1);
-                ui32 family = rowSet.GetValueOrDefault<Schema::MigratedColumns::Family>(0);
-                auto defaultKind = rowSet.GetValue<Schema::MigratedColumns::DefaultKind>();
-                auto defaultValue = rowSet.GetValue<Schema::MigratedColumns::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumns::NotNull>(false);
-
-                NScheme::TTypeInfoMod typeInfoMod;
-                if (typeData) {
-                    NKikimrProto::TTypeInfo protoType;
-                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
-                } else {
-                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
-                }
-
-                columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
-                                        keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                    rowSet.GetValue<Schema::MigratedColumns::LocalPathId>()
+                );
+                columnRows.push_back(MakeColumnRec<Schema::MigratedColumns>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -485,78 +429,26 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::ColumnAlters::TabId>());
-
-                ui32 colId = rowSet.GetValue<Schema::ColumnAlters::ColId>();
-                TString colName = rowSet.GetValue<Schema::ColumnAlters::ColName>();
-                NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::ColumnAlters::ColType>();
-                TString typeData = rowSet.GetValue<Schema::ColumnAlters::ColTypeData>();
-                ui32 keyOrder = rowSet.GetValue<Schema::ColumnAlters::ColKeyOrder>();
-                ui64 createVersion = rowSet.GetValueOrDefault<Schema::ColumnAlters::CreateVersion>(0);
-                ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::ColumnAlters::DeleteVersion>(-1);
-                ui32 family = rowSet.GetValueOrDefault<Schema::ColumnAlters::Family>(0);
-                auto defaultKind = rowSet.GetValue<Schema::ColumnAlters::DefaultKind>();
-                auto defaultValue = rowSet.GetValue<Schema::ColumnAlters::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::ColumnAlters::NotNull>(false);
-
-                NScheme::TTypeInfoMod typeInfoMod;
-                if (typeData) {
-                    NKikimrProto::TTypeInfo protoType;
-                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
-                } else {
-                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
-                }
-
-                columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
-                                        keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::ColumnAlters::TabId>());
+                columnRows.push_back(MakeColumnRec<Schema::ColumnAlters>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedColumnAlters>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = TPathId(
+                const auto pathId = TPathId(
                     rowSet.GetValue<Schema::MigratedColumnAlters::OwnerPathId>(),
-                    rowSet.GetValue<Schema::MigratedColumnAlters::LocalPathId>());
-
-                ui32 colId = rowSet.GetValue<Schema::MigratedColumnAlters::ColId>();
-                TString colName = rowSet.GetValue<Schema::MigratedColumnAlters::ColName>();
-                NScheme::TTypeId typeId = (NScheme::TTypeId)rowSet.GetValue<Schema::MigratedColumnAlters::ColType>();
-                TString typeData = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::ColTypeData>("");
-                ui32 keyOrder = rowSet.GetValue<Schema::MigratedColumnAlters::ColKeyOrder>();
-                ui64 createVersion = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::CreateVersion>(0);
-                ui64 deleteVersion = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::DeleteVersion>(-1);
-                ui32 family = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::Family>(0);
-                auto defaultKind = rowSet.GetValue<Schema::MigratedColumnAlters::DefaultKind>();
-                auto defaultValue = rowSet.GetValue<Schema::MigratedColumnAlters::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::NotNull>(false);
-
-                NScheme::TTypeInfoMod typeInfoMod;
-                if (typeData) {
-                    NKikimrProto::TTypeInfo protoType;
-                    Y_VERIFY(ParseFromStringNoSizeLimit(protoType, typeData));
-                    typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId, &protoType);
-                } else {
-                    typeInfoMod.TypeInfo = NScheme::TTypeInfo(typeId);
-                }
-
-                columnRows.emplace_back(pathId, colId,
-                                        colName, typeInfoMod.TypeInfo, typeInfoMod.TypeMod,
-                                        keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                    rowSet.GetValue<Schema::MigratedColumnAlters::LocalPathId>()
+                );
+                columnRows.push_back(MakeColumnRec<Schema::MigratedColumnAlters>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -570,47 +462,48 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, ui64, TString, TShardIdx, ui64, ui64> TTablePartitionRec;
     typedef TDeque<TTablePartitionRec> TTablePartitionsRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TTablePartitionRec MakeTablePartitionRec(const TPathId& pathId, const TShardIdx& shardIdx, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::Id>(),
+            rowSet.template GetValue<typename SchemaTable::RangeEnd>(),
+            shardIdx,
+            rowSet.template GetValueOrDefault<typename SchemaTable::LastCondErase>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::NextCondErase>(0)
+        );
+    }
+
     bool LoadTablePartitions(NIceDb::TNiceDb& db, TTablePartitionsRows& partitionsRows) const {
         {
             auto rowSet = db.Table<Schema::TablePartitions>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::TablePartitions::TabId>());
-                ui64 id = rowSet.GetValue<Schema::TablePartitions::Id>();
-                TString rangeEnd = rowSet.GetValue<Schema::TablePartitions::RangeEnd>();
-                TShardIdx datashardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::TablePartitions::DatashardIdx>());
-                ui64 lastCondErase = rowSet.GetValueOrDefault<Schema::TablePartitions::LastCondErase>(0);
-                ui64 nextCondErase = rowSet.GetValueOrDefault<Schema::TablePartitions::NextCondErase>(0);
-
-                partitionsRows.emplace_back(pathId, id, rangeEnd, datashardIdx, lastCondErase, nextCondErase);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::TablePartitions::TabId>());
+                const auto datashardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::TablePartitions::DatashardIdx>());
+                partitionsRows.push_back(MakeTablePartitionRec<Schema::TablePartitions>(pathId, datashardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedTablePartitions>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TPathId pathId = TPathId(
+                const auto pathId = TPathId(
                     rowSet.GetValue<Schema::MigratedTablePartitions::OwnerPathId>(),
-                    rowSet.GetValue<Schema::MigratedTablePartitions::LocalPathId>());
-                ui64 id = rowSet.GetValue<Schema::MigratedTablePartitions::Id>();
-                TString rangeEnd = rowSet.GetValue<Schema::MigratedTablePartitions::RangeEnd>();
-                TShardIdx datashardIdx = TShardIdx(rowSet.GetValue<Schema::MigratedTablePartitions::OwnerShardIdx>(),
-                                                   rowSet.GetValue<Schema::MigratedTablePartitions::LocalShardIdx>());
-                ui64 lastCondErase = rowSet.GetValueOrDefault<Schema::MigratedTablePartitions::LastCondErase>(0);
-                ui64 nextCondErase = rowSet.GetValueOrDefault<Schema::MigratedTablePartitions::NextCondErase>(0);
-
-                partitionsRows.emplace_back(pathId, id, rangeEnd, datashardIdx, lastCondErase, nextCondErase);
+                    rowSet.GetValue<Schema::MigratedTablePartitions::LocalPathId>()
+                );
+                const auto datashardIdx = TShardIdx(
+                    rowSet.GetValue<Schema::MigratedTablePartitions::OwnerShardIdx>(),
+                    rowSet.GetValue<Schema::MigratedTablePartitions::LocalShardIdx>()
+                );
+                partitionsRows.push_back(MakeTablePartitionRec<Schema::MigratedTablePartitions>(pathId, datashardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -627,38 +520,39 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TShardIdx, TString> TTableShardPartitionConfigRec;
     typedef TDeque<TTableShardPartitionConfigRec> TTableShardPartitionConfigRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TTableShardPartitionConfigRec MakeTableShardPartitionConfigRec(const TShardIdx& shardIdx, TRowSet& rowSet) {
+        return std::make_tuple(shardIdx,
+            rowSet.template GetValue<typename SchemaTable::PartitionConfig>()
+        );
+    }
+
     bool LoadTableShardPartitionConfigs(NIceDb::TNiceDb& db, TTableShardPartitionConfigRows& partitionsRows) const {
         {
             auto rowSet = db.Table<Schema::TableShardPartitionConfigs>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TShardIdx shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::TableShardPartitionConfigs::ShardIdx>());
-                TString data = rowSet.GetValue<Schema::TableShardPartitionConfigs::PartitionConfig>();
-
-                partitionsRows.emplace_back(shardIdx, data);
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::TableShardPartitionConfigs::ShardIdx>());
+                partitionsRows.push_back(MakeTableShardPartitionConfigRec<Schema::TableShardPartitionConfigs>(shardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedTableShardPartitionConfigs>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TShardIdx shardIdx = TShardIdx(
+                const auto shardIdx = TShardIdx(
                     rowSet.GetValue<Schema::MigratedTableShardPartitionConfigs::OwnerShardIdx>(),
-                    rowSet.GetValue<Schema::MigratedTableShardPartitionConfigs::LocalShardIdx>());
-                TString data = rowSet.GetValue<Schema::MigratedTableShardPartitionConfigs::PartitionConfig>();
-
-                partitionsRows.emplace_back(shardIdx, data);
+                    rowSet.GetValue<Schema::MigratedTableShardPartitionConfigs::LocalShardIdx>()
+                );
+                partitionsRows.push_back(MakeTableShardPartitionConfigRec<Schema::MigratedTableShardPartitionConfigs>(shardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -672,40 +566,41 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TTxId, TPathId, ui64> TPublicationRec;
     typedef TDeque<TPublicationRec> TPublicationsRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TPublicationRec MakePublicationRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(
+            rowSet.template GetValue<typename SchemaTable::TxId>(),
+            pathId,
+            rowSet.template GetValue<typename SchemaTable::Version>()
+        );
+    }
+
     bool LoadPublications(NIceDb::TNiceDb& db, TPublicationsRows& publicationsRows) const {
         {
             auto rowSet = db.Table<Schema::PublishingPaths>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TTxId txId = rowSet.GetValue<Schema::PublishingPaths::TxId>();
-                TPathId pathId = Self->MakeLocalId(rowSet.GetValue<Schema::PublishingPaths::PathId>());
-                ui64 version = rowSet.GetValue<Schema::PublishingPaths::Version>();
-
-                publicationsRows.emplace_back(txId, pathId, version);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::PublishingPaths::PathId>());
+                publicationsRows.push_back(MakePublicationRec<Schema::PublishingPaths>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedPublishingPaths>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TTxId txId = rowSet.GetValue<Schema::MigratedPublishingPaths::TxId>();
-                TPathId pathId = TPathId(
+                const auto pathId = TPathId(
                     rowSet.GetValue<Schema::MigratedPublishingPaths::PathOwnerId>(),
-                    rowSet.GetValue<Schema::MigratedPublishingPaths::LocalPathId>());
-                ui64 version = rowSet.GetValue<Schema::MigratedPublishingPaths::Version>();
-
-                publicationsRows.emplace_back(txId, pathId, version);
+                    rowSet.GetValue<Schema::MigratedPublishingPaths::LocalPathId>()
+                );
+                publicationsRows.push_back(MakePublicationRec<Schema::MigratedPublishingPaths>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -725,10 +620,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TShardIdx shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::ShardsToDelete::ShardIdx>());
-
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::ShardsToDelete::ShardIdx>());
                 shardsToDelete.emplace_back(shardIdx);
 
                 if (!rowSet.Next()) {
@@ -736,18 +629,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedShardsToDelete>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                TShardIdx shardIdx = TShardIdx(
+                const auto shardIdx = TShardIdx(
                     rowSet.GetValue<Schema::MigratedShardsToDelete::ShardOwnerId>(),
-                    rowSet.GetValue<Schema::MigratedShardsToDelete::ShardLocalIdx>());
-
+                    rowSet.GetValue<Schema::MigratedShardsToDelete::ShardLocalIdx>()
+                );
                 shardsToDelete.emplace_back(shardIdx);
 
                 if (!rowSet.Next()) {
@@ -762,19 +653,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TOperationId, TShardIdx, TTxState::ETxState> TTxShardRec;
     typedef TVector<TTxShardRec> TTxShardsRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    TTxShardRec MakeTxShardRec(const TOperationId& opId, TRowSet& rowSet) const {
+        return MakeTxShardRec<SchemaTable>(opId,
+            Self->MakeLocalId(rowSet.template GetValue<typename SchemaTable::ShardIdx>()), rowSet
+        );
+    }
+
+    template <typename SchemaTable, typename TRowSet>
+    static TTxShardRec MakeTxShardRec(const TOperationId& opId, const TShardIdx& shardIdx, TRowSet& rowSet) {
+        return std::make_tuple(opId, shardIdx,
+            static_cast<TTxState::ETxState>(rowSet.template GetValue<typename SchemaTable::Operation>())
+        );
+    }
+
     bool LoadTxShards(NIceDb::TNiceDb& db, TTxShardsRows& txShards) const {
         {
             auto rowset = db.Table<Schema::TxShards>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
-
             while (!rowset.EndOfSet()) {
-                auto operationId = TOperationId(rowset.GetValue<Schema::TxShards::TxId>(), 0);
-                TShardIdx shardIdx = Self->MakeLocalId(rowset.GetValue<Schema::TxShards::ShardIdx>());
-                TTxState::ETxState operation = (TTxState::ETxState)rowset.GetValue<Schema::TxShards::Operation>();
-
-                txShards.emplace_back(operationId, shardIdx, operation);
+                const auto operationId = TOperationId(rowset.GetValue<Schema::TxShards::TxId>(), 0);
+                txShards.push_back(MakeTxShardRec<Schema::TxShards>(operationId, rowset));
 
                 if (!rowset.Next()) {
                     return false;
@@ -786,35 +687,33 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowset.IsReady()) {
                 return false;
             }
-
             while (!rowset.EndOfSet()) {
-                auto operationId = TOperationId(rowset.GetValue<Schema::TxShardsV2::TxId>(),
-                                                rowset.GetValue<Schema::TxShardsV2::TxPartId>());
-                TShardIdx shardIdx = Self->MakeLocalId(rowset.GetValue<Schema::TxShardsV2::ShardIdx>());
-                TTxState::ETxState operation = (TTxState::ETxState)rowset.GetValue<Schema::TxShardsV2::Operation>();
-
-                txShards.emplace_back(operationId, shardIdx, operation);
+                const auto operationId = TOperationId(
+                    rowset.GetValue<Schema::TxShardsV2::TxId>(),
+                    rowset.GetValue<Schema::TxShardsV2::TxPartId>()
+                );
+                txShards.push_back(MakeTxShardRec<Schema::TxShardsV2>(operationId, rowset));
 
                 if (!rowset.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowset = db.Table<Schema::MigratedTxShards>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
-
             while (!rowset.EndOfSet()) {
-                auto operationId = TOperationId(rowset.GetValue<Schema::MigratedTxShards::TxId>(),
-                                                rowset.GetValue<Schema::MigratedTxShards::TxPartId>());
-                TShardIdx shardIdx = TShardIdx(rowset.GetValue<Schema::MigratedTxShards::ShardOwnerId>(),
-                                               rowset.GetValue<Schema::MigratedTxShards::ShardLocalIdx>());
-                TTxState::ETxState operation = (TTxState::ETxState)rowset.GetValue<Schema::MigratedTxShards::Operation>();
-
-                txShards.emplace_back(operationId, shardIdx, operation);
+                const auto operationId = TOperationId(
+                    rowset.GetValue<Schema::MigratedTxShards::TxId>(),
+                    rowset.GetValue<Schema::MigratedTxShards::TxPartId>()
+                );
+                const auto shardIdx = TShardIdx(
+                    rowset.GetValue<Schema::MigratedTxShards::ShardOwnerId>(),
+                    rowset.GetValue<Schema::MigratedTxShards::ShardLocalIdx>()
+                );
+                txShards.push_back(MakeTxShardRec<Schema::MigratedTxShards>(operationId, shardIdx, rowset));
 
                 if (!rowset.Next()) {
                     return false;
@@ -832,45 +731,50 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TShardIdx, TTabletId, TPathId, TTxId, TTabletTypes::EType> TShardsRec;
     typedef TDeque<TShardsRec> TShardsRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TShardsRec MakeShardsRec(const TShardIdx& shardIdx, const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(shardIdx,
+            rowSet.template GetValue<typename SchemaTable::TabletId>(),
+            pathId,
+            rowSet.template GetValueOrDefault<typename SchemaTable::LastTxId>(InvalidTxId),
+            rowSet.template GetValue<typename SchemaTable::TabletType>()
+        );
+    }
+
     bool LoadShards(NIceDb::TNiceDb& db, TShardsRows& shards) const {
         {
             auto rowSet = db.Table<Schema::Shards>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::Shards::ShardIdx>());
-                auto tabletID = rowSet.GetValue<Schema::Shards::TabletId>();
-                auto pathId = TPathId(rowSet.GetValueOrDefault<Schema::Shards::OwnerPathId>(Self->TabletID()),
-                                       rowSet.GetValue<Schema::Shards::PathId>());
-                auto currentTxId = rowSet.GetValueOrDefault<Schema::Shards::LastTxId>(InvalidTxId);
-                auto tabletType = rowSet.GetValue<Schema::Shards::TabletType>();
-
-                shards.emplace_back(shardIdx, tabletID, pathId, currentTxId, tabletType);
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::Shards::ShardIdx>());
+                const auto pathId = TPathId(
+                    rowSet.GetValueOrDefault<Schema::Shards::OwnerPathId>(Self->TabletID()),
+                    rowSet.GetValue<Schema::Shards::PathId>()
+                );
+                shards.push_back(MakeShardsRec<Schema::Shards>(shardIdx, pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedShards>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto shardIdx = TShardIdx(rowSet.GetValue<Schema::MigratedShards::OwnerShardId>(),
-                                          rowSet.GetValue<Schema::MigratedShards::LocalShardId>());
-                auto tabletID = rowSet.GetValue<Schema::MigratedShards::TabletId>();
-                auto pathId = TPathId(rowSet.GetValue<Schema::MigratedShards::OwnerPathId>(),
-                                      rowSet.GetValue<Schema::MigratedShards::LocalPathId>());
-                auto currentTxId = rowSet.GetValueOrDefault<Schema::MigratedShards::LastTxId>(InvalidTxId);
-                auto tabletType = rowSet.GetValue<Schema::MigratedShards::TabletType>();
-
-                shards.emplace_back(shardIdx, tabletID, pathId, currentTxId, tabletType);
+                const auto shardIdx = TShardIdx(
+                    rowSet.GetValue<Schema::MigratedShards::OwnerShardId>(),
+                    rowSet.GetValue<Schema::MigratedShards::LocalShardId>()
+                );
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedShards::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedShards::LocalPathId>()
+                );
+                shards.push_back(MakeShardsRec<Schema::MigratedShards>(shardIdx, pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -884,49 +788,45 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TBackupSettingsRec MakeBackupSettingsRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::TableName>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::YTSettings>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::S3Settings>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ScanSettings>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::NeedToBill>(true),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TableDescription>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0)
+        );
+    }
+
     bool LoadBackupSettings(NIceDb::TNiceDb& db, TBackupSettingsRows& settings) const {
         {
             auto rowSet = db.Table<Schema::BackupSettings>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::BackupSettings::PathId>());
-                auto tableName = rowSet.GetValue<Schema::BackupSettings::TableName>();
-                auto ytSettings = rowSet.GetValueOrDefault<Schema::BackupSettings::YTSettings>("");
-                auto s3Settings = rowSet.GetValueOrDefault<Schema::BackupSettings::S3Settings>("");
-                auto scanSettings = rowSet.GetValueOrDefault<Schema::BackupSettings::ScanSettings>("");
-                auto needToBill = rowSet.GetValueOrDefault<Schema::BackupSettings::NeedToBill>(true);
-                auto tableDesc = rowSet.GetValueOrDefault<Schema::BackupSettings::TableDescription>("");
-                auto nRetries = rowSet.GetValueOrDefault<Schema::BackupSettings::NumberOfRetries>(0);
-
-                settings.emplace_back(pathId, tableName, ytSettings, s3Settings, scanSettings, needToBill, tableDesc, nRetries);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::BackupSettings::PathId>());
+                settings.push_back(MakeBackupSettingsRec<Schema::BackupSettings>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedBackupSettings>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = TPathId(rowSet.GetValue<Schema::MigratedBackupSettings::OwnerPathId>(),
-                                      rowSet.GetValue<Schema::MigratedBackupSettings::LocalPathId>());
-                auto tableName = rowSet.GetValue<Schema::MigratedBackupSettings::TableName>();
-                auto ytSettings = rowSet.GetValueOrDefault<Schema::MigratedBackupSettings::YTSettings>("");
-                auto s3Settings = rowSet.GetValueOrDefault<Schema::MigratedBackupSettings::S3Settings>("");
-                auto scanSettings = rowSet.GetValueOrDefault<Schema::MigratedBackupSettings::ScanSettings>("");
-                auto needToBill = rowSet.GetValueOrDefault<Schema::MigratedBackupSettings::NeedToBill>(true);
-                auto tableDesc = rowSet.GetValueOrDefault<Schema::MigratedBackupSettings::TableDescription>("");
-                auto nRetries = rowSet.GetValueOrDefault<Schema::MigratedBackupSettings::NumberOfRetries>(0);
-
-                settings.emplace_back(pathId, tableName, ytSettings, s3Settings, scanSettings, needToBill, tableDesc, nRetries);
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedBackupSettings::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedBackupSettings::LocalPathId>()
+                );
+                settings.push_back(MakeBackupSettingsRec<Schema::MigratedBackupSettings>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -940,51 +840,45 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, TTxId, ui64, ui32, ui32, ui64, ui64, ui8> TCompletedBackupRestoreRec;
     typedef TDeque<TCompletedBackupRestoreRec> TCompletedBackupRestoreRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TCompletedBackupRestoreRec MakeCompletedBackupRestoreRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::TxId>(),
+            rowSet.template GetValue<typename SchemaTable::DateTimeOfCompletion>(),
+            rowSet.template GetValue<typename SchemaTable::SuccessShardCount>(),
+            rowSet.template GetValue<typename SchemaTable::TotalShardCount>(),
+            rowSet.template GetValue<typename SchemaTable::StartTime>(),
+            rowSet.template GetValue<typename SchemaTable::DataTotalSize>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::Kind>(0)
+        );
+    }
+
     bool LoadBackupRestoreHistory(NIceDb::TNiceDb& db, TCompletedBackupRestoreRows& history) const {
         {
             auto rowSet = db.Table<Schema::CompletedBackups>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::CompletedBackups::PathId>());
-                auto txId = rowSet.GetValue<Schema::CompletedBackups::TxId>();
-                auto completeTime = rowSet.GetValue<Schema::CompletedBackups::DateTimeOfCompletion>();
-
-                auto successShardsCount = rowSet.GetValue<Schema::CompletedBackups::SuccessShardCount>();
-                auto totalShardCount = rowSet.GetValue<Schema::CompletedBackups::TotalShardCount>();
-                auto startTime = rowSet.GetValue<Schema::CompletedBackups::StartTime>();
-                auto dataSize = rowSet.GetValue<Schema::CompletedBackups::DataTotalSize>();
-                auto kind = rowSet.GetValueOrDefault<Schema::CompletedBackups::Kind>(0);
-
-                history.emplace_back(pathId, txId, completeTime, successShardsCount, totalShardCount, startTime, dataSize, kind);
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::CompletedBackups::PathId>());
+                history.push_back(MakeCompletedBackupRestoreRec<Schema::CompletedBackups>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedCompletedBackups>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = TPathId(rowSet.GetValue<Schema::MigratedCompletedBackups::OwnerPathId>(),
-                                      rowSet.GetValue<Schema::MigratedCompletedBackups::LocalPathId>());
-                auto txId = rowSet.GetValue<Schema::MigratedCompletedBackups::TxId>();
-                auto completeTime = rowSet.GetValue<Schema::MigratedCompletedBackups::DateTimeOfCompletion>();
-
-                auto successShardsCount = rowSet.GetValue<Schema::MigratedCompletedBackups::SuccessShardCount>();
-                auto totalShardCount = rowSet.GetValue<Schema::MigratedCompletedBackups::TotalShardCount>();
-                auto startTime = rowSet.GetValue<Schema::MigratedCompletedBackups::StartTime>();
-                auto dataSize = rowSet.GetValue<Schema::MigratedCompletedBackups::DataTotalSize>();
-                auto kind = rowSet.GetValueOrDefault<Schema::MigratedCompletedBackups::Kind>(0);
-
-                history.emplace_back(pathId, txId, completeTime, successShardsCount, totalShardCount, startTime, dataSize, kind);
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedCompletedBackups::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedCompletedBackups::LocalPathId>()
+                );
+                history.push_back(MakeCompletedBackupRestoreRec<Schema::MigratedCompletedBackups>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -998,54 +892,56 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TTxId, TShardIdx, bool, TString, ui64, ui64> TShardBackupStatusRec;
     typedef TDeque<TShardBackupStatusRec> TShardBackupStatusRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TShardBackupStatusRec MakeShardBackupStatusRec(const TShardIdx& shardIdx, TRowSet& rowSet) {
+        return std::make_tuple(
+            rowSet.template GetValue<typename SchemaTable::TxId>(),
+            shardIdx, false,
+            rowSet.template GetValue<typename SchemaTable::Explain>(),
+            0, 0
+        );
+    }
+
     template <typename T, typename U, typename V>
     bool LoadBackupStatusesImpl(TShardBackupStatusRows& statuses,
-            T& byShardBackupStatus, U& byMigratedShardBackupStatus, V& byTxShardStatus) const {
+            T& byShardBackupStatus, U& byMigratedShardBackupStatus, V& byTxShardStatus) const
+    {
         {
             T& rowSet = byShardBackupStatus;
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto txId = rowSet.template GetValue<Schema::ShardBackupStatus::TxId>();
-                auto shardIdx = Self->MakeLocalId(rowSet.template GetValue<Schema::ShardBackupStatus::ShardIdx>());
-                auto explain = rowSet.template GetValue<Schema::ShardBackupStatus::Explain>();
-
-                statuses.emplace_back(txId, shardIdx, false, explain, 0, 0);
+                const auto shardIdx = Self->MakeLocalId(rowSet.template GetValue<Schema::ShardBackupStatus::ShardIdx>());
+                statuses.push_back(MakeShardBackupStatusRec<Schema::ShardBackupStatus>(shardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             U& rowSet = byMigratedShardBackupStatus;
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto txId = rowSet.template GetValue<Schema::MigratedShardBackupStatus::TxId>();
-                auto shardIdx = TShardIdx(rowSet.template GetValue<Schema::MigratedShardBackupStatus::OwnerShardId>(),
-                                          rowSet.template GetValue<Schema::MigratedShardBackupStatus::LocalShardId>());
-                auto explain = rowSet.template GetValue<Schema::MigratedShardBackupStatus::Explain>();
-
-                statuses.emplace_back(txId, shardIdx, false, explain, 0, 0);
+                const auto shardIdx = TShardIdx(
+                    rowSet.template GetValue<Schema::MigratedShardBackupStatus::OwnerShardId>(),
+                    rowSet.template GetValue<Schema::MigratedShardBackupStatus::LocalShardId>()
+                );
+                statuses.push_back(MakeShardBackupStatusRec<Schema::MigratedShardBackupStatus>(shardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             V& rowSet = byTxShardStatus;
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
                 auto txId = rowSet.template GetValue<Schema::TxShardStatus::TxId>();
                 auto shardIdx = TShardIdx(
@@ -1079,41 +975,41 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, ui64, NKikimrSchemeOp::EIndexType, NKikimrSchemeOp::EIndexState> TTableIndexRec;
     typedef TDeque<TTableIndexRec> TTableIndexRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TTableIndexRec MakeTableIndexRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::AlterVersion>(),
+            rowSet.template GetValue<typename SchemaTable::IndexType>(),
+            rowSet.template GetValue<typename SchemaTable::State>()
+        );
+    }
+
     bool LoadTableIndexes(NIceDb::TNiceDb& db, TTableIndexRows& tableIndexes) const {
         {
             auto rowSet = db.Table<Schema::TableIndex>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = Self->MakeLocalId(TLocalPathId(rowSet.GetValue<Schema::TableIndex::PathId>()));
-                auto alterVersion = rowSet.GetValue<Schema::TableIndex::AlterVersion>();
-                auto type = rowSet.GetValue<Schema::TableIndex::IndexType>();
-                auto state = rowSet.GetValue<Schema::TableIndex::State>();
-
-                tableIndexes.emplace_back(pathId, alterVersion, type, state);
+                const auto pathId = Self->MakeLocalId(TLocalPathId(rowSet.GetValue<Schema::TableIndex::PathId>()));
+                tableIndexes.push_back(MakeTableIndexRec<Schema::TableIndex>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedTableIndex>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = TPathId(TOwnerId(rowSet.GetValue<Schema::MigratedTableIndex::OwnerPathId>()),
-                                      TLocalPathId(rowSet.GetValue<Schema::MigratedTableIndex::LocalPathId>()));
-                auto alterVersion = rowSet.GetValue<Schema::MigratedTableIndex::AlterVersion>();
-                auto type = rowSet.GetValue<Schema::MigratedTableIndex::IndexType>();
-                auto state = rowSet.GetValue<Schema::MigratedTableIndex::State>();
-
-                tableIndexes.emplace_back(pathId, alterVersion, type, state);
+                const auto pathId = TPathId(
+                    TOwnerId(rowSet.GetValue<Schema::MigratedTableIndex::OwnerPathId>()),
+                    TLocalPathId(rowSet.GetValue<Schema::MigratedTableIndex::LocalPathId>())
+                );
+                tableIndexes.push_back(MakeTableIndexRec<Schema::MigratedTableIndex>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -1128,39 +1024,40 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef TDeque<TTableIndexColRec> TTableIndexKeyRows;
     typedef TDeque<TTableIndexColRec> TTableIndexDataRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TTableIndexColRec MakeTableIndexColRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::KeyId>(),
+            rowSet.template GetValue<typename SchemaTable::KeyName>()
+        );
+    }
+
     bool LoadTableIndexKeys(NIceDb::TNiceDb& db, TTableIndexKeyRows& tableIndexKeys) const {
         {
             auto rowSet = db.Table<Schema::TableIndexKeys>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = Self->MakeLocalId(TLocalPathId(rowSet.GetValue<Schema::TableIndexKeys::PathId>()));
-                auto id = rowSet.GetValue<Schema::TableIndexKeys::KeyId>();
-                auto name = rowSet.GetValue<Schema::TableIndexKeys::KeyName>();
-
-                tableIndexKeys.emplace_back(pathId, id, name);
+                const auto pathId = Self->MakeLocalId(TLocalPathId(rowSet.GetValue<Schema::TableIndexKeys::PathId>()));
+                tableIndexKeys.push_back(MakeTableIndexColRec<Schema::TableIndexKeys>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedTableIndexKeys>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = TPathId(rowSet.GetValue<Schema::MigratedTableIndexKeys::OwnerPathId>(),
-                                      rowSet.GetValue<Schema::MigratedTableIndexKeys::LocalPathId>());
-                auto id = rowSet.GetValue<Schema::MigratedTableIndexKeys::KeyId>();
-                auto name = rowSet.GetValue<Schema::MigratedTableIndexKeys::KeyName>();
-
-                tableIndexKeys.emplace_back(pathId, id, name);
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedTableIndexKeys::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedTableIndexKeys::LocalPathId>()
+                );
+                tableIndexKeys.push_back(MakeTableIndexColRec<Schema::MigratedTableIndexKeys>(pathId, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -1176,59 +1073,61 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         if (!rowSet.IsReady()) {
             return false;
         }
-
         while (!rowSet.EndOfSet()) {
-            auto pathId = TPathId(rowSet.GetValue<Schema::TableIndexDataColumns::PathOwnerId>(),
-                                  rowSet.GetValue<Schema::TableIndexDataColumns::PathLocalId>());
+            const auto pathId = TPathId(
+                rowSet.GetValue<Schema::TableIndexDataColumns::PathOwnerId>(),
+                rowSet.GetValue<Schema::TableIndexDataColumns::PathLocalId>()
+            );
             auto id = rowSet.GetValue<Schema::TableIndexDataColumns::DataColumnId>();
             auto name = rowSet.GetValue<Schema::TableIndexDataColumns::DataColumnName>();
-
             tableIndexData.emplace_back(pathId, id, name);
+
             if (!rowSet.Next()) {
                 return false;
             }
         }
+
         return true;
     }
 
     typedef std::tuple<TShardIdx, ui32, TString, TString> TChannelBindingRec;
     typedef TDeque<TChannelBindingRec> TChannelBindingRows;
 
-    bool LoadChannelBindings(NIceDb::TNiceDb& db, TChannelBindingRows& tableIndexKeys) const {
+    template <typename SchemaTable, typename TRowSet>
+    static TChannelBindingRec MakeChannelBindingRec(const TShardIdx& shardIdx, TRowSet& rowSet) {
+        return std::make_tuple(shardIdx,
+            rowSet.template GetValue<typename SchemaTable::ChannelId>(),
+            rowSet.template GetValue<typename SchemaTable::Binding>(),
+            rowSet.template GetValue<typename SchemaTable::PoolName>()
+        );
+    }
+
+    bool LoadChannelBindings(NIceDb::TNiceDb& db, TChannelBindingRows& channeldBindings) const {
         {
             auto rowSet = db.Table<Schema::ChannelsBinding>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::ChannelsBinding::ShardId>());
-                ui32 channelId = rowSet.GetValue<Schema::ChannelsBinding::ChannelId>();
-                TString binding = rowSet.GetValue<Schema::ChannelsBinding::Binding>();
-                TString poolName = rowSet.GetValue<Schema::ChannelsBinding::PoolName>();
-
-                tableIndexKeys.emplace_back(shardIdx, channelId, binding, poolName);
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::ChannelsBinding::ShardId>());
+                channeldBindings.push_back(MakeChannelBindingRec<Schema::ChannelsBinding>(shardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedChannelsBinding>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto shardIdx = TShardIdx(rowSet.GetValue<Schema::MigratedChannelsBinding::OwnerShardId>(),
-                                          rowSet.GetValue<Schema::MigratedChannelsBinding::LocalShardId>());
-                ui32 channelId = rowSet.GetValue<Schema::MigratedChannelsBinding::ChannelId>();
-                TString binding = rowSet.GetValue<Schema::MigratedChannelsBinding::Binding>();
-                TString poolName = rowSet.GetValue<Schema::MigratedChannelsBinding::PoolName>();
-
-                tableIndexKeys.emplace_back(shardIdx, channelId, binding, poolName);
+                const auto shardIdx = TShardIdx(
+                    rowSet.GetValue<Schema::MigratedChannelsBinding::OwnerShardId>(),
+                    rowSet.GetValue<Schema::MigratedChannelsBinding::LocalShardId>()
+                );
+                channeldBindings.push_back(MakeChannelBindingRec<Schema::MigratedChannelsBinding>(shardIdx, rowSet));
 
                 if (!rowSet.Next()) {
                     return false;
@@ -1242,38 +1141,41 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, TString, ui64> TKesusInfosRec;
     typedef TDeque<TKesusInfosRec> TKesusInfosRows;
 
+    template <typename SchemaTable, typename TRowSet>
+    static TKesusInfosRec MakeKesusInfosRec(const TPathId& pathId, TRowSet& rowSet) {
+        return std::make_tuple(pathId,
+            rowSet.template GetValue<typename SchemaTable::Config>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::Version>()
+        );
+    }
+
     bool LoadKesusInfos(NIceDb::TNiceDb& db, TKesusInfosRows& kesusInfosData) const {
         {
             auto rowSet = db.Table<Schema::KesusInfos>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::KesusInfos::PathId>());
-                auto config = rowSet.GetValue<Schema::KesusInfos::Config>();
-                auto version = rowSet.GetValueOrDefault<Schema::KesusInfos::Version>();
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::KesusInfos::PathId>());
+                kesusInfosData.push_back(MakeKesusInfosRec<Schema::KesusInfos>(pathId, rowSet));
 
-                kesusInfosData.emplace_back(pathId, config, version);
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedKesusInfos>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = TPathId(rowSet.GetValue<Schema::MigratedKesusInfos::OwnerPathId>(),
-                                      rowSet.GetValue<Schema::MigratedKesusInfos::LocalPathId>());
-                auto config = rowSet.GetValue<Schema::MigratedKesusInfos::Config>();
-                auto version = rowSet.GetValueOrDefault<Schema::MigratedKesusInfos::Version>();
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedKesusInfos::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedKesusInfos::LocalPathId>()
+                );
+                kesusInfosData.push_back(MakeKesusInfosRec<Schema::MigratedKesusInfos>(pathId, rowSet));
 
-                kesusInfosData.emplace_back(pathId, config, version);
                 if (!rowSet.Next()) {
                     return false;
                 }
@@ -1292,32 +1194,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::KesusAlters::PathId>());
-                auto config = rowSet.GetValue<Schema::KesusAlters::Config>();
-                auto version = rowSet.GetValueOrDefault<Schema::KesusAlters::Version>();
+                const auto pathId = Self->MakeLocalId(rowSet.GetValue<Schema::KesusAlters::PathId>());
+                kesusAlterData.push_back(MakeKesusInfosRec<Schema::KesusAlters>(pathId, rowSet));
 
-                kesusAlterData.emplace_back(pathId, config, version);
                 if (!rowSet.Next()) {
                     return false;
                 }
             }
         }
-
         {
             auto rowSet = db.Table<Schema::MigratedKesusAlters>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
             }
-
             while (!rowSet.EndOfSet()) {
-                auto pathId = TPathId(rowSet.GetValue<Schema::MigratedKesusAlters::OwnerPathId>(),
-                                      rowSet.GetValue<Schema::MigratedKesusAlters::LocalPathId>());
-                auto config = rowSet.GetValue<Schema::MigratedKesusAlters::Config>();
-                auto version = rowSet.GetValueOrDefault<Schema::MigratedKesusAlters::Version>();
+                const auto pathId = TPathId(
+                    rowSet.GetValue<Schema::MigratedKesusAlters::OwnerPathId>(),
+                    rowSet.GetValue<Schema::MigratedKesusAlters::LocalPathId>()
+                );
+                kesusAlterData.push_back(MakeKesusInfosRec<Schema::MigratedKesusAlters>(pathId, rowSet));
 
-                kesusAlterData.emplace_back(pathId, config, version);
                 if (!rowSet.Next()) {
                     return false;
                 }
@@ -1864,9 +1761,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 tableInfo->PartitioningVersion = std::get<6>(rec);
 
-                TString ttlSettings = std::get<7>(rec);
-                if (ttlSettings) {
+                if (const auto ttlSettings = std::get<7>(rec)) {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableTTLSettings(), ttlSettings);
+                    Y_VERIFY(parseOk);
+                }
+
+                if (const auto replicationConfig = std::get<9>(rec)) {
+                    bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableReplicationConfig(), replicationConfig);
                     Y_VERIFY(parseOk);
                 }
 

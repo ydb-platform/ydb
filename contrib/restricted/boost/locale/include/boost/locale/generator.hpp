@@ -6,7 +6,7 @@
 
 #ifndef BOOST_LOCALE_GENERATOR_HPP
 #define BOOST_LOCALE_GENERATOR_HPP
-#include <boost/locale/config.hpp>
+
 #include <boost/locale/hold_ptr.hpp>
 #include <boost/cstdint.hpp>
 #include <locale>

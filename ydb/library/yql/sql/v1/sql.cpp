@@ -11101,7 +11101,10 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             TNodePtr typeNode = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", { BuildLiteralRawString(Ctx.Pos(), type) });
             PushNamedAtom(Ctx.Pos(), varName);
             // no duplicates are possible at this stage
-            Ctx.DeclareVariable(varName, typeNode);
+            bool isWeak = true;
+            Ctx.DeclareVariable(varName, typeNode, isWeak);
+            // avoid 'Symbol is not used' warning for externally declared expression
+            YQL_ENSURE(GetNamedNode(varName));
         }
     }
 

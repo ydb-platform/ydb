@@ -17,6 +17,34 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
+template<class TConstraint>
+TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TConstraint>()) {
+        const auto pos = node->Pos();
+        TExprNode::TListType children(1U, std::move(node));
+        for (const auto& set : constraint->GetAllSets()) {
+            TExprNode::TListType columns;
+            columns.reserve(set.size());
+            for (const auto& path : set) {
+                if (1U == path.size())
+                    columns.emplace_back(ctx.NewAtom(pos, path.front()));
+                else {
+                    TExprNode::TListType atoms(path.size());
+                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(pos, name); });
+                    columns.emplace_back(ctx.NewList(pos, std::move(atoms)));
+                }
+            }
+            children.emplace_back(ctx.NewList(pos, std::move(columns)));
+        }
+        return ctx.NewCallable(pos, TString("Assume") += TConstraint::Name(), std::move(children));
+    }
+    return node;
+}
+
+}
+
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
     return ctx.NewCallable(position, "Nothing", {
         ctx.NewCallable(position, "OptionalType", {
@@ -1126,7 +1154,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
 
     TExprNode::TPtr tuple;
     if (tupleItems.size() == 0) {
-        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, "0").Seal().Build();
+        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, 0U).Seal().Build();
     } else if (tupleItems.size() == 1) {
         tuple = tupleItems[0];
     } else {
@@ -1421,7 +1449,7 @@ ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
             return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
         case ETypeAnnotationKind::Pg: {
             const auto& typeDesc = NPg::LookupType(type.Cast<TPgExprType>()->GetId());
-            if (typeDesc.TypeLen > 0 && typeDesc.PassByValue) {
+            if (typeDesc.PassByValue) {
                 return typeDesc.TypeLen;
             }
             return UnknownWeight;
@@ -1690,6 +1718,61 @@ bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
     });
 
     return withDependsOn;
+}
+
+TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, TExprContext& ctx) {
+    if (!sorted) {
+        return node;
+    }
+    const auto& constent = sorted->GetContent();
+    return ctx.Builder(node->Pos())
+        .Callable("AssumeSorted")
+            .Add(0, std::move(node))
+            .List(1)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    size_t index = 0;
+                    for (auto c : constent) {
+                        parent.Callable(index++, "Bool")
+                            .Atom(0, ToString(c.second), TNodeFlags::Default)
+                        .Seal();
+                        if (1U < c.first.front().size())
+                            break;
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .List()
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        size_t index = 0;
+                        for (auto c : constent) {
+                            if (c.first.front().empty())
+                                parent.Arg(index++, "item");
+                            else if (1U == c.first.front().size()) {
+                                parent.Callable(index++, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, c.first.front().front())
+                                .Seal();
+                            } else {
+                                parent.Callable(index++, "Null").Seal();
+                                break;
+                            }
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
+    res = KeepConstraint<TChoppedConstraintNode>(std::move(res), src, ctx);
+    res = KeepConstraint<TDistinctConstraintNode>(std::move(res), src, ctx);
+    res = KeepConstraint<TUniqueConstraintNode>(std::move(res), src, ctx);
+    return res;
 }
 
 }

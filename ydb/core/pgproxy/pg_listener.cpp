@@ -62,7 +62,8 @@ public:
             }
         }
         BLOG_ERROR("Failed to listen on " << bindAddress->ToString());
-        abort();
+        //abort();
+        PassAway();
     }
 
     void PassAway() override {

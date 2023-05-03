@@ -328,6 +328,7 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
 

@@ -110,6 +110,7 @@ private:
     class TTxGetLogTail;
     class TTxLogCleanup;
     class TTxApplyYamlConfig;
+    class TTxDropYamlConfig;
     class TTxGetYamlConfig;
 
     ITransaction *CreateTxAddConfigSubscription(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev);
@@ -123,6 +124,7 @@ private:
     ITransaction *CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxLogCleanup();
     ITransaction *CreateTxApplyYamlConfig(TEvConsole::TEvApplyConfigRequest::TPtr &ev);
+    ITransaction *CreateTxDropYamlConfig(TEvConsole::TEvDropConfigRequest::TPtr &ev);
     ITransaction *CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev);
 
     void Handle(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
@@ -141,6 +143,7 @@ private:
     void Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvApplyConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvPrivate::TEvStateLoaded::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &ev, const TActorContext &ctx);
 
@@ -184,6 +187,7 @@ private:
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
             HFuncTraced(TEvConsole::TEvApplyConfigRequest, HandleWithRights);
+            HFuncTraced(TEvConsole::TEvDropConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsProvider);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsProvider);
             FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsProvider);
@@ -249,6 +253,7 @@ private:
     TString ClusterName;
     ui32 YamlVersion = 0;
     TString YamlConfig;
+    bool YamlDropped = false;
     TMap<ui64, TString> VolatileYamlConfigs;
 };
 

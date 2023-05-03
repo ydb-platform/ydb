@@ -7,7 +7,6 @@
 #ifndef BOOST_LOCALE_LOCALIZATION_BACKEND_HPP
 #define BOOST_LOCALE_LOCALIZATION_BACKEND_HPP
 
-#include <boost/locale/config.hpp>
 #include <boost/locale/generator.hpp>
 #include <boost/locale/hold_ptr.hpp>
 #include <locale>

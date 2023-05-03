@@ -1091,6 +1091,10 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
         entry->MutableTTLSettings()->CopyFrom(tableInfo->TTLSettings());
     }
 
+    if (tableInfo->HasReplicationConfig()) {
+        entry->MutableReplicationConfig()->CopyFrom(tableInfo->ReplicationConfig());
+    }
+
     entry->SetIsBackup(tableInfo->IsBackup);
 }
 

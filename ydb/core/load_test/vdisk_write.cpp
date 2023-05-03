@@ -326,6 +326,8 @@ namespace NKikimr {
                         }
                     }
                 }
+#undef NAMED_PARAM
+#undef PARAM
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
             }
 

@@ -409,12 +409,17 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     std::bind(&TTabletWriter::ExposeCounters, this, _1), ctx);
         }
 
-        void DumpState(IOutputStream& str) {
-#define DUMP_PARAM(NAME) \
-            TABLER() { \
-                TABLED() { str << #NAME; } \
-                TABLED() { str << NAME; } \
+        void DumpState(IOutputStream& str, bool finalResult) {
+#define DUMP_PARAM_IMPL(NAME, INCLUDE_IN_FINAL) \
+            if (!finalResult || INCLUDE_IN_FINAL) { \
+                TABLER() { \
+                    TABLED() { str << #NAME; } \
+                    TABLED() { str << NAME; } \
+                } \
             }
+#define DUMP_PARAM(NAME) DUMP_PARAM_IMPL(NAME, false)
+#define DUMP_PARAM_FINAL(NAME) DUMP_PARAM_IMPL(NAME, true)
+
             HTML(str) {
                 TDuration EarliestTimestamp = TDuration::Zero();
                 const ui64 nowCycles = GetCycleCountFast();
@@ -437,16 +442,16 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 DUMP_PARAM(NextWriteTimestamp)
                 DUMP_PARAM(WritesInFlight)
                 DUMP_PARAM(WriteBytesInFlight)
-                DUMP_PARAM(MaxWritesInFlight)
-                DUMP_PARAM(MaxWriteBytesInFlight)
-                DUMP_PARAM(TotalBytesWritten)
-                DUMP_PARAM(MaxTotalBytesWritten)
-                DUMP_PARAM(TotalBytesRead)
+                DUMP_PARAM_FINAL(MaxWritesInFlight)
+                DUMP_PARAM_FINAL(MaxWriteBytesInFlight)
+                DUMP_PARAM_FINAL(TotalBytesWritten)
+                DUMP_PARAM_FINAL(MaxTotalBytesWritten)
+                DUMP_PARAM_FINAL(TotalBytesRead)
                 DUMP_PARAM(NextReadTimestamp)
                 DUMP_PARAM(ReadsInFlight)
                 DUMP_PARAM(ReadBytesInFlight)
-                DUMP_PARAM(MaxReadsInFlight)
-                DUMP_PARAM(MaxReadBytesInFlight)
+                DUMP_PARAM_FINAL(MaxReadsInFlight)
+                DUMP_PARAM_FINAL(MaxReadBytesInFlight)
                 DUMP_PARAM(ConfirmedBlobIds.size())
 
                 static constexpr size_t count = 5;
@@ -483,6 +488,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     }
                 }
             }
+#undef DUMP_PARAM_IMPL
+#undef DUMP_PARAM
+#undef DUMP_PARAM_FINAL
         }
 
     private:
@@ -742,6 +750,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     const TActorId Parent;
 
     TMaybe<TDuration> TestDuration;
+    TInstant TestStartTime;
+    bool EarlyStop = false;
 
     TVector<TTabletWriter> TabletWriters;
 
@@ -752,7 +762,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
     ::NMonitoring::TDynamicCounters::TCounterPtr ScheduleCounter;
 
-    ui32 TestStoppedRecieved = 0;
+    ui32 TestStoppedReceived = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -833,6 +843,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TLogWriterLoadTestActor::StateFunc);
+        EarlyStop = false;
+        TestStartTime = TAppData::TimeProvider->Now();
         if (TestDuration) {
             ctx.Schedule(*TestDuration, new TEvents::TEvPoisonPill());
         }
@@ -844,6 +856,9 @@ public:
     }
 
     void HandlePoison(const TActorContext& ctx) {
+        if (TestDuration.Defined()) {
+            EarlyStop = TAppData::TimeProvider->Now() - TestStartTime < TestDuration;
+        }
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load tablet recieved PoisonPill, going to die");
         for (auto& writer : TabletWriters) {
             writer.StopWorking(ctx); // Sends TEvStopTest then all garbage is collected
@@ -851,11 +866,29 @@ public:
     }
 
     void HandleStopTest(const TActorContext& ctx) {
-        ++TestStoppedRecieved;
-        if (TestStoppedRecieved == TabletWriters.size()) {
-            ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, "HandleStopTest"));
-            Die(ctx);
+        ++TestStoppedReceived;
+        if (TestStoppedReceived == TabletWriters.size()) {
+            DeathReport(ctx);
         }
+    }
+
+    void DeathReport(const TActorContext& ctx) {
+        TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
+        TString errorReason;
+        if (EarlyStop) {
+            errorReason = "Abort, stop signal received";
+        } else {
+            report.Reset(new TEvLoad::TLoadReport());
+            if (TestDuration.Defined()) {
+                report->Duration = TestDuration.GetRef();
+            }
+            errorReason = "HandleStopTest";
+        }
+
+        auto* finishEv = new TEvLoad::TEvLoadTestFinished(Tag, report, errorReason);
+        finishEv->LastHtmlPage = RenderHTML(true);
+        ctx.Send(Parent, finishEv);
+        Die(ctx);
     }
 
     void HandleUpdateQuantile(const TActorContext& ctx) {
@@ -893,7 +926,7 @@ public:
         HandleWakeup(ctx);
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    TString RenderHTML(bool finalResult) {
         TStringStream str;
         HTML(str) {
             TABLE_CLASS("table table-condensed") {
@@ -908,9 +941,24 @@ public:
                     }
                 }
                 TABLEBODY() {
+                    TABLER() {
+                        TABLED() {
+                            str << "Passed/Total, sec";
+                        }
+                        TABLED() {
+                            str << (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << " / ";
+                            if (TestDuration.Defined()) {
+                                str << TestDuration->Seconds();
+                            } else {
+                                str << "-";
+                            }
+                        }
+                    }
                     for (auto& writer : TabletWriters) {
-                        str << "<tr><td colspan=\"2\">" << "<b>Tablet</b>" << "</td></tr>";
-                        writer.DumpState(str);
+                        TABLER() {
+                            str << "<td colspan=\"2\">" << "<b>Tablet</b>" << "</td>";
+                        }
+                        writer.DumpState(str, finalResult);
                     }
                 }
             }
@@ -918,7 +966,12 @@ public:
                 str << "<pre>" << ConfingString << "</pre>";
             }
         }
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+        return str.Str();
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        TString html = RenderHTML(false);
+        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(html, ev->Get()->SubRequestId));
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& /*ctx*/) {

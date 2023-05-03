@@ -9,6 +9,8 @@
 
 #include <library/cpp/yt/malloc/malloc.h>
 
+#include <library/cpp/yt/misc/hash.h>
+
 #include <util/system/compiler.h>
 
 #include <algorithm>
@@ -21,9 +23,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 static_assert(sizeof(uintptr_t) == 8);
-
-// TODO(gritukan, babenko): Uncomment check below after DEVTOOLS-7870.
-// static_assert(std::endian::native == std::endian::little);
+static_assert(std::endian::native == std::endian::little);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1005,6 +1005,21 @@ void swap(NYT::TCompactVector<T, N>& lhs, NYT::TCompactVector<T, N>& rhs)
 {
     lhs.swap(rhs);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, size_t N>
+struct hash<NYT::TCompactVector<T, N>>
+{
+    size_t operator()(const NYT::TCompactVector<T, N>& container) const
+    {
+        size_t result = 0;
+        for (const auto& element : container) {
+            NYT::HashCombine(result, element);
+        }
+        return result;
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

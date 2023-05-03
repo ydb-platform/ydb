@@ -195,6 +195,12 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("header",
             "Set if file contains column names at the first not skipped row")
         .StoreTrue(&Header);
+    config.Opts->AddLongOption("columns", 
+            "String with column names that replaces header")
+        .RequiredArgument("STR").StoreResult(&HeaderRow);
+    config.Opts->AddLongOption("newline-delimited",
+            "No newline characters inside records, enables some import optimizations (see docs)")
+        .StoreTrue(&NewlineDelimited);
     if (InputFormat == EOutputFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
@@ -211,6 +217,8 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.SkipRows(SkipRows);
     settings.Header(Header);
+    settings.NewlineDelimited(NewlineDelimited);
+    settings.HeaderRow(HeaderRow);
     settings.NullValue(NullValue);
 
     if (Delimiter.size() != 1) {

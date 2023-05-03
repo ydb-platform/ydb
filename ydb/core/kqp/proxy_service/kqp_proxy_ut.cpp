@@ -3,10 +3,16 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -401,5 +407,120 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         UNIT_ASSERT_C(NegativeStories > 0, "Proxy has no negative responses");
     }
 
+    Y_UNIT_TEST(CreatesScriptExecutionsTable) {
+        TPortManager tp;
+        constexpr ui32 nodesCount = 5;
+
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport);
+        settings.SetEnableScriptExecutionOperations(true);
+        settings.SetNodeCount(nodesCount); // Test that all nodes will create table with race
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+        //server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        //server.GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
+        //server.GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG);
+        //server.GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_DEBUG);
+        //server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+
+        TActorId edgeActors[nodesCount];
+        for (ui32 node = 0; node < nodesCount; ++node) {
+            edgeActors[node] = runtime->AllocateEdgeActor(node);
+        }
+
+        // Make sure that KQP proxy will answer with SUCCESS after a period of time
+        bool allSuccess = false;
+        do {
+            allSuccess = true;
+            for (ui32 node = 0; node < nodesCount; ++node) {
+                TActorId kqpProxy = MakeKqpProxyID(runtime->GetNodeId(node));
+
+                auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
+                auto& req = *ev->Record.MutableRequest();
+                req.SetQuery("SELECT 42");
+                req.SetType(NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY);
+                req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+                req.SetDatabase(settings.DomainName);
+
+                runtime->Send(new IEventHandle(kqpProxy, edgeActors[node], ev.Release()), node);
+            }
+            for (ui32 node = 0; node < nodesCount; ++node) {
+                auto reply = runtime->GrabEdgeEvent<TEvKqp::TEvScriptResponse>(edgeActors[node]);
+                Ydb::StatusIds::StatusCode status = reply->Get()->Status;
+                UNIT_ASSERT_C(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::UNAVAILABLE, reply->Get()->Issues.ToString());
+                UNIT_ASSERT_C(status == Ydb::StatusIds::UNAVAILABLE || reply->Get()->ExecutionId, reply->Get()->Issues.ToString());
+                if (status != Ydb::StatusIds::SUCCESS) {
+                    allSuccess = false;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        } while (!allSuccess);
+    }
+
+    Y_UNIT_TEST(NoUserAccessToScriptExecutionsTable) {
+        // Test that checks that we can create operations table without internal token (=nullptr)
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
+        NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+
+        ui16 grpc = server.GetPort();
+        auto connection = NYdb::TDriver(NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
+            .SetDatabase("/Root")
+            .SetAuthToken("user@builtin"));
+        NYdb::NQuery::TQueryClient client(connection);
+
+        // Wait until KQP proxy is set up
+        {
+            NYdb::EStatus scriptStatus = NYdb::EStatus::UNAVAILABLE;
+            do {
+                auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
+                scriptStatus = executeScrptsResult.Status().GetStatus();
+                UNIT_ASSERT_C(scriptStatus == NYdb::EStatus::UNAVAILABLE || scriptStatus == NYdb::EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
+                UNIT_ASSERT(scriptStatus == NYdb::EStatus::UNAVAILABLE || executeScrptsResult.Metadata().ExecutionId);
+                Sleep(TDuration::MilliSeconds(10));
+            } while (scriptStatus == NYdb::EStatus::UNAVAILABLE);
+        }
+
+        NYdb::NTable::TTableClient tableClient(connection);
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteDataQuery("SELECT * FROM `.metadata/script_executions`", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+
+        NYdb::NScheme::TSchemeClient schemeClient(connection);
+        auto listResult = schemeClient.ListDirectory("/Root/.metadata").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::UNAUTHORIZED, listResult.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(listResult.GetIssues().ToString(), "Access denied");
+    }
+
+    Y_UNIT_TEST(ExecuteScriptFailsWithoutFeatureFlag) {
+        NKikimrConfig::TAppConfig appConfig;
+        NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
+        appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(false); // default
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+
+        ui16 grpc = server.GetPort();
+        auto connection = NYdb::TDriver(NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
+            .SetDatabase("/Root"));
+        NYdb::NQuery::TQueryClient client(connection);
+
+        auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(executeScrptsResult.Status().GetStatus(), NYdb::EStatus::UNSUPPORTED, executeScrptsResult.Status().GetIssues().ToString());
+
+        // Check that there is no .metadata folder
+        NYdb::NScheme::TSchemeClient schemeClient(connection);
+        auto listResult = schemeClient.ListDirectory("/Root").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".sys");
+    }
 } // namspace NKqp
 } // namespace NKikimr

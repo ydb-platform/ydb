@@ -13,6 +13,9 @@
 namespace NKikimr {
 
 static constexpr TStringBuf kResultTablePath = ".load_test_archive";
+static constexpr TStringBuf kMinSuffix = "_min";
+static constexpr TStringBuf kAvgSuffix = "_avg";
+static constexpr TStringBuf kMaxSuffix = "_max";
 
 namespace {
 
@@ -28,8 +31,9 @@ const TColumnDescription BuildTableColumns() {
     columns.emplace_back("success_nodes", "Uint32");
 
     auto addStatsColumn = [&columns](const TString& name, const TString& typeName) {
-        for (const auto& suffix : {"_min", "_avg", "_max"}) {
-            columns.emplace_back(name + suffix, typeName);
+        for (const auto& suffix : {kMinSuffix, kAvgSuffix, kMaxSuffix}) {
+            TString columnTypeName = (suffix == kAvgSuffix) ? "Double" : typeName;
+            columns.emplace_back(name + suffix, std::move(columnTypeName));
         }
     };
     addStatsColumn("transactions", "Uint64");

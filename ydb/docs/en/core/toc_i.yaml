@@ -53,9 +53,11 @@ items:
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Public talks
   href: public-talks.md
-- name: What's new
+- name: Changelog
   items:
-  - name: Changelog
-    href: changelog.md
+  - name: "{{ ydb-short-name }} Server"
+    href: changelog-server.md
+  - name: "{{ ydb-short-name }} CLI"
+    href: changelog-cli.md
   - name: Security changelog
     href: security-changelog.md

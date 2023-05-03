@@ -117,6 +117,7 @@ struct Schema : NIceDb::Schema {
         struct PartitioningVersion : Column<7, NScheme::NTypeIds::Uint64> {};
         struct TTLSettings : Column<8, NScheme::NTypeIds::String> {};
         struct IsBackup : Column<9, NScheme::NTypeIds::Bool> {};
+        struct ReplicationConfig : Column<10, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -128,7 +129,8 @@ struct Schema : NIceDb::Schema {
             AlterTableFull,
             PartitioningVersion,
             TTLSettings,
-            IsBackup
+            IsBackup,
+            ReplicationConfig
         >;
     };
 
@@ -144,6 +146,7 @@ struct Schema : NIceDb::Schema {
         struct PartitioningVersion : Column<8, NScheme::NTypeIds::Uint64> {};
         struct TTLSettings :         Column<9, NScheme::NTypeIds::String> {};
         struct IsBackup :            Column<10, NScheme::NTypeIds::Bool> {};
+        struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -156,7 +159,8 @@ struct Schema : NIceDb::Schema {
             AlterTableFull,
             PartitioningVersion,
             TTLSettings,
-            IsBackup
+            IsBackup,
+            ReplicationConfig
         >;
     };
 

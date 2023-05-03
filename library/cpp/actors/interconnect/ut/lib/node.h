@@ -2,6 +2,7 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>
+#include <library/cpp/actors/core/executor_pool_io.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
@@ -24,11 +25,10 @@ public:
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
-        setup.ExecutorsCount = 1;
+        setup.ExecutorsCount = 2;
         setup.Executors.Reset(new TAutoPtr<IExecutorPool>[setup.ExecutorsCount]);
-        for (ui32 i = 0; i < setup.ExecutorsCount; ++i) {
-            setup.Executors[i].Reset(new TBasicExecutorPool(i, numThreads, 20 /* magic number */));
-        }
+        setup.Executors[0].Reset(new TBasicExecutorPool(0, numThreads, 20 /* magic number */));
+        setup.Executors[1].Reset(new TIOExecutorPool(1, 1));
         setup.Scheduler.Reset(new TBasicSchedulerThread());
         const ui32 interconnectPoolId = 0;
 
@@ -108,8 +108,7 @@ public:
         // register logger
         setup.LocalServices.emplace_back(loggerActorId, TActorSetupCmd(new TLoggerActor(loggerSettings,
             CreateStderrBackend(), counters->GetSubgroup("subsystem", "logger")),
-            TMailboxType::ReadAsFilled, interconnectPoolId));
-
+            TMailboxType::ReadAsFilled, 1));
 
         if (common->OutgoingHandshakeInflightLimit) {
             // create handshake broker actor

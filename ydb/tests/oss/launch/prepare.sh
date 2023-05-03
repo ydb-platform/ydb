@@ -11,7 +11,7 @@ mkdir ${testresults}/py3test/testing_out_stuff
 
 python ${source_root}/ydb/tests/oss/launch/generate_test_context.py --build-root ${build_root} --source-root ${source_root} --out-dir ${testresults}
 
-export PYTHONPATH=${source_root}:${source_root}/library/python/testing/yatest_common:${source_root}/library/python/testing:${source_root}/library/python/pytest/plugins:${source_root}/ydb/tests/oss/canonical
+export PYTHONPATH=${source_root}/ydb/public/sdk/python3:${source_root}:${source_root}/library/python/testing/yatest_common:${source_root}/library/python/testing:${source_root}/library/python/pytest/plugins:${source_root}/ydb/tests/oss/canonical
 
 export YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd"
 export PYTEST_PLUGINS=ya,conftests,canonical

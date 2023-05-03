@@ -124,6 +124,9 @@ message TVolumeConfig {
 
     // Placement partition index.
     optional uint32 PlacementPartitionIndex = 47;
+
+    // Is partitions PoolKind set manually or by config.
+    optional bool IsPartitionsPoolKindSetManually = 48;
 }
 
 message TUpdateVolumeConfig {

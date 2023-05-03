@@ -131,7 +131,6 @@ struct TSqsEvents {
         EvNodeTrackerSubscriptionStatus,
 
         EvForceReloadState,
-        EvChangeRetentionActiveCheck,
 
         EvEnd,
     };
@@ -945,13 +944,6 @@ struct TSqsEvents {
             : NextTryAfter(nextTryAfter)
         {}
         TDuration NextTryAfter;
-    };
-    
-    struct TEvChangeRetentionActiveCheck : public NActors::TEventLocal<TEvChangeRetentionActiveCheck, EvChangeRetentionActiveCheck> {
-        explicit TEvChangeRetentionActiveCheck(bool active)
-            : Active(active)
-        {}
-        bool Active;
     };
 };
 

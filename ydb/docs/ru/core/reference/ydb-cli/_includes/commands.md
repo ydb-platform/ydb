@@ -54,8 +54,8 @@ scheme permissions set | Установка разрешений
 table attribute add | Добавление атрибута таблицы
 table attribute drop | Удаление атрибута таблицы
 [table drop](../table-drop.md) | Удаление таблицы
-[table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса 
-[table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса 
+[table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса
+[table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса
 [table index drop](../commands/secondary_index.md#drop) | Удаление индекса
 [table query execute](../table-query-execute.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
@@ -71,6 +71,7 @@ table attribute drop | Удаление атрибута таблицы
 [topic drop](../topic-drop.md) | Удаление топика
 [topic consumer add](../topic-consumer-add.md) | Добавление читателя в топик
 [topic consumer drop](../topic-consumer-drop.md) | Удаление читателя из топика
+[topic consumer offset commit](../topic-consumer-offset-commit.md) | Сохранение позиции чтения
 [topic read](../topic-read.md) | Чтение сообщений из топика
 [topic write](../topic-write.md) | Запись сообщений в топик
 {% if ydb-cli == "ydb" %}

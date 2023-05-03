@@ -83,6 +83,8 @@
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
+#define LOG_QE(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " " << stream)
+#define LOG_QW(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " " << stream)
 
 namespace NFq {
 
@@ -134,7 +136,8 @@ public:
         const TString& sql,
         const TString& sessionId,
         const NSQLTranslation::TTranslationSettings& sqlSettings,
-        FederatedQuery::ExecuteMode executeMode
+        FederatedQuery::ExecuteMode executeMode,
+        const TString& queryId
     )
         : RunActorId(runActorId)
         , FunctionRegistry(functionRegistry)
@@ -146,6 +149,7 @@ public:
         , SessionId(sessionId)
         , SqlSettings(sqlSettings)
         , ExecuteMode(executeMode)
+        , QueryId(queryId)
     {
     }
 
@@ -217,7 +221,7 @@ public:
             TStringStream exprOut;
             TStringStream planOut;
             Program->Print(&exprOut, &planOut);
-            plan = NJson2Yson::ConvertYson2Json(planOut.Str());
+            plan = Plan2Json(planOut.Str());
             expr = exprOut.Str();
         }
         Issues.AddIssues(Program->Issues());
@@ -248,6 +252,19 @@ public:
         SendStatusAndDie(status);
     }
 
+    TString Plan2Json(const TString& ysonPlan) {
+        if (!ysonPlan) {
+            LOG_QW("Can't convert plan from yson to json: plan is empty");
+            return {};
+        }
+        try {
+            return NJson2Yson::ConvertYson2Json(ysonPlan);
+        } catch (...) {
+            LOG_QE("Can't convert plan from yson to json: " << CurrentExceptionMessage());
+        }
+        return {};
+    }
+
 private:
     TProgramPtr Program;
     TIssues Issues;
@@ -261,6 +278,7 @@ private:
     const TString SessionId;
     const NSQLTranslation::TTranslationSettings SqlSettings;
     const FederatedQuery::ExecuteMode ExecuteMode;
+    const TString QueryId;
     bool Compiled = false;
 };
 
@@ -1206,16 +1224,17 @@ private:
         if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
            LOG_E("StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
         }
-        const bool failure = statusCode != NYql::NDqProto::StatusIds::SUCCESS;
-        const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
-        if (finalize) {
+        
+        if (statusCode != NYql::NDqProto::StatusIds::SUCCESS) {
+            // Error
+            ResignQuery(statusCode);
+            return;
+        }
 
-            if (failure) {
-                ResignQuery(statusCode);
-                return;
-            }
-
-            Finish(GetFinishStatus(!failure));
+        if (DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size())) {
+            // Success
+            QueryStateUpdateRequest.mutable_resources()->set_final_run_no(Params.RestartCount);
+            Finish(GetFinishStatus(true));
             return;
         }
 
@@ -1660,7 +1679,7 @@ private:
                                             , Params.S3Gateway
                                             , Params.QueryId
                                             , Params.JobId
-                                            , Params.RestartCount
+                                            , QueryStateUpdateRequest.resources().final_run_no()
                                             , Params.Status == FederatedQuery::QueryMeta::COMPLETING || Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER
                                             , mergedSecureParams
                                             , Params.CredentialsFactory
@@ -1855,7 +1874,8 @@ private:
             Params.Sql,
             SessionId,
             sqlSettings,
-            Params.ExecuteMode
+            Params.ExecuteMode,
+            Params.QueryId
         ));
     }
 
@@ -1897,10 +1917,10 @@ private:
             if (issues) {
                 SendTransientIssues(issues);
             }
-            PrepareGraphs();
             for (auto& graphParams : DqGraphParams) {
                 FillGraphMemoryInfo(graphParams);
             }
+            PrepareGraphs(); // will compress and seal graphs
         } else {
             Issues.AddIssues(issues);
             if (message) {

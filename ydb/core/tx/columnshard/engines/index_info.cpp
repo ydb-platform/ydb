@@ -46,32 +46,45 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
-    return std::make_shared<arrow::Schema>(arrow::FieldVector{
+    static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
         arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
         arrow::field(SPEC_COL_TX_ID, arrow::uint64())
     });
+    return result;
 }
 
 bool TIndexInfo::IsSpecialColumn(const arrow::Field& field) {
-    const auto& name = field.name();
-    return (name == SPEC_COL_PLAN_STEP)
-        || (name == SPEC_COL_TX_ID);
+    return IsSpecialColumn(field.name());
 }
 
+bool TIndexInfo::IsSpecialColumn(const std::string& fieldName) {
+    return fieldName == SPEC_COL_PLAN_STEP
+        || fieldName == SPEC_COL_TX_ID;
+}
 
-ui32 TIndexInfo::GetColumnId(const TString& name) const {
+bool TIndexInfo::IsSpecialColumn(const ui32 fieldId) {
+    return fieldId == (ui32)ESpecialColumn::PLAN_STEP
+        || fieldId == (ui32)ESpecialColumn::TX_ID;
+}
+
+ui32 TIndexInfo::GetColumnId(const std::string& name) const {
+    auto id = GetColumnIdOptional(name);
+    Y_VERIFY(!!id);
+    return *id;
+}
+
+std::optional<ui32> TIndexInfo::GetColumnIdOptional(const std::string& name) const {
     const auto ni = ColumnNames.find(name);
 
-    if (ni == ColumnNames.end()) {
-        if (name == SPEC_COL_PLAN_STEP) {
-            return ui32(ESpecialColumn::PLAN_STEP);
-        } else if (name == SPEC_COL_TX_ID) {
-            return ui32(ESpecialColumn::TX_ID);
-        }
-        Y_VERIFY(false);
+    if (ni != ColumnNames.end()) {
+        return ni->second;
     }
-
-    return ni->second;
+    if (name == SPEC_COL_PLAN_STEP) {
+        return ui32(ESpecialColumn::PLAN_STEP);
+    } else if (name == SPEC_COL_TX_ID) {
+        return ui32(ESpecialColumn::TX_ID);
+    }
+    return {};
 }
 
 TString TIndexInfo::GetColumnName(ui32 id, bool required) const {

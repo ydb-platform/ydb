@@ -136,7 +136,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         Y_VERIFY(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
-        it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicConverter->GetClientsideName(), Partition, ctx);//will change OwnerCookie
+        it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicName(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
         EmplaceRequest(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, ctx);
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
@@ -301,7 +301,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ctx,
                 NKikimrServices::PERSQUEUE,
                 "Answering for message sourceid: '" << EscapeC(s) <<
-                "', Topic: '" << TopicConverter->GetClientsideName() <<
+                "', Topic: '" << TopicName() <<
                 "', Partition: " << Partition <<
                 ", SeqNo: " << seqNo << ", partNo: " << partNo <<
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
@@ -849,7 +849,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             if (poffset >= curOffset) {
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
-                        "Already written message. Topic: '" << TopicConverter->GetClientsideName()
+                        "Already written message. Topic: '" << TopicName()
                             << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
                             << "'. Message seqNo = " << p.Msg.SeqNo
                             << ". Committed seqNo = " << (isCommitted ? it_inMemory->second.SeqNo : 0)
@@ -922,7 +922,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
 
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                "Topic '" << TopicName() << "' partition " << Partition
                     << " part blob processing sourceId '" << EscapeC(p.Msg.SourceId) <<
                     "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo
         );
@@ -984,7 +984,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
 
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicConverter->GetClientsideName() <<
+                    "Topic '" << TopicName() <<
                         "' partition " << Partition <<
                         " part blob sourceId '" << EscapeC(p.Msg.SourceId) <<
                         "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo <<
@@ -1021,7 +1021,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 }
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
-                        "writing blob: topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                        "writing blob: topic '" << TopicName() << "' partition " << Partition
                             << " " << x.first.ToString() << " size " << x.second << " WTime " << ctx.Now().MilliSeconds()
                 );
 
@@ -1060,7 +1060,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
 
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PERSQUEUE,
-                    "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+                    "Topic '" << TopicName() << "' partition " << Partition
                         << " part blob complete sourceId '" << EscapeC(p.Msg.SourceId) << "' seqNo " << p.Msg.SeqNo
                         << " partNo " << p.Msg.PartNo << " FormedBlobsCount " << PartitionedBlob.GetFormedBlobs().size()
                         << " NewHead: " << NewHead
@@ -1292,7 +1292,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
 
     LOG_DEBUG_S(
             ctx, NKikimrServices::PERSQUEUE,
-            "writing blob: topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
+            "writing blob: topic '" << TopicName() << "' partition " << Partition
                 << " compactOffset " << key.GetOffset() << "," << key.GetCount()
                 << " HeadOffset " << Head.Offset << " endOffset " << EndOffset << " curOffset "
                 << NewHead.GetNextOffset() << " " << key.ToString()
@@ -1372,7 +1372,7 @@ void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
     LOG_DEBUG_S(
             TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
             "Send write quota request." <<
-            " Topic: \"" << TopicConverter->GetClientsideName() << "\"." <<
+            " Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << "." <<
             " Amount: " << dataSize << "." <<
             " Cookie: " << cookie

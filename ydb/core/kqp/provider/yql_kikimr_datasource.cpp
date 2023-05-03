@@ -99,11 +99,14 @@ public:
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         TTypeAnnotationContext& types,
-        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory)
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+        bool isInternalCall)
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
         , Types(types)
-        , ExternalSourceFactory(externalSourceFactory) {}
+        , ExternalSourceFactory(externalSourceFactory)
+        , IsInternalCall(isInternalCall)
+        {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -133,7 +136,7 @@ public:
             auto& result = emplaceResult.first->second;
 
             auto future = Gateway->LoadTableMetadata(clusterName, tableName,
-                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats()));
+                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats()).WithPrivateTables(IsInternalCall));
 
             futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
@@ -255,6 +258,7 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+    const bool IsInternalCall;
 
     THashMap<std::pair<TString, TString>, std::shared_ptr<IKikimrGateway::TTableMetadataResult>> LoadResults;
     NThreading::TFuture<void> AsyncFuture;
@@ -329,7 +333,8 @@ public:
         TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory)
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+        bool isInternalCall)
         : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
@@ -337,7 +342,7 @@ public:
         , ExternalSourceFactory(externalSourceFactory)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
-        , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory))
+        , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx))
 
@@ -769,17 +774,19 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory)
+    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+    bool isInternalCall)
 {
-    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, externalSourceFactory);
+    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, externalSourceFactory, isInternalCall);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types,
-    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory)
+    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+    bool isInternalCall)
 {
-    return new TKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory);
+    return new TKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall);
 }
 
 } // namespace NYql

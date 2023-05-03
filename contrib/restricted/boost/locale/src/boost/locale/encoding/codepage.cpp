@@ -4,16 +4,13 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
-#include <boost/locale/config.hpp>
 #include <boost/locale/encoding.hpp>
 #include <boost/locale/hold_ptr.hpp>
-#include <cstring>
 #include <memory>
 #include <string>
 
 #include "boost/locale/encoding/conv.hpp"
-#if defined(BOOST_WINDOWS) || defined(__CYGWIN__)
+#if BOOST_LOCALE_USE_WIN32_API
 #    define BOOST_LOCALE_WITH_WCONV
 #endif
 #ifdef BOOST_LOCALE_WITH_ICONV
@@ -96,22 +93,6 @@ namespace boost { namespace locale { namespace conv {
                 return cvt->convert(begin, end);
 #endif
             throw invalid_charset_error(charset);
-        }
-
-        std::string normalize_encoding(const char* ccharset)
-        {
-            std::string charset;
-            charset.reserve(std::strlen(ccharset));
-            while(*ccharset != 0) {
-                char c = *ccharset++;
-                if('0' <= c && c <= '9')
-                    charset += c;
-                else if('a' <= c && c <= 'z')
-                    charset += c;
-                else if('A' <= c && c <= 'Z')
-                    charset += char(c - 'A' + 'a');
-            }
-            return charset;
         }
 
     } // namespace impl

@@ -293,6 +293,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
             auto item = result.AddColumns();
             item->SetName(column.Name);
             item->SetType(NScheme::TypeName(column.PType, column.PTypeMod));
+            item->SetNotNull(column.NotNull);
             ui32 order = Max<ui32>();
             if (implKeyToImplColumn.contains(column.Name)) {
                 order = implKeyToImplColumn.at(column.Name);

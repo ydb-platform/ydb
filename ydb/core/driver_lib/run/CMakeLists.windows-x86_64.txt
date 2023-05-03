@@ -67,6 +67,7 @@ target_link_libraries(run PUBLIC
   ydb-core-kqp
   core-kqp-rm_service
   ydb-core-load_test
+  ydb-core-local_pgwire
   ydb-core-log_backend
   ydb-core-metering
   ydb-core-mind
@@ -122,7 +123,7 @@ target_link_libraries(run PUBLIC
   lib-deprecated-client
   ydb-services-auth
   ydb-services-cms
-  ydb-services-console
+  ydb-services-dynamic_config
   ydb-services-datastreams
   ydb-services-discovery
   ydb-services-fq

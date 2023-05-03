@@ -39,9 +39,14 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable>
+template<typename TStringType, bool Nullable, NUdf::EPgStringType PgString>
 class TStringBlockItemConverter : public IBlockItemConverter {
 public:
+    void SetPgBuilder(const NUdf::IPgBuilder* pgBuilder) {
+        Y_ENSURE(PgString != NUdf::EPgStringType::None);
+        PgBuilder = pgBuilder;
+    }
+
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
         Y_UNUSED(holderFactory);
         if constexpr (Nullable) {
@@ -50,7 +55,13 @@ public:
             }
         }
 
-        return MakeString(item.AsStringRef());
+        if constexpr (PgString == NUdf::EPgStringType::CString) {
+             return PgBuilder->MakeCString(item.AsStringRef().Data()).Release();
+        } else if constexpr (PgString == NUdf::EPgStringType::Text) {
+             return PgBuilder->MakeText(item.AsStringRef().Data()).Release();             
+        } else {
+            return MakeString(item.AsStringRef());
+        }
     }
 
     TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
@@ -60,8 +71,19 @@ public:
             }
         }
 
-        return TBlockItem(value.AsStringRef());
+        if constexpr (PgString == NUdf::EPgStringType::CString) {
+            return TBlockItem(PgBuilder->AsCStringBuffer(value));
+        } else if constexpr (PgString == NUdf::EPgStringType::Text) {
+            return TBlockItem(PgBuilder->AsTextBuffer(value));
+        } else {
+            return TBlockItem(value.AsStringRef());
+        }
     }
+
+private:
+    const NUdf::IPgBuilder* PgBuilder = nullptr;
+    i32 TypeLen = 0;
+    ui32 PgTypeId = 0;
 };
 
 template <bool Nullable>
@@ -152,15 +174,31 @@ struct TConverterTraits {
     using TTuple = TTupleBlockItemConverter<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockItemConverter<T, Nullable>;
-    template <typename TStringType, bool Nullable>
-    using TStrings = TStringBlockItemConverter<TStringType, Nullable>;
+    template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
+    using TStrings = TStringBlockItemConverter<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
+
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+        if (desc.PassByValue) {
+            return std::make_unique<TFixedSize<ui64, true>>();
+        } else {
+            if (desc.Typelen == -1) {
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::Text>>();
+                ret->SetPgBuilder(pgBuilder);
+                return ret;
+            } else {
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::CString>>();
+                ret->SetPgBuilder(pgBuilder);
+                return ret;
+            }
+        }        
+    }
 };
 
 } // namespace
 
-std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
-    return NYql::NUdf::MakeBlockReaderImpl<TConverterTraits>(typeInfoHelper, type);
+std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const NUdf::IPgBuilder& pgBuilder) {
+    return NYql::NUdf::MakeBlockReaderImpl<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
 }
 
 } // namespace NMiniKQL

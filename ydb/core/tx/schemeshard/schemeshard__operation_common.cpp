@@ -605,7 +605,7 @@ bool CollectSchemaChanged(const TOperationId& operationId,
     const auto& evRecord = ev->Get()->Record;
     if (evRecord.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
         const auto ssId = context.SS->SelfTabletId();
-        const auto shardId = TTabletId(evRecord.GetOrigin());
+        const TTabletId shardId(evRecord.GetOrigin());
 
         const auto shardIdx = context.SS->MustGetShardIdx(shardId);
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
@@ -649,10 +649,12 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                                                                                        const TString& databaseId,
                                                                                        const TString& databasePath,
                                                                                        TTxState::ETxType txType,
-                                                                                       TTabletId ssId)
+                                                                                       TTabletId ssId,
+                                                                                       const TOperationContext& context)
 {
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
     event->Record.SetTxId(ui64(txId));
+    event->Record.SetTablet(ui64(ssId));
     event->Record.MutableConfig()->SetSchemeShardId(ui64(ssId));
 
     MakePQTabletConfig(*event->Record.MutableConfig()->MutableTabletConfig(),
@@ -668,6 +670,10 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                         pqGroup,
                         txType);
 
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Propose configure PersQueue" <<
+                ", message: " << event->Record.ShortUtf8DebugString());
+
     return event;
 }
 
@@ -680,7 +686,8 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                                                                            const TString& folderId,
                                                                            const TString& databaseId,
                                                                            const TString& databasePath,
-                                                                           TTxState::ETxType txType)
+                                                                           TTxState::ETxType txType,
+                                                                           const TOperationContext& context)
 {
     auto event = MakeHolder<TEvPersQueue::TEvUpdateConfig>();
     event->Record.SetTxId(ui64(txId));
@@ -697,6 +704,10 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
     MakeBootstrapConfig(*event->Record.MutableBootstrapConfig(),
                         pqGroup,
                         txType);
+
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Propose configure PersQueue" <<
+                ", message: " << event->Record.ShortUtf8DebugString());
 
     return event;
 }

@@ -822,7 +822,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, const TKqpTabl
         if (!task.Meta.Reads->empty()) {
             protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
             protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
-            protoTaskMeta.SetSorted(task.Meta.ReadInfo.Sorted);
+            if (task.Meta.HasEnableShardsSequentialScan()) {
+                protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
+            }
             protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
 
             for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
@@ -978,6 +980,10 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, c
     ActorIdToProto(task.Meta.ExecuterId, result.MutableExecuter()->MutableActorId());
     result.SetId(task.Id);
     result.SetStageId(stageInfo.Id.StageId);
+    result.SetUseLlvm(task.GetUseLlvm());
+    if (task.HasMetaId()) {
+        result.SetMetaId(task.GetMetaIdUnsafe());
+    }
 
     for (const auto& [paramName, paramValue] : task.Meta.DqTaskParams) {
         (*result.MutableTaskParams())[paramName] = paramValue;

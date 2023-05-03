@@ -71,6 +71,7 @@ public:
         , Tail_(other.Tail_)
         , TailSize_(other.TailSize_)
         , HeadReserve_(other.HeadReserve_)
+        , ClosedPagesSize_(other.ClosedPagesSize_)
     {
         other.Reset();
     }
@@ -114,16 +115,15 @@ public:
             if (len) {
                 f(src, len);
             }
-            page = page->Next();
+            page = (page == end) ? nullptr : page->Next();
         }
     }
 
     inline size_t Size() const {
-        size_t result = 0;
-        ForEachPage([&result](const char*, size_t size) {
-            result += size;
-        });
-        return result;
+        //                      + (Tail_ ? TailSize_ : 0);
+        size_t sizeWithReserve = ClosedPagesSize_ + ((-size_t(Tail_ != nullptr)) & TailSize_);
+        Y_VERIFY_DEBUG(sizeWithReserve >= HeadReserve_);
+        return sizeWithReserve - HeadReserve_;
     }
 
     template<typename TContainer>
@@ -152,6 +152,8 @@ public:
 
     inline void ReserveHeader(size_t len) {
         Y_VERIFY_DEBUG(len > 0);
+        Y_VERIFY_DEBUG(Head_ == Tail_);
+        Y_VERIFY_DEBUG(HeadReserve_ == 0);
         Advance(len);
         HeadReserve_ = len;
     }
@@ -173,7 +175,7 @@ public:
 
     inline void Clear() {
         Tail_ = Head_;
-        HeadReserve_ = 0;
+        ClosedPagesSize_ = HeadReserve_ = 0;
         //        = Tail_ ? 0 : TBufferPage::PageAllocSize;
         TailSize_ = (-size_t(Tail_ == nullptr)) & TBufferPage::PageCapacity;
     }
@@ -221,7 +223,7 @@ private:
     inline void Reset() noexcept {
         Head_ = Tail_ = nullptr;
         TailSize_ = TBufferPage::PageCapacity;
-        HeadReserve_ = 0;
+        ClosedPagesSize_ = HeadReserve_ = 0;
     }
 
     void Deallocate() noexcept {
@@ -241,6 +243,7 @@ private:
     // TailSize_ is initialized as if last page is full, this way we can simplifiy check in Advance()
     size_t TailSize_ = TBufferPage::PageCapacity;
     size_t HeadReserve_ = 0;
+    size_t ClosedPagesSize_ = 0;
 };
 
 } // NMiniKQL

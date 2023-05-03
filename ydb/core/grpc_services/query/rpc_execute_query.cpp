@@ -20,9 +20,14 @@ using namespace NActors;
 using TEvExecuteQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::ExecuteQueryRequest,
     Ydb::Query::ExecuteQueryResponsePart>;
 
-class RpcFlowControlState {
+struct TProducerState {
+    TMaybe<ui64> LastSeqNo;
+    ui64 AckedFreeSpaceBytes = 0;
+};
+
+class TRpcFlowControlState {
 public:
-    RpcFlowControlState(ui64 inflightLimitBytes)
+    TRpcFlowControlState(ui64 inflightLimitBytes)
         : InflightLimitBytes_(inflightLimitBytes) {}
 
     void PushResponse(ui64 responseSizeBytes) {
@@ -150,41 +155,46 @@ private:
         }
 
         ui64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
-        if (ResumeWithSeqNo_ && freeSpaceBytes > 0) {
-            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
-                << ", seqNo: " << *ResumeWithSeqNo_
-                << ", freeSpace: " << freeSpaceBytes
-                << ", executer: " << ExecuterActorId_);
 
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-            resp->Record.SetSeqNo(*ResumeWithSeqNo_);
-            resp->Record.SetFreeSpace(freeSpaceBytes);
+        for (auto& pair : StreamProducers_) {
+            const auto& producerId = pair.first;
+            auto& producer = pair.second;
 
-            ctx.Send(ExecuterActorId_, resp.Release());
+            if (freeSpaceBytes > 0 && producer.LastSeqNo && producer.AckedFreeSpaceBytes == 0) {
+                LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
+                    << ", producer: " << producerId
+                    << ", seqNo: " << producer.LastSeqNo
+                    << ", freeSpace: " << freeSpaceBytes);
 
-            ResumeWithSeqNo_.Clear();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                resp->Record.SetSeqNo(*producer.LastSeqNo);
+                resp->Record.SetFreeSpace(freeSpaceBytes);
+
+                ctx.Send(producerId, resp.Release());
+
+                producer.AckedFreeSpaceBytes = freeSpaceBytes;
+            }
         }
+
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
-        if (!ExecuterActorId_) {
-            ExecuterActorId_ = ev->Sender;
-        }
-
         Ydb::Query::ExecuteQueryResponsePart response;
         response.set_status(Ydb::StatusIds::SUCCESS);
-        response.set_result_set_index(0);
+        response.set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
         response.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
+        FlowControl_.PushResponse(out.size());
+        auto freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+
         Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
 
-        auto freeSpaceBytes = FlowControl_.FreeSpaceBytes();
-        if (freeSpaceBytes == 0) {
-            ResumeWithSeqNo_ = ev->Get()->Record.GetSeqNo();
-        }
+        auto& producer = StreamProducers_[ev->Sender];
+        producer.LastSeqNo = ev->Get()->Record.GetSeqNo();
+        producer.AckedFreeSpaceBytes = freeSpaceBytes;
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
@@ -272,10 +282,8 @@ private:
 private:
     std::unique_ptr<TEvExecuteQueryRequest> Request_;
 
-    RpcFlowControlState FlowControl_;
-    TMaybe<ui64> ResumeWithSeqNo_;
-
-    TActorId ExecuterActorId_;
+    TRpcFlowControlState FlowControl_;
+    TMap<TActorId, TProducerState> StreamProducers_;
 };
 
 } // namespace

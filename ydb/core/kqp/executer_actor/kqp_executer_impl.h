@@ -960,24 +960,19 @@ protected:
     }
 
     IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {
+        auto channelIt = ResultChannelProxies.find(channel.Id);
+        if (channelIt != ResultChannelProxies.end()) {
+            return channelIt->second;
+        }
+
+        YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
+        const auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
+
         IActor* proxy;
-
-        if (ResponseEv->TxResults[0].IsStream) {
-            if (!ResultChannelProxies.empty()) {
-                return ResultChannelProxies.begin()->second;
-            }
-
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
-                ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), this->SelfId());
+        if (txResult.IsStream) {
+            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
+                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats.get(), this->SelfId());
         } else {
-            YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
-
-            auto channelIt = ResultChannelProxies.find(channel.Id);
-
-            if (channelIt != ResultChannelProxies.end()) {
-                return channelIt->second;
-            }
-
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
         }
@@ -1103,7 +1098,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, TPreparedQueryHolder::TConstPtr preparedQuery);
 
 } // namespace NKqp
 } // namespace NKikimr

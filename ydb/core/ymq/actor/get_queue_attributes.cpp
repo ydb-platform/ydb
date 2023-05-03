@@ -182,51 +182,55 @@ private:
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
         auto* result = Response_.MutableGetQueueAttributes();
+        bool queueExists = true;
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
-            const TValue& attrs(val["attrs"]);
+            queueExists = val["queueExists"];
+            if (queueExists) {
+                const TValue& attrs(val["attrs"]);
 
-            if (HasAttributeName("ContentBasedDeduplication")) {
-                result->SetContentBasedDeduplication(bool(attrs["ContentBasedDeduplication"]));
-            }
-            if (HasAttributeName("DelaySeconds")) {
-                result->SetDelaySeconds(TDuration::MilliSeconds(ui64(attrs["DelaySeconds"])).Seconds());
-            }
-            if (HasAttributeName("FifoQueue")) {
-                result->SetFifoQueue(bool(attrs["FifoQueue"]));
-            }
-            if (HasAttributeName("MaximumMessageSize")) {
-                result->SetMaximumMessageSize(ui64(attrs["MaximumMessageSize"]));
-            }
-            if (HasAttributeName("MessageRetentionPeriod")) {
-                result->SetMessageRetentionPeriod(TDuration::MilliSeconds(ui64(attrs["MessageRetentionPeriod"])).Seconds());
-            }
-            if (HasAttributeName("ReceiveMessageWaitTimeSeconds")) {
-                result->SetReceiveMessageWaitTimeSeconds(TDuration::MilliSeconds(ui64(attrs["ReceiveMessageWaitTime"])).Seconds());
-            }
-            if (HasAttributeName("VisibilityTimeout")) {
-                result->SetVisibilityTimeout(TDuration::MilliSeconds(ui64(attrs["VisibilityTimeout"])).Seconds());
-            }
-            if (HasAttributeName("RedrivePolicy")) {
-                const TValue& dlqArn(attrs["DlqArn"]);
-                if (dlqArn.HaveValue() && !TString(dlqArn).empty()) {
-                    // the attributes can't be set separately, so we check only one
-                    TRedrivePolicy redrivePolicy;
-                    redrivePolicy.TargetArn = TString(dlqArn);
-                    redrivePolicy.MaxReceiveCount = ui64(attrs["MaxReceiveCount"]);
-                    result->SetRedrivePolicy(redrivePolicy.ToJson());
+                if (HasAttributeName("ContentBasedDeduplication")) {
+                    result->SetContentBasedDeduplication(bool(attrs["ContentBasedDeduplication"]));
                 }
+                if (HasAttributeName("DelaySeconds")) {
+                    result->SetDelaySeconds(TDuration::MilliSeconds(ui64(attrs["DelaySeconds"])).Seconds());
+                }
+                if (HasAttributeName("FifoQueue")) {
+                    result->SetFifoQueue(bool(attrs["FifoQueue"]));
+                }
+                if (HasAttributeName("MaximumMessageSize")) {
+                    result->SetMaximumMessageSize(ui64(attrs["MaximumMessageSize"]));
+                }
+                if (HasAttributeName("MessageRetentionPeriod")) {
+                    result->SetMessageRetentionPeriod(TDuration::MilliSeconds(ui64(attrs["MessageRetentionPeriod"])).Seconds());
+                }
+                if (HasAttributeName("ReceiveMessageWaitTimeSeconds")) {
+                    result->SetReceiveMessageWaitTimeSeconds(TDuration::MilliSeconds(ui64(attrs["ReceiveMessageWaitTime"])).Seconds());
+                }
+                if (HasAttributeName("VisibilityTimeout")) {
+                    result->SetVisibilityTimeout(TDuration::MilliSeconds(ui64(attrs["VisibilityTimeout"])).Seconds());
+                }
+                if (HasAttributeName("RedrivePolicy")) {
+                    const TValue& dlqArn(attrs["DlqArn"]);
+                    if (dlqArn.HaveValue() && !TString(dlqArn).empty()) {
+                        // the attributes can't be set separately, so we check only one
+                        TRedrivePolicy redrivePolicy;
+                        redrivePolicy.TargetArn = TString(dlqArn);
+                        redrivePolicy.MaxReceiveCount = ui64(attrs["MaxReceiveCount"]);
+                        result->SetRedrivePolicy(redrivePolicy.ToJson());
+                    }
+                }
+                
+                --WaitCount_;
+                ReplyIfReady();
+                return;
             }
-        } else {
-            RLOG_SQS_ERROR("Get queue attributes query failed");
-            MakeError(result, NErrors::INTERNAL_FAILURE);
-            SendReplyAndDie();
-            return;
         }
 
-        --WaitCount_;
-        ReplyIfReady();
+        RLOG_SQS_ERROR("Get queue attributes query failed, queue exists: " << queueExists << ", answer: " << record);
+        MakeError(result, queueExists ? NErrors::INTERNAL_FAILURE : NErrors::NON_EXISTENT_QUEUE);
+        SendReplyAndDie();
     }
 
     void HandleRuntimeAttributes(TSqsEvents::TEvGetRuntimeQueueAttributesResponse::TPtr& ev) {

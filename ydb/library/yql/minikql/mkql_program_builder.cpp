@@ -1536,14 +1536,16 @@ TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode sec
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
     auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool firstOptional;
-    auto firstItemType = UnpackOptionalData(firstType->GetItemType(), firstOptional);
+    auto firstItemType = firstType->GetItemType();
+    auto secondItemType = secondType->GetItemType();
 
-    bool secondOptional;
-    auto secondItemType = UnpackOptionalData(secondType->GetItemType(), secondOptional);
+    MKQL_ENSURE(firstItemType->IsOptional() || firstItemType->IsPg(), "Expecting Optional or Pg type as first argument");
 
-    MKQL_ENSURE(firstOptional, "BlockCoalesce with non-optional first argument");
-    MKQL_ENSURE(firstItemType->IsSameType(*secondItemType), "Argument should have same base types");
+    if (!firstItemType->IsSameType(*secondItemType)) {
+        bool firstOptional;
+        firstItemType = UnpackOptional(firstItemType, firstOptional);
+        MKQL_ENSURE(firstItemType->IsSameType(*secondItemType), "Uncompatible arguemnt types");
+    }
 
     auto outputType = NewBlockType(secondType->GetItemType(), GetResultShape({firstType, secondType}));
 
@@ -2257,6 +2259,10 @@ TRuntimeNode TProgramBuilder::NewStruct(TType* structType, const TArrayRef<const
     return TRuntimeNode(TStructLiteral::Create(values.size(), values.data(), detailedStructType, Env), true);
 }
 
+TRuntimeNode TProgramBuilder::NewEmptyList() {
+    return TRuntimeNode(Env.GetEmptyList(), true);
+}
+
 TRuntimeNode TProgramBuilder::NewEmptyList(TType* itemType) {
     TListLiteralBuilder builder(Env, itemType);
     return TRuntimeNode(builder.Build(), true);
@@ -2309,6 +2315,10 @@ TType* TProgramBuilder::NewTaggedType(TType* baseType, const std::string_view& t
 
 TType* TProgramBuilder::NewDictType(TType* keyType, TType* payloadType, bool multi) {
     return TDictType::Create(keyType, multi ? NewListType(payloadType) : payloadType, Env);
+}
+
+TRuntimeNode TProgramBuilder::NewEmptyDict() {
+    return TRuntimeNode(Env.GetEmptyDict(), true);
 }
 
 TRuntimeNode TProgramBuilder::NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items) {

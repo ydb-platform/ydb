@@ -14,9 +14,18 @@
 #include <util/generic/list.h>
 
 #include "types.h"
+#include "outgoing_stream.h"
 
 #ifndef FORCE_EVENT_CHECKSUM
 #define FORCE_EVENT_CHECKSUM 0
+#endif
+
+// WARNING: turning this feature on will make protocol incompatible with ordinary Interconnect, use with caution
+#define IC_FORCE_HARDENED_PACKET_CHECKS 0
+
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+#undef FORCE_EVENT_CHECKSUM
+#define FORCE_EVENT_CHECKSUM 1
 #endif
 
 Y_FORCE_INLINE ui32 Crc32cExtendMSanCompatible(ui32 checksum, const void *data, size_t len) {
@@ -45,9 +54,6 @@ struct TTcpPacketBuf {
     static constexpr ui64 ClockMask = 0x2000000000000000ULL;
 
     static constexpr size_t PacketDataLen = 4096 * 2 - 96 - sizeof(TTcpPacketHeader_v2);
-
-    TTcpPacketHeader_v2 Header;
-    char Data[PacketDataLen];
 };
 
 struct TEventData {
@@ -58,9 +64,13 @@ struct TEventData {
     ui64 Cookie;
     NWilson::TTraceId TraceId;
     ui32 Checksum;
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+    ui32 Len;
+#endif
 };
 
 #pragma pack(push, 1)
+
 struct TEventDescr2 {
     ui32 Type;
     ui32 Flags;
@@ -69,7 +79,11 @@ struct TEventDescr2 {
     ui64 Cookie;
     NWilson::TTraceId::TSerializedTraceId TraceId;
     ui32 Checksum;
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+    ui32 Len;
+#endif
 };
+
 #pragma pack(pop)
 
 struct TEventHolder : TNonCopyable {
@@ -121,144 +135,123 @@ namespace NActors {
 
 struct TTcpPacketOutTask : TNonCopyable {
     const TSessionParams& Params;
-    TTcpPacketBuf Packet;
-    size_t DataSize;
-    TStackVec<TConstIoVec, 32> Bufs;
-    size_t BufferIndex;
-    size_t FirstBufferOffset;
-    bool TriedWriting;
-    char *FreeArea;
-    char *End;
-    mutable NLWTrace::TOrbit Orbit;
+    NInterconnect::TOutgoingStream& OutgoingStream;
+    NInterconnect::TOutgoingStream& XdcStream;
+    NInterconnect::TOutgoingStream::TBookmark HeaderBookmark;
+    size_t InternalSize = 0;
+    size_t ExternalSize = 0;
 
-public:
-    TTcpPacketOutTask(const TSessionParams& params)
+    TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
+            NInterconnect::TOutgoingStream& xdcStream)
         : Params(params)
-    {
-        Reuse();
+        , OutgoingStream(outgoingStream)
+        , XdcStream(xdcStream)
+        , HeaderBookmark(OutgoingStream.Bookmark(sizeof(TTcpPacketHeader_v2)))
+    {}
+
+    // Preallocate some space to fill it later.
+    NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {
+        Y_VERIFY_DEBUG(len <= GetInternalFreeAmount());
+        InternalSize += len;
+        return OutgoingStream.Bookmark(len);
     }
 
-    bool IsAtBegin() const {
-        return !BufferIndex && !FirstBufferOffset && !TriedWriting;
+    // Write previously bookmarked space.
+    void WriteBookmark(NInterconnect::TOutgoingStream::TBookmark&& bookmark, const void *buffer, size_t len) {
+        OutgoingStream.WriteBookmark(std::move(bookmark), {static_cast<const char*>(buffer), len});
     }
 
-    void MarkTriedWriting() {
-        TriedWriting = true;
-    }
-
-    void Reuse() {
-        DataSize = 0;
-        Bufs.assign(1, {&Packet.Header, sizeof(Packet.Header)});
-        BufferIndex = 0;
-        FirstBufferOffset = 0;
-        TriedWriting = false;
-        FreeArea = Packet.Data;
-        End = FreeArea + TTcpPacketBuf::PacketDataLen;
-        Orbit.Reset();
-    }
-
-    bool IsEmpty() const {
-        return !DataSize;
-    }
-
-    void SetMetadata(ui64 serial, ui64 confirm) {
-        Packet.Header.Serial = serial;
-        Packet.Header.Confirm = confirm;
-    }
-
-    size_t GetDataSize() const { return DataSize; }
-
-    ui64 GetSerial() const {
-        return Packet.Header.Serial;
-    }
-
-    bool Confirmed(ui64 confirm) const {
-        return IsEmpty() || Packet.Header.Serial <= confirm;
-    }
-
-    void *GetFreeArea() {
-        return FreeArea;
-    }
-
-    size_t GetVirtualFreeAmount() const {
-        return TTcpPacketBuf::PacketDataLen - DataSize;
-    }
-
-    void AppendBuf(const void *buf, size_t size) {
-        DataSize += size;
-        Y_VERIFY_DEBUG(DataSize <= TTcpPacketBuf::PacketDataLen, "DataSize# %zu AppendBuf buf# %p size# %zu"
-            " FreeArea# %p End# %p", DataSize, buf, size, FreeArea, End);
-
-        if (Bufs && static_cast<const char*>(Bufs.back().Data) + Bufs.back().Size == buf) {
-            Bufs.back().Size += size;
+    // Acquire raw pointer to write some data.
+    TMutableContiguousSpan AcquireSpanForWriting(bool external) {
+        if (external) {
+            return XdcStream.AcquireSpanForWriting(GetExternalFreeAmount());
         } else {
-            Bufs.push_back({buf, size});
-        }
-
-        if (buf >= FreeArea && buf < End) {
-            Y_VERIFY_DEBUG(buf == FreeArea);
-            FreeArea = const_cast<char*>(static_cast<const char*>(buf)) + size;
-            Y_VERIFY_DEBUG(FreeArea <= End);
+            return OutgoingStream.AcquireSpanForWriting(GetInternalFreeAmount());
         }
     }
 
-    void Undo(size_t size) {
-        Y_VERIFY(Bufs);
-        auto& buf = Bufs.back();
-        Y_VERIFY(buf.Data == FreeArea - buf.Size);
-        buf.Size -= size;
-        if (!buf.Size) {
-            Bufs.pop_back();
-        }
-        FreeArea -= size;
-        DataSize -= size;
+    // Append reference to some data (acquired previously or external pointer).
+    void Append(bool external, const void *buffer, size_t len) {
+        Y_VERIFY_DEBUG(len <= (external ? GetExternalFreeAmount() : GetInternalFreeAmount()));
+        (external ? ExternalSize : InternalSize) += len;
+        (external ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len});
     }
 
-    bool DropBufs(size_t& amount) {
-        while (BufferIndex != Bufs.size()) {
-            TConstIoVec& item = Bufs[BufferIndex];
-            // calculate number of bytes to the end in current buffer
-            const size_t remain = item.Size - FirstBufferOffset;
-            if (amount >= remain) {
-                // vector item completely fits into the received amount, drop it out and switch to next buffer
-                amount -= remain;
-                ++BufferIndex;
-                FirstBufferOffset = 0;
-            } else {
-                // adjust first buffer by "amount" bytes forward and reset amount to zero
-                FirstBufferOffset += amount;
-                amount = 0;
-                // return false meaning that we have some more data to send
-                return false;
-            }
-        }
-        return true;
+    // Write some data with copying.
+    void Write(bool external, const void *buffer, size_t len) {
+        Y_VERIFY_DEBUG(len <= (external ? GetExternalFreeAmount() : GetInternalFreeAmount()));
+        (external ? ExternalSize : InternalSize) += len;
+        (external ? XdcStream : OutgoingStream).Write({static_cast<const char*>(buffer), len});
     }
 
-    void ResetBufs() {
-        BufferIndex = FirstBufferOffset = 0;
-        TriedWriting = false;
+    void Finish(ui64 serial, ui64 confirm) {
+        Y_VERIFY(InternalSize <= Max<ui16>());
+
+        TTcpPacketHeader_v2 header{
+            confirm,
+            serial,
+            0,
+            static_cast<ui16>(InternalSize)
+        };
+
+        if (Checksumming()) {
+            // pre-write header without checksum for correct checksum calculation
+            WriteBookmark(NInterconnect::TOutgoingStream::TBookmark(HeaderBookmark), &header, sizeof(header));
+
+            size_t total = 0;
+            ui32 checksum = 0;
+            OutgoingStream.ScanLastBytes(GetPacketSize(), [&](TContiguousSpan span) {
+                checksum = Crc32cExtendMSanCompatible(checksum, span.data(), span.size());
+                total += span.size();
+            });
+            header.Checksum = checksum;
+            Y_VERIFY(total == GetPacketSize(), "total# %zu InternalSize# %zu GetPacketSize# %zu", total, InternalSize,
+                GetPacketSize());
+        }
+
+        WriteBookmark(std::exchange(HeaderBookmark, {}), &header, sizeof(header));
     }
 
-    template <typename TVectorType>
-    void AppendToIoVector(TVectorType& vector, size_t max) {
-        for (size_t k = BufferIndex, offset = FirstBufferOffset; k != Bufs.size() && vector.size() < max; ++k, offset = 0) {
-            TConstIoVec v = Bufs[k];
-            v.Data = static_cast<const char*>(v.Data) + offset;
-            v.Size -= offset;
-            vector.push_back(v);
-        }
+    bool Checksumming() const {
+        return !Params.Encryption;
     }
 
-    void Sign() {
-        Packet.Header.Checksum = 0;
-        Packet.Header.PayloadLength = DataSize;
-        if (!Params.Encryption) {
-            ui32 sum = 0;
-            for (const auto& item : Bufs) {
-                sum = Crc32cExtendMSanCompatible(sum, item.Data, item.Size);
-            }
-            Packet.Header.Checksum = sum;
-        }
-    }
+    bool IsEmpty() const { return GetDataSize() == 0; }
+    size_t GetDataSize() const { return InternalSize + ExternalSize; }
+    size_t GetPacketSize() const { return sizeof(TTcpPacketHeader_v2) + InternalSize; }
+    size_t GetInternalFreeAmount() const { return TTcpPacketBuf::PacketDataLen - InternalSize; }
+    size_t GetExternalFreeAmount() const { return 16384 - ExternalSize; }
+    size_t GetExternalSize() const { return ExternalSize; }
 };
+
+namespace NInterconnect::NDetail {
+    static constexpr size_t MaxNumberBytes = (sizeof(ui64) * CHAR_BIT + 6) / 7;
+
+    inline size_t SerializeNumber(ui64 num, char *buffer) {
+        char *begin = buffer;
+        do {
+            *buffer++ = (num & 0x7F) | (num >= 128 ? 0x80 : 0x00);
+            num >>= 7;
+        } while (num);
+        return buffer - begin;
+    }
+
+    inline ui64 DeserializeNumber(const char **ptr, const char *end) {
+        const char *p = *ptr;
+        size_t res = 0;
+        size_t offset = 0;
+        for (;;) {
+            if (p == end) {
+                return Max<ui64>();
+            }
+            const char byte = *p++;
+            res |= (static_cast<size_t>(byte) & 0x7F) << offset;
+            offset += 7;
+            if (!(byte & 0x80)) {
+                break;
+            }
+        }
+        *ptr = p;
+        return res;
+    }
+}

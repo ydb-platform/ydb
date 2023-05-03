@@ -26,7 +26,7 @@ struct TQueryExecutionStats;
 struct TKqpExecuterTxResult;
 
 NActors::IActor* CreateResultStreamChannelProxy(ui64 txId, ui64 channelId, NKikimr::NMiniKQL::TType* itemType,
-    const TVector<ui32>* columnOrder, NActors::TActorId target, TQueryExecutionStats* stats,
+    const TVector<ui32>* columnOrder, ui32 queryResultIndex, NActors::TActorId target, TQueryExecutionStats* stats,
     NActors::TActorId executer);
 
 NActors::IActor* CreateResultDataChannelProxy(ui64 txId, ui64 channelId, TQueryExecutionStats* stats,

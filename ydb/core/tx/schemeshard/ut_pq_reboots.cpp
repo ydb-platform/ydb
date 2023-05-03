@@ -18,9 +18,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     const TString GroupAlter2 = "Name: \"Isolda\""
                                   "TotalGroupCount: 8 ";
 
-    Y_UNIT_TEST(Create) {
+    Y_UNIT_TEST_FLAG(Create, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
                             "Name: \"PQGroup_2\""
                             "TotalGroupCount: 10 "
@@ -49,9 +53,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateMultiplePqTablets) {
+    Y_UNIT_TEST_FLAG(CreateMultiplePqTablets, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA",
                             "Name: \"PQGroup_2\""
                             "TotalGroupCount: 2 "
@@ -138,9 +146,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         }
     }
 
-    Y_UNIT_TEST(AlterWithReboots) {
+    Y_UNIT_TEST_FLAG(AlterWithReboots, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             TPathVersion pqVer;
             {
                 TInactiveZone inactive(activeZone);
@@ -199,9 +211,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateAlter) {
+    Y_UNIT_TEST_FLAG(CreateAlter, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
 
             AsyncCreatePQGroup(runtime, t.TxId++, "/MyRoot/DirA",
@@ -248,9 +264,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDrop) {
+    Y_UNIT_TEST_FLAG(CreateDrop, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
 
             TestCreatePQGroup(runtime, t.TxId++, "/MyRoot/DirA", GroupConfig);
@@ -282,9 +302,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDropAbort) {
+    Y_UNIT_TEST_FLAG(CreateDropAbort, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
             ui64& txId = t.TxId;
 
@@ -308,9 +332,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     //VERIFY failed:
     //ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp:289
     //Handle(): requirement std::make_pair(msg->CollectGeneration, msg->CollectStep) >= barrier.MakeCollectPair() failed
-    /*Y_UNIT_TEST(CreateAlterAlterDrop) {
+    /*Y_UNIT_TEST_FLAG(CreateAlterAlterDrop, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            t.Runtime->SetScheduledLimit(400);
+
             t.RestoreLogging();
             ui64& txId = t.TxId;
 
@@ -335,9 +363,13 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     }*/
 
 
-    Y_UNIT_TEST(CreateAlterDropPqGroupWithReboots) {
+    Y_UNIT_TEST_FLAG(CreateAlterDropPqGroupWithReboots, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
+            t.Runtime->SetScheduledLimit(400);
+
             using ESts = NKikimrScheme::EStatus;
 
             t.RestoreLogging();

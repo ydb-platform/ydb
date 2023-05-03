@@ -1,0 +1,94 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.DynamicConfig;
+option java_package = "com.yandex.ydb.dynamic_console";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message ApplyConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional string config = 2;
+}
+
+message ApplyConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DropConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional string cluster = 2;
+    optional uint32 version = 3;
+}
+
+message DropConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AddVolatileConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional uint64 id = 2;
+    optional string config = 3;
+    optional uint64 version = 4;
+    optional string cluster = 5;
+}
+
+message AddVolatileConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message VolatileConfig {
+    optional uint64 id = 1;
+    optional string config = 2;
+}
+
+message GetConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+    optional string config = 2;
+    repeated VolatileConfig volatile_configs = 3;
+    optional string cluster = 4;
+    optional uint32 version = 5;
+}
+
+message RemoveVolatileConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional uint64 version = 2;
+    optional string cluster = 3;
+    repeated uint64 ids = 4;
+}
+
+message RemoveVolatileConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message YamlLabel {
+    optional string label = 1;
+    optional string value = 2;
+}
+
+message ResolveConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional string config = 2;
+    repeated VolatileConfig volatile_configs = 3;
+    repeated YamlLabel labels = 4;
+}
+
+message ResolveConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+    optional string config = 2;
+}
+
+message ResolveAllConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional string config = 2;
+    repeated VolatileConfig volatile_configs = 3;
+}
+
+message ResolveAllConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+    optional string config = 2;
+}

@@ -35,6 +35,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         }, "Kind: Void\n");
     }
 
+    Y_UNIT_TEST(TestExportNullType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder &pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewNull();
+            return pgmReturn;
+        }, "Kind: Null\n");
+    }
+
     Y_UNIT_TEST(TestExportDataType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42);
@@ -142,6 +149,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "}\n");
     }
 
+    Y_UNIT_TEST(TestExportEmptyListType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewEmptyList();
+            return pgmReturn;
+        },
+        "Kind: EmptyList\n");
+    }
+
     Y_UNIT_TEST(TestExportListType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<i32>(42));
@@ -246,6 +261,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         },
         "struct_type {\n"
         "}\n");
+    }
+
+    Y_UNIT_TEST(TestExportEmptyDictType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewEmptyDict();
+            return pgmReturn;
+        },
+        "Kind: EmptyDict\n");
     }
 
     Y_UNIT_TEST(TestExportDictType) {
@@ -484,6 +507,13 @@ Variant {
            "Hi128: 18441323062847124093\n");
     }
 
+    Y_UNIT_TEST(TestExportNull) {
+        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewNull();
+            return pgmReturn;
+        }, "NullFlagValue: NULL_VALUE\n");
+    }
+
     Y_UNIT_TEST(TestExportEmptyOptional) {
         TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
@@ -509,6 +539,14 @@ Variant {
         "Optional {\n"
         "  Bytes: \"abc\"\n"
         "}\n");
+    }
+
+    Y_UNIT_TEST(TestExportEmptyList) {
+        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewEmptyList();
+            return pgmReturn;
+        },
+        "");
     }
 
     Y_UNIT_TEST(TestExportList) {
@@ -616,6 +654,14 @@ Variant {
         "  Int32: 777\n"
         "}\n",
         &columnOrder);
+    }
+
+    Y_UNIT_TEST(TestExportEmptyDict) {
+        TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewEmptyDict();
+            return pgmReturn;
+        },
+        "");
     }
 
     Y_UNIT_TEST(TestExportDict) {

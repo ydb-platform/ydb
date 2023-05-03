@@ -32,6 +32,18 @@ public:
 
 class TPDisk;
 
+struct TLogChunkItem {
+    TChunkIdx ChunkIdx;
+    bool IsPreviousChunkDropped;
+    bool IsPreviousChunkCut;;
+
+    TLogChunkItem(TChunkIdx chunkIdx, bool isPreviousChunkDropped, bool isPreviousChunkCut)
+        : ChunkIdx(chunkIdx)
+        , IsPreviousChunkDropped(isPreviousChunkDropped)
+        , IsPreviousChunkCut(isPreviousChunkCut)
+    {}
+};
+
 class TLogReader : public TLogReaderBase {
     static constexpr ui32 BufferSizeSectors = 105;
 
@@ -84,15 +96,14 @@ class TLogReader : public TLogReaderBase {
     ui64 LastRecordHeaderNonce;
     TString LastRecordData;
     ui32 LastRecordDataWritePosition;
-    ui64 MaxCompleteLsnCyclic;
     ui64 EndSectorIdx;
     ui64 SectorsToSkip;
     ui64 ExpectedOffset;
     ui32 LogEndChunkIdx;
     ui64 LogEndSectorIdx;
     TReqId ReqId;
-    TVector<TChunkIdx> ChunksToRead;
-    TVector<TChunkIdx>::iterator CurrentChunkToRead;
+    TVector<TLogChunkItem> ChunksToRead;
+    TVector<TLogChunkItem>::iterator CurrentChunkToRead;
     TVector<ui64> BadOffsets;
     TMutex ExecMutex;
 
@@ -103,7 +114,7 @@ public:
     TLogReader(bool isInitial, TPDisk *pDisk, TActorSystem * const actorSystem, const TActorId &replyTo, TOwner owner,
             TLogPosition ownerLogStartPosition, EOwnerGroupType ownerGroupType, TLogPosition position, ui64 sizeLimit,
             ui64 lastNonce, ui32 logEndChunkIdx, ui64 logEndSectorIdx, TReqId reqId,
-            TVector<TChunkIdx> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId);
+            TVector<TLogChunkItem> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId);
 
     virtual ~TLogReader();
 

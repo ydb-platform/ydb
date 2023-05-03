@@ -10,7 +10,5 @@
 add_library(library-cpp-balloc INTERFACE)
 target_link_libraries(library-cpp-balloc INTERFACE
   contrib-libs-cxxsupp
-)
-target_allocator(library-cpp-balloc
   library-cpp-lfalloc
 )

@@ -28,7 +28,7 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {
     MKQL_ENSURE(len > 0, "Invalid block size");
     auto reader = MakeBlockReader(TTypeInfoHelper(), type);
-    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len);
+    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, nullptr);
 
     auto scalarItem = reader->GetScalarItem(scalar);
     for (size_t i = 0; i < len; ++i) {

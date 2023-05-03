@@ -221,7 +221,7 @@ protected:
 
     friend struct TStoragePoolInfo;
 
-    void StartHiveBalancer(int maxMovements = 0, bool recheckOnFinish = false, const std::vector<TNodeId>& filterNodeIds = {});
+    void StartHiveBalancer(int maxMovements = 0, bool recheckOnFinish = false, ui64 maxInFlight = 1, const std::vector<TNodeId>& filterNodeIds = {});
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -663,6 +663,10 @@ public:
 
     ui64 GetBalancerInflight() const {
         return CurrentConfig.GetBalancerInflight();
+    }
+
+    ui64 GetEmergencyBalancerInflight() const {
+        return CurrentConfig.GetEmergencyBalancerInflight();
     }
 
     ui64 GetMaxBootBatchSize() const {

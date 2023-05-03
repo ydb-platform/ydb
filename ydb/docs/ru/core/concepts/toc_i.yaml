@@ -6,7 +6,6 @@ items:
   href: auth.md
 - name: Модель данных и схема
   include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Режимы работы Serverless и Dedicated,   href: serverless_and_dedicated.md }
 - { name: Типы данных,                            href: datatypes.md, hidden: true } # Deprecated
 - { name: Транзакции,                             href: transactions.md }
 - { name: Вторичные индексы,                      href: secondary_indexes.md }

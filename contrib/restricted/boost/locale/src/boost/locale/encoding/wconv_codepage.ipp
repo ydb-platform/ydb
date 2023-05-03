@@ -7,18 +7,18 @@
 #ifndef BOOST_LOCALE_IMPL_WCONV_CODEPAGE_HPP
 #define BOOST_LOCALE_IMPL_WCONV_CODEPAGE_HPP
 
+#ifndef NOMINMAX
+#    define NOMINMAX
+#endif
 #include <boost/locale/encoding.hpp>
+#include "boost/locale/encoding/conv.hpp"
+#include "boost/locale/util/encoding.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <limits>
 #include <string>
 #include <vector>
-#ifndef NOMINMAX
-#    define NOMINMAX
-#endif
-#include "boost/locale/encoding/conv.hpp"
-#include "boost/locale/encoding/win_codepages.hpp"
 #include <windows.h>
 
 namespace boost { namespace locale { namespace conv { namespace impl {
@@ -146,28 +146,6 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         }
     }
 
-    int encoding_to_windows_codepage(const char* ccharset)
-    {
-        constexpr size_t n = sizeof(all_windows_encodings) / sizeof(all_windows_encodings[0]);
-        windows_encoding* begin = all_windows_encodings;
-        windows_encoding* end = all_windows_encodings + n;
-
-        const std::string charset = normalize_encoding(ccharset);
-        windows_encoding* ptr = std::lower_bound(begin, end, charset.c_str());
-        while(ptr != end && strcmp(ptr->name, charset.c_str()) == 0) {
-            if(ptr->was_tested)
-                return ptr->codepage;
-            else if(IsValidCodePage(ptr->codepage)) {
-                // the thread safety is not an issue, maximum
-                // it would be checked more then once
-                ptr->was_tested = 1;
-                return ptr->codepage;
-            } else
-                ++ptr;
-        }
-        return -1;
-    }
-
     template<typename CharType>
     bool validate_utf16(const CharType* str, size_t len)
     {
@@ -210,8 +188,8 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         bool open(const char* to_charset, const char* from_charset, method_type how) override
         {
             how_ = how;
-            to_code_page_ = encoding_to_windows_codepage(to_charset);
-            from_code_page_ = encoding_to_windows_codepage(from_charset);
+            to_code_page_ = util::encoding_to_windows_codepage(to_charset);
+            from_code_page_ = util::encoding_to_windows_codepage(from_charset);
             if(to_code_page_ == -1 || from_code_page_ == -1)
                 return false;
             return true;
@@ -298,7 +276,7 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         bool open(const char* charset, method_type how) override
         {
             how_ = how;
-            code_page_ = encoding_to_windows_codepage(charset);
+            code_page_ = util::encoding_to_windows_codepage(charset);
             return code_page_ != -1;
         }
 
@@ -332,7 +310,7 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         bool open(const char* charset, method_type how) override
         {
             how_ = how;
-            code_page_ = encoding_to_windows_codepage(charset);
+            code_page_ = util::encoding_to_windows_codepage(charset);
             return code_page_ != -1;
         }
 
@@ -388,7 +366,7 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         bool open(const char* charset, method_type how) override
         {
             how_ = how;
-            code_page_ = encoding_to_windows_codepage(charset);
+            code_page_ = util::encoding_to_windows_codepage(charset);
             return code_page_ != -1;
         }
 
@@ -423,7 +401,7 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         bool open(const char* charset, method_type how) override
         {
             how_ = how;
-            code_page_ = encoding_to_windows_codepage(charset);
+            code_page_ = util::encoding_to_windows_codepage(charset);
             return code_page_ != -1;
         }
 

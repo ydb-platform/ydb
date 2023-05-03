@@ -802,6 +802,7 @@ message TFeatureFlags {
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
+    optional bool EnableScriptExecutionOperations = 92 [default = false];
 }
 
 
@@ -1590,6 +1591,9 @@ message THiveConfig {
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
     optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
     optional bool WarmUpEnabled = 55 [default = false];
+    optional uint64 EmergencyBalancerInflight = 56 [default = 5]; // tablets
+    optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 1000];
+    optional bool ContinueEmergencyBalancer = 58 [default = true];
 }
 
 message TDataShardConfig {
@@ -1611,6 +1615,23 @@ message TDataShardConfig {
     optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
     optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
+}
+
+message TColumnShardConfig {
+    message TTablesStorageLayoutPolicy {
+        message TMinimalTablesCountPolicy {
+        };
+
+        message TIdentityGroupsPolicy {
+        };
+
+        oneof Policy {
+            TMinimalTablesCountPolicy MinimalTables = 1;
+            TIdentityGroupsPolicy IdentityGroups = 2;
+        }
+
+    }
+    optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
 }
 
 message TSchemeShardConfig {
@@ -1749,6 +1770,11 @@ message TClientCertificateAuthorization {
     optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
 }
 
+message TLocalPgWireConfig {
+    optional int32 ListeningPort = 1 [default = 5432];
+    optional string SslCertificate = 5;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1815,6 +1841,8 @@ message TAppConfig {
     optional TExternalIndexConfig ExternalIndexConfig = 63;
     optional bool YamlConfigEnabled = 64;
     optional TConveyorConfig ConveyorConfig = 65;
+    optional TColumnShardConfig ColumnShardConfig = 66;
+    optional TLocalPgWireConfig LocalPgWireConfig = 69;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

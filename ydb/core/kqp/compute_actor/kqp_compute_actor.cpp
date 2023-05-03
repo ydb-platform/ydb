@@ -65,7 +65,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCou
 
 void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta,
     ui32& maxInFlight, bool& isAggregationRequest) const {
-    const bool isSorted = (meta.HasSorted() ? meta.GetSorted() : true);
+    const bool enableShardsSequentialScan = (meta.HasEnableShardsSequentialScan() ? meta.GetEnableShardsSequentialScan() : true);
 
     isAggregationRequest = false;
     maxInFlight = 1;
@@ -87,7 +87,7 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
         }
     }
     isAggregationRequest = hasGroupByWithFields || hasGroupByWithNoFields;
-    if (isSorted) {
+    if (enableShardsSequentialScan) {
         maxInFlight = 1;
     } else if (hasGroupByWithFields) {
         maxInFlight = ProtoConfig.GetAggregationGroupByLimit();

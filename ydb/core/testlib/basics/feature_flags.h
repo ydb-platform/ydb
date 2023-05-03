@@ -45,6 +45,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicServiceTx)
     FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
     FEATURE_FLAG_SETTER(EnablePQConfigTransactionsAtSchemeShard)
+    FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
 
     #undef FEATURE_FLAG_SETTER
 };

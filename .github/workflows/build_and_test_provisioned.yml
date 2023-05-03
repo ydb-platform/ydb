@@ -6,9 +6,38 @@ on:
       runner_label:
         required: true
         type: string
+      run_build:
+        type: boolean
+        default: true
       sanitizer:
         required: false
         type: string
+      run_unit_tests:
+        required: true
+        type: boolean
+      run_functional_tests:
+        required: true
+        type: boolean
+      test_label_regexp:
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      run_build:
+        type: boolean
+        default: true
+      sanitizer:
+        required: false
+        type: string
+      run_unit_tests:
+        required: true
+        type: boolean
+      run_functional_tests:
+        required: true
+        type: boolean
       test_label_regexp:
         required: false
         type: string
@@ -22,12 +51,28 @@ jobs:
       uses: actions/checkout@v3
     - name: Build
       uses: ./.github/actions/build
+      if: inputs.run_build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Test
+    - name: Run unit tests
       uses: ./.github/actions/test
+      if: inputs.run_unit_tests
       with: 
-        log_suffix: ${{format('{0}-{1}', inputs.runner_label, inputs.sanitizer)}}
+        log_suffix: ${{format('{0}{1}{2}', inputs.runner_label, inputs.sanitizer, 'unit')}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
+        testman_token: ${{secrets.TESTMO_TOKEN}}
+        testman_url: ${{vars.TESTMO_URL}}
+        testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
+    - name: Run functional tests
+      if: inputs.run_functional_tests
+      uses: ./.github/actions/test_python
+      with:
+        log_suffix: ${{format('{0}{1}{2}', inputs.runner_label, inputs.sanitizer, 'functional')}}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
+      

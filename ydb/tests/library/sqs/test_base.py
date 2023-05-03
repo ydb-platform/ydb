@@ -61,6 +61,12 @@ VISIBILITY_CHANGE_METHOD_PARAMS = {
     'ids': ['with_delete_message', 'with_change_visibility'],
 }
 
+HAS_QUEUES_PARAMS = {
+    'argnames': 'has_queues',
+    'argvalues': [True, False],
+    'ids': ['with_queues', 'without_queues']
+}
+
 
 def get_sqs_client_path():
     return yatest_common.binary_path("ydb/core/ymq/client/bin/sqs")

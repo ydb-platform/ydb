@@ -268,10 +268,16 @@ public:
     virtual void Prepare(TConfig& config);
     virtual int ValidateAndRun(TConfig& config);
 
-    virtual void RenderCommandsDescription(
+    enum RenderEntryType {
+        BEGIN,
+        MIDDLE,
+        END
+    };
+
+    void RenderOneCommandDescription(
         TStringStream& stream,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
-        const std::basic_string<bool>& ends = std::basic_string<bool>()
+        RenderEntryType type = BEGIN
     );
 
 protected:
@@ -293,8 +299,6 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
-
-    static TString Ends2Prefix(const std::basic_string<bool>& ends);
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -306,11 +310,10 @@ public:
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
-    virtual void RenderCommandsDescription(
+    void RenderCommandsDescription(
         TStringStream& stream,
-        const NColorizer::TColors& colors = NColorizer::TColors(false),
-        const std::basic_string<bool>& ends = std::basic_string<bool>()
-    ) override;
+        const NColorizer::TColors& colors = NColorizer::TColors(false)
+    );
     virtual void SetFreeArgs(TConfig& config);
 
 protected:

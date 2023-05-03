@@ -17,7 +17,7 @@
 ## Пример
 
 ``` bash
-$ ydb --profile db1 discovery whoami -g
+$ ydb -p quickstart discovery whoami -g
 User SID: aje5kkjdgs0puc18976co@as
 
 User has no groups

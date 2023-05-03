@@ -54,14 +54,13 @@ class TLocalDataTasksProcessor: public IDataTasksProcessor {
 private:
     const TActorIdentity OwnerActorId;
 protected:
-    virtual bool DoAdd(IDataPreparationTask::TPtr task) override {
+    virtual bool DoAdd(IDataTasksProcessor::ITask::TPtr task) override {
         OwnerActorId.Send(NConveyor::MakeServiceId(OwnerActorId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
         return true;
     }
 public:
     TLocalDataTasksProcessor(const TActorIdentity& ownerActorId)
-        : OwnerActorId(ownerActorId)
-    {
+        : OwnerActorId(ownerActorId) {
     }
 };
 
@@ -75,7 +74,7 @@ public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
                      ui64 tabletId, TDuration timeout, TVector<TTxScan::TReadMetadataPtr>&& readMetadataList,
-                     NKikimrTxDataShard::EScanDataFormat dataFormat)
+                     NKikimrTxDataShard::EScanDataFormat dataFormat, const TScanCounters& scanCountersPool)
         : ColumnShardActorId(columnShardActorId)
         , ScanComputeActorId(scanComputeActorId)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
@@ -88,6 +87,7 @@ public:
         , ReadMetadataRanges(std::move(readMetadataList))
         , ReadMetadataIndex(0)
         , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
+        , ScanCountersPool(scanCountersPool)
     {
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
@@ -100,18 +100,23 @@ public:
             new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
 
         Y_VERIFY(!ScanIterator);
-        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan();
+        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(MakeTasksProcessor(), ScanCountersPool);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen), IEventHandle::FlagTrackDelivery);
-        if (NConveyor::TServiceOperator::IsEnabled()) {
-            DataTasksProcessor = std::make_shared<TLocalDataTasksProcessor>(SelfId());
-        }
 
         Become(&TColumnShardScan::StateScan);
     }
 
 private:
+    IDataTasksProcessor::TPtr MakeTasksProcessor() const {
+        if (NConveyor::TServiceOperator::IsEnabled()) {
+            return std::make_shared<TLocalDataTasksProcessor>(SelfId());
+        } else {
+            return nullptr;
+        }
+    }
+
     STATEFN(StateScan) {
         auto g = Stats.MakeGuard("processing");
         switch (ev->GetTypeRewrite()) {
@@ -161,19 +166,17 @@ private:
     }
 
     void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
-        TaskResultsCounter.Inc();
         auto g = Stats.MakeGuard("task_result");
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " got ScanDataAck" << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         if (ev->Get()->GetErrorMessage()) {
             ALS_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
                  << "Scan " << ScanActorId << " got finished error " << ev->Get()->GetErrorMessage() << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId;
-            DataTasksProcessor->Stop();
             SendScanError(ev->Get()->GetErrorMessage());
             Finish();
         } else {
-            auto t = dynamic_pointer_cast<IDataPreparationTask>(ev->Get()->GetResult());
-            Y_VERIFY(t);
+            auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
+            Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
             ScanIterator->Apply(t);
         }
         ContinueProcessing();
@@ -233,7 +236,7 @@ private:
         if (ScanIterator) {
             {
                 auto g = Stats.MakeGuard("AddData");
-                ScanIterator->AddData(blobRange, event.Data, DataTasksProcessor);
+                ScanIterator->AddData(blobRange, event.Data);
             }
             ContinueProcessing();
         }
@@ -343,7 +346,7 @@ private:
         }
 
         // Switch to the next range if the current one is finished
-        if (ScanIterator && ScanIterator->Finished() && !InFlightReads) {
+        if (ScanIterator && ScanIterator->Finished()) {
             NextReadMetadata();
         }
 
@@ -363,7 +366,7 @@ private:
             // * we have finished scanning ALL the ranges
             // * or there is an in-flight blob read or ScanData message for which
             //   we will get a reply and will be able to proceed further
-            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads != 0 || (DataTasksProcessor && DataTasksProcessor->GetDataCounter() > TaskResultsCounter.Val())) {
+            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads != 0 || ScanIterator->HasWaitingTasks()) {
                 return;
             }
         }
@@ -433,7 +436,7 @@ private:
     void NextReadMetadata() {
         auto g = Stats.MakeGuard("NextReadMetadata");
         ScanIterator.reset();
-
+        Stats.NextReadMetadata();
         ++ReadMetadataIndex;
 
         if (ReadMetadataIndex == ReadMetadataRanges.size()) {
@@ -443,8 +446,7 @@ private:
             return Finish();
         }
 
-        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan();
-
+        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(MakeTasksProcessor(), ScanCountersPool);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();
     }
@@ -587,6 +589,7 @@ private:
     const TSerializedTableRange TableRange;
     const TSmallVec<bool> SkipNullKeys;
     const TInstant Deadline;
+    TScanCounters ScanCountersPool;
 
     TActorId TimeoutActorId;
     TMaybe<TString> AbortReason;
@@ -596,9 +599,6 @@ private:
     i64 InFlightReads = 0;
     i64 InFlightReadBytes = 0;
     bool Finished = false;
-
-    TAtomicCounter TaskResultsCounter = 0;
-    IDataTasksProcessor::TPtr DataTasksProcessor;
 
     class TBlobStats {
     private:
@@ -640,7 +640,13 @@ private:
         THashMap<TString, TInstant> StartGuards;
         THashMap<TString, TInstant> SectionFirst;
         THashMap<TString, TInstant> SectionLast;
+        bool FirstMetadataCurrently = true;
     public:
+
+        void NextReadMetadata() {
+            StartBlobRequest.clear();
+            FirstMetadataCurrently = false;
+        }
 
         TString DebugString() const {
             const TInstant now = TInstant::Now();
@@ -722,7 +728,11 @@ private:
 
         void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
             auto it = StartBlobRequest.find(br);
-            Y_VERIFY(it != StartBlobRequest.end());
+            if (FirstMetadataCurrently) {
+                Y_VERIFY(it != StartBlobRequest.end());
+            } else if (it == StartBlobRequest.end()) {
+                return;
+            }
             const TDuration d = replyInstant - it->second;
             if (fromCache) {
                 CacheBlobs.Received(br, d);
@@ -1009,7 +1019,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor,
-        scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, std::move(ReadMetadataRanges), dataFormat));
+        scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, std::move(ReadMetadataRanges), dataFormat, Self->ScanCounters));
 
     LOG_S_DEBUG("TTxScan starting " << scanActor
                 << " txId: " << txId

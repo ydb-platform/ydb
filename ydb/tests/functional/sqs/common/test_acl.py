@@ -140,7 +140,7 @@ class SqsACLTest(KikimrSqsTestBase):
                     result = self._sqs_api.send_message(_queue_url, data)
                     assert_that(result, result_predicate)
                     return result
-                except:
+                except Exception:
                     if retries == 0:
                         raise
                     time.sleep(0.1)
@@ -164,9 +164,9 @@ class SqsACLTest(KikimrSqsTestBase):
         __send_message_with_retries(queue_url, 'superdata', is_(none()))  # no access again. that's a pity
 
         result = self._sqs_api.list_permissions(self._username)
-        assert('Account' in str(result))
-        assert(berkanavt_sid in str(result))
-        assert('Permissions' in str(result))
+        assert 'Account' in str(result)
+        assert berkanavt_sid in str(result)
+        assert 'Permissions' in str(result)
 
 
 class SqsWithForceAuthorizationTest(KikimrSqsTestBase):

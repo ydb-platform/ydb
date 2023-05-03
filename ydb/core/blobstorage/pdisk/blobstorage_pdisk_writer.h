@@ -223,7 +223,7 @@ public:
         ChunkIdx = nextChunk;
         LogChunkInfo = nextLogChunkInfo;
         LogChunkInfo->FirstNonce = Nonce;
-        LogChunkInfo->PrevChunkLastNonce = Nonce - 1;
+        LogChunkInfo->DesiredPrevChunkLastNonce = Nonce - 1;
         SectorIdx = 0;
         FirstSectorIdx = 0;
         ui64 sectorOffset = Format.Offset(ChunkIdx, SectorIdx);

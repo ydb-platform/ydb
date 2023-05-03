@@ -17,9 +17,14 @@ using namespace NYql;
 
 void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx) {
     TxHolders.push_back(tx);
-    TxResults.reserve(TxResults.size() + tx->GetTxResultsMeta().size());
-    for (const auto& txResult : tx->GetTxResultsMeta()) {
-        TxResults.emplace_back(txResult.IsStream, txResult.MkqlItemType, &txResult.ColumnOrder);
+    TxResults.reserve(TxResults.size() + tx->ResultsSize());
+
+    for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
+        const auto& result = tx->GetResults(i);
+        const auto& resultMeta = tx->GetTxResultsMeta()[i];
+
+        TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder,
+            result.GetQueryResultIndex());
     }
 }
 
@@ -51,7 +56,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnb
     auto& txResult = TxResults[idx];
     auto serializer = NYql::NDq::TDqDataSerializer(
         AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-    auto buffer = serializer.Serialize(rows, txResult.MkqlItemType);
+    auto buffer = serializer.Serialize(rows.begin(), rows.end(), txResult.MkqlItemType);
     {
         auto g = AllocState->TypeEnv.BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueVector emptyVector;
@@ -86,7 +91,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -110,7 +115,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpDataExecuter(std::move(request), database, userToken, counters, false, executerRetriesConfig, std::move(asyncIoFactory));
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig);
+            return CreateKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig, preparedQuery);
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
             return CreateKqpDataExecuter(std::move(request), database, userToken, counters, true, executerRetriesConfig, std::move(asyncIoFactory));

@@ -66,6 +66,7 @@ public:
         const size_t usedBits = Mask.ValueBitCount();
         const size_t usedBytes = (usedBits + 7ULL) >> 3ULL;
         buf.Advance(MAX_PACKED64_SIZE);
+        // Note: usage of Pack64() is safe here - it won't overwrite useful data for small values of usedBytes
         buf.EraseBack(MAX_PACKED64_SIZE - Pack64(usedBytes, buf.Pos() - MAX_PACKED64_SIZE));
         buf.Append(reinterpret_cast<const char*>(Mask.GetChunks()), usedBytes);
     }

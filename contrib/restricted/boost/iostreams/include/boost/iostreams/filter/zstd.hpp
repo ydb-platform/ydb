@@ -183,8 +183,8 @@ public:
 };
 
 //
-// Template name: zstd_compressor_impl
-// Description: Model of C-Style Filte implementing decompression by
+// Template name: zstd_decompressor_impl
+// Description: Model of C-Style Filter implementing decompression by
 //      delegating to the zstd function inflate.
 //
 template<typename Alloc = std::allocator<char> >

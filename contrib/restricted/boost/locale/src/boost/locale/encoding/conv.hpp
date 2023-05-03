@@ -31,17 +31,6 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         return "Unknown Character Encoding";
     }
 
-    BOOST_LOCALE_DECL std::string normalize_encoding(const char* encoding);
-
-    inline int compare_encodings(const char* l, const char* r)
-    {
-        return normalize_encoding(l).compare(normalize_encoding(r));
-    }
-
-#if defined(BOOST_WINDOWS) || defined(__CYGWIN__)
-    int encoding_to_windows_codepage(const char* ccharset);
-#endif
-
     class converter_between {
     public:
         typedef char char_type;

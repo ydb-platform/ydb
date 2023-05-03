@@ -143,6 +143,7 @@ public:
                 .NotUnderDeleting()
                 .NotUnderOperation()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath();
 
             if (!checks) {

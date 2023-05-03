@@ -52,9 +52,14 @@ struct TTableBucket {
     std::vector<char, TMKQLAllocator<char>> InterfaceValues; // Vector to store types to work through external-provided IHash, IEquate interfaces
     std::vector<ui32, TMKQLAllocator<ui32>> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces 
  
-    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>>  JoinIds;    // Results of join operations stored as index of tuples in buckets 
-                                            // of two tables with the same number
+    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>>  JoinIds;     // Results of join operations stored as index of tuples in buckets 
+                                                                            // of two tables with the same number
+
     std::vector<ui32, TMKQLAllocator<ui32>> RightIds; // Sorted Ids of right table joined tuples to process full join and exclusion join
+
+    std::set<ui32> AllLeftMatchedIds;  // All row ids of left join table which have matching rows in right table. To process streaming join mode.
+    std::set<ui32> AllRightMatchedIds; // All row ids of right join table which matching rows in left table. To process streaming join mode. 
+
  };
 
 
@@ -143,6 +148,12 @@ class TTable {
     ui64 TotalPacked = 0; // Total number of packed tuples
     ui64 TotalUnpacked = 0; // Total number of unpacked tuples
 
+    bool LeftTableBatch_ = false; // True if left table is processed in batch mode
+    bool RightTableBatch_ = false; // True if right table is procesed in batch mode
+
+    bool HasMoreLeftTuples_  = false; // True if join is not completed, rows from left table are coming
+    bool HasMoreRightTuples_ = false; // True if join is not completed, rows from right table are coming
+
 public:
 
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns, 
@@ -158,7 +169,8 @@ public:
 
     // Joins two tables and stores join result in table data. Tuples of joined table could be received by
     // joined table iterator.  Life time of t1, t2 should be greater than lifetime of joined table
-    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner);
+    // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false
+    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false );
 
 
     // Returns next jointed tuple data. Returs true if there are more tuples

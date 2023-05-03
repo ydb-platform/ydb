@@ -626,7 +626,7 @@ private:
     TComputationMutables& Mutables;
 };
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash);
+void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
 
 struct TContainerCacheOnContext : private TNonCopyable {
     TContainerCacheOnContext(TComputationMutables& mutables);

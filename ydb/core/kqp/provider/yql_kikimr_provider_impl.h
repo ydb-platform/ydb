@@ -158,7 +158,8 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types,
-    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory);
+    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
+    bool isInternalCall);
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(

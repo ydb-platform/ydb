@@ -18,7 +18,6 @@ target_link_libraries(restricted-boost-type_index INTERFACE
   restricted-boost-container_hash
   restricted-boost-core
   restricted-boost-preprocessor
-  restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-throw_exception
   restricted-boost-type_traits

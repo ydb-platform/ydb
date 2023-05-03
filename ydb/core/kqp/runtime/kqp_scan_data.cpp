@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -18,6 +19,14 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         return { sizeof(NUdf::TUnboxedValue), 8 }; // Special value for NULL elements
     }
     switch (type.GetTypeId()) {
+        case NTypeIds::Pg:
+        {
+            return {
+                sizeof(NUdf::TUnboxedValue),
+                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetTypeDesc()))
+            };
+        }
+
         case NTypeIds::Bool:
         case NTypeIds::Int8:
         case NTypeIds::Uint8:
@@ -63,16 +72,6 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
             }
         }
 
-        case NTypeIds::Pg:
-        {
-            return {
-                sizeof(NUdf::TUnboxedValue),
-                NKikimr::NMiniKQL::PgValueSize(
-                    NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()), //extra typeDesc resolve
-                    value
-                )
-            };
-        }
 
         default:
             Y_VERIFY_DEBUG_S(false, "Unsupported type " << NScheme::TypeName(type.GetTypeId()));

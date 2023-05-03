@@ -3728,13 +3728,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(NUM_NODES, false);
 
         Setup(runtime, true, 1, [](TAppPrepare& app) {
-            app.HiveConfig.SetMaxMovementsOnAutoBalancer(100);
+            app.HiveConfig.SetMaxMovementsOnEmergencyBalancer(100);
             app.HiveConfig.SetMinPeriodBetweenBalance(0.1);
             app.HiveConfig.SetTabletKickCooldownPeriod(0);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
             // this value of MaxNodeUsageToKick is selected specifically to make test scenario work
             // in link with number of tablets and values of network usage metrics used below
             app.HiveConfig.SetMaxNodeUsageToKick(0.01);
+            app.HiveConfig.SetEmergencyBalancerInflight(1); // to ensure fair distribution
         });
 
         TActorId senderA = runtime.AllocateEdgeActor();

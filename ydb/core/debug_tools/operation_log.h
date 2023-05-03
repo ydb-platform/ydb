@@ -10,52 +10,23 @@ namespace NKikimr {
 
 template <ui32 S>
 class TOperationLog {
-private:
-    class const_iterator {
-        friend class TOperationLog;
-    public:
-        const_iterator(ui64 position, const TOperationLog& container)
-            : Container(container)
-            , Position(position) {
-        }
-
-        bool operator==(const const_iterator& other) const {
-            return other.Position == Position;
-        }
-
-        bool operator!=(const const_iterator& other) const {
-            return other.Position != Position;
-        }
-
-        const_iterator& operator++() {
-            Position--;
-            return *this;
-        }
-
-        const_iterator& operator++(int) {
-            Position--;
-            return *this;
-        }
+public:
+    struct BorrowedRecord {
+        std::unique_ptr<TString> Record;
+        ui32 Position;
 
         const TString& operator*() const {
-            const TString& str = Container.GetByPosition(Position);
-            return str;
+            return *Record;
         }
 
-    private:
-        ui64 GetPosition() {
-            return Position;
+        operator bool() const {
+            return (bool)Record;
         }
-
-        const TOperationLog& Container;
-        ui64 Position;
     };
-
-    friend class const_iterator;
 
 private:
     constexpr static ui32 Capacity = S;
-    std::array<TString, S> Records;
+    std::array<std::atomic<TString*>, S> Records;
     // RecordIdx is shifted to prevent underflow on decrement
     std::atomic<ui64> NextRecordPosition = Capacity;
 
@@ -68,38 +39,58 @@ public:
     TOperationLog(TOperationLog&& other) = default;
     TOperationLog& operator=(TOperationLog&& other) = default;
 
-    const_iterator begin() const {
-        return const_iterator(NextRecordPosition.load() - 1, *this);
+    ~TOperationLog() {
+        for (auto& record : Records) {
+            delete record.load();
+        }
     }
 
-    const_iterator end() const {
-        return const_iterator(NextRecordPosition.load() - 1 - Size(), *this);
+    BorrowedRecord BorrowByIdx(ui32 idx) {
+        ui32 position = (NextRecordPosition.load() - 1 - idx) % Capacity;
+        if (idx >= Size()) {
+            return { nullptr, position };
+        }
+
+        std::unique_ptr<TString> ptr(Records[position].exchange(nullptr));
+        return { 
+            .Record = std::move(ptr),
+            .Position = position
+        };
     }
 
-    const TString& GetByPosition(ui64 position) const {
-        return Records[position % Capacity];
-    }
-
-    const TString& operator[](ui32 idx) const {
-        Y_VERIFY(idx < Size());
-        return Records[(NextRecordPosition.load() - 1 - idx) % Capacity];
+    void ReturnBorrowedRecord(BorrowedRecord& borrowed) {
+        TString* pRecord = borrowed.Record.release();
+        TString* expected = nullptr;
+        if (!Records[borrowed.Position].compare_exchange_strong(expected, pRecord)) {
+            // This cell is taken by newer value, delete an old one
+            delete pRecord;
+        }
     }
 
     ui32 Size() const {
         return Min(NextRecordPosition.load() - Capacity, static_cast<ui64>(Capacity));
     }
 
-    void AddRecord(const TString& value) {
-        Records[NextRecordPosition.fetch_add(1) % Capacity] = value;
+    void AddRecord(std::unique_ptr<TString>& value) {
+        TString* prev = Records[NextRecordPosition.fetch_add(1) % Capacity].exchange(value.release());
+        if (prev) {
+            delete prev;
+        }
     }
 
-    TString ToString() const {
+    TString ToString() {
         TStringStream str;
         str << "[ " ;
         /* Print OperationLog records from newer to older */ 
-        ui32 ctr = 0;
-        for (auto it = begin(); it != end(); ++it, ++ctr) {
-            str << "Record# " << ctr <<  " : { " << GetByPosition(it.GetPosition()) << " }, ";
+        ui32 logSize = Size();
+        for (ui32 i = 0; i < logSize; ++i) {
+            auto record = BorrowByIdx(i);
+            if (record) {
+                str << "Record# " << i <<  " : { " << *record << " }, ";
+                ReturnBorrowedRecord(record);
+            } else {
+                str << "Record# " << i <<  " : { null }, ";
+            }
         }
         str << " ]";
         return str.Str();
@@ -108,13 +99,14 @@ public:
 
 } // NKikimr
 
-#define ADD_RECORD_TO_OPERATION_LOG(log, record)    \
-    do {                                            \
-        log.AddRecord(TStringBuilder() << record);  \
+#define ADD_RECORD_TO_OPERATION_LOG(log, record)                                \
+    do {                                                                        \
+        auto recordPtr = std::make_unique<TString>(TStringBuilder() << record); \
+        log.AddRecord(recordPtr);                                               \
     } while (false)
 
-
-#define ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(log, record)                         \
-    do {                                                                                \
-        log.AddRecord(TStringBuilder() << TInstant::Now().ToString() << " " << record); \
-    } while (false)
+#define ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(log, record)                                                         \
+    do {                                                                                                                \
+        auto recordPtr = std::make_unique<TString>(TStringBuilder() << TInstant::Now().ToString() << " " << record);    \
+        log.AddRecord(recordPtr);                                                                                       \
+    } while (false)   

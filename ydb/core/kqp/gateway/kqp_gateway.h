@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
 
@@ -18,8 +19,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 const TStringBuf ParamNamePrefix = "%kqp%";
 
@@ -102,6 +102,7 @@ public:
     };
 
     struct TExecPhysicalRequest : private TMoveOnly {
+    public:
 
         TExecPhysicalRequest(NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc)
             : TxAlloc(txAlloc)
@@ -123,8 +124,6 @@ public:
         ui64 MkqlMemoryLimit = 0; // old engine compatibility
         ui64 PerShardKeysSizeLimitBytes = 0;
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
-        bool DisableLlvmForUdfStages = false;
-        bool LlvmEnabled = true;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
@@ -176,8 +175,7 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const T
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp
 
 template<>
 struct THash<NKikimr::NKqp::IKqpGateway::TKqpSnapshot> {

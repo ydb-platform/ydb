@@ -14,6 +14,7 @@ add_library(yql-parser-pg_wrapper)
 target_compile_options(yql-parser-pg_wrapper PRIVATE
   -DHAVE__GET_CPUID=1
   -DUSE_SSE42_CRC32C_WITH_RUNTIME_CHECK=1
+  -DUSE_SLOW_PG_KERNELS
   -DDLSUFFIX=".so"
   -Wno-ignored-attributes
   -Wno-unused-parameter
@@ -114,6 +115,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-cpp-resource
   library-cpp-yson
   library-yql-core
+  yql-minikql-arrow
   yql-minikql-computation
   yql-parser-pg_catalog
   providers-common-codec
@@ -127,7 +129,9 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(yql-parser-pg_wrapper PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arena_ctx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/arrow_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/thread_inits.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp

@@ -373,7 +373,7 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
     }
 
     if (!AppData(ctx)->DisableCheckingSysNodesCms &&
-        !CheckSysTabletsNode(action, opts, node, error)) {
+        !CheckSysTabletsNode(opts, node, error)) {
         return false;
     }
 
@@ -533,8 +533,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     return true;
 }
 
-bool TCms::CheckSysTabletsNode(const TAction &action,
-                               const TActionOptions &opts,
+bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
                                const TNodeInfo &node,
                                TErrorInfo &error) const
 {
@@ -543,55 +542,12 @@ bool TCms::CheckSysTabletsNode(const TAction &action,
     }
 
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
-            ui32 disabledNodesCnt = 1; // сounting including this node
-            TErrorInfo err;
-            TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
-            TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-
-            for (auto &nodeId : ClusterInfo->TabletTypeToNodes[tabletType]) {
-                if (nodeId == node.NodeId) {
-                    continue;
-                }
-                if (ClusterInfo->Node(nodeId).IsLocked(err, State->Config.DefaultRetryTime,
-                                                       TActivationContext::Now(), duration) ||
-                    ClusterInfo->Node(nodeId).IsDown(err, defaultDeadline))
-                {
-                    ++disabledNodesCnt;
-                }
-            }
-
-            ui32 tabletNodes = ClusterInfo->TabletTypeToNodes[tabletType].size();
-            switch (opts.AvailabilityMode) {
-                case MODE_MAX_AVAILABILITY:
-                    if (tabletNodes > 1 && disabledNodesCnt * 2 > tabletNodes){
-                        error.Code = TStatus::DISALLOW_TEMP;
-                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType)
-                                                        << " has too many locked nodes: " << disabledNodesCnt
-                                                        << " limit: " << tabletNodes / 2 << " (50%)";
-                        error.Deadline = defaultDeadline;
-                        return false;
-                    }
-                    break;
-                case MODE_KEEP_AVAILABLE:
-                    if (tabletNodes > 1 && disabledNodesCnt > tabletNodes - 1) {
-                        error.Code = TStatus::DISALLOW_TEMP;
-                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType)
-                                                        << " has too many locked nodes: " << disabledNodesCnt
-                                                        << ". At least one node must be available";
-                        error.Deadline = defaultDeadline;
-                        return false;
-                    }
-                    break;
-                case MODE_FORCE_RESTART:
-                    break;
-                default:
-                    error.Code = TStatus::WRONG_REQUEST;
-                    error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
-                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(),
-                                   static_cast<ui32>(opts.AvailabilityMode));
-                    error.Deadline = defaultDeadline;
-                    return false;
-            }
+        if (!ClusterInfo->SysNodesCheckers[tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode)) {
+            error.Code = TStatus::DISALLOW_TEMP;
+            error.Reason = ClusterInfo->SysNodesCheckers[tabletType]->ReadableReason(node.NodeId, opts.AvailabilityMode);
+            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+            return false;
+        }
     }
 
     return true;
@@ -605,12 +561,10 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    bool isForceRestart = opts.AvailabilityMode == NKikimrCms::MODE_FORCE_RESTART;
-
-    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, isForceRestart))
+    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode))
     {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = ClusterInfo->ClusterNodes->ReadableReason();
+        error.Reason = ClusterInfo->ClusterNodes->ReadableReason(node.NodeId, opts.AvailabilityMode);
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
         return false;
@@ -618,10 +572,10 @@ bool TCms::TryToLockNode(const TAction& action,
 
     if (node.Tenant
         && opts.TenantPolicy != NONE
-        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, isForceRestart))
+        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode))
     {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = ClusterInfo->TenantNodesChecker[node.Tenant]->ReadableReason();
+        error.Reason = ClusterInfo->TenantNodesChecker[node.Tenant]->ReadableReason(node.NodeId, opts.AvailabilityMode);
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
         return false;
@@ -1426,6 +1380,9 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     // We need to generate NodeCheckers after MigrateOldInfo to get
     // all the information about the tenants on the disconnected nodes
     info->GenerateTenantNodesCheckers();
+
+    if (!AppData(ctx)->DisableCheckingSysNodesCms)
+        info->GenerateSysTabletsNodesCheckers();
 
     AdjustInfo(info, ctx);
 

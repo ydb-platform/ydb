@@ -279,18 +279,18 @@ struct TLogChunkInfo {
         {}
     };
     ui32 ChunkIdx;
-    ui64 PrevChunkLastNonce;
+    ui64 DesiredPrevChunkLastNonce;
     ui64 FirstNonce;
     ui64 LastNonce;
     TVector<TLsnRange> OwnerLsnRange;
 
     ui32 CurrentUserCount;
 
-    bool IsEndOfSplice;
+    bool IsEndOfSplice = false;
 
     TLogChunkInfo(ui32 chunkIdx, ui32 ownerCount)
         : ChunkIdx(chunkIdx)
-        , PrevChunkLastNonce(0)
+        , DesiredPrevChunkLastNonce(0)
         , FirstNonce(0)
         , LastNonce(0)
         , OwnerLsnRange(ownerCount)
@@ -319,10 +319,11 @@ struct TLogChunkInfo {
     TString ToString() const {
         TStringStream str;
         str << "{ChunkIdx# " << ChunkIdx
-            << " PrevChunkLastNonce# " << PrevChunkLastNonce
+            << " DesiredPrevChunkLastNonce# " << DesiredPrevChunkLastNonce
             << " FirstNonce# " << FirstNonce
             << " LastNonce# " << LastNonce
             << " CurrentUserCount# " << CurrentUserCount
+            << " IsEndOfSplice# " << IsEndOfSplice
             << " OwnersLsnRange# {";
 
         for (size_t i = 0; i < OwnerLsnRange.size(); ++i) {

@@ -83,7 +83,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
-#include <ydb/services/console/grpc_service.h>
+#include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
@@ -811,7 +811,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
 
-            server.AddService(new NGRpcService::TGRpcConsoleService(ActorSystem.Get(), Counters,
+            server.AddService(new NGRpcService::TGRpcDynamicConfigService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
         }
 
@@ -1080,6 +1080,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasDataShardConfig()) {
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
+    }
+
+    if (runConfig.AppConfig.HasColumnShardConfig()) {
+        AppData->ColumnShardConfig = runConfig.AppConfig.GetColumnShardConfig();
     }
 
     if (runConfig.AppConfig.HasSchemeShardConfig()) {
@@ -1564,6 +1568,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableReplicationService) {
         sil->AddServiceInitializer(new TReplicationServiceInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableLocalPgWire) {
+        sil->AddServiceInitializer(new TLocalPgWireServiceInitializer(runConfig));
     }
 
     return sil;

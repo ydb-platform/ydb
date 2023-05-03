@@ -360,9 +360,9 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     }
 
     if (!yamlConfigRowset.EndOfSet()) {
-        auto config = yamlConfigRowset.template GetValue<Schema::YamlConfig::Config>();
         YamlVersion = yamlConfigRowset.template GetValue<Schema::YamlConfig::Version>();
-        YamlConfig = config;
+        YamlConfig = yamlConfigRowset.template GetValue<Schema::YamlConfig::Config>();
+        YamlDropped = yamlConfigRowset.template GetValue<Schema::YamlConfig::Dropped>();
     }
 
     while (!configItemRowset.EndOfSet()) {
@@ -617,6 +617,11 @@ void TConfigsManager::Handle(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &
 void TConfigsManager::Handle(TEvConsole::TEvApplyConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxApplyYamlConfig(ev), ctx);
+}
+
+void TConfigsManager::Handle(TEvConsole::TEvDropConfigRequest::TPtr &ev, const TActorContext &ctx)
+{
+    TxProcessor->ProcessTx(CreateTxDropYamlConfig(ev), ctx);
 }
 
 void TConfigsManager::Handle(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev, const TActorContext &ctx)

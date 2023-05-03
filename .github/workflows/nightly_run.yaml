@@ -13,24 +13,28 @@ jobs:
     name: Build/test X64
     strategy:
       matrix:
-        sanitizer: [ "", "sanitize=address" ]
+        sanitizer: [ "", "address" ]
       fail-fast: false
 
     uses: ./.github/workflows/build_and_test_ondemand.yml
     with:
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
+      run_unit_tests: true
+      run_functional_tests: true
     secrets: inherit
 
   build_provisioned:
     name: Build/test ARM64
     strategy:
       matrix:
-        sanitizer: [ "", "sanitize=address" ]
+        sanitizer: [ "", "address" ]
       fail-fast: false
     uses: ./.github/workflows/build_and_test_provisioned.yml
     with:
       runner_label: ARM64
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
+      run_unit_tests: true
+      run_functional_tests: true
     secrets: inherit

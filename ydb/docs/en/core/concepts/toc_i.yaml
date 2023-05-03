@@ -6,7 +6,6 @@ items:
   href: auth.md
 - name: Data model and schema
   include: { path: datamodel/toc_p.yaml, mode: link }
-- { name: Serverless and Dedicated operation modes,   href: serverless_and_dedicated.md }
 - { name: Data types,                            href: datatypes.md, hidden: true } # Deprecated
 - { name: Transactions,                             href: transactions.md }
 - { name: Secondary indexes,                      href: secondary_indexes.md }
@@ -14,6 +13,7 @@ items:
 - { name: Time to Live (TTL),                     href: ttl.md }
 - { name: Scan queries,                           href: scan_query.md }
 - { name: Database limits,                href: limits-ydb.md }
+- { name: Multi-Version Concurrency Control (MVCC), href: mvcc.md }
 - name: YDB cluster
   items:
   - name: Overview

@@ -287,7 +287,7 @@ public:
 TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorSystem, const TActorId &replyTo, NPDisk::TOwner owner,
         TLogPosition ownerLogStartPosition, EOwnerGroupType ownerGroupType, TLogPosition position, ui64 sizeLimit,
         ui64 lastNonce, ui32 logEndChunkIdx, ui64 logEndSectorIdx, TReqId reqId,
-        TVector<TChunkIdx> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId)
+        TVector<TLogChunkItem> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId)
     : IsInitial(isInitial)
     , PDisk(pDisk)
     , ActorSystem(actorSystem)
@@ -323,7 +323,6 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , LastRecordHeader(0, 0, 0)
     , LastRecordHeaderNonce(0)
     , LastRecordDataWritePosition(0)
-    , MaxCompleteLsnCyclic(0)
     , EndSectorIdx(0)
     , ExpectedOffset(0)
     , LogEndChunkIdx(logEndChunkIdx)
@@ -345,8 +344,15 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
         TStringStream ss;
         ss << SelfInfo() << " ChunksToRead# [";
         bool first = true;
-        for (auto idx : ChunksToRead) {
-            ss << (first ? first = false, "" : " ") << idx;
+        for (auto item : ChunksToRead) {
+            ss << (first ? first = false, "" : " ");
+            if (item.IsPreviousChunkDropped) {
+                ss << "- ";
+            }
+            if (item.IsPreviousChunkCut) {
+                ss << "x ";
+            }
+            ss << item.ChunkIdx;
         }
         ss << "]";
         return ss.Str();
@@ -397,6 +403,15 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
             break;
         case ELogReaderState::NewLogChunk:
             if (ChunkIdx == 0) {
+                if (IsInitial) {
+                    LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                            << " In case ELogReaderState::NewLogChunk got ChunkIdx# " << ChunkIdx
+                            << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                            << " Marker# LR014");
+                } else {
+                    Y_FAIL_S(SelfInfo() << " File# " << __FILE__ << " Line# " << __LINE__);
+                }
+
                 ReplyOk();
                 return; // Already replied
             }
@@ -408,8 +423,13 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
                 if (PDisk->LogChunks.size() > 1) {
                     auto last = PDisk->LogChunks.rbegin();
                     // May be set in NonceJump record processing, and if so it should not be changed
-                    if (!last->PrevChunkLastNonce) {
-                        last->PrevChunkLastNonce = std::next(last)->LastNonce;
+                    if (!last->DesiredPrevChunkLastNonce) {
+                        LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                                << " In case ELogReaderState::NewLogChunk strange."
+                                << " changing last->DesiredPrevChunkLastNonce# " << last->DesiredPrevChunkLastNonce
+                                << " to std::next(last)->LastNonce# " << std::next(last)->LastNonce
+                                << " Marker# LR015");
+                        last->DesiredPrevChunkLastNonce = std::next(last)->LastNonce;
                     }
                 }
                 UpdateNewChunkInfo(ChunkIdx, {});
@@ -447,7 +467,11 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
                         ReplyOk();
                         return; // Already replied
                     }
-                    SwitchToChunk(*CurrentChunkToRead);
+                    SwitchToChunk(CurrentChunkToRead->ChunkIdx);
+                    if (CurrentChunkToRead->IsPreviousChunkDropped || CurrentChunkToRead->IsPreviousChunkCut) {
+                        IsLastRecordSkipped = true; // There are gaps in the log!
+                        IsLastRecordHeaderValid = false;
+                    }
                     State = ELogReaderState::ScheduleForwardReads;
                 }
             }
@@ -549,10 +573,10 @@ bool TLogReader::PrepareToRead() {
             }
             if (OwnerLogStartPosition != TLogPosition{0, 0}) {
                 ui32 startChunkIdx = OwnerLogStartPosition.ChunkIdx;
-                Y_VERIFY(startChunkIdx == ChunksToRead[0]);
+                Y_VERIFY(startChunkIdx == ChunksToRead[0].ChunkIdx);
                 Position = OwnerLogStartPosition;
             } else {
-                Position = PDisk->LogPosition(ChunksToRead[0], 0, 0);
+                Position = PDisk->LogPosition(ChunksToRead[0].ChunkIdx, 0, 0);
             }
             CurrentChunkToRead = ChunksToRead.begin();
         }
@@ -561,7 +585,7 @@ bool TLogReader::PrepareToRead() {
         ChunkIdx = Position.ChunkIdx;
         if (!IsInitial) {
             auto keepIt = ChunksToRead.begin();
-            while (keepIt != ChunksToRead.end() && *keepIt != ChunkIdx) {
+            while (keepIt != ChunksToRead.end() && keepIt->ChunkIdx != ChunkIdx) {
                 ++keepIt;
             }
             ChunksToRead.erase(ChunksToRead.begin(), keepIt);
@@ -657,9 +681,23 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
     if (IsInitial) {
         PDisk->LastNonceJumpLogPageHeader2 = *nonceJumpLogPageHeader2;
 
+
         if (SectorIdx == 0) {
-            // For future log splices PrevChunkLastNonce should be equal to expected in NonceJump record
-            ChunkInfo->PrevChunkLastNonce = nonceJumpLogPageHeader2->PreviousNonce;
+            LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                    << " nonce jump2 "
+                    << " IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
+                    << " replacing ChunkInfo->DesiredPrevChunkLastNonce# " << ChunkInfo->DesiredPrevChunkLastNonce
+                    << " with nonceJumpLogPageHeader2->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
+                    << " Marker# LR016");
+
+
+            if (ChunkInfo->IsEndOfSplice) {
+                // NonceJump can't be interpreted the usual way
+                ChunkInfo->DesiredPrevChunkLastNonce = nonceJumpLogPageHeader2->PreviousNonce;
+            } else {
+                // For future log splices DesiredPrevChunkLastNonce should be equal to expected in NonceJump record
+                ChunkInfo->DesiredPrevChunkLastNonce = nonceJumpLogPageHeader2->PreviousNonce;
+            }
         }
 
         // TODO: Investigate / process error the proper way here.
@@ -671,6 +709,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
                     << " previousNonce# " << previousNonce
                     << " previousDataNonce# " << previousDataNonce
                     << " nonceJumpLogPageHeader2->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
+                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
                     << " ReplyOk, marker LR001");
             ReplyOk();
             return;
@@ -692,9 +731,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
     } else if (ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
         LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
                 << " ReplyOk, marker LR003"
-                << " ChunkIdx# " << ChunkIdx
                 << " LogEndChunkIdx# " << LogEndChunkIdx
-                << " SectorIdx# " << SectorIdx
                 << " LogEndSectorId# " << LogEndSectorIdx);
         ReplyOk();
         return;
@@ -712,6 +749,12 @@ void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) {
         // TODO: Investigate / process error the proper way here.
         if (previousNonce > nonceJumpLogPageHeader1->PreviousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
+            LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                    << " In ProcessLogPageNonceJump1 got previousNonce > nonceJumpLogPageHeader1->PreviousNonce! "
+                    << " previousNonce# " << previousNonce
+                    << " nonceJumpLogPageHeader1->PreviousNonce# " << nonceJumpLogPageHeader1->PreviousNonce
+                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                    << " Marker# LR017");
             ReplyOk();
             return;
         }
@@ -741,15 +784,50 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
     const ui64 magic = format.MagicLogChunk;
     TSectorRestorator restorator(false, LogErasureDataParts, false, format,
         PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
-    restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, PDisk->Cfg->UseT1ha0HashInFooter);
+    restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, PDisk->Cfg->UseT1ha0HashInFooter, Owner);
 
     if (!restorator.GoodSectorFlags) {
+        if (IsInitial) {
+            LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                    << " In ProcessSectorSet got !restorator.GoodSectorFlags !"
+                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                    << " Marker# LR018");
+        } else {
+//           Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
+//                   << " File# " << __FILE__
+//                   << " Line# " << __LINE__
+//                   << " LogEndChunkIdx# " << LogEndChunkIdx
+//                   << " LogEndSectorIdx# " << LogEndSectorIdx);
+            if (!(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx)) {
+                LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                        << " In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector."
+                        << " File# " << __FILE__
+                        << " Line# " << __LINE__
+                        << " LogEndChunkIdx# " << LogEndChunkIdx
+                        << " LogEndSectorIdx# " << LogEndSectorIdx
+                        << " Marker# LR004");
+            }
+        }
+
         ReplyOk();
         return true;
     }
     {
         UpdateLastGoodToWritePosition();
         if (!(restorator.GoodSectorFlags & 1)) {
+            if (IsInitial) {
+                LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                        << " In ProcessSectorSet got !(restorator.GoodSectorFlags & 1) !"
+                        << " restorator.GoodSectorFlags# " << restorator.GoodSectorFlags
+                        << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                        << " Marker# LR005");
+            } else {
+                Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
+                        << " File# " << __FILE__
+                        << " Line# " << __LINE__
+                        << " LogEndChunkIdx# " << LogEndChunkIdx
+                        << " LogEndSectorIdx# " << LogEndSectorIdx);
+            }
             ReplyOk();
             return true;
         }
@@ -759,9 +837,9 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             (rawSector + format.SectorSize - sizeof(TDataSectorFooter));
 
         LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                << " SectorIdx# " << SectorIdx
                 << " currentSectorIdx# " << SectorIdx
-                << " sectorFooter->Nonce# " << sectorFooter->Nonce);
+                << " sectorFooter->Nonce# " << sectorFooter->Nonce
+                << " Marker# LR020");
 
         ui64 previousNonce = std::exchange(LastNonce, sectorFooter->Nonce);
         ui64 previousDataNonce = std::exchange(LastDataNonce, sectorFooter->Nonce);
@@ -796,7 +874,30 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                 continue;
             }
             if (pageHeader->Flags & LogPageNonceJump2) {
+                if (IsInitial) {
+                    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                            << " In ProcessSectorSet saw LogPageNonceJump2, before processing"
+                            << " LastNonce# " << LastNonce
+                            << " LastDataNonce# " << LastDataNonce
+                            << " previousNonce# " << previousNonce
+                            << " previousDataNonce# " << previousDataNonce
+                            << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                            << " ChunkInfo->LastNonce# " << ChunkInfo->LastNonce
+                            << " Marker# LR006");
+                }
+
                 ProcessLogPageNonceJump2(data + OffsetInSector, previousNonce, previousDataNonce);
+                if (IsInitial) {
+                    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                            << " In ProcessSectorSet saw LogPageNonceJump2, afer  processing"
+                            << " LastNonce# " << LastNonce
+                            << " LastDataNonce# " << LastDataNonce
+                            << " previousNonce# " << previousNonce
+                            << " previousDataNonce# " << previousDataNonce
+                            << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                            << " ChunkInfo->LastNonce# " << ChunkInfo->LastNonce
+                            << " Marker# LR007");
+                }
                 if (IsReplied.load()) {
                     return true;
                 }
@@ -811,14 +912,50 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             }
 
             if (IsInitial && previousNonce != 0) {
-                if (SectorIdx != 0) {
-                    // Suspicious place!
+                if (SectorIdx == 0) {
+                    if (OffsetInSector == 0) {
+                        // Mark the desired prev chunk nonce so that splicing the log works as intended
+                        ChunkInfo->DesiredPrevChunkLastNonce = previousNonce;
+                    }
+
                     if (LastNonce != previousNonce + 1) {
+                        LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                                << " In ProcessSectorSet got LastNonce != previousNonce + 1 !"
+                                << " LastNonce# " << LastNonce
+                                << " previousNonce# " << previousNonce
+                                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                                << " ChunkInfo->IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
+                                << " Marker# LR008");
+
+                        Y_VERIFY_S(!ChunkInfo->IsEndOfSplice, SelfInfo() <<
+                                " Unexpectedly got LastNonce != previosNonce + 1 at Sector0 at the EndOfSplice!"
+                                << " LastNonce# " << LastNonce
+                                << " previousNonce# " << previousNonce
+                                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                                << " ChunkInfo->IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
+                                << " Marker# LR009");
+
                         ReplyOk();
                         return true;
                     }
                 } else {
                     if (LastNonce != previousNonce + 1) {
+                        LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                                << " In ProcessSectorSet got LastNonce != previousNonce + 1 !"
+                                << " LastNonce# " << LastNonce
+                                << " previousNonce# " << previousNonce
+                                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                                << " ChunkInfo->IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
+                                << " Marker# LR010");
+
+                        Y_VERIFY_S(!ChunkInfo->IsEndOfSplice, SelfInfo() <<
+                                " Unexpectedly got LastNonce != previosNonce + 1 at the EndOfSplice!"
+                                << " LastNonce# " << LastNonce
+                                << " previousNonce# " << previousNonce
+                                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                                << " ChunkInfo->IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
+                                << " Marker# LR011");
+
                         ReplyOk();
                         return true;
                     }
@@ -886,19 +1023,37 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     continue;
                 }
                 if (!IsLastRecordHeaderValid) {
-                    Y_FAIL_S(SelfInfo() << " Last record header is corrupted!" << Endl);
+                    Y_FAIL_S(SelfInfo() << " Last record header is corrupted!"
+                            << " Invalid last record, then middle of record."
+                            << " IsLastRecordSkipped# " << IsLastRecordSkipped
+                            << " OffsetInSector# " << OffsetInSector
+                            << " LastRecordDataWritePosition# " << LastRecordDataWritePosition
+                            << " pageHeader->Size# " << pageHeader->Size
+                            << " LastRecordData.Size()# " << LastRecordData.size()
+                            << " LastRecordHeaderNonce# " << LastRecordHeaderNonce
+                            << " sectorFooter->Nonce# " << sectorFooter->Nonce
+                            << " LastRecordHeader.OwnerId# " << LastRecordHeader.OwnerId
+                            << " LastRecordHeader.OwnerLsn# " << LastRecordHeader.OwnerLsn
+                            << " pageHeader# " << pageHeader->ToString()
+                            << Endl);
 
                     // TODO: skip the incorrect entry gracefully?  ReplyError() and return true
                 }
                 if (IsInitial || LastRecordHeader.OwnerId == Owner) {
                     void* destination = (void*)((ui8*)LastRecordData.data() + LastRecordDataWritePosition);
                     if (LastRecordDataWritePosition + pageHeader->Size > LastRecordData.size()) {
-                        Y_FAIL_S(SelfInfo() << " Last record header is corrupted!"
+                        Y_FAIL_S(SelfInfo() << " Last record header is corrupted! Size mismatch."
                             << " IsLastRecordSkipped# " << IsLastRecordSkipped
                             << " OffsetInSector# " << OffsetInSector
                             << " LastRecordDataWritePosition# " << LastRecordDataWritePosition
                             << " pageHeader->Size# " << pageHeader->Size
-                            << " LastRecordData.Size()# " << LastRecordData.size() << Endl);
+                            << " LastRecordData.Size()# " << LastRecordData.size()
+                            << " LastRecordHeaderNonce# " << LastRecordHeaderNonce
+                            << " sectorFooter->Nonce# " << sectorFooter->Nonce
+                            << " LastRecordHeader.OwnerId# " << LastRecordHeader.OwnerId
+                            << " LastRecordHeader.OwnerLsn# " << LastRecordHeader.OwnerLsn
+                            << " pageHeader# " << pageHeader->ToString()
+                            << Endl);
                     }
                     memcpy(destination, data + OffsetInSector, pageHeader->Size);
                     LastRecordDataWritePosition += pageHeader->Size;
@@ -910,25 +1065,28 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                 if (LastRecordHeaderNonce >=
                         PDisk->SysLogFirstNoncesToKeep.FirstNonceToKeep[LastRecordHeader.OwnerId]) {
                     TLogChunkInfo &info = *ChunkInfo;
-                    info.RegisterLogSector<false>(LastRecordHeader.OwnerId, LastRecordHeader.OwnerLsn);
+                    info.RegisterLogSector<true>(LastRecordHeader.OwnerId, LastRecordHeader.OwnerLsn);
                 }
             }
             if (IsLastRecordHeaderValid && (pageHeader->Flags & LogPageLast)) {
                 // Log page last
-                MaxCompleteLsnCyclic = LastRecordHeader.OwnerLsn;
                 SetLastGoodToWritePosition = true;
 
                 IsLastRecordHeaderValid = false;
                 Y_VERIFY_S(LastRecordDataWritePosition == LastRecordData.size(),
-                    "LastRecordDataWritePosition# " << LastRecordDataWritePosition
+                    SelfInfo() << " LastRecordDataWritePosition# " << LastRecordDataWritePosition
                     << " LastRecordData.size()# " << LastRecordData.size()
                     << " pageHeader->Size# " << pageHeader->Size
                     << " pageHeader->Flags# " << ui64(pageHeader->Flags)
-                    << " chunkIdx# " << ChunkIdx
-                    << " sectorIdx# " << SectorIdx
                     << " OffsetInSector# " << OffsetInSector
                     << " maxOffsetInSector# " << maxOffsetInSector
-                    << " rawSector# " << (void*)rawSector);
+                    << " rawSector# " << (void*)rawSector
+                    << " IsLastRecordSkipped# " << IsLastRecordSkipped
+                    << " LastRecordHeaderNonce# " << LastRecordHeaderNonce
+                    << " sectorFooter->Nonce# " << sectorFooter->Nonce
+                    << " LastRecordHeader.OwnerId# " << LastRecordHeader.OwnerId
+                    << " LastRecordHeader.OwnerLsn# " << LastRecordHeader.OwnerLsn
+                    << " pageHeader# " << pageHeader->ToString());
 
                 PDisk->ProcessReadLogRecord(LastRecordHeader, LastRecordData, Owner, sectorFooter->Nonce,
                         Result.Get(), ChunkOwnerMap.Get(), IsInitial, ParseCommits);
@@ -1010,7 +1168,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
             PDisk->Format, PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon,
             PDisk->BufferPool.Get());
     restorator.Restore(sector.GetData(), sector.Offset, format.MagicNextLogChunkReference, LastNonce,
-            PDisk->Cfg->UseT1ha0HashInFooter);
+            PDisk->Cfg->UseT1ha0HashInFooter, Owner);
     LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo() << " ProcessNextChunkReference");
 
     if (restorator.LastGoodIdx < ReplicationFactor) {
@@ -1018,10 +1176,12 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
             (rawSector + format.SectorSize - sizeof(TDataSectorFooter));
         if (sectorFooter->Nonce < LastNonce) {
-            LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+            LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
                     << " ProcessNextChunkReference, Nonce reordering"
                     << " sectorFooter->Nonce# " << sectorFooter->Nonce
-                    << " LastNonce# " << LastNonce);
+                    << " LastNonce# " << LastNonce
+                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                    << " Marker# LR012");
             // This one came unexpectedly out of the blue!
             // TODO(cthulhu): Write a unit-test that hits this line.
             // Steps to reproduce:
@@ -1059,6 +1219,14 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
                 LastRecordDataWritePosition = 0;
                 LastNonce = nextRef->NextChunkFirstNonce - 1;
                 OnEndOfSplice = true;
+
+                if (IsInitial) {
+                    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                            << " ProcessNextChunkReference contains NextChunkFirstNonce. "
+                            << " nextRef->NextChunkFirstNonce# " << nextRef->NextChunkFirstNonce
+                            << " sectorFooter->Nonce# " << sectorFooter->Nonce
+                            << " LastNonce# " << LastNonce);
+                }
             } else {
                 LastNonce = sectorFooter->Nonce;
                 OnEndOfSplice = false;
@@ -1091,8 +1259,13 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         return false;
     } else {
         // As we always write next chunk reference, the situation we are in is impossible.
-        LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                << " ProcessNextChunkReference, nextLogChunkReference not in a valid state");
+        LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+                << " ProcessNextChunkReference, nextLogChunkReference not in a valid state"
+                << " !(restorator.LastGoodIdx < ReplicationFactor) "
+                << " restorator.LastGoodIdx# " << restorator.LastGoodIdx
+                << " ReplicationFactor# " << ReplicationFactor
+                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
+                << " Marker# LR013");
         ReplyOk();
         return true;
     }

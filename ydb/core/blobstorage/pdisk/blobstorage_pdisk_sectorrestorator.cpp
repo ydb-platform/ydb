@@ -32,7 +32,7 @@ TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasur
 {}
 
 void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce,
-        const bool useT1ha0Hash) {
+        const bool useT1ha0Hash, TOwner owner) {
     ui32 sectorCount = IsErasureEncode ? (IsTrippleCopy ? ReplicationFactor : (ErasureDataParts + 1)) : 1;
     ui64 maxNonce = 0;
     TPDiskHashCalculator hasher(useT1ha0Hash);
@@ -48,6 +48,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
         if (!isCrcOk) {
             if (ActorSystem) {
                 LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " <<  (ui32)PDiskId << " Bad hash."
+                    << " owner# " << owner
                     << " IsErasureEncode# " << (ui32)IsErasureEncode
                     << " ErasureDataParts# " << (ui32)ErasureDataParts << " i# " << (ui32)i
                     << " readHash# " << (ui64)sectorFooter->Hash
@@ -78,6 +79,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                 if (ActorSystem) {
                     LOG_WARN_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
                             << " Sector nonce reordering."
+                            << " owner# " << owner
                             << " IsErasureEncode# " << (ui32)IsErasureEncode
                             << " ErasureDataParts# " << (ui32)ErasureDataParts
                             << " i# "  << (ui32)i << " readNonce# " << (ui64)sectorFooterNonce
@@ -100,6 +102,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
         if (!IsTrippleCopy && GoodSectorCount == ErasureDataParts) {
             if (ActorSystem) {
                 LOG_WARN_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+                        << " owner# " << owner
                         << " Restoring sector. ErasureDataParts# " << (ui32)ErasureDataParts
                         << " LastBadIdx# " << (ui32)LastBadIdx
                         << " sectorOffset# " << (ui64)(offset + (ui64)LastBadIdx * (ui64)Format.SectorSize));
@@ -159,6 +162,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                     if (ActorSystem) {
                         LOG_WARN_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
                                 << " Restoring trippleCopy sector i# " << (ui32)i
+                                << " owner# " << owner
                                 << " GoodSectorCount# " << (ui32)GoodSectorCount
                                 << " ReplicationFactor# " << (ui32)ReplicationFactor
                                 << " sectorOffset# " << (ui64)sectorOffset);

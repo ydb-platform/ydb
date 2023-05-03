@@ -19,6 +19,7 @@ private:
     ITableExistsController::TPtr OutputController;
     const TString Path;
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     virtual void OnBootstrap() override;
     virtual void OnTimeout() override;
 public:
@@ -65,11 +66,10 @@ public:
         }
     };
 
-    static NKikimrServices::TActivity::EType ActorActivityType();
-
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(NActors::TEvents::TEvUndelivered, Handle);
             default:
                 TBase::StateMain(ev);
         }

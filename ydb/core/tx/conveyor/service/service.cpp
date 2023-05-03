@@ -37,8 +37,8 @@ void TDistributor::Bootstrap() {
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     SolutionsRate->Inc();
     if (Waiting.size()) {
-        Send(ev->Sender, new TEvInternal::TEvNewTask(Waiting.front()));
-        Waiting.pop_front();
+        Send(ev->Sender, new TEvInternal::TEvNewTask(Waiting.top()));
+        Waiting.pop();
     } else {
         Workers.emplace_back(ev->Sender);
     }
@@ -60,7 +60,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         Send(Workers.back(), new TEvInternal::TEvNewTask(TWorkerTask(ev->Get()->GetTask(), ev->Sender)));
         Workers.pop_back();
     } else if (Waiting.size() < Config.GetQueueSizeLimit()) {
-        Waiting.emplace_back(ev->Get()->GetTask(), ev->Sender);
+        Waiting.emplace(ev->Get()->GetTask(), ev->Sender);
     } else {
         ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=overlimit;sender=" << ev->Sender << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
         OverlimitRate->Inc();

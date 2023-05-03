@@ -65,13 +65,13 @@ struct TEvControlPlaneProxy {
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {
-        explicit TControlPlaneRequest(const TString& folderId,
-                                      const ProtoMessage& request,
-                                      const TString& user,
-                                      const TString& token,
-                                      const TVector<TString>& permissions,
-                                      TMaybe<TQuotaMap> quotas = Nothing(),
-                                      TTenantInfo::TPtr tenantInfo = nullptr)
+        TControlPlaneRequest(const TString& folderId,
+                             const ProtoMessage& request,
+                             const TString& user,
+                             const TString& token,
+                             const TVector<TString>& permissions,
+                             TMaybe<TQuotaMap> quotas = Nothing(),
+                             TTenantInfo::TPtr tenantInfo = nullptr)
             : FolderId(folderId)
             , Request(request)
             , User(user)
@@ -90,48 +90,53 @@ struct TEvControlPlaneProxy {
         TVector<TString> Permissions;
         TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
+        TString SubjectType;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>
     struct TControlPlaneResponse : NActors::TEventLocal<TDerived, EventType> {
-        explicit TControlPlaneResponse(const ProtoMessage& result)
+        TControlPlaneResponse(const ProtoMessage& result, const TString& subjectType)
             : Result(result)
+            , SubjectType(subjectType)
         {
         }
 
-        explicit TControlPlaneResponse(const NYql::TIssues& issues)
+        TControlPlaneResponse(const NYql::TIssues& issues, const TString& subjectType)
             : Issues(issues)
+            , SubjectType(subjectType)
         {
         }
 
         ProtoMessage Result;
         NYql::TIssues Issues;
+        TString SubjectType;
     };
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneNonAuditableResponse : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType> {
-        explicit TControlPlaneNonAuditableResponse(const ProtoMessage& result)
-            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(result)
+        TControlPlaneNonAuditableResponse(const ProtoMessage& result, const TString& subjectType)
+            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(result, subjectType)
         {
         }
 
-        explicit TControlPlaneNonAuditableResponse(const NYql::TIssues& issues)
-            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(issues)
+        TControlPlaneNonAuditableResponse(const NYql::TIssues& issues, const TString& subjectType)
+            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(issues, subjectType)
         {
         }
     };
 
     template<typename ProtoMessage, typename AuditMessage, ui32 EventType>
     struct TControlPlaneAuditableResponse : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType> {
-        explicit TControlPlaneAuditableResponse(const ProtoMessage& result,
-                                        const TAuditDetails<AuditMessage>& auditDetails)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result)
+        TControlPlaneAuditableResponse(const ProtoMessage& result,
+                                       const TAuditDetails<AuditMessage>& auditDetails,
+                                       const TString& subjectType)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result, subjectType)
             , AuditDetails(auditDetails)
         {
         }
 
-        explicit TControlPlaneAuditableResponse(const NYql::TIssues& issues)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(issues)
+        TControlPlaneAuditableResponse(const NYql::TIssues& issues, const TString& subjectType)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(issues, subjectType)
         {
         }
 

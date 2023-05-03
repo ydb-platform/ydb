@@ -130,7 +130,7 @@ void TTxRead::Complete(const TActorContext& ctx) {
 
         TInstant deadline = TInstant::Max(); // TODO
         ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(),
-            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie));
+            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
     }
 }
 

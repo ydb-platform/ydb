@@ -56,6 +56,7 @@ target_compile_options(clickhouse_client_udf.global PRIVATE
   -DDBMS_VERSION_PATCH=0
   -Wno-unused-parameter
   -DUSE_CURRENT_UDF_ABI_VERSION
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(clickhouse_client_udf.global PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox

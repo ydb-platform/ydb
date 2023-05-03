@@ -45,6 +45,7 @@ class TQueryStats {
     friend class TScanQueryPartIterator;
 
 public:
+    TQueryStats(Ydb::TableStats::QueryStats&& proto);
     TString ToString(bool withPlan = false) const;
     TMaybe<TString> GetPlan() const;
     TDuration GetTotalDuration() const;

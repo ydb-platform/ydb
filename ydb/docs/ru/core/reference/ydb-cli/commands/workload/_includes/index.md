@@ -20,6 +20,8 @@
 ## Доступные подкоманды {#subcommands}
 
 В данный момент поддерживаются следующие виды нагрузочных тестов:
+
 * [Stock](../stock.md) - симулятор склада интернет-магазина.
 * [Key-value](../../../workload-kv.md) - Key-Value нагрузка.
 * [ClickBench](../../../workload-click-bench.md) - аналитический бенчмарк ClickBench (https://github.com/ClickHouse/ClickBench).
+* [Topic](../../../workload-topic.md) - Topic нагрузка.

@@ -156,7 +156,9 @@ protected:
             .PeerName = PeerName,
             .UserAgent = UserAgent,
             .RequestId = RequestId,
+            .SubjectType = response.SubjectType
         };
+
 
         Send(NFq::YqAuditServiceActorId(), NFq::TEvAuditService::MakeAuditEvent(
             std::move(extraInfo),

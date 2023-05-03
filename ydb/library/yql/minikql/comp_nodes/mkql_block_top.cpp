@@ -199,7 +199,7 @@ private:
         TVector<std::unique_ptr<IArrayBuilder>> Builders_;
         ui64 BuilderMaxLength_ = 0;
         ui64 BuilderLength_ = 0;
-        TVector<std::unique_ptr<NUdf::IBlockItemComparator>> Comparators_; // by key columns only
+        TVector<NUdf::IBlockItemComparator::TPtr> Comparators_; // by key columns only
 
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
@@ -228,7 +228,7 @@ private:
 
             Comparators_.resize(keyIndicies.size());
             for (ui32 k = 0; k < keyIndicies.size(); ++k) {
-                Comparators_[k] = NUdf::MakeBlockItemComparator(TTypeInfoHelper(), columns[keyIndicies[k]]->GetItemType());
+                Comparators_[k] = TBlockTypeHelper().MakeComparator(columns[keyIndicies[k]]->GetItemType());
             }
 
             SortInput_.resize(columns.size());
@@ -258,7 +258,7 @@ private:
                     continue;
                 }
 
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), columns[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength_);
+                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), columns[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength_, &ctx.Builder->GetPgBuilder());
             }
         }
 

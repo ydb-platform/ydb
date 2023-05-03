@@ -105,7 +105,7 @@ public:
         const std::shared_ptr<arrow::ArrayData>& pred = predDatum.array();
 
         const size_t len = pred->length;
-        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type, *ctx->memory_pool(), len);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type, *ctx->memory_pool(), len, nullptr);
         const ui8* predValues = pred->GetValues<uint8_t>(1);
         for (size_t i = 0; i < len; ++i) {
             if constexpr (!ThenIsScalar) {

@@ -77,7 +77,7 @@ is used.
 */
 
 #if defined(_MSC_VER) || defined(BOOST_BORLANDC)
-#include <float.h>
+#include <cfloat>
 #endif
 #ifdef BOOST_MATH_USE_FLOAT128
 #ifdef __has_include

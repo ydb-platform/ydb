@@ -124,6 +124,10 @@ Datum ScalarDatumFromPod(const NUdf::TUnboxedValuePod& value) {
     return (Datum)value.Get<ui64>();
 }
 
+Datum ScalarDatumFromItem(const NUdf::TBlockItem& value) {
+    return (Datum)value.As<ui64>();
+}
+
 class TBoxedValueWithFree : public NUdf::TBoxedValueBase {
 public:
     void operator delete(void *mem) noexcept {
@@ -182,6 +186,10 @@ NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByValue) {
 
 Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value) {
     return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
+}
+
+Datum PointerDatumFromItem(const NUdf::TBlockItem& value) {
+    return (Datum)value.AsStringRef().Data();
 }
 
 NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
@@ -2403,21 +2411,24 @@ namespace NMiniKQL {
 
 using namespace NYql;
 
-ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
-    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
-
-    if (typeDesc.TypeLen >= 0) {
-        return typeDesc.TypeLen;
+ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
+    if (typeLen >= 0) {
+        return typeLen;
     }
-    Y_ENSURE(typeDesc.TypeLen == -1 || typeDesc.TypeLen == -2);
+    Y_ENSURE(typeLen == -1 || typeLen == -2);
     auto datum = PointerDatumFromPod(value);
-    if (typeDesc.TypeLen == -1) {
+    if (typeLen == -1) {
         const auto x = (const text*)PointerDatumFromPod(value);
         return GetCleanVarSize(x);
     } else {
         const auto x = (const char*)PointerDatumFromPod(value);
         return strlen(x);
     }
+}
+
+ui64 PgValueSize(ui32 pgTypeId, const NUdf::TUnboxedValuePod& value) {
+    const auto& typeDesc = NYql::NPg::LookupType(pgTypeId);
+    return PgValueSize(value, typeDesc.TypeLen);
 }
 
 ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
@@ -2616,16 +2627,23 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     }
 }
 
+template <bool PassByValue, bool IsArray>
 class TPgHash : public NUdf::IHash {
 public:
-    TPgHash(const NMiniKQL::TPgType* type)
-        : Type(type)
-        , TypeDesc(NYql::NPg::LookupType(type->GetTypeId()))
+    TPgHash(const NYql::NPg::TTypeDesc& typeDesc)
+        : TypeDesc(typeDesc)
     {
-        Y_ENSURE(TypeDesc.HashProcId);
+        auto hashProcId = TypeDesc.HashProcId;
+        if constexpr (IsArray) {
+            const auto& elemDesc = NYql::NPg::LookupType(TypeDesc.ElementTypeId);
+            Y_ENSURE(elemDesc.HashProcId);
 
+            hashProcId = NYql::NPg::LookupProc("hash_array", { 0, 0 }).ProcId;
+        }
+
+        Y_ENSURE(hashProcId);;
         Zero(FInfoHash);
-        fmgr_info(TypeDesc.HashProcId, &FInfoHash);
+        fmgr_info(hashProcId, &FInfoHash);
         Y_ENSURE(!FInfoHash.fn_retset);
         Y_ENSURE(FInfoHash.fn_addr);
         Y_ENSURE(FInfoHash.fn_nargs == 1);
@@ -2642,7 +2660,7 @@ public:
             return 0;
         }
 
-        callInfo->args[0] = { TypeDesc.PassByValue ?
+        callInfo->args[0] = { PassByValue ?
             ScalarDatumFromPod(lhs) :
             PointerDatumFromPod(lhs), false };
 
@@ -2652,39 +2670,67 @@ public:
     }
 
 private:
-    const NMiniKQL::TPgType* Type;
     const NYql::NPg::TTypeDesc TypeDesc;
 
     FmgrInfo FInfoHash;
 };
 
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
-    return new TPgHash(type);
+    const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+    if (typeDesc.PassByValue) {
+        return new TPgHash<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgHash<false, true>(typeDesc);
+    } else {
+        return new TPgHash<false, false>(typeDesc);
+    }
 }
 
-class TPgCompare : public NUdf::ICompare {
+template <bool PassByValue, bool IsArray>
+class TPgCompare : public NUdf::ICompare, public NUdf::TBlockItemComparatorBase<TPgCompare<PassByValue, IsArray>, true> {
 public:
-    TPgCompare(const NMiniKQL::TPgType* type)
-        : Type(type)
-        , TypeDesc(NYql::NPg::LookupType(type->GetTypeId()))
+    TPgCompare(const NYql::NPg::TTypeDesc& typeDesc)
+        : TypeDesc(typeDesc)
     {
-        Y_ENSURE(TypeDesc.LessProcId);
-        Y_ENSURE(TypeDesc.CompareProcId);
+        Zero(FInfoLess);        
+        Zero(FInfoCompare);        
+        Zero(FInfoEquals);        
 
-        Zero(FInfoLess);
-        fmgr_info(TypeDesc.LessProcId, &FInfoLess);
-        Y_ENSURE(!FInfoLess.fn_retset);
-        Y_ENSURE(FInfoLess.fn_addr);
-        Y_ENSURE(FInfoLess.fn_nargs == 2);
+        auto lessProcId = TypeDesc.LessProcId;
+        auto compareProcId = TypeDesc.CompareProcId;
+        auto equalProcId = TypeDesc.EqualProcId;
+        if constexpr (IsArray) {
+            const auto& elemDesc = NYql::NPg::LookupType(TypeDesc.ElementTypeId);
+            Y_ENSURE(elemDesc.CompareProcId);
 
-        Zero(FInfoCompare);
-        fmgr_info(TypeDesc.CompareProcId, &FInfoCompare);
+            compareProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
+        } else {
+            Y_ENSURE(lessProcId);
+            Y_ENSURE(equalProcId);
+
+            fmgr_info(lessProcId, &FInfoLess);
+            Y_ENSURE(!FInfoLess.fn_retset);
+            Y_ENSURE(FInfoLess.fn_addr);
+            Y_ENSURE(FInfoLess.fn_nargs == 2);
+
+            fmgr_info(equalProcId, &FInfoEquals);
+            Y_ENSURE(!FInfoEquals.fn_retset);
+            Y_ENSURE(FInfoEquals.fn_addr);
+            Y_ENSURE(FInfoEquals.fn_nargs == 2);        
+        }
+
+        Y_ENSURE(compareProcId);
+        fmgr_info(compareProcId, &FInfoCompare);
         Y_ENSURE(!FInfoCompare.fn_retset);
         Y_ENSURE(FInfoCompare.fn_addr);
         Y_ENSURE(FInfoCompare.fn_nargs == 2);
     }
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        if constexpr (IsArray) {
+            return Compare(lhs, rhs) < 0;
+        }
+
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
@@ -2703,10 +2749,10 @@ public:
             return false;
         }
 
-        callInfo->args[0] = { TypeDesc.PassByValue ?
+        callInfo->args[0] = { PassByValue ?
             ScalarDatumFromPod(lhs) :
             PointerDatumFromPod(lhs), false };
-        callInfo->args[1] = { TypeDesc.PassByValue ?
+        callInfo->args[1] = { PassByValue ?
             ScalarDatumFromPod(rhs) :
             PointerDatumFromPod(rhs), false };
 
@@ -2734,10 +2780,10 @@ public:
             return 1;
         }
 
-        callInfo->args[0] = { TypeDesc.PassByValue ?
+        callInfo->args[0] = { PassByValue ?
             ScalarDatumFromPod(lhs) :
             PointerDatumFromPod(lhs), false };
-        callInfo->args[1] = { TypeDesc.PassByValue ?
+        callInfo->args[1] = { PassByValue ?
             ScalarDatumFromPod(rhs) :
             PointerDatumFromPod(rhs), false };
 
@@ -2746,27 +2792,117 @@ public:
         return DatumGetInt32(x);
     }
 
+    i64 DoCompare(NUdf::TBlockItem lhs, NUdf::TBlockItem rhs) const {
+        LOCAL_FCINFO(callInfo, 2);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare); // don't copy becase of ICompare isn't threadsafe
+        callInfo->nargs = 2;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { PassByValue ?
+            ScalarDatumFromItem(lhs) :
+            PointerDatumFromItem(lhs), false };
+        callInfo->args[1] = { PassByValue ?
+            ScalarDatumFromItem(rhs) :
+            PointerDatumFromItem(rhs), false };
+
+        auto x = FInfoCompare.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetInt32(x);
+    }
+
+    bool DoEquals(NUdf::TBlockItem lhs, NUdf::TBlockItem rhs) const {
+        if constexpr (IsArray) {
+            return DoCompare(lhs, rhs) == 0;
+        }
+
+        LOCAL_FCINFO(callInfo, 2);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquals); // don't copy becase of ICompare isn't threadsafe
+        callInfo->nargs = 2;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { PassByValue ?
+            ScalarDatumFromItem(lhs) :
+            PointerDatumFromItem(lhs), false };
+        callInfo->args[1] = { PassByValue ?
+            ScalarDatumFromItem(rhs) :
+            PointerDatumFromItem(rhs), false };
+
+        auto x = FInfoEquals.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetBool(x);
+    }
+
+    bool DoLess(NUdf::TBlockItem lhs, NUdf::TBlockItem rhs) const {
+        if constexpr (IsArray) {
+            return DoCompare(lhs, rhs) < 0;
+        }
+
+        LOCAL_FCINFO(callInfo, 2);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
+        callInfo->nargs = 2;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { PassByValue ?
+            ScalarDatumFromItem(lhs) :
+            PointerDatumFromItem(lhs), false };
+        callInfo->args[1] = { PassByValue ?
+            ScalarDatumFromItem(rhs) :
+            PointerDatumFromItem(rhs), false };
+
+        auto x = FInfoLess.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetBool(x);
+    }
+
 private:
-    const NMiniKQL::TPgType* Type;
     const NYql::NPg::TTypeDesc TypeDesc;
 
-    FmgrInfo FInfoLess, FInfoCompare;
+    FmgrInfo FInfoLess, FInfoCompare, FInfoEquals;
 };
 
 NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
-    return new TPgCompare(type);
+    const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+    if (typeDesc.PassByValue) {
+        return new TPgCompare<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgCompare<false, true>(typeDesc);
+    } else {
+        return new TPgCompare<false, false>(typeDesc);
+    }
 }
 
+NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
+    const auto& typeDesc = NYql::NPg::LookupType(typeId);
+    if (typeDesc.PassByValue) {
+        return new TPgCompare<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgCompare<false, true>(typeDesc);
+    } else {
+        return new TPgCompare<false, false>(typeDesc);
+    }
+}
+
+template <bool PassByValue, bool IsArray>
 class TPgEquate: public NUdf::IEquate {
 public:
-    TPgEquate(const NMiniKQL::TPgType* type)
-        : Type(type)
-        , TypeDesc(NYql::NPg::LookupType(type->GetTypeId()))
+    TPgEquate(const NYql::NPg::TTypeDesc& typeDesc)
+        : TypeDesc(typeDesc)
     {
-        Y_ENSURE(TypeDesc.EqualProcId);
+        auto equalProcId = TypeDesc.EqualProcId;
+        if constexpr (IsArray) {
+            const auto& elemDesc = NYql::NPg::LookupType(TypeDesc.ElementTypeId);
+            Y_ENSURE(elemDesc.CompareProcId);
+
+            equalProcId = NYql::NPg::LookupProc("btarraycmp", { 0, 0 }).ProcId;
+        }
+
+        Y_ENSURE(equalProcId);
 
         Zero(FInfoEquate);
-        fmgr_info(TypeDesc.EqualProcId, &FInfoEquate);
+        fmgr_info(equalProcId, &FInfoEquate);
         Y_ENSURE(!FInfoEquate.fn_retset);
         Y_ENSURE(FInfoEquate.fn_addr);
         Y_ENSURE(FInfoEquate.fn_nargs == 2);
@@ -2791,27 +2927,37 @@ public:
             return false;
         }
 
-        callInfo->args[0] = { TypeDesc.PassByValue ?
+        callInfo->args[0] = { PassByValue ?
             ScalarDatumFromPod(lhs) :
             PointerDatumFromPod(lhs), false };
-        callInfo->args[1] = { TypeDesc.PassByValue ?
+        callInfo->args[1] = { PassByValue ?
             ScalarDatumFromPod(rhs) :
             PointerDatumFromPod(rhs), false };
 
         auto x = FInfoEquate.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
+        if constexpr (IsArray) {
+            return DatumGetInt32(x) == 0;
+        }
+
         return DatumGetBool(x);
     }
 
 private:
-    const NMiniKQL::TPgType* Type;
     const NYql::NPg::TTypeDesc TypeDesc;
 
     FmgrInfo FInfoEquate;
 };
 
 NUdf::IEquate::TPtr MakePgEquate(const TPgType* type) {
-    return new TPgEquate(type);
+    const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+    if (typeDesc.PassByValue) {
+        return new TPgEquate<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgEquate<false, true>(typeDesc);
+    } else {
+        return new TPgEquate<false, false>(typeDesc);
+    }
 }
 
 void* PgInitializeMainContext() {
@@ -2885,6 +3031,30 @@ public:
 
     NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
         return CreatePgString(typeLen, targetTypeId, data);
+    }
+
+    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        return { x, strlen(x) + 1};
+    }
+
+    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+        auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+        return { (const char*)x, GetFullVarSize(x) };
+    }
+
+    NUdf::TUnboxedValue MakeCString(const char* value) const override {
+        auto len = 1 + strlen(value);
+        char* ret = (char*)palloc(len);
+        memcpy(ret, value, len);
+        return PointerDatumToPod((Datum)ret);
+    }
+    
+    NUdf::TUnboxedValue MakeText(const char* value) const override {
+        auto len = GetFullVarSize((const text*)value);
+        char* ret = (char*)palloc(len);
+        memcpy(ret, value, len);
+        return PointerDatumToPod((Datum)ret);
     }
 };
 
@@ -3549,6 +3719,13 @@ bool TypeDescIsComparable(void* typeDesc) {
         return false;
     }
     return static_cast<TPgTypeDescriptor*>(typeDesc)->CompareProcId != 0;
+}
+
+i32 TypeDescGetTypeLen(void* typeDesc) {
+    if (!typeDesc) {
+        return 0;
+    }
+    return static_cast<TPgTypeDescriptor*>(typeDesc)->TypeLen;
 }
 
 ui32 TypeDescGetStoredSize(void* typeDesc) {

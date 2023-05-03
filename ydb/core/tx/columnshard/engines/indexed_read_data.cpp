@@ -72,7 +72,7 @@ GroupInKeyRanges(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
 std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const TIndexInfo& indexInfo,
                                                                     const std::shared_ptr<NArrow::TSortDescription>& description,
-                                                                    const THashSet<const void*> batchesToDedup) {
+                                                                    const THashSet<const void*>& batchesToDedup) {
     auto rangesSlices = GroupInKeyRanges(batches, indexInfo);
 
     // Merge slices in ranges
@@ -113,56 +113,21 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 
 }
 
-bool TIndexedReadData::TAssembledNotFiltered::DoExecuteImpl() {
-    /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
-    /// It's not OK to apply predicate before replacing key duplicates otherwise.
-    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto batch = BatchConstructor.Assemble();
-    Y_VERIFY(batch);
-    auto filtered = NOlap::FilterPortion(batch, *ReadMetadata);
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
+void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) {
+    Y_VERIFY(IndexedBlobs.emplace(range).second);
+    Y_VERIFY(IndexedBlobSubscriber.emplace(range, &batch).second);
+    if (batch.GetFilter()) {
+        Counters.GetPostFilterBytes()->Add(range.Size);
+        ReadMetadata->ReadStats->DataAdditionalBytes += range.Size;
+        FetchBlobsQueue.emplace_front(range);
+    } else {
+        Counters.GetFilterBytes()->Add(range.Size);
+        ReadMetadata->ReadStats->DataFilterBytes += range.Size;
+        FetchBlobsQueue.emplace_back(range);
     }
-#if 1 // optimization
-    if (filtered.Batch && ReadMetadata->Program && AllowEarlyFilter) {
-        filtered = NOlap::EarlyFilter(filtered.Batch, ReadMetadata->Program);
-    }
-    if (filtered.Batch) {
-        Y_VERIFY(filtered.Valid());
-        filtered.ApplyFilter();
-    }
-#else
-    Y_UNUSED(AllowEarlyFilter);
-#endif
-    FilteredBatch = filtered.Batch;
-    return true;
 }
 
-bool TIndexedReadData::TAssembledNotFiltered::DoApply(TIndexedReadData& owner) const {
-    owner.PortionFinished(BatchNo, FilteredBatch);
-    return true;
-}
-
-std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan() const {
-    return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this());
-}
-
-
-TVector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetResultYqlSchema() const {
-    return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, ResultColumnIds);
-}
-
-TVector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYqlSchema() const {
-    return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, NColumnShard::PrimaryIndexStatsSchema.KeyColumns);
-}
-
-std::unique_ptr<NColumnShard::TScanIteratorBase> TReadStatsMetadata::StartScan() const {
-    return std::make_unique<NColumnShard::TStatsIterator>(this->shared_from_this());
-}
-
-
-THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGranulesOrder) {
+void TIndexedReadData::InitRead(ui32 inputBatch) {
     Y_VERIFY(ReadMetadata->BlobSchema);
     Y_VERIFY(ReadMetadata->LoadSchema);
     Y_VERIFY(ReadMetadata->ResultSchema);
@@ -172,119 +137,50 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
     SortReplaceDescription = IndexInfo().SortReplaceDescription();
 
     NotIndexed.resize(inputBatch);
-    FirstIndexedBatch = inputBatch;
 
     ui32 batchNo = inputBatch;
-    BatchPortion.resize(inputBatch + ReadMetadata->SelectInfo->Portions.size());
-    THashMap<TBlobRange, ui64> out;
-
-    ui64 dataBytes = 0;
+    Y_VERIFY(!GranulesContext);
+    GranulesContext = std::make_unique<NIndexedReader::TGranulesFillingContext>(ReadMetadata, *this, OnePhaseReadMode, inputBatch + ReadMetadata->SelectInfo->Portions.size());
+    ui64 portionsBytes = 0;
     for (auto& portionInfo : ReadMetadata->SelectInfo->Portions) {
-        Y_VERIFY_S(portionInfo.Records.size() > 0, "ReadMeatadata: " << *ReadMetadata);
+        portionsBytes += portionInfo.BlobsBytes();
+        Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
-        ui64 portion = portionInfo.Records[0].Portion;
-        ui64 granule = portionInfo.Records[0].Granule;
-        PortionBatch[portion] = batchNo;
-        BatchPortion[batchNo] = portion;
-        PortionGranule[portion] = granule;
-        if (!GranuleWaits.count(granule)) {
-            GranuleWaits[granule] = 1;
-        } else {
-            ++GranuleWaits[granule];
-        }
-
-        // If there's no PK dups in granule we could use optimized version of merge
-        if (portionInfo.CanIntersectOthers()) {
-            GranulesWithDups.emplace(granule);
-            if (portionInfo.CanHaveDups()) {
-                PortionsWithDups.emplace(portion);
-            }
-        }
-
-        for (const NOlap::TColumnRecord& rec : portionInfo.Records) {
-            WaitIndexed[batchNo].insert(rec.BlobRange);
-            IndexedBlobs[rec.BlobRange] = batchNo;
-            out[rec.BlobRange] = rec.Granule;
-            dataBytes += rec.BlobRange.Size;
-
-            Y_VERIFY_S(rec.Valid(), "ReadMeatadata: " << *ReadMetadata);
-            Y_VERIFY_S(PortionGranule[rec.Portion] == rec.Granule, "ReadMeatadata: " << *ReadMetadata);
-        }
-
-        ++batchNo;
+        NIndexedReader::TGranule& granule = GranulesContext->UpsertGranule(portionInfo.Records[0].Granule);
+        granule.AddBatch(batchNo++, portionInfo);
     }
+    GranulesContext->PrepareForStart();
 
-    if (inGranulesOrder) {
-        for (auto& granuleInfo : ReadMetadata->SelectInfo->Granules) {
-            ui64 granule = granuleInfo.Granule;
-            Y_VERIFY_S(GranuleWaits.count(granule), "ReadMeatadata: " << *ReadMetadata);
-            if (ReadMetadata->IsAscSorted()) {
-                GranulesOutOrder.push_back(granule);
-            } else if (ReadMetadata->IsDescSorted()) {
-                GranulesOutOrder.push_front(granule);
-            }
-        }
-    }
-
+    Counters.GetPortionBytes()->Add(portionsBytes);
     auto& stats = ReadMetadata->ReadStats;
-    stats->IndexGranules = GranuleWaits.size();
-    stats->IndexPortions = PortionGranule.size();
+    stats->IndexGranules = ReadMetadata->SelectInfo->Granules.size();
+    stats->IndexPortions = ReadMetadata->SelectInfo->Portions.size();
     stats->IndexBatches = ReadMetadata->NumIndexedBlobs();
     stats->CommittedBatches = ReadMetadata->CommittedBlobs.size();
-    stats->UsedColumns = ReadMetadata->LoadSchema->num_fields();
-    stats->DataBytes = dataBytes;
-    return out;
+    stats->SchemaColumns = ReadMetadata->LoadSchema->num_fields();
+    stats->FilterColumns = GranulesContext->GetEarlyFilterColumns().size();
+    stats->AdditionalColumns = GranulesContext->GetPostFilterColumns().size();
+    stats->PortionsBytes = portionsBytes;
 }
 
-void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& data, NColumnShard::IDataTasksProcessor::TPtr processor) {
-    Y_VERIFY(IndexedBlobs.count(blobRange));
-    ui32 batchNo = IndexedBlobs[blobRange];
-    if (!WaitIndexed.count(batchNo)) {
-        return;
-    }
-    auto& waitingFor = WaitIndexed[batchNo];
-    if (waitingFor.erase(blobRange) != 1) {
-        return;
-    }
-
-    Data[blobRange] = data;
-
-    if (waitingFor.empty()) {
-        if (auto batch = AssembleIndexedBatch(batchNo, processor)) {
-            if (processor) {
-                processor->Add(batch);
-            } else {
-                batch->Execute();
-                batch->Apply(*this);
-            }
-        } else {
-            WaitIndexed.erase(batchNo);
+void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& data) {
+    Y_VERIFY(GranulesContext);
+    NIndexedReader::TBatch* portionBatch = nullptr;
+    {
+        auto it = IndexedBlobSubscriber.find(blobRange);
+        Y_VERIFY_DEBUG(it != IndexedBlobSubscriber.end());
+        if (it == IndexedBlobSubscriber.end()) {
+            return;
         }
+        portionBatch = it->second;
+        IndexedBlobSubscriber.erase(it);
     }
-}
-
-NColumnShard::IDataPreparationTask::TPtr TIndexedReadData::AssembleIndexedBatch(ui32 batchNo, NColumnShard::IDataTasksProcessor::TPtr processor) {
-    auto& portionInfo = Portion(batchNo);
-    Y_VERIFY(portionInfo.Produced());
-
-    auto batchConstructor = portionInfo.PrepareForAssemble(ReadMetadata->IndexInfo, ReadMetadata->LoadSchema, Data);
-
-    for (auto& rec : portionInfo.Records) {
-        auto& blobRange = rec.BlobRange;
-        Data.erase(blobRange);
+    if (!portionBatch->AddIndexedReady(blobRange, data)) {
+        return;
     }
-
-    return std::make_shared<TAssembledNotFiltered>(std::move(batchConstructor), ReadMetadata, batchNo, portionInfo.AllowEarlyFilter(), processor);
-}
-
-void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
-    ui64 granule = BatchGranule(batchNo);
-    if (GranuleWaits.count(granule)) {
-        ui32& count = GranuleWaits[granule];
-        --count;
-        if (!count) {
-            ReadyGranules[granule] = {};
-            GranuleWaits.erase(granule);
+    if (portionBatch->IsFetchingReady()) {
+        if (auto batch = portionBatch->AssembleTask(TasksProcessor.GetObject(), ReadMetadata)) {
+            TasksProcessor.Add(*GranulesContext, batch);
         }
     }
 }
@@ -299,20 +195,20 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     auto batch = NArrow::ExtractExistedColumns(srcBatch, ReadMetadata->LoadSchema);
     Y_VERIFY(batch);
 
-    auto filtered = FilterNotIndexed(batch, *ReadMetadata);
-    if (!filtered.Batch) {
-        return {};
+    auto filter = FilterNotIndexed(batch, *ReadMetadata);
+    if (filter.IsTotalDenyFilter()) {
+        return nullptr;
     }
+    auto preparedBatch = batch;
 
-    filtered.Batch = TIndexInfo::AddSpecialColumns(filtered.Batch, planStep, txId);
-    Y_VERIFY(filtered.Batch);
+    preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, planStep, txId);
+    Y_VERIFY(preparedBatch);
 
-    filtered.Batch = NArrow::ExtractColumns(filtered.Batch, ReadMetadata->LoadSchema);
-    Y_VERIFY(filtered.Batch);
+    preparedBatch = NArrow::ExtractColumns(preparedBatch, ReadMetadata->LoadSchema);
+    Y_VERIFY(preparedBatch);
 
-    Y_VERIFY(filtered.Valid());
-    filtered.ApplyFilter();
-    return filtered.Batch;
+    filter.Apply(preparedBatch);
+    return preparedBatch;
 }
 
 TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {
@@ -336,39 +232,22 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
             marksGranules.MakePrecedingMark(IndexInfo());
             Y_VERIFY(!marksGranules.Empty());
 
-            OutNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
+            auto outNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
+            GranulesContext->AddNotIndexedBatches(outNotIndexed);
+            Y_VERIFY(outNotIndexed.size() <= 1);
+            if (outNotIndexed.size() == 1) {
+                auto it = outNotIndexed.find(0);
+                Y_VERIFY(it != outNotIndexed.end());
+                NotIndexedOutscopeBatch = it->second;
+            }
         }
         NotIndexed.clear();
         ReadyNotIndexed = 0;
     }
 
-    // Extact ready granules (they are ready themselves but probably not ready to go out)
-    std::vector<ui32> ready;
-    for (auto& [batchNo, batch] : Indexed) {
-        ui64 granule = BatchGranule(batchNo);
-        if (ReadyGranules.count(granule)) {
-            Y_VERIFY(batch);
-            if (batch->num_rows()) {
-                ui64 portion = BatchPortion[batchNo];
-                if (PortionsWithDups.count(portion)) {
-                    Y_VERIFY(GranulesWithDups.count(granule));
-                    BatchesToDedup.insert(batch.get());
-                } else {
-                    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, IndexInfo().GetReplaceKey(), false));
-                }
-                ReadyGranules[granule].push_back(batch);
-            }
-            ready.push_back(batchNo);
-        }
-    }
-
-    // Remove ready batches from future extraction
-    for (ui32 batchNo : ready) {
-        Indexed.erase(batchNo);
-    }
-
     // Extract ready to out granules: ready granules that are not blocked by other (not ready) granules
-    bool requireResult = !HasIndexRead(); // not indexed or the last indexed read (even if it's emply)
+    Y_VERIFY(GranulesContext);
+    const bool requireResult = !GranulesContext->IsInProgress(); // not indexed or the last indexed read (even if it's empty)
     auto out = MakeResult(ReadyToOut(), maxRowsInBatch);
     if (requireResult && out.empty()) {
         out.push_back(TPartialReadResult{
@@ -378,70 +257,36 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
     return out;
 }
 
-template <typename TCont>
-static std::vector<ui64> GetReadyInOrder(const TCont& ready, TDeque<ui64>& order) {
-    std::vector<ui64> out;
-    out.reserve(ready.size());
-
-    if (order.empty()) {
-        for (auto& [granule, _] : ready) {
-            out.push_back(granule);
-        }
-    } else {
-        while (order.size()) {
-            ui64 granule = order.front();
-            if (!ready.count(granule)) {
-                break;
-            }
-            out.push_back(granule);
-            order.pop_front();
-        }
-    }
-
-    return out;
-}
-
 /// @return batches that are not blocked by others
 std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::ReadyToOut() {
     Y_VERIFY(SortReplaceDescription);
+    Y_VERIFY(GranulesContext);
 
+    std::vector<NIndexedReader::TGranule*> ready = GranulesContext->DetachReadyInOrder();
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> out;
-    out.reserve(ReadyGranules.size() + 1);
+    out.reserve(ready.size() + 1);
 
     // Prepend not indexed data (less then first granule) before granules for ASC sorting
-    if (ReadMetadata->IsAscSorted() && OutNotIndexed.count(0)) {
+    if (ReadMetadata->IsAscSorted() && NotIndexedOutscopeBatch) {
         out.push_back({});
-        out.back().push_back(OutNotIndexed[0]);
-        OutNotIndexed.erase(0);
+        out.back().push_back(NotIndexedOutscopeBatch);
+        NotIndexedOutscopeBatch = nullptr;
     }
 
-    std::vector<ui64> ready = GetReadyInOrder(ReadyGranules, GranulesOutOrder);
-    for (ui64 granule : ready) {
-        std::vector<std::shared_ptr<arrow::RecordBatch>> inGranule = std::move(ReadyGranules[granule]);
-        ReadyGranules.erase(granule);
-        bool canHaveDups = GranulesWithDups.count(granule);
-
-        // Append not indexed data to granules
-        if (OutNotIndexed.count(granule)) {
-            auto batch = OutNotIndexed[granule];
-            if (batch && batch->num_rows()) { // TODO: check why it could be empty
-                inGranule.push_back(batch);
-                canHaveDups = true;
-            }
-            OutNotIndexed.erase(granule);
-        }
+    for (auto&& granule : ready) {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> inGranule = granule->GetReadyBatches();
 
         if (inGranule.empty()) {
             continue;
         }
 
-        if (canHaveDups) {
+        if (granule->IsDuplicationsAvailable()) {
             for (auto& batch : inGranule) {
                 Y_VERIFY(batch->num_rows());
                 Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortReplaceDescription->ReplaceKey));
             }
 #if 1 // optimization
-            auto deduped = SpecialMergeSorted(inGranule, IndexInfo(), SortReplaceDescription, BatchesToDedup);
+            auto deduped = SpecialMergeSorted(inGranule, IndexInfo(), SortReplaceDescription, granule->GetBatchesToDedup());
             out.emplace_back(std::move(deduped));
 #else
             out.push_back({});
@@ -453,10 +298,10 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
     }
 
     // Append not indexed data (less then first granule) after granules for DESC sorting
-    if (ReadMetadata->IsDescSorted() && GranulesOutOrder.empty() && OutNotIndexed.count(0)) {
+    if (GranulesContext->GetSortingPolicy()->ReadyForAddNotIndexedToEnd() && NotIndexedOutscopeBatch) {
         out.push_back({});
-        out.back().push_back(OutNotIndexed[0]);
-        OutNotIndexed.erase(0);
+        out.back().push_back(NotIndexedOutscopeBatch);
+        NotIndexedOutscopeBatch = nullptr;
     }
 
     return out;
@@ -604,23 +449,15 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
     return out;
 }
 
-void TIndexedReadData::PortionFinished(const ui32 batchNo, std::shared_ptr<arrow::RecordBatch> batch) {
-    WaitIndexed.erase(batchNo);
-    if (batch) {
-        Y_VERIFY(Indexed.emplace(batchNo, batch).second);
-    }
-    UpdateGranuleWaits(batchNo);
+TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, TFetchBlobsQueue& fetchBlobsQueue,
+    const bool internalRead, const NColumnShard::TScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor)
+    : Counters(counters)
+    , TasksProcessor(tasksProcessor)
+    , FetchBlobsQueue(fetchBlobsQueue)
+    , ReadMetadata(readMetadata)
+    , OnePhaseReadMode(internalRead)
+{
+    Y_VERIFY(ReadMetadata->SelectInfo);
 }
 
-}
-
-namespace NKikimr::NColumnShard {
-
-bool IDataPreparationTask::DoExecute() {
-    if (OwnerOperator && OwnerOperator->IsStopped()) {
-        return true;
-    } else {
-        return DoExecuteImpl();
-    }
-}
 }

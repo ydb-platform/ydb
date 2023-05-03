@@ -146,8 +146,8 @@ bool GetPercentileLevel(TStringBuf statName, TStringBuf& level) {
     return false;
 }
 
-template<typename T>
-void SetInAggregatedField(TStringBuf suffix, T value, TAggregatedField<T>& dst) {
+template<typename T, typename U>
+void SetInAggregatedField(TStringBuf suffix, T value, TAggregatedField<U>& dst) {
     if (suffix == "_min") {
         dst.MinValue = value;
     } else if (suffix == "_avg") {
@@ -179,7 +179,11 @@ TAggregatedResult GetResultFromValueListItem(const NKikimrMiniKQL::TValue& listI
             result.Config = ExtractValue<TString>(listItem, pos);
         } else if (GetStatName(column, statName, suffix)) {
             if (statName == "transactions") {
-                SetInAggregatedField(suffix, ExtractValue<ui64>(listItem, pos), result.Stats.Transactions);
+                if (suffix == "_avg") {
+                    SetInAggregatedField(suffix, ExtractValue<double>(listItem, pos), result.Stats.Transactions);
+                } else {
+                    SetInAggregatedField(suffix, ExtractValue<ui64>(listItem, pos), result.Stats.Transactions);
+                }
             } else if (statName == "transactions_per_sec") {
                 SetInAggregatedField(suffix, ExtractValue<double>(listItem, pos), result.Stats.TransactionsPerSecond);
             } else if (statName == "errors_per_sec") {

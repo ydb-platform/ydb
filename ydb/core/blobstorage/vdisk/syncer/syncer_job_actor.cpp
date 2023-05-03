@@ -125,7 +125,9 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             // don't run sync job for too long
-            ctx.Schedule(SyncerCtx->Config->SyncJobTimeout, new TEvents::TEvWakeup());
+            if (const auto timeout = SyncerCtx->Config->SyncJobTimeout; timeout != TDuration::Max()) {
+                ctx.Schedule(timeout, new TEvents::TEvWakeup());
+            }
 
             // initiate requests
             TSjOutcome outcome = Task->NextRequest();

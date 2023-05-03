@@ -20,6 +20,7 @@
 
 #include <chrono>
 #include <format>
+#include <limits>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -48,6 +49,7 @@ struct TGraceJoinPacker {
     ui64 TuplesPacked = 0; // Total number of packed tuples
     ui64 TuplesBatchPacked = 0; // Number of tuples packed during current join batch
     ui64 TuplesUnpacked = 0; // Total number of unpacked tuples
+    ui64 BatchSize = PartialJoinBatchSize; // Batch size for partial table packing and join 
     std::chrono::time_point<std::chrono::system_clock> StartTime; // Start time of execution
     std::chrono::time_point<std::chrono::system_clock> EndTime; // End time of execution
     std::vector<ui64> TupleIntVals; // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
@@ -564,7 +566,13 @@ public:
     ,   LeftKeyColumns(leftKeyColumns)
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
-    ,   RightRenames(rightRenames) {}
+    ,   RightRenames(rightRenames) 
+    {
+        if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
+            LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
+            RightPacker->BatchSize = std::numeric_limits<ui64>::max();
+        }
+    }
 private:
     IComputationWideFlowNode* const FlowLeft;
     IComputationWideFlowNode* const FlowRight;
@@ -820,17 +828,17 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *HaveMoreRightRows = false;
                 }
 
-                if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= PartialJoinBatchSize ) {
+                if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
                     *PartialJoinCompleted = true;
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
                                          
                 }
 
 
-                if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= PartialJoinBatchSize ) {
+                if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
                     *PartialJoinCompleted = true;
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
                    
                 }
@@ -839,7 +847,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *PartialJoinCompleted = true;
                     LeftPacker->StartTime = std::chrono::system_clock::now();
                     RightPacker->StartTime = std::chrono::system_clock::now();
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
                     LeftPacker->EndTime = std::chrono::system_clock::now(); 
                     RightPacker->EndTime = std::chrono::system_clock::now();

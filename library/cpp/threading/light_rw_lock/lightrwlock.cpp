@@ -46,7 +46,7 @@ void TLightRWLock::WaitForExclusiveAndUntrappedShared() {
             break;
     }
 
-    for (ui32 j = 0;; ++j) {
+    for (;;) {
         for (ui32 i = 0; i < SpinCount_; ++i) {
             if ((AtomicLoad(Counter_) & 0x7FFFFFFF) == 0)
                 return;

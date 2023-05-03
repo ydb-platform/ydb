@@ -271,6 +271,10 @@ public:
         );
     }
 
+    bool IsInternalCall() const {
+        return RequestEv->IsInternalCall();
+    }
+
     void ResetTimer() {
         if (CurrentTimer) {
             CpuTime += CurrentTimer->GetTime();

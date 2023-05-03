@@ -19,12 +19,9 @@ target_link_libraries(restricted-boost-container PUBLIC
   contrib-libs-cxxsupp
   restricted-boost-assert
   restricted-boost-config
-  restricted-boost-core
   restricted-boost-intrusive
   restricted-boost-move
   restricted-boost-static_assert
-  restricted-boost-type_traits
-  restricted-boost-winapi
 )
 target_sources(restricted-boost-container PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/alloc_lib.c

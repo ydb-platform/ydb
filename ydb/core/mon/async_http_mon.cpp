@@ -310,7 +310,8 @@ public:
             resultPage.Parent = ActorMonPage->Parent;
             resultPage.Output(Container);
         } else {
-            ev->Get()->Output(Container);
+            TCustomResult result(*(ev->Get()));
+            result.Output(Container);
         }
         ReplyWith(Event->Get()->Request->CreateResponseString(Container.Str()));
         PassAway();

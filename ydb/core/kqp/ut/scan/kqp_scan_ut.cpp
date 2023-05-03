@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -93,6 +94,77 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpScan) {
+
+    Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+
+        {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1";
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            // We must wait execution to be started
+            int count = 60;
+            while (counters.GetActiveSessionActors()->Val() != 1 && count) {
+                count--;
+                Sleep(TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_C(count, "Unable to wait second session actor (executing compiled program) start");
+        }
+
+        NDataShard::gSkipRepliesFailPoint.Disable();
+        int count = 60;
+        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
+            count--;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+    }
+
+    Y_UNIT_TEST(StreamExecuteScanQueryTimeoutBruteForce) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        int maxTimeoutMs = 100;
+
+        for (int i = 1; i < maxTimeoutMs; i++) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+            )",
+            TStreamExecScanQuerySettings()
+                .ClientTimeout(TDuration::MilliSeconds(i))
+            ).GetValueSync();
+
+            if (it.IsSuccess()) {
+                try {
+                    auto yson = StreamResultToYson(it, true);
+                    CompareYson(R"([[[1];[101u];["Value1"]];[[2];[201u];["Value1"]];[[3];[301u];["Value1"]];[[1];[401u];["Value1"]];[[2];[501u];["Value1"]];[[3];[601u];["Value1"]];[[1];[701u];["Value1"]];[[2];[801u];["Value1"]]])", yson);
+                } catch (const TStreamReadError& ex) {
+                    UNIT_ASSERT_VALUES_EQUAL(ex.Status, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+                } catch (const std::exception& ex) {
+                    UNIT_ASSERT_C(false, "unknown exception during the test");
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+            }
+        }
+
+        int count = 60;
+        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
+            count--;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+    }
+
     Y_UNIT_TEST(IsNull) {
         auto kikimr = DefaultKikimrRunner();
         CreateNullSampleTables(kikimr);

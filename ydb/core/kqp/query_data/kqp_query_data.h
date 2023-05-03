@@ -59,15 +59,18 @@ struct TKqpExecuterTxResult {
     bool IsStream = true;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
+    ui32 QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueVector Rows;
 
     explicit TKqpExecuterTxResult(
         bool isStream,
         NKikimr::NMiniKQL::TType* mkqlItemType,
-        const TVector<ui32>* сolumnOrder = nullptr)
+        const TVector<ui32>* сolumnOrder,
+        ui32 queryResultIndex)
         : IsStream(isStream)
         , MkqlItemType(mkqlItemType)
         , ColumnOrder(сolumnOrder)
+        , QueryResultIndex(queryResultIndex)
     {}
 
     TTypedUnboxedValue GetUV(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

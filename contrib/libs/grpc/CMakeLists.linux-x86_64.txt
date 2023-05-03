@@ -693,10 +693,10 @@ target_sources(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/tls/tls_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/tls/tls_utils.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/credentials/xds/xds_credentials.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/add_arcadia_root_certs.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/alts/alts_security_connector.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/fake/fake_security_connector.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/insecure/insecure_security_connector.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/load_arcadia_root_certs.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/load_system_roots_fallback.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/load_system_roots_linux.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/security/security_connector/local/local_security_connector.cc

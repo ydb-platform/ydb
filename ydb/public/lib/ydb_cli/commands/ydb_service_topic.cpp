@@ -207,7 +207,7 @@ namespace {
             .Optional()
             .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "New topic path");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
     }
@@ -264,7 +264,7 @@ namespace {
             .Optional()
             .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic to alter");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
     }
@@ -313,6 +313,9 @@ namespace {
         TDriver driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
+
         auto describeResult = topicClient.DescribeTopic(TopicName).GetValueSync();
         ThrowOnError(describeResult);
 
@@ -334,12 +337,15 @@ namespace {
     void TCommandTopicDrop::Config(TConfig& config) {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic which will be dropped");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 
     int TCommandTopicDrop::Run(TConfig& config) {
         TDriver driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
+
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
 
         auto settings = NYdb::NTopic::TDropTopicSettings();
         TStatus status = topicClient.DropTopic(TopicName, settings).GetValueSync();
@@ -373,7 +379,7 @@ namespace {
             .Optional()
             .StoreResult(&StartingMessageTimestamp_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "topic for which consumer will be added");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
     }
 
@@ -386,6 +392,9 @@ namespace {
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
         TDriver driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
+
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
 
         NYdb::NTopic::TAlterTopicSettings readRuleSettings = NYdb::NTopic::TAlterTopicSettings();
         NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TAlterTopicSettings> consumerSettings(readRuleSettings);
@@ -416,7 +425,7 @@ namespace {
             .Required()
             .StoreResult(&ConsumerName_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic from which consumer will be dropped");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 
     void TCommandTopicConsumerDrop::Parse(TConfig& config) {
@@ -427,6 +436,16 @@ namespace {
     int TCommandTopicConsumerDrop::Run(TConfig& config) {
         TDriver driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
+
+        auto consumers = topicDescription.GetTopicDescription().GetConsumers();
+        if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
+        {
+            throw TMisuseException() << "Topic '" << TopicName << "' doesn't have a consumer '" << ConsumerName_ << "'.\n";
+            return EXIT_FAILURE;
+        }
 
         NYdb::NTopic::TAlterTopicSettings removeReadRuleSettings = NYdb::NTopic::TAlterTopicSettings();
         removeReadRuleSettings.AppendDropConsumers(ConsumerName_);
@@ -451,12 +470,12 @@ namespace {
             .Required()
             .StoreResult(&PartitionId_);
 
-        config.Opts->AddLongOption("offset", "Partition offset to be setted for desired consumer")
+        config.Opts->AddLongOption("offset", "Partition offset will be set for desired consumer")
             .Required()
             .StoreResult(&Offset_);
 
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic from which consumer will be dropped");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
     }
 
     void TCommandTopicConsumerCommitOffset::Parse(TConfig& config) {
@@ -467,6 +486,16 @@ namespace {
     int TCommandTopicConsumerCommitOffset::Run(TConfig& config) {
         TDriver driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
+
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
+
+        auto consumers = topicDescription.GetTopicDescription().GetConsumers();
+        if (!std::any_of(consumers.begin(), consumers.end(), [&](const auto& consumer) { return consumer.GetConsumerName() == ConsumerName_; }))
+        {
+            throw TMisuseException() << "Topic '" << TopicName << "' doesn't have a consumer '" << ConsumerName_ << "'.\n";
+            return EXIT_FAILURE;
+        }
 
         TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
         ThrowOnError(status);
@@ -528,7 +557,7 @@ namespace {
     void TCommandTopicRead::Config(TConfig& config) {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic to read data from");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
 
         AddMessagingFormats(config, {
                                EMessagingFormat::SingleMessage,
@@ -643,6 +672,10 @@ namespace {
         auto driver =
             std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
+
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
+
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
         {
@@ -704,7 +737,7 @@ namespace {
     void TCommandTopicWrite::Config(TConfig& config) {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic to write data");
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
 
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
@@ -771,6 +804,9 @@ namespace {
         auto driver =
             std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
+
+        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
+        ThrowOnError(topicDescription);
 
         {
             auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));

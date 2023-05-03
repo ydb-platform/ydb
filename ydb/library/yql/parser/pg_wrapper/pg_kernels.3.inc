@@ -1,3002 +1,3660 @@
+struct TArgs_areajoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_areajoinsel() { return TGenericExec<TPgDirectFunc<&areajoinsel>, true, true, TArgs_areajoinsel_Policy>({}); }
+struct TArgs_areasel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_areasel() { return TGenericExec<TPgDirectFunc<&areasel>, true, true, TArgs_areasel_Policy>({}); }
+struct TArgs_array_agg_array_finalfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_array_agg_array_finalfn() { return TGenericExec<TPgDirectFunc<&array_agg_array_finalfn>, false, false, TArgs_array_agg_array_finalfn_Policy>({}); }
+struct TArgs_array_agg_array_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_array_agg_array_transfn() { return TGenericExec<TPgDirectFunc<&array_agg_array_transfn>, false, true, TArgs_array_agg_array_transfn_Policy>({}); }
+struct TArgs_array_agg_finalfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_array_agg_finalfn() { return TGenericExec<TPgDirectFunc<&array_agg_finalfn>, false, false, TArgs_array_agg_finalfn_Policy>({}); }
+struct TArgs_array_agg_transfn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_array_agg_transfn() { return TGenericExec<TPgDirectFunc<&array_agg_transfn>, false, true, TArgs_array_agg_transfn_Policy>({}); }
+struct TArgs_array_append_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_array_append() { return TGenericExec<TPgDirectFunc<&array_append>, false, false, TArgs_array_append_Policy>({}); }
+struct TArgs_array_cat_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_array_cat() { return TGenericExec<TPgDirectFunc<&array_cat>, false, false, TArgs_array_cat_Policy>({}); }
+struct TArgs_array_position_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_array_position() { return TGenericExec<TPgDirectFunc<&array_position>, false, true, TArgs_array_position_Policy>({}); }
+struct TArgs_array_position_start_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_array_position_start() { return TGenericExec<TPgDirectFunc<&array_position_start>, false, true, TArgs_array_position_start_Policy>({}); }
+struct TArgs_array_positions_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_array_positions() { return TGenericExec<TPgDirectFunc<&array_positions>, false, false, TArgs_array_positions_Policy>({}); }
+struct TArgs_array_prepend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_array_prepend() { return TGenericExec<TPgDirectFunc<&array_prepend>, false, false, TArgs_array_prepend_Policy>({}); }
+struct TArgs_array_typanalyze_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_array_typanalyze() { return TGenericExec<TPgDirectFunc<&array_typanalyze>, true, true, TArgs_array_typanalyze_Policy>({}); }
 struct TArgs_binary_decode_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_binary_decode() { return &GenericExec<TPgDirectFunc<&binary_decode>, true, false, TArgs_binary_decode_Policy>; }
+TExecFunc arrow_binary_decode() { return TGenericExec<TPgDirectFunc<&binary_decode>, true, false, TArgs_binary_decode_Policy>({}); }
 struct TArgs_binary_encode_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_binary_encode() { return &GenericExec<TPgDirectFunc<&binary_encode>, true, false, TArgs_binary_encode_Policy>; }
-struct TArgs_binary_upgrade_create_empty_extension_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 7> IsFixedArg = {false,false,true,false,false,false,false};
-};
-TExecFunc arrow_binary_upgrade_create_empty_extension() { return &GenericExec<TPgDirectFunc<&binary_upgrade_create_empty_extension>, false, true, TArgs_binary_upgrade_create_empty_extension_Policy>; }
-struct TArgs_binary_upgrade_set_missing_value_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
-};
-TExecFunc arrow_binary_upgrade_set_missing_value() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_missing_value>, true, true, TArgs_binary_upgrade_set_missing_value_Policy>; }
-struct TArgs_binary_upgrade_set_next_array_pg_type_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_array_pg_type_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_array_pg_type_oid>, true, true, TArgs_binary_upgrade_set_next_array_pg_type_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_heap_pg_class_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_heap_pg_class_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_heap_pg_class_oid>, true, true, TArgs_binary_upgrade_set_next_heap_pg_class_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_index_pg_class_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_index_pg_class_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_index_pg_class_oid>, true, true, TArgs_binary_upgrade_set_next_index_pg_class_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_multirange_array_pg_type_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_multirange_array_pg_type_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_multirange_array_pg_type_oid>, true, true, TArgs_binary_upgrade_set_next_multirange_array_pg_type_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_multirange_pg_type_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_multirange_pg_type_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_multirange_pg_type_oid>, true, true, TArgs_binary_upgrade_set_next_multirange_pg_type_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_pg_authid_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_pg_authid_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_pg_authid_oid>, true, true, TArgs_binary_upgrade_set_next_pg_authid_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_pg_enum_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_pg_enum_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_pg_enum_oid>, true, true, TArgs_binary_upgrade_set_next_pg_enum_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_pg_type_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_pg_type_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_pg_type_oid>, true, true, TArgs_binary_upgrade_set_next_pg_type_oid_Policy>; }
-struct TArgs_binary_upgrade_set_next_toast_pg_class_oid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_next_toast_pg_class_oid() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_next_toast_pg_class_oid>, true, true, TArgs_binary_upgrade_set_next_toast_pg_class_oid_Policy>; }
-struct TArgs_binary_upgrade_set_record_init_privs_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_binary_upgrade_set_record_init_privs() { return &GenericExec<TPgDirectFunc<&binary_upgrade_set_record_init_privs>, true, true, TArgs_binary_upgrade_set_record_init_privs_Policy>; }
-struct TArgs_bool_accum_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_bool_accum() { return &GenericExec<TPgDirectFunc<&bool_accum>, false, true, TArgs_bool_accum_Policy>; }
-struct TArgs_bool_accum_inv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_bool_accum_inv() { return &GenericExec<TPgDirectFunc<&bool_accum_inv>, false, true, TArgs_bool_accum_inv_Policy>; }
-struct TArgs_bool_alltrue_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_bool_alltrue() { return &GenericExec<TPgDirectFunc<&bool_alltrue>, true, true, TArgs_bool_alltrue_Policy>; }
-struct TArgs_bool_anytrue_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_bool_anytrue() { return &GenericExec<TPgDirectFunc<&bool_anytrue>, true, true, TArgs_bool_anytrue_Policy>; }
-struct TArgs_bool_int4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_bool_int4() { return &GenericExec<TPgDirectFunc<&bool_int4>, true, true, TArgs_bool_int4_Policy>; }
-struct TArgs_booland_statefunc_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_booland_statefunc() { return &GenericExec<TPgDirectFunc<&booland_statefunc>, true, true, TArgs_booland_statefunc_Policy>; }
-struct TArgs_booleq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_booleq() { return &GenericExec<TPgDirectFunc<&booleq>, true, true, TArgs_booleq_Policy>; }
-struct TArgs_boolge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_boolge() { return &GenericExec<TPgDirectFunc<&boolge>, true, true, TArgs_boolge_Policy>; }
-struct TArgs_boolgt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_boolgt() { return &GenericExec<TPgDirectFunc<&boolgt>, true, true, TArgs_boolgt_Policy>; }
-struct TArgs_boolin_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_boolin() { return &GenericExec<TPgDirectFunc<&boolin>, true, true, TArgs_boolin_Policy>; }
-struct TArgs_boolle_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_boolle() { return &GenericExec<TPgDirectFunc<&boolle>, true, true, TArgs_boolle_Policy>; }
-struct TArgs_boollt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_boollt() { return &GenericExec<TPgDirectFunc<&boollt>, true, true, TArgs_boollt_Policy>; }
-struct TArgs_boolne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_boolne() { return &GenericExec<TPgDirectFunc<&boolne>, true, true, TArgs_boolne_Policy>; }
-struct TArgs_boolor_statefunc_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_boolor_statefunc() { return &GenericExec<TPgDirectFunc<&boolor_statefunc>, true, true, TArgs_boolor_statefunc_Policy>; }
-struct TArgs_boolout_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_boolout() { return &GenericExec<TPgDirectFunc<&boolout>, true, false, TArgs_boolout_Policy>; }
-struct TArgs_boolrecv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_boolrecv() { return &GenericExec<TPgDirectFunc<&boolrecv>, true, true, TArgs_boolrecv_Policy>; }
-struct TArgs_boolsend_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_boolsend() { return &GenericExec<TPgDirectFunc<&boolsend>, true, false, TArgs_boolsend_Policy>; }
-struct TArgs_booltext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_booltext() { return &GenericExec<TPgDirectFunc<&booltext>, true, false, TArgs_booltext_Policy>; }
-struct TArgs_bpchar_Policy {
+TExecFunc arrow_binary_encode() { return TGenericExec<TPgDirectFunc<&binary_encode>, true, false, TArgs_binary_encode_Policy>({}); }
+struct TArgs_bit_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_bpchar() { return &GenericExec<TPgDirectFunc<&bpchar>, true, false, TArgs_bpchar_Policy>; }
-struct TArgs_bpchar_larger_Policy {
+TExecFunc arrow_bit() { return TGenericExec<TPgDirectFunc<&bit>, true, false, TArgs_bit_Policy>({}); }
+struct TArgs_bit_and_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_bpchar_larger() { return &GenericExec<TPgDirectFunc<&bpchar_larger>, true, false, TArgs_bpchar_larger_Policy>; }
-struct TArgs_bpchar_name_Policy {
+TExecFunc arrow_bit_and() { return TGenericExec<TPgDirectFunc<&bit_and>, true, false, TArgs_bit_and_Policy>({}); }
+struct TArgs_bit_bit_count_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_bpchar_name() { return &GenericExec<TPgDirectFunc<&bpchar_name>, true, false, TArgs_bpchar_name_Policy>; }
-struct TArgs_bpchar_pattern_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchar_pattern_ge() { return &GenericExec<TPgDirectFunc<&bpchar_pattern_ge>, true, true, TArgs_bpchar_pattern_ge_Policy>; }
-struct TArgs_bpchar_pattern_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchar_pattern_gt() { return &GenericExec<TPgDirectFunc<&bpchar_pattern_gt>, true, true, TArgs_bpchar_pattern_gt_Policy>; }
-struct TArgs_bpchar_pattern_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchar_pattern_le() { return &GenericExec<TPgDirectFunc<&bpchar_pattern_le>, true, true, TArgs_bpchar_pattern_le_Policy>; }
-struct TArgs_bpchar_pattern_lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchar_pattern_lt() { return &GenericExec<TPgDirectFunc<&bpchar_pattern_lt>, true, true, TArgs_bpchar_pattern_lt_Policy>; }
-struct TArgs_bpchar_smaller_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchar_smaller() { return &GenericExec<TPgDirectFunc<&bpchar_smaller>, true, false, TArgs_bpchar_smaller_Policy>; }
-struct TArgs_bpchar_sortsupport_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_bpchar_sortsupport() { return &GenericExec<TPgDirectFunc<&bpchar_sortsupport>, true, true, TArgs_bpchar_sortsupport_Policy>; }
-struct TArgs_bpcharcmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpcharcmp() { return &GenericExec<TPgDirectFunc<&bpcharcmp>, true, true, TArgs_bpcharcmp_Policy>; }
-struct TArgs_bpchareq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchareq() { return &GenericExec<TPgDirectFunc<&bpchareq>, true, true, TArgs_bpchareq_Policy>; }
-struct TArgs_bpcharge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpcharge() { return &GenericExec<TPgDirectFunc<&bpcharge>, true, true, TArgs_bpcharge_Policy>; }
-struct TArgs_bpchargt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpchargt() { return &GenericExec<TPgDirectFunc<&bpchargt>, true, true, TArgs_bpchargt_Policy>; }
-struct TArgs_bpcharin_Policy {
+TExecFunc arrow_bit_bit_count() { return TGenericExec<TPgDirectFunc<&bit_bit_count>, true, true, TArgs_bit_bit_count_Policy>({}); }
+struct TArgs_bit_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_bpcharin() { return &GenericExec<TPgDirectFunc<&bpcharin>, true, false, TArgs_bpcharin_Policy>; }
-struct TArgs_bpcharle_Policy {
+TExecFunc arrow_bit_in() { return TGenericExec<TPgDirectFunc<&bit_in>, true, false, TArgs_bit_in_Policy>({}); }
+struct TArgs_bit_or_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_bpcharle() { return &GenericExec<TPgDirectFunc<&bpcharle>, true, true, TArgs_bpcharle_Policy>; }
-struct TArgs_bpcharlen_Policy {
+TExecFunc arrow_bit_or() { return TGenericExec<TPgDirectFunc<&bit_or>, true, false, TArgs_bit_or_Policy>({}); }
+struct TArgs_bit_out_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_bpcharlen() { return &GenericExec<TPgDirectFunc<&bpcharlen>, true, true, TArgs_bpcharlen_Policy>; }
-struct TArgs_bpcharlt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpcharlt() { return &GenericExec<TPgDirectFunc<&bpcharlt>, true, true, TArgs_bpcharlt_Policy>; }
-struct TArgs_bpcharne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_bpcharne() { return &GenericExec<TPgDirectFunc<&bpcharne>, true, true, TArgs_bpcharne_Policy>; }
-struct TArgs_bpcharoctetlen_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_bpcharoctetlen() { return &GenericExec<TPgDirectFunc<&bpcharoctetlen>, true, true, TArgs_bpcharoctetlen_Policy>; }
-struct TArgs_bpcharout_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_bpcharout() { return &GenericExec<TPgDirectFunc<&bpcharout>, true, false, TArgs_bpcharout_Policy>; }
-struct TArgs_bpcharrecv_Policy {
+TExecFunc arrow_bit_out() { return TGenericExec<TPgDirectFunc<&bit_out>, true, false, TArgs_bit_out_Policy>({}); }
+struct TArgs_bit_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-TExecFunc arrow_bpcharrecv() { return &GenericExec<TPgDirectFunc<&bpcharrecv>, true, false, TArgs_bpcharrecv_Policy>; }
-struct TArgs_bpcharsend_Policy {
+TExecFunc arrow_bit_recv() { return TGenericExec<TPgDirectFunc<&bit_recv>, true, false, TArgs_bit_recv_Policy>({}); }
+struct TArgs_bit_send_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_bpcharsend() { return &GenericExec<TPgDirectFunc<&bpcharsend>, true, false, TArgs_bpcharsend_Policy>; }
-struct TArgs_bpchartypmodin_Policy {
+TExecFunc arrow_bit_send() { return TGenericExec<TPgDirectFunc<&bit_send>, true, false, TArgs_bit_send_Policy>({}); }
+struct TArgs_bitcat_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitcat() { return TGenericExec<TPgDirectFunc<&bitcat>, true, false, TArgs_bitcat_Policy>({}); }
+struct TArgs_bitcmp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitcmp() { return TGenericExec<TPgDirectFunc<&bitcmp>, true, true, TArgs_bitcmp_Policy>({}); }
+struct TArgs_biteq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_biteq() { return TGenericExec<TPgDirectFunc<&biteq>, true, true, TArgs_biteq_Policy>({}); }
+struct TArgs_bitfromint4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_bitfromint4() { return TGenericExec<TPgDirectFunc<&bitfromint4>, true, false, TArgs_bitfromint4_Policy>({}); }
+struct TArgs_bitfromint8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_bitfromint8() { return TGenericExec<TPgDirectFunc<&bitfromint8>, true, false, TArgs_bitfromint8_Policy>({}); }
+struct TArgs_bitge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitge() { return TGenericExec<TPgDirectFunc<&bitge>, true, true, TArgs_bitge_Policy>({}); }
+struct TArgs_bitgetbit_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_bitgetbit() { return TGenericExec<TPgDirectFunc<&bitgetbit>, true, true, TArgs_bitgetbit_Policy>({}); }
+struct TArgs_bitgt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitgt() { return TGenericExec<TPgDirectFunc<&bitgt>, true, true, TArgs_bitgt_Policy>({}); }
+struct TArgs_bitle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitle() { return TGenericExec<TPgDirectFunc<&bitle>, true, true, TArgs_bitle_Policy>({}); }
+struct TArgs_bitlength_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_bpchartypmodin() { return &GenericExec<TPgDirectFunc<&bpchartypmodin>, true, true, TArgs_bpchartypmodin_Policy>; }
-struct TArgs_bpchartypmodout_Policy {
+TExecFunc arrow_bitlength() { return TGenericExec<TPgDirectFunc<&bitlength>, true, true, TArgs_bitlength_Policy>({}); }
+struct TArgs_bitlt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitlt() { return TGenericExec<TPgDirectFunc<&bitlt>, true, true, TArgs_bitlt_Policy>({}); }
+struct TArgs_bitne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitne() { return TGenericExec<TPgDirectFunc<&bitne>, true, true, TArgs_bitne_Policy>({}); }
+struct TArgs_bitnot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_bitnot() { return TGenericExec<TPgDirectFunc<&bitnot>, true, false, TArgs_bitnot_Policy>({}); }
+struct TArgs_bitoctetlength_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_bitoctetlength() { return TGenericExec<TPgDirectFunc<&bitoctetlength>, true, true, TArgs_bitoctetlength_Policy>({}); }
+struct TArgs_bitoverlay_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,true};
+};
+TExecFunc arrow_bitoverlay() { return TGenericExec<TPgDirectFunc<&bitoverlay>, true, false, TArgs_bitoverlay_Policy>({}); }
+struct TArgs_bitoverlay_no_len_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
+};
+TExecFunc arrow_bitoverlay_no_len() { return TGenericExec<TPgDirectFunc<&bitoverlay_no_len>, true, false, TArgs_bitoverlay_no_len_Policy>({}); }
+struct TArgs_bitposition_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitposition() { return TGenericExec<TPgDirectFunc<&bitposition>, true, true, TArgs_bitposition_Policy>({}); }
+struct TArgs_bitsetbit_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_bitsetbit() { return TGenericExec<TPgDirectFunc<&bitsetbit>, true, false, TArgs_bitsetbit_Policy>({}); }
+struct TArgs_bitshiftleft_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_bitshiftleft() { return TGenericExec<TPgDirectFunc<&bitshiftleft>, true, false, TArgs_bitshiftleft_Policy>({}); }
+struct TArgs_bitshiftright_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_bitshiftright() { return TGenericExec<TPgDirectFunc<&bitshiftright>, true, false, TArgs_bitshiftright_Policy>({}); }
+struct TArgs_bitsubstr_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_bitsubstr() { return TGenericExec<TPgDirectFunc<&bitsubstr>, true, false, TArgs_bitsubstr_Policy>({}); }
+struct TArgs_bitsubstr_no_len_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_bitsubstr_no_len() { return TGenericExec<TPgDirectFunc<&bitsubstr_no_len>, true, false, TArgs_bitsubstr_no_len_Policy>({}); }
+struct TArgs_bittoint4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_bittoint4() { return TGenericExec<TPgDirectFunc<&bittoint4>, true, true, TArgs_bittoint4_Policy>({}); }
+struct TArgs_bittoint8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_bittoint8() { return TGenericExec<TPgDirectFunc<&bittoint8>, true, true, TArgs_bittoint8_Policy>({}); }
+struct TArgs_bittypmodin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_bittypmodin() { return TGenericExec<TPgDirectFunc<&bittypmodin>, true, true, TArgs_bittypmodin_Policy>({}); }
+struct TArgs_bittypmodout_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_bpchartypmodout() { return &GenericExec<TPgDirectFunc<&bpchartypmodout>, true, false, TArgs_bpchartypmodout_Policy>; }
+TExecFunc arrow_bittypmodout() { return TGenericExec<TPgDirectFunc<&bittypmodout>, true, false, TArgs_bittypmodout_Policy>({}); }
+struct TArgs_bitxor_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_bitxor() { return TGenericExec<TPgDirectFunc<&bitxor>, true, false, TArgs_bitxor_Policy>({}); }
+struct TArgs_box_above_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_above() { return TGenericExec<TPgDirectFunc<&box_above>, true, true, TArgs_box_above_Policy>({}); }
+struct TArgs_box_above_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_above_eq() { return TGenericExec<TPgDirectFunc<&box_above_eq>, true, true, TArgs_box_above_eq_Policy>({}); }
+struct TArgs_box_add_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_add() { return TGenericExec<TPgDirectFunc<&box_add>, true, false, TArgs_box_add_Policy>({}); }
+struct TArgs_box_area_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_area() { return TGenericExec<TPgDirectFunc<&box_area>, true, true, TArgs_box_area_Policy>({}); }
+struct TArgs_box_below_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_below() { return TGenericExec<TPgDirectFunc<&box_below>, true, true, TArgs_box_below_Policy>({}); }
+struct TArgs_box_below_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_below_eq() { return TGenericExec<TPgDirectFunc<&box_below_eq>, true, true, TArgs_box_below_eq_Policy>({}); }
+struct TArgs_box_center_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_center() { return TGenericExec<TPgDirectFunc<&box_center>, true, false, TArgs_box_center_Policy>({}); }
+struct TArgs_box_circle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_circle() { return TGenericExec<TPgDirectFunc<&box_circle>, true, false, TArgs_box_circle_Policy>({}); }
+struct TArgs_box_contain_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_contain() { return TGenericExec<TPgDirectFunc<&box_contain>, true, true, TArgs_box_contain_Policy>({}); }
+struct TArgs_box_contain_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_contain_pt() { return TGenericExec<TPgDirectFunc<&box_contain_pt>, true, true, TArgs_box_contain_pt_Policy>({}); }
+struct TArgs_box_contained_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_contained() { return TGenericExec<TPgDirectFunc<&box_contained>, true, true, TArgs_box_contained_Policy>({}); }
+struct TArgs_box_diagonal_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_diagonal() { return TGenericExec<TPgDirectFunc<&box_diagonal>, true, false, TArgs_box_diagonal_Policy>({}); }
+struct TArgs_box_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_distance() { return TGenericExec<TPgDirectFunc<&box_distance>, true, true, TArgs_box_distance_Policy>({}); }
+struct TArgs_box_div_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_div() { return TGenericExec<TPgDirectFunc<&box_div>, true, false, TArgs_box_div_Policy>({}); }
+struct TArgs_box_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_eq() { return TGenericExec<TPgDirectFunc<&box_eq>, true, true, TArgs_box_eq_Policy>({}); }
+struct TArgs_box_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_ge() { return TGenericExec<TPgDirectFunc<&box_ge>, true, true, TArgs_box_ge_Policy>({}); }
+struct TArgs_box_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_gt() { return TGenericExec<TPgDirectFunc<&box_gt>, true, true, TArgs_box_gt_Policy>({}); }
+struct TArgs_box_height_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_height() { return TGenericExec<TPgDirectFunc<&box_height>, true, true, TArgs_box_height_Policy>({}); }
+struct TArgs_box_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_in() { return TGenericExec<TPgDirectFunc<&box_in>, true, false, TArgs_box_in_Policy>({}); }
+struct TArgs_box_intersect_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_intersect() { return TGenericExec<TPgDirectFunc<&box_intersect>, true, false, TArgs_box_intersect_Policy>({}); }
+struct TArgs_box_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_le() { return TGenericExec<TPgDirectFunc<&box_le>, true, true, TArgs_box_le_Policy>({}); }
+struct TArgs_box_left_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_left() { return TGenericExec<TPgDirectFunc<&box_left>, true, true, TArgs_box_left_Policy>({}); }
+struct TArgs_box_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_lt() { return TGenericExec<TPgDirectFunc<&box_lt>, true, true, TArgs_box_lt_Policy>({}); }
+struct TArgs_box_mul_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_mul() { return TGenericExec<TPgDirectFunc<&box_mul>, true, false, TArgs_box_mul_Policy>({}); }
+struct TArgs_box_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_out() { return TGenericExec<TPgDirectFunc<&box_out>, true, false, TArgs_box_out_Policy>({}); }
+struct TArgs_box_overabove_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_overabove() { return TGenericExec<TPgDirectFunc<&box_overabove>, true, true, TArgs_box_overabove_Policy>({}); }
+struct TArgs_box_overbelow_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_overbelow() { return TGenericExec<TPgDirectFunc<&box_overbelow>, true, true, TArgs_box_overbelow_Policy>({}); }
+struct TArgs_box_overlap_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_overlap() { return TGenericExec<TPgDirectFunc<&box_overlap>, true, true, TArgs_box_overlap_Policy>({}); }
+struct TArgs_box_overleft_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_overleft() { return TGenericExec<TPgDirectFunc<&box_overleft>, true, true, TArgs_box_overleft_Policy>({}); }
+struct TArgs_box_overright_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_overright() { return TGenericExec<TPgDirectFunc<&box_overright>, true, true, TArgs_box_overright_Policy>({}); }
+struct TArgs_box_poly_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_poly() { return TGenericExec<TPgDirectFunc<&box_poly>, true, false, TArgs_box_poly_Policy>({}); }
+struct TArgs_box_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_box_recv() { return TGenericExec<TPgDirectFunc<&box_recv>, true, false, TArgs_box_recv_Policy>({}); }
+struct TArgs_box_right_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_right() { return TGenericExec<TPgDirectFunc<&box_right>, true, true, TArgs_box_right_Policy>({}); }
+struct TArgs_box_same_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_same() { return TGenericExec<TPgDirectFunc<&box_same>, true, true, TArgs_box_same_Policy>({}); }
+struct TArgs_box_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_send() { return TGenericExec<TPgDirectFunc<&box_send>, true, false, TArgs_box_send_Policy>({}); }
+struct TArgs_box_sub_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_box_sub() { return TGenericExec<TPgDirectFunc<&box_sub>, true, false, TArgs_box_sub_Policy>({}); }
+struct TArgs_box_width_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_box_width() { return TGenericExec<TPgDirectFunc<&box_width>, true, true, TArgs_box_width_Policy>({}); }
+struct TArgs_boxes_bound_box_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_boxes_bound_box() { return TGenericExec<TPgDirectFunc<&boxes_bound_box>, true, false, TArgs_boxes_bound_box_Policy>({}); }
 struct TArgs_brin_bloom_add_value_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_brin_bloom_add_value() { return &GenericExec<TPgDirectFunc<&brin_bloom_add_value>, true, true, TArgs_brin_bloom_add_value_Policy>; }
+TExecFunc arrow_brin_bloom_add_value() { return TGenericExec<TPgDirectFunc<&brin_bloom_add_value>, true, true, TArgs_brin_bloom_add_value_Policy>({}); }
 struct TArgs_brin_bloom_consistent_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_brin_bloom_consistent() { return &GenericExec<TPgDirectFunc<&brin_bloom_consistent>, true, true, TArgs_brin_bloom_consistent_Policy>; }
+TExecFunc arrow_brin_bloom_consistent() { return TGenericExec<TPgDirectFunc<&brin_bloom_consistent>, true, true, TArgs_brin_bloom_consistent_Policy>({}); }
 struct TArgs_brin_bloom_opcinfo_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_brin_bloom_opcinfo() { return &GenericExec<TPgDirectFunc<&brin_bloom_opcinfo>, true, true, TArgs_brin_bloom_opcinfo_Policy>; }
+TExecFunc arrow_brin_bloom_opcinfo() { return TGenericExec<TPgDirectFunc<&brin_bloom_opcinfo>, true, true, TArgs_brin_bloom_opcinfo_Policy>({}); }
 struct TArgs_brin_bloom_options_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_brin_bloom_options() { return &GenericExec<TPgDirectFunc<&brin_bloom_options>, false, true, TArgs_brin_bloom_options_Policy>; }
+TExecFunc arrow_brin_bloom_options() { return TGenericExec<TPgDirectFunc<&brin_bloom_options>, false, true, TArgs_brin_bloom_options_Policy>({}); }
 struct TArgs_brin_bloom_summary_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_brin_bloom_summary_in() { return &GenericExec<TPgDirectFunc<&brin_bloom_summary_in>, true, false, TArgs_brin_bloom_summary_in_Policy>; }
+TExecFunc arrow_brin_bloom_summary_in() { return TGenericExec<TPgDirectFunc<&brin_bloom_summary_in>, true, false, TArgs_brin_bloom_summary_in_Policy>({}); }
 struct TArgs_brin_bloom_summary_out_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_brin_bloom_summary_out() { return &GenericExec<TPgDirectFunc<&brin_bloom_summary_out>, true, false, TArgs_brin_bloom_summary_out_Policy>; }
+TExecFunc arrow_brin_bloom_summary_out() { return TGenericExec<TPgDirectFunc<&brin_bloom_summary_out>, true, false, TArgs_brin_bloom_summary_out_Policy>({}); }
 struct TArgs_brin_bloom_summary_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_brin_bloom_summary_recv() { return &GenericExec<TPgDirectFunc<&brin_bloom_summary_recv>, true, false, TArgs_brin_bloom_summary_recv_Policy>; }
+TExecFunc arrow_brin_bloom_summary_recv() { return TGenericExec<TPgDirectFunc<&brin_bloom_summary_recv>, true, false, TArgs_brin_bloom_summary_recv_Policy>({}); }
 struct TArgs_brin_bloom_summary_send_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_brin_bloom_summary_send() { return &GenericExec<TPgDirectFunc<&brin_bloom_summary_send>, true, false, TArgs_brin_bloom_summary_send_Policy>; }
+TExecFunc arrow_brin_bloom_summary_send() { return TGenericExec<TPgDirectFunc<&brin_bloom_summary_send>, true, false, TArgs_brin_bloom_summary_send_Policy>({}); }
 struct TArgs_brin_bloom_union_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-TExecFunc arrow_brin_bloom_union() { return &GenericExec<TPgDirectFunc<&brin_bloom_union>, true, true, TArgs_brin_bloom_union_Policy>; }
-struct TArgs_brin_minmax_add_value_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-TExecFunc arrow_brin_minmax_add_value() { return &GenericExec<TPgDirectFunc<&brin_minmax_add_value>, true, true, TArgs_brin_minmax_add_value_Policy>; }
-struct TArgs_brin_minmax_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_brin_minmax_consistent() { return &GenericExec<TPgDirectFunc<&brin_minmax_consistent>, true, true, TArgs_brin_minmax_consistent_Policy>; }
-struct TArgs_brin_minmax_multi_add_value_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-TExecFunc arrow_brin_minmax_multi_add_value() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_add_value>, true, true, TArgs_brin_minmax_multi_add_value_Policy>; }
-struct TArgs_brin_minmax_multi_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-TExecFunc arrow_brin_minmax_multi_consistent() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_consistent>, true, true, TArgs_brin_minmax_multi_consistent_Policy>; }
-struct TArgs_brin_minmax_multi_distance_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_date() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_date>, true, true, TArgs_brin_minmax_multi_distance_date_Policy>; }
-struct TArgs_brin_minmax_multi_distance_float4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_float4() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_float4>, true, true, TArgs_brin_minmax_multi_distance_float4_Policy>; }
-struct TArgs_brin_minmax_multi_distance_float8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_float8() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_float8>, true, true, TArgs_brin_minmax_multi_distance_float8_Policy>; }
-struct TArgs_brin_minmax_multi_distance_inet_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_inet() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_inet>, true, true, TArgs_brin_minmax_multi_distance_inet_Policy>; }
-struct TArgs_brin_minmax_multi_distance_int2_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_int2() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_int2>, true, true, TArgs_brin_minmax_multi_distance_int2_Policy>; }
-struct TArgs_brin_minmax_multi_distance_int4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_int4() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_int4>, true, true, TArgs_brin_minmax_multi_distance_int4_Policy>; }
-struct TArgs_brin_minmax_multi_distance_int8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_int8() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_int8>, true, true, TArgs_brin_minmax_multi_distance_int8_Policy>; }
-struct TArgs_brin_minmax_multi_distance_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_interval() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_interval>, true, true, TArgs_brin_minmax_multi_distance_interval_Policy>; }
-struct TArgs_brin_minmax_multi_distance_macaddr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_macaddr() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_macaddr>, true, true, TArgs_brin_minmax_multi_distance_macaddr_Policy>; }
-struct TArgs_brin_minmax_multi_distance_macaddr8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_macaddr8() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_macaddr8>, true, true, TArgs_brin_minmax_multi_distance_macaddr8_Policy>; }
-struct TArgs_brin_minmax_multi_distance_numeric_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_numeric() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_numeric>, true, true, TArgs_brin_minmax_multi_distance_numeric_Policy>; }
-struct TArgs_brin_minmax_multi_distance_pg_lsn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_pg_lsn() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_pg_lsn>, true, true, TArgs_brin_minmax_multi_distance_pg_lsn_Policy>; }
-struct TArgs_brin_minmax_multi_distance_tid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_tid() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_tid>, true, true, TArgs_brin_minmax_multi_distance_tid_Policy>; }
-struct TArgs_brin_minmax_multi_distance_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_time() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_time>, true, true, TArgs_brin_minmax_multi_distance_time_Policy>; }
-struct TArgs_brin_minmax_multi_distance_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_timestamp() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_timestamp>, true, true, TArgs_brin_minmax_multi_distance_timestamp_Policy>; }
-struct TArgs_brin_minmax_multi_distance_timetz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_timetz() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_timetz>, true, true, TArgs_brin_minmax_multi_distance_timetz_Policy>; }
-struct TArgs_brin_minmax_multi_distance_uuid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_brin_minmax_multi_distance_uuid() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_distance_uuid>, true, true, TArgs_brin_minmax_multi_distance_uuid_Policy>; }
-struct TArgs_brin_minmax_multi_opcinfo_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_brin_minmax_multi_opcinfo() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_opcinfo>, true, true, TArgs_brin_minmax_multi_opcinfo_Policy>; }
-struct TArgs_brin_minmax_multi_options_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_brin_minmax_multi_options() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_options>, false, true, TArgs_brin_minmax_multi_options_Policy>; }
-struct TArgs_brin_minmax_multi_summary_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_brin_minmax_multi_summary_in() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_summary_in>, true, false, TArgs_brin_minmax_multi_summary_in_Policy>; }
-struct TArgs_brin_minmax_multi_summary_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_brin_minmax_multi_summary_out() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_summary_out>, true, false, TArgs_brin_minmax_multi_summary_out_Policy>; }
-struct TArgs_brin_minmax_multi_summary_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_brin_minmax_multi_summary_recv() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_summary_recv>, true, false, TArgs_brin_minmax_multi_summary_recv_Policy>; }
-struct TArgs_brin_minmax_multi_summary_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_brin_minmax_multi_summary_send() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_summary_send>, true, false, TArgs_brin_minmax_multi_summary_send_Policy>; }
-struct TArgs_brin_minmax_multi_union_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_brin_minmax_multi_union() { return &GenericExec<TPgDirectFunc<&brin_minmax_multi_union>, true, true, TArgs_brin_minmax_multi_union_Policy>; }
-struct TArgs_brin_minmax_opcinfo_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_brin_minmax_opcinfo() { return &GenericExec<TPgDirectFunc<&brin_minmax_opcinfo>, true, true, TArgs_brin_minmax_opcinfo_Policy>; }
-struct TArgs_brin_minmax_union_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_brin_minmax_union() { return &GenericExec<TPgDirectFunc<&brin_minmax_union>, true, true, TArgs_brin_minmax_union_Policy>; }
-struct TArgs_btbpchar_pattern_cmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_btbpchar_pattern_cmp() { return &GenericExec<TPgDirectFunc<&btbpchar_pattern_cmp>, true, true, TArgs_btbpchar_pattern_cmp_Policy>; }
-struct TArgs_btbpchar_pattern_sortsupport_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_btbpchar_pattern_sortsupport() { return &GenericExec<TPgDirectFunc<&btbpchar_pattern_sortsupport>, true, true, TArgs_btbpchar_pattern_sortsupport_Policy>; }
-struct TArgs_btequalimage_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_btequalimage() { return &GenericExec<TPgDirectFunc<&btequalimage>, true, true, TArgs_btequalimage_Policy>; }
-struct TArgs_bthandler_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_bthandler() { return &GenericExec<TPgDirectFunc<&bthandler>, true, true, TArgs_bthandler_Policy>; }
+TExecFunc arrow_brin_bloom_union() { return TGenericExec<TPgDirectFunc<&brin_bloom_union>, true, true, TArgs_brin_bloom_union_Policy>({}); }
 struct TArgs_bttidcmp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_bttidcmp() { return &GenericExec<TPgDirectFunc<&bttidcmp>, true, true, TArgs_bttidcmp_Policy>; }
-struct TArgs_char_bpchar_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_char_bpchar() { return &GenericExec<TPgDirectFunc<&char_bpchar>, true, false, TArgs_char_bpchar_Policy>; }
-struct TArgs_char_text_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_char_text() { return &GenericExec<TPgDirectFunc<&char_text>, true, false, TArgs_char_text_Policy>; }
-struct TArgs_chareq_Policy {
+TExecFunc arrow_bttidcmp() { return TGenericExec<TPgDirectFunc<&bttidcmp>, true, true, TArgs_bttidcmp_Policy>({}); }
+struct TArgs_cash_cmp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_chareq() { return &GenericExec<TPgDirectFunc<&chareq>, true, true, TArgs_chareq_Policy>; }
-struct TArgs_charge_Policy {
+TExecFunc arrow_cash_cmp() { return TGenericExec<TPgDirectFunc<&cash_cmp>, true, true, TArgs_cash_cmp_Policy>({}); }
+struct TArgs_cash_div_cash_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_charge() { return &GenericExec<TPgDirectFunc<&charge>, true, true, TArgs_charge_Policy>; }
-struct TArgs_chargt_Policy {
+TExecFunc arrow_cash_div_cash() { return TGenericExec<TPgDirectFunc<&cash_div_cash>, true, true, TArgs_cash_div_cash_Policy>({}); }
+struct TArgs_cash_div_flt4_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_chargt() { return &GenericExec<TPgDirectFunc<&chargt>, true, true, TArgs_chargt_Policy>; }
-struct TArgs_charin_Policy {
+TExecFunc arrow_cash_div_flt4() { return TGenericExec<TPgDirectFunc<&cash_div_flt4>, true, true, TArgs_cash_div_flt4_Policy>({}); }
+struct TArgs_cash_div_flt8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_div_flt8() { return TGenericExec<TPgDirectFunc<&cash_div_flt8>, true, true, TArgs_cash_div_flt8_Policy>({}); }
+struct TArgs_cash_div_int2_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_div_int2() { return TGenericExec<TPgDirectFunc<&cash_div_int2>, true, true, TArgs_cash_div_int2_Policy>({}); }
+struct TArgs_cash_div_int4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_div_int4() { return TGenericExec<TPgDirectFunc<&cash_div_int4>, true, true, TArgs_cash_div_int4_Policy>({}); }
+struct TArgs_cash_div_int8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_div_int8() { return TGenericExec<TPgDirectFunc<&cash_div_int8>, true, true, TArgs_cash_div_int8_Policy>({}); }
+struct TArgs_cash_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_eq() { return TGenericExec<TPgDirectFunc<&cash_eq>, true, true, TArgs_cash_eq_Policy>({}); }
+struct TArgs_cash_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_ge() { return TGenericExec<TPgDirectFunc<&cash_ge>, true, true, TArgs_cash_ge_Policy>({}); }
+struct TArgs_cash_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_gt() { return TGenericExec<TPgDirectFunc<&cash_gt>, true, true, TArgs_cash_gt_Policy>({}); }
+struct TArgs_cash_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_charin() { return &GenericExec<TPgDirectFunc<&charin>, true, true, TArgs_charin_Policy>; }
-struct TArgs_charle_Policy {
+TExecFunc arrow_cash_in() { return TGenericExec<TPgDirectFunc<&cash_in>, true, true, TArgs_cash_in_Policy>({}); }
+struct TArgs_cash_le_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_charle() { return &GenericExec<TPgDirectFunc<&charle>, true, true, TArgs_charle_Policy>; }
-struct TArgs_charlt_Policy {
+TExecFunc arrow_cash_le() { return TGenericExec<TPgDirectFunc<&cash_le>, true, true, TArgs_cash_le_Policy>({}); }
+struct TArgs_cash_lt_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_charlt() { return &GenericExec<TPgDirectFunc<&charlt>, true, true, TArgs_charlt_Policy>; }
-struct TArgs_charne_Policy {
+TExecFunc arrow_cash_lt() { return TGenericExec<TPgDirectFunc<&cash_lt>, true, true, TArgs_cash_lt_Policy>({}); }
+struct TArgs_cash_mi_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_charne() { return &GenericExec<TPgDirectFunc<&charne>, true, true, TArgs_charne_Policy>; }
-struct TArgs_charout_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_charout() { return &GenericExec<TPgDirectFunc<&charout>, true, false, TArgs_charout_Policy>; }
-struct TArgs_charrecv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_charrecv() { return &GenericExec<TPgDirectFunc<&charrecv>, true, true, TArgs_charrecv_Policy>; }
-struct TArgs_charsend_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_charsend() { return &GenericExec<TPgDirectFunc<&charsend>, true, false, TArgs_charsend_Policy>; }
-struct TArgs_chartoi4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_chartoi4() { return &GenericExec<TPgDirectFunc<&chartoi4>, true, true, TArgs_chartoi4_Policy>; }
-struct TArgs_cideq_Policy {
+TExecFunc arrow_cash_mi() { return TGenericExec<TPgDirectFunc<&cash_mi>, true, true, TArgs_cash_mi_Policy>({}); }
+struct TArgs_cash_mul_flt4_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_cideq() { return &GenericExec<TPgDirectFunc<&cideq>, true, true, TArgs_cideq_Policy>; }
-struct TArgs_cidin_Policy {
+TExecFunc arrow_cash_mul_flt4() { return TGenericExec<TPgDirectFunc<&cash_mul_flt4>, true, true, TArgs_cash_mul_flt4_Policy>({}); }
+struct TArgs_cash_mul_flt8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_mul_flt8() { return TGenericExec<TPgDirectFunc<&cash_mul_flt8>, true, true, TArgs_cash_mul_flt8_Policy>({}); }
+struct TArgs_cash_mul_int2_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_mul_int2() { return TGenericExec<TPgDirectFunc<&cash_mul_int2>, true, true, TArgs_cash_mul_int2_Policy>({}); }
+struct TArgs_cash_mul_int4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_mul_int4() { return TGenericExec<TPgDirectFunc<&cash_mul_int4>, true, true, TArgs_cash_mul_int4_Policy>({}); }
+struct TArgs_cash_mul_int8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_mul_int8() { return TGenericExec<TPgDirectFunc<&cash_mul_int8>, true, true, TArgs_cash_mul_int8_Policy>({}); }
+struct TArgs_cash_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_ne() { return TGenericExec<TPgDirectFunc<&cash_ne>, true, true, TArgs_cash_ne_Policy>({}); }
+struct TArgs_cash_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_cash_numeric() { return TGenericExec<TPgDirectFunc<&cash_numeric>, true, false, TArgs_cash_numeric_Policy>({}); }
+struct TArgs_cash_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_cash_out() { return TGenericExec<TPgDirectFunc<&cash_out>, true, false, TArgs_cash_out_Policy>({}); }
+struct TArgs_cash_pl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cash_pl() { return TGenericExec<TPgDirectFunc<&cash_pl>, true, true, TArgs_cash_pl_Policy>({}); }
+struct TArgs_cash_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_cash_recv() { return TGenericExec<TPgDirectFunc<&cash_recv>, true, true, TArgs_cash_recv_Policy>({}); }
+struct TArgs_cash_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_cash_send() { return TGenericExec<TPgDirectFunc<&cash_send>, true, false, TArgs_cash_send_Policy>({}); }
+struct TArgs_cash_words_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_cash_words() { return TGenericExec<TPgDirectFunc<&cash_words>, true, false, TArgs_cash_words_Policy>({}); }
+struct TArgs_cashlarger_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cashlarger() { return TGenericExec<TPgDirectFunc<&cashlarger>, true, true, TArgs_cashlarger_Policy>({}); }
+struct TArgs_cashsmaller_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_cashsmaller() { return TGenericExec<TPgDirectFunc<&cashsmaller>, true, true, TArgs_cashsmaller_Policy>({}); }
+struct TArgs_circle_above_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_above() { return TGenericExec<TPgDirectFunc<&circle_above>, true, true, TArgs_circle_above_Policy>({}); }
+struct TArgs_circle_add_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_add_pt() { return TGenericExec<TPgDirectFunc<&circle_add_pt>, true, false, TArgs_circle_add_pt_Policy>({}); }
+struct TArgs_circle_area_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_cidin() { return &GenericExec<TPgDirectFunc<&cidin>, true, true, TArgs_cidin_Policy>; }
-struct TArgs_cidout_Policy {
+TExecFunc arrow_circle_area() { return TGenericExec<TPgDirectFunc<&circle_area>, true, true, TArgs_circle_area_Policy>({}); }
+struct TArgs_circle_below_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_below() { return TGenericExec<TPgDirectFunc<&circle_below>, true, true, TArgs_circle_below_Policy>({}); }
+struct TArgs_circle_box_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_box() { return TGenericExec<TPgDirectFunc<&circle_box>, true, false, TArgs_circle_box_Policy>({}); }
+struct TArgs_circle_center_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_center() { return TGenericExec<TPgDirectFunc<&circle_center>, true, false, TArgs_circle_center_Policy>({}); }
+struct TArgs_circle_contain_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_contain() { return TGenericExec<TPgDirectFunc<&circle_contain>, true, true, TArgs_circle_contain_Policy>({}); }
+struct TArgs_circle_contain_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_contain_pt() { return TGenericExec<TPgDirectFunc<&circle_contain_pt>, true, true, TArgs_circle_contain_pt_Policy>({}); }
+struct TArgs_circle_contained_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_contained() { return TGenericExec<TPgDirectFunc<&circle_contained>, true, true, TArgs_circle_contained_Policy>({}); }
+struct TArgs_circle_diameter_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_diameter() { return TGenericExec<TPgDirectFunc<&circle_diameter>, true, true, TArgs_circle_diameter_Policy>({}); }
+struct TArgs_circle_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_distance() { return TGenericExec<TPgDirectFunc<&circle_distance>, true, true, TArgs_circle_distance_Policy>({}); }
+struct TArgs_circle_div_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_div_pt() { return TGenericExec<TPgDirectFunc<&circle_div_pt>, true, false, TArgs_circle_div_pt_Policy>({}); }
+struct TArgs_circle_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_eq() { return TGenericExec<TPgDirectFunc<&circle_eq>, true, true, TArgs_circle_eq_Policy>({}); }
+struct TArgs_circle_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_ge() { return TGenericExec<TPgDirectFunc<&circle_ge>, true, true, TArgs_circle_ge_Policy>({}); }
+struct TArgs_circle_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_gt() { return TGenericExec<TPgDirectFunc<&circle_gt>, true, true, TArgs_circle_gt_Policy>({}); }
+struct TArgs_circle_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_in() { return TGenericExec<TPgDirectFunc<&circle_in>, true, false, TArgs_circle_in_Policy>({}); }
+struct TArgs_circle_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_le() { return TGenericExec<TPgDirectFunc<&circle_le>, true, true, TArgs_circle_le_Policy>({}); }
+struct TArgs_circle_left_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_left() { return TGenericExec<TPgDirectFunc<&circle_left>, true, true, TArgs_circle_left_Policy>({}); }
+struct TArgs_circle_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_lt() { return TGenericExec<TPgDirectFunc<&circle_lt>, true, true, TArgs_circle_lt_Policy>({}); }
+struct TArgs_circle_mul_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_mul_pt() { return TGenericExec<TPgDirectFunc<&circle_mul_pt>, true, false, TArgs_circle_mul_pt_Policy>({}); }
+struct TArgs_circle_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_ne() { return TGenericExec<TPgDirectFunc<&circle_ne>, true, true, TArgs_circle_ne_Policy>({}); }
+struct TArgs_circle_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_out() { return TGenericExec<TPgDirectFunc<&circle_out>, true, false, TArgs_circle_out_Policy>({}); }
+struct TArgs_circle_overabove_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_overabove() { return TGenericExec<TPgDirectFunc<&circle_overabove>, true, true, TArgs_circle_overabove_Policy>({}); }
+struct TArgs_circle_overbelow_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_overbelow() { return TGenericExec<TPgDirectFunc<&circle_overbelow>, true, true, TArgs_circle_overbelow_Policy>({}); }
+struct TArgs_circle_overlap_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_overlap() { return TGenericExec<TPgDirectFunc<&circle_overlap>, true, true, TArgs_circle_overlap_Policy>({}); }
+struct TArgs_circle_overleft_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_overleft() { return TGenericExec<TPgDirectFunc<&circle_overleft>, true, true, TArgs_circle_overleft_Policy>({}); }
+struct TArgs_circle_overright_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_overright() { return TGenericExec<TPgDirectFunc<&circle_overright>, true, true, TArgs_circle_overright_Policy>({}); }
+struct TArgs_circle_poly_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_circle_poly() { return TGenericExec<TPgDirectFunc<&circle_poly>, true, false, TArgs_circle_poly_Policy>({}); }
+struct TArgs_circle_radius_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_radius() { return TGenericExec<TPgDirectFunc<&circle_radius>, true, true, TArgs_circle_radius_Policy>({}); }
+struct TArgs_circle_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_cidout() { return &GenericExec<TPgDirectFunc<&cidout>, true, false, TArgs_cidout_Policy>; }
-struct TArgs_cidrecv_Policy {
+TExecFunc arrow_circle_recv() { return TGenericExec<TPgDirectFunc<&circle_recv>, true, false, TArgs_circle_recv_Policy>({}); }
+struct TArgs_circle_right_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_cidrecv() { return &GenericExec<TPgDirectFunc<&cidrecv>, true, true, TArgs_cidrecv_Policy>; }
-struct TArgs_cidsend_Policy {
+TExecFunc arrow_circle_right() { return TGenericExec<TPgDirectFunc<&circle_right>, true, true, TArgs_circle_right_Policy>({}); }
+struct TArgs_circle_same_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_cidsend() { return &GenericExec<TPgDirectFunc<&cidsend>, true, false, TArgs_cidsend_Policy>; }
+TExecFunc arrow_circle_same() { return TGenericExec<TPgDirectFunc<&circle_same>, true, true, TArgs_circle_same_Policy>({}); }
+struct TArgs_circle_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_circle_send() { return TGenericExec<TPgDirectFunc<&circle_send>, true, false, TArgs_circle_send_Policy>({}); }
+struct TArgs_circle_sub_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_circle_sub_pt() { return TGenericExec<TPgDirectFunc<&circle_sub_pt>, true, false, TArgs_circle_sub_pt_Policy>({}); }
+struct TArgs_clock_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+TExecFunc arrow_clock_timestamp() { return TGenericExec<TPgDirectFunc<&clock_timestamp>, true, true, TArgs_clock_timestamp_Policy>({}); }
+struct TArgs_close_lb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_lb() { return TGenericExec<TPgDirectFunc<&close_lb>, true, false, TArgs_close_lb_Policy>({}); }
+struct TArgs_close_ls_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_ls() { return TGenericExec<TPgDirectFunc<&close_ls>, true, false, TArgs_close_ls_Policy>({}); }
+struct TArgs_close_lseg_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_lseg() { return TGenericExec<TPgDirectFunc<&close_lseg>, true, false, TArgs_close_lseg_Policy>({}); }
+struct TArgs_close_pb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_pb() { return TGenericExec<TPgDirectFunc<&close_pb>, true, false, TArgs_close_pb_Policy>({}); }
+struct TArgs_close_pl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_pl() { return TGenericExec<TPgDirectFunc<&close_pl>, true, false, TArgs_close_pl_Policy>({}); }
+struct TArgs_close_ps_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_ps() { return TGenericExec<TPgDirectFunc<&close_ps>, true, false, TArgs_close_ps_Policy>({}); }
+struct TArgs_close_sb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_sb() { return TGenericExec<TPgDirectFunc<&close_sb>, true, false, TArgs_close_sb_Policy>({}); }
+struct TArgs_close_sl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_close_sl() { return TGenericExec<TPgDirectFunc<&close_sl>, true, false, TArgs_close_sl_Policy>({}); }
+struct TArgs_construct_point_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_construct_point() { return TGenericExec<TPgDirectFunc<&construct_point>, true, false, TArgs_construct_point_Policy>({}); }
+struct TArgs_contjoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_contjoinsel() { return TGenericExec<TPgDirectFunc<&contjoinsel>, true, true, TArgs_contjoinsel_Policy>({}); }
+struct TArgs_contsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_contsel() { return TGenericExec<TPgDirectFunc<&contsel>, true, true, TArgs_contsel_Policy>({}); }
+struct TArgs_cr_circle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_cr_circle() { return TGenericExec<TPgDirectFunc<&cr_circle>, true, false, TArgs_cr_circle_Policy>({}); }
 struct TArgs_current_database_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_current_database() { return &GenericExec<TPgDirectFunc<&current_database>, true, false, TArgs_current_database_Policy>; }
+TExecFunc arrow_current_database() { return TGenericExec<TPgDirectFunc<&current_database>, true, false, TArgs_current_database_Policy>({}); }
 struct TArgs_current_query_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_current_query() { return &GenericExec<TPgDirectFunc<&current_query>, false, false, TArgs_current_query_Policy>; }
+TExecFunc arrow_current_query() { return TGenericExec<TPgDirectFunc<&current_query>, false, false, TArgs_current_query_Policy>({}); }
 struct TArgs_currtid_byrelname_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_currtid_byrelname() { return &GenericExec<TPgDirectFunc<&currtid_byrelname>, true, false, TArgs_currtid_byrelname_Policy>; }
-struct TArgs_cursor_to_xml_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {false,true,true,true,false};
-};
-TExecFunc arrow_cursor_to_xml() { return &GenericExec<TPgDirectFunc<&cursor_to_xml>, true, false, TArgs_cursor_to_xml_Policy>; }
-struct TArgs_cursor_to_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
-};
-TExecFunc arrow_cursor_to_xmlschema() { return &GenericExec<TPgDirectFunc<&cursor_to_xmlschema>, true, false, TArgs_cursor_to_xmlschema_Policy>; }
-struct TArgs_database_to_xml_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,false};
-};
-TExecFunc arrow_database_to_xml() { return &GenericExec<TPgDirectFunc<&database_to_xml>, true, false, TArgs_database_to_xml_Policy>; }
-struct TArgs_database_to_xml_and_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,false};
-};
-TExecFunc arrow_database_to_xml_and_xmlschema() { return &GenericExec<TPgDirectFunc<&database_to_xml_and_xmlschema>, true, false, TArgs_database_to_xml_and_xmlschema_Policy>; }
-struct TArgs_database_to_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,false};
-};
-TExecFunc arrow_database_to_xmlschema() { return &GenericExec<TPgDirectFunc<&database_to_xmlschema>, true, false, TArgs_database_to_xmlschema_Policy>; }
-struct TArgs_date_cmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_cmp() { return &GenericExec<TPgDirectFunc<&date_cmp>, true, true, TArgs_date_cmp_Policy>; }
-struct TArgs_date_cmp_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_cmp_timestamp() { return &GenericExec<TPgDirectFunc<&date_cmp_timestamp>, true, true, TArgs_date_cmp_timestamp_Policy>; }
-struct TArgs_date_cmp_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_cmp_timestamptz() { return &GenericExec<TPgDirectFunc<&date_cmp_timestamptz>, true, true, TArgs_date_cmp_timestamptz_Policy>; }
-struct TArgs_date_eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_eq() { return &GenericExec<TPgDirectFunc<&date_eq>, true, true, TArgs_date_eq_Policy>; }
-struct TArgs_date_eq_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_eq_timestamp() { return &GenericExec<TPgDirectFunc<&date_eq_timestamp>, true, true, TArgs_date_eq_timestamp_Policy>; }
-struct TArgs_date_eq_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_eq_timestamptz() { return &GenericExec<TPgDirectFunc<&date_eq_timestamptz>, true, true, TArgs_date_eq_timestamptz_Policy>; }
-struct TArgs_date_finite_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_finite() { return &GenericExec<TPgDirectFunc<&date_finite>, true, true, TArgs_date_finite_Policy>; }
-struct TArgs_date_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_ge() { return &GenericExec<TPgDirectFunc<&date_ge>, true, true, TArgs_date_ge_Policy>; }
-struct TArgs_date_ge_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_ge_timestamp() { return &GenericExec<TPgDirectFunc<&date_ge_timestamp>, true, true, TArgs_date_ge_timestamp_Policy>; }
-struct TArgs_date_ge_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_ge_timestamptz() { return &GenericExec<TPgDirectFunc<&date_ge_timestamptz>, true, true, TArgs_date_ge_timestamptz_Policy>; }
-struct TArgs_date_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_gt() { return &GenericExec<TPgDirectFunc<&date_gt>, true, true, TArgs_date_gt_Policy>; }
-struct TArgs_date_gt_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_gt_timestamp() { return &GenericExec<TPgDirectFunc<&date_gt_timestamp>, true, true, TArgs_date_gt_timestamp_Policy>; }
-struct TArgs_date_gt_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_gt_timestamptz() { return &GenericExec<TPgDirectFunc<&date_gt_timestamptz>, true, true, TArgs_date_gt_timestamptz_Policy>; }
-struct TArgs_date_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_date_in() { return &GenericExec<TPgDirectFunc<&date_in>, true, true, TArgs_date_in_Policy>; }
-struct TArgs_date_larger_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_larger() { return &GenericExec<TPgDirectFunc<&date_larger>, true, true, TArgs_date_larger_Policy>; }
-struct TArgs_date_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_le() { return &GenericExec<TPgDirectFunc<&date_le>, true, true, TArgs_date_le_Policy>; }
-struct TArgs_date_le_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_le_timestamp() { return &GenericExec<TPgDirectFunc<&date_le_timestamp>, true, true, TArgs_date_le_timestamp_Policy>; }
-struct TArgs_date_le_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_le_timestamptz() { return &GenericExec<TPgDirectFunc<&date_le_timestamptz>, true, true, TArgs_date_le_timestamptz_Policy>; }
-struct TArgs_date_lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_lt() { return &GenericExec<TPgDirectFunc<&date_lt>, true, true, TArgs_date_lt_Policy>; }
-struct TArgs_date_lt_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_lt_timestamp() { return &GenericExec<TPgDirectFunc<&date_lt_timestamp>, true, true, TArgs_date_lt_timestamp_Policy>; }
-struct TArgs_date_lt_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_lt_timestamptz() { return &GenericExec<TPgDirectFunc<&date_lt_timestamptz>, true, true, TArgs_date_lt_timestamptz_Policy>; }
-struct TArgs_date_mi_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_mi() { return &GenericExec<TPgDirectFunc<&date_mi>, true, true, TArgs_date_mi_Policy>; }
-struct TArgs_date_mi_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-TExecFunc arrow_date_mi_interval() { return &GenericExec<TPgDirectFunc<&date_mi_interval>, true, true, TArgs_date_mi_interval_Policy>; }
-struct TArgs_date_mii_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_mii() { return &GenericExec<TPgDirectFunc<&date_mii>, true, true, TArgs_date_mii_Policy>; }
-struct TArgs_date_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_ne() { return &GenericExec<TPgDirectFunc<&date_ne>, true, true, TArgs_date_ne_Policy>; }
-struct TArgs_date_ne_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_ne_timestamp() { return &GenericExec<TPgDirectFunc<&date_ne_timestamp>, true, true, TArgs_date_ne_timestamp_Policy>; }
-struct TArgs_date_ne_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_ne_timestamptz() { return &GenericExec<TPgDirectFunc<&date_ne_timestamptz>, true, true, TArgs_date_ne_timestamptz_Policy>; }
-struct TArgs_date_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_out() { return &GenericExec<TPgDirectFunc<&date_out>, true, false, TArgs_date_out_Policy>; }
-struct TArgs_date_pl_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-TExecFunc arrow_date_pl_interval() { return &GenericExec<TPgDirectFunc<&date_pl_interval>, true, true, TArgs_date_pl_interval_Policy>; }
-struct TArgs_date_pli_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_pli() { return &GenericExec<TPgDirectFunc<&date_pli>, true, true, TArgs_date_pli_Policy>; }
-struct TArgs_date_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_recv() { return &GenericExec<TPgDirectFunc<&date_recv>, true, true, TArgs_date_recv_Policy>; }
-struct TArgs_date_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_send() { return &GenericExec<TPgDirectFunc<&date_send>, true, false, TArgs_date_send_Policy>; }
-struct TArgs_date_smaller_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_date_smaller() { return &GenericExec<TPgDirectFunc<&date_smaller>, true, true, TArgs_date_smaller_Policy>; }
-struct TArgs_date_sortsupport_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_sortsupport() { return &GenericExec<TPgDirectFunc<&date_sortsupport>, true, true, TArgs_date_sortsupport_Policy>; }
-struct TArgs_date_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_timestamp() { return &GenericExec<TPgDirectFunc<&date_timestamp>, true, true, TArgs_date_timestamp_Policy>; }
-struct TArgs_date_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_date_timestamptz() { return &GenericExec<TPgDirectFunc<&date_timestamptz>, true, true, TArgs_date_timestamptz_Policy>; }
-struct TArgs_daterange_canonical_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_daterange_canonical() { return &GenericExec<TPgDirectFunc<&daterange_canonical>, true, false, TArgs_daterange_canonical_Policy>; }
-struct TArgs_daterange_subdiff_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_daterange_subdiff() { return &GenericExec<TPgDirectFunc<&daterange_subdiff>, true, true, TArgs_daterange_subdiff_Policy>; }
-struct TArgs_datetime_timestamp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_datetime_timestamp() { return &GenericExec<TPgDirectFunc<&datetime_timestamp>, true, true, TArgs_datetime_timestamp_Policy>; }
-struct TArgs_datetimetz_timestamptz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-TExecFunc arrow_datetimetz_timestamptz() { return &GenericExec<TPgDirectFunc<&datetimetz_timestamptz>, true, true, TArgs_datetimetz_timestamptz_Policy>; }
-struct TArgs_dispell_init_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_dispell_init() { return &GenericExec<TPgDirectFunc<&dispell_init>, true, true, TArgs_dispell_init_Policy>; }
-struct TArgs_dispell_lexize_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
-};
-TExecFunc arrow_dispell_lexize() { return &GenericExec<TPgDirectFunc<&dispell_lexize>, true, true, TArgs_dispell_lexize_Policy>; }
-struct TArgs_domain_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
-};
-TExecFunc arrow_domain_in() { return &GenericExec<TPgDirectFunc<&domain_in>, false, true, TArgs_domain_in_Policy>; }
-struct TArgs_domain_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_domain_recv() { return &GenericExec<TPgDirectFunc<&domain_recv>, false, true, TArgs_domain_recv_Policy>; }
-struct TArgs_elem_contained_by_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-TExecFunc arrow_elem_contained_by_range() { return &GenericExec<TPgDirectFunc<&elem_contained_by_range>, true, true, TArgs_elem_contained_by_range_Policy>; }
-struct TArgs_extract_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_extract_date() { return &GenericExec<TPgDirectFunc<&extract_date>, true, false, TArgs_extract_date_Policy>; }
-struct TArgs_extract_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_extract_time() { return &GenericExec<TPgDirectFunc<&extract_time>, true, false, TArgs_extract_time_Policy>; }
-struct TArgs_extract_timetz_Policy {
+TExecFunc arrow_currtid_byrelname() { return TGenericExec<TPgDirectFunc<&currtid_byrelname>, true, false, TArgs_currtid_byrelname_Policy>({}); }
+struct TArgs_dist_bl_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_extract_timetz() { return &GenericExec<TPgDirectFunc<&extract_timetz>, true, false, TArgs_extract_timetz_Policy>; }
-struct TArgs_generate_series_int4_support_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_generate_series_int4_support() { return &GenericExec<TPgDirectFunc<&generate_series_int4_support>, true, true, TArgs_generate_series_int4_support_Policy>; }
-struct TArgs_gin_cmp_prefix_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,true};
-};
-TExecFunc arrow_gin_cmp_prefix() { return &GenericExec<TPgDirectFunc<&gin_cmp_prefix>, true, true, TArgs_gin_cmp_prefix_Policy>; }
-struct TArgs_gin_cmp_tslexeme_Policy {
+TExecFunc arrow_dist_bl() { return TGenericExec<TPgDirectFunc<&dist_bl>, true, true, TArgs_dist_bl_Policy>({}); }
+struct TArgs_dist_bp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_gin_cmp_tslexeme() { return &GenericExec<TPgDirectFunc<&gin_cmp_tslexeme>, true, true, TArgs_gin_cmp_tslexeme_Policy>; }
-struct TArgs_gin_extract_tsquery_Policy {
+TExecFunc arrow_dist_bp() { return TGenericExec<TPgDirectFunc<&dist_bp>, true, true, TArgs_dist_bp_Policy>({}); }
+struct TArgs_dist_bs_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 7> IsFixedArg = {false,true,true,true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_gin_extract_tsquery() { return &GenericExec<TPgDirectFunc<&gin_extract_tsquery>, true, true, TArgs_gin_extract_tsquery_Policy>; }
-struct TArgs_gin_extract_tsquery_5args_Policy {
+TExecFunc arrow_dist_bs() { return TGenericExec<TPgDirectFunc<&dist_bs>, true, true, TArgs_dist_bs_Policy>({}); }
+struct TArgs_dist_cpoint_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {false,true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_gin_extract_tsquery_5args() { return &GenericExec<TPgDirectFunc<&gin_extract_tsquery_5args>, true, true, TArgs_gin_extract_tsquery_5args_Policy>; }
-struct TArgs_gin_extract_tsquery_oldsig_Policy {
+TExecFunc arrow_dist_cpoint() { return TGenericExec<TPgDirectFunc<&dist_cpoint>, true, true, TArgs_dist_cpoint_Policy>({}); }
+struct TArgs_dist_cpoly_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 7> IsFixedArg = {false,true,true,true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_gin_extract_tsquery_oldsig() { return &GenericExec<TPgDirectFunc<&gin_extract_tsquery_oldsig>, true, true, TArgs_gin_extract_tsquery_oldsig_Policy>; }
-struct TArgs_gin_extract_tsvector_Policy {
+TExecFunc arrow_dist_cpoly() { return TGenericExec<TPgDirectFunc<&dist_cpoly>, true, true, TArgs_dist_cpoly_Policy>({}); }
+struct TArgs_dist_lb_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_gin_extract_tsvector() { return &GenericExec<TPgDirectFunc<&gin_extract_tsvector>, true, true, TArgs_gin_extract_tsvector_Policy>; }
-struct TArgs_gin_extract_tsvector_2args_Policy {
+TExecFunc arrow_dist_lb() { return TGenericExec<TPgDirectFunc<&dist_lb>, true, true, TArgs_dist_lb_Policy>({}); }
+struct TArgs_dist_lp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_lp() { return TGenericExec<TPgDirectFunc<&dist_lp>, true, true, TArgs_dist_lp_Policy>({}); }
+struct TArgs_dist_ls_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_ls() { return TGenericExec<TPgDirectFunc<&dist_ls>, true, true, TArgs_dist_ls_Policy>({}); }
+struct TArgs_dist_pathp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_pathp() { return TGenericExec<TPgDirectFunc<&dist_pathp>, true, true, TArgs_dist_pathp_Policy>({}); }
+struct TArgs_dist_pb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_pb() { return TGenericExec<TPgDirectFunc<&dist_pb>, true, true, TArgs_dist_pb_Policy>({}); }
+struct TArgs_dist_pc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_pc() { return TGenericExec<TPgDirectFunc<&dist_pc>, true, true, TArgs_dist_pc_Policy>({}); }
+struct TArgs_dist_pl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_pl() { return TGenericExec<TPgDirectFunc<&dist_pl>, true, true, TArgs_dist_pl_Policy>({}); }
+struct TArgs_dist_polyc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_polyc() { return TGenericExec<TPgDirectFunc<&dist_polyc>, true, true, TArgs_dist_polyc_Policy>({}); }
+struct TArgs_dist_polyp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_polyp() { return TGenericExec<TPgDirectFunc<&dist_polyp>, true, true, TArgs_dist_polyp_Policy>({}); }
+struct TArgs_dist_ppath_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_ppath() { return TGenericExec<TPgDirectFunc<&dist_ppath>, true, true, TArgs_dist_ppath_Policy>({}); }
+struct TArgs_dist_ppoly_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_ppoly() { return TGenericExec<TPgDirectFunc<&dist_ppoly>, true, true, TArgs_dist_ppoly_Policy>({}); }
+struct TArgs_dist_ps_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_ps() { return TGenericExec<TPgDirectFunc<&dist_ps>, true, true, TArgs_dist_ps_Policy>({}); }
+struct TArgs_dist_sb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_sb() { return TGenericExec<TPgDirectFunc<&dist_sb>, true, true, TArgs_dist_sb_Policy>({}); }
+struct TArgs_dist_sl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_sl() { return TGenericExec<TPgDirectFunc<&dist_sl>, true, true, TArgs_dist_sl_Policy>({}); }
+struct TArgs_dist_sp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_dist_sp() { return TGenericExec<TPgDirectFunc<&dist_sp>, true, true, TArgs_dist_sp_Policy>({}); }
+struct TArgs_extract_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_extract_interval() { return TGenericExec<TPgDirectFunc<&extract_interval>, true, false, TArgs_extract_interval_Policy>({}); }
+struct TArgs_extract_timestamp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_gin_extract_tsvector_2args() { return &GenericExec<TPgDirectFunc<&gin_extract_tsvector_2args>, true, true, TArgs_gin_extract_tsvector_2args_Policy>; }
-struct TArgs_gin_tsquery_consistent_Policy {
+TExecFunc arrow_extract_timestamp() { return TGenericExec<TPgDirectFunc<&extract_timestamp>, true, false, TArgs_extract_timestamp_Policy>({}); }
+struct TArgs_extract_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_extract_timestamptz() { return TGenericExec<TPgDirectFunc<&extract_timestamptz>, true, false, TArgs_extract_timestamptz_Policy>({}); }
+struct TArgs_float4_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_float4_numeric() { return TGenericExec<TPgDirectFunc<&float4_numeric>, true, false, TArgs_float4_numeric_Policy>({}); }
+struct TArgs_float4_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_float4_to_char() { return TGenericExec<TPgDirectFunc<&float4_to_char>, true, false, TArgs_float4_to_char_Policy>({}); }
+struct TArgs_float8_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_float8_numeric() { return TGenericExec<TPgDirectFunc<&float8_numeric>, true, false, TArgs_float8_numeric_Policy>({}); }
+struct TArgs_float8_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_float8_timestamptz() { return TGenericExec<TPgDirectFunc<&float8_timestamptz>, true, true, TArgs_float8_timestamptz_Policy>({}); }
+struct TArgs_float8_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_float8_to_char() { return TGenericExec<TPgDirectFunc<&float8_to_char>, true, false, TArgs_float8_to_char_Policy>({}); }
+struct TArgs_flt4_mul_cash_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_flt4_mul_cash() { return TGenericExec<TPgDirectFunc<&flt4_mul_cash>, true, true, TArgs_flt4_mul_cash_Policy>({}); }
+struct TArgs_flt8_mul_cash_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_flt8_mul_cash() { return TGenericExec<TPgDirectFunc<&flt8_mul_cash>, true, true, TArgs_flt8_mul_cash_Policy>({}); }
+struct TArgs_ginarrayconsistent_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 8> IsFixedArg = {true,true,false,true,true,true,true,true};
 };
-TExecFunc arrow_gin_tsquery_consistent() { return &GenericExec<TPgDirectFunc<&gin_tsquery_consistent>, true, true, TArgs_gin_tsquery_consistent_Policy>; }
-struct TArgs_gin_tsquery_consistent_6args_Policy {
+TExecFunc arrow_ginarrayconsistent() { return TGenericExec<TPgDirectFunc<&ginarrayconsistent>, true, true, TArgs_ginarrayconsistent_Policy>({}); }
+struct TArgs_ginarrayextract_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 6> IsFixedArg = {true,true,false,true,true,true};
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_gin_tsquery_consistent_6args() { return &GenericExec<TPgDirectFunc<&gin_tsquery_consistent_6args>, true, true, TArgs_gin_tsquery_consistent_6args_Policy>; }
-struct TArgs_gin_tsquery_consistent_oldsig_Policy {
+TExecFunc arrow_ginarrayextract() { return TGenericExec<TPgDirectFunc<&ginarrayextract>, true, true, TArgs_ginarrayextract_Policy>({}); }
+struct TArgs_ginarrayextract_2args_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 8> IsFixedArg = {true,true,false,true,true,true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_gin_tsquery_consistent_oldsig() { return &GenericExec<TPgDirectFunc<&gin_tsquery_consistent_oldsig>, true, true, TArgs_gin_tsquery_consistent_oldsig_Policy>; }
-struct TArgs_gin_tsquery_triconsistent_Policy {
+TExecFunc arrow_ginarrayextract_2args() { return TGenericExec<TPgDirectFunc<&ginarrayextract_2args>, true, true, TArgs_ginarrayextract_2args_Policy>({}); }
+struct TArgs_ginarraytriconsistent_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 7> IsFixedArg = {true,true,false,true,true,true,true};
 };
-TExecFunc arrow_gin_tsquery_triconsistent() { return &GenericExec<TPgDirectFunc<&gin_tsquery_triconsistent>, true, true, TArgs_gin_tsquery_triconsistent_Policy>; }
-struct TArgs_ginhandler_Policy {
+TExecFunc arrow_ginarraytriconsistent() { return TGenericExec<TPgDirectFunc<&ginarraytriconsistent>, true, true, TArgs_ginarraytriconsistent_Policy>({}); }
+struct TArgs_ginqueryarrayextract_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 7> IsFixedArg = {false,true,true,true,true,true,true};
 };
-TExecFunc arrow_ginhandler() { return &GenericExec<TPgDirectFunc<&ginhandler>, true, true, TArgs_ginhandler_Policy>; }
-struct TArgs_hash_range_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_hash_range() { return &GenericExec<TPgDirectFunc<&hash_range>, true, true, TArgs_hash_range_Policy>; }
-struct TArgs_hash_range_extended_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_hash_range_extended() { return &GenericExec<TPgDirectFunc<&hash_range_extended>, true, true, TArgs_hash_range_extended_Policy>; }
-struct TArgs_hashbpchar_Policy {
+TExecFunc arrow_ginqueryarrayextract() { return TGenericExec<TPgDirectFunc<&ginqueryarrayextract>, true, true, TArgs_ginqueryarrayextract_Policy>({}); }
+struct TArgs_hash_numeric_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_hashbpchar() { return &GenericExec<TPgDirectFunc<&hashbpchar>, true, true, TArgs_hashbpchar_Policy>; }
-struct TArgs_hashbpcharextended_Policy {
+TExecFunc arrow_hash_numeric() { return TGenericExec<TPgDirectFunc<&hash_numeric>, true, true, TArgs_hash_numeric_Policy>({}); }
+struct TArgs_hash_numeric_extended_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_hashbpcharextended() { return &GenericExec<TPgDirectFunc<&hashbpcharextended>, true, true, TArgs_hashbpcharextended_Policy>; }
-struct TArgs_hashhandler_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_hashhandler() { return &GenericExec<TPgDirectFunc<&hashhandler>, true, true, TArgs_hashhandler_Policy>; }
+TExecFunc arrow_hash_numeric_extended() { return TGenericExec<TPgDirectFunc<&hash_numeric_extended>, true, true, TArgs_hash_numeric_extended_Policy>({}); }
 struct TArgs_hashtid_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_hashtid() { return &GenericExec<TPgDirectFunc<&hashtid>, true, true, TArgs_hashtid_Policy>; }
+TExecFunc arrow_hashtid() { return TGenericExec<TPgDirectFunc<&hashtid>, true, true, TArgs_hashtid_Policy>({}); }
 struct TArgs_hashtidextended_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_hashtidextended() { return &GenericExec<TPgDirectFunc<&hashtidextended>, true, true, TArgs_hashtidextended_Policy>; }
-struct TArgs_i2toi4_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_i2toi4() { return &GenericExec<TPgDirectFunc<&i2toi4>, true, true, TArgs_i2toi4_Policy>; }
-struct TArgs_i4tochar_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_i4tochar() { return &GenericExec<TPgDirectFunc<&i4tochar>, true, true, TArgs_i4tochar_Policy>; }
-struct TArgs_i4toi2_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_i4toi2() { return &GenericExec<TPgDirectFunc<&i4toi2>, true, true, TArgs_i4toi2_Policy>; }
-struct TArgs_in_range_date_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,false,true,true};
-};
-TExecFunc arrow_in_range_date_interval() { return &GenericExec<TPgDirectFunc<&in_range_date_interval>, true, true, TArgs_in_range_date_interval_Policy>; }
-struct TArgs_in_range_int2_int2_Policy {
+TExecFunc arrow_hashtidextended() { return TGenericExec<TPgDirectFunc<&hashtidextended>, true, true, TArgs_hashtidextended_Policy>({}); }
+struct TArgs_iclikejoinsel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
 };
-TExecFunc arrow_in_range_int2_int2() { return &GenericExec<TPgDirectFunc<&in_range_int2_int2>, true, true, TArgs_in_range_int2_int2_Policy>; }
-struct TArgs_in_range_int2_int4_Policy {
+TExecFunc arrow_iclikejoinsel() { return TGenericExec<TPgDirectFunc<&iclikejoinsel>, true, true, TArgs_iclikejoinsel_Policy>({}); }
+struct TArgs_iclikesel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_iclikesel() { return TGenericExec<TPgDirectFunc<&iclikesel>, true, true, TArgs_iclikesel_Policy>({}); }
+struct TArgs_icnlikejoinsel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
 };
-TExecFunc arrow_in_range_int2_int4() { return &GenericExec<TPgDirectFunc<&in_range_int2_int4>, true, true, TArgs_in_range_int2_int4_Policy>; }
-struct TArgs_in_range_int2_int8_Policy {
+TExecFunc arrow_icnlikejoinsel() { return TGenericExec<TPgDirectFunc<&icnlikejoinsel>, true, true, TArgs_icnlikejoinsel_Policy>({}); }
+struct TArgs_icnlikesel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_icnlikesel() { return TGenericExec<TPgDirectFunc<&icnlikesel>, true, true, TArgs_icnlikesel_Policy>({}); }
+struct TArgs_icregexeqjoinsel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
 };
-TExecFunc arrow_in_range_int2_int8() { return &GenericExec<TPgDirectFunc<&in_range_int2_int8>, true, true, TArgs_in_range_int2_int8_Policy>; }
-struct TArgs_in_range_int4_int2_Policy {
+TExecFunc arrow_icregexeqjoinsel() { return TGenericExec<TPgDirectFunc<&icregexeqjoinsel>, true, true, TArgs_icregexeqjoinsel_Policy>({}); }
+struct TArgs_icregexeqsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_icregexeqsel() { return TGenericExec<TPgDirectFunc<&icregexeqsel>, true, true, TArgs_icregexeqsel_Policy>({}); }
+struct TArgs_icregexnejoinsel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
 };
-TExecFunc arrow_in_range_int4_int2() { return &GenericExec<TPgDirectFunc<&in_range_int4_int2>, true, true, TArgs_in_range_int4_int2_Policy>; }
-struct TArgs_in_range_int4_int4_Policy {
+TExecFunc arrow_icregexnejoinsel() { return TGenericExec<TPgDirectFunc<&icregexnejoinsel>, true, true, TArgs_icregexnejoinsel_Policy>({}); }
+struct TArgs_icregexnesel_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_in_range_int4_int4() { return &GenericExec<TPgDirectFunc<&in_range_int4_int4>, true, true, TArgs_in_range_int4_int4_Policy>; }
-struct TArgs_in_range_int4_int8_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
-};
-TExecFunc arrow_in_range_int4_int8() { return &GenericExec<TPgDirectFunc<&in_range_int4_int8>, true, true, TArgs_in_range_int4_int8_Policy>; }
-struct TArgs_in_range_time_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 5> IsFixedArg = {true,true,false,true,true};
-};
-TExecFunc arrow_in_range_time_interval() { return &GenericExec<TPgDirectFunc<&in_range_time_interval>, true, true, TArgs_in_range_time_interval_Policy>; }
-struct TArgs_in_range_timetz_interval_Policy {
+TExecFunc arrow_icregexnesel() { return TGenericExec<TPgDirectFunc<&icregexnesel>, true, true, TArgs_icregexnesel_Policy>({}); }
+struct TArgs_in_range_interval_interval_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {false,false,false,true,true};
 };
-TExecFunc arrow_in_range_timetz_interval() { return &GenericExec<TPgDirectFunc<&in_range_timetz_interval>, true, true, TArgs_in_range_timetz_interval_Policy>; }
+TExecFunc arrow_in_range_interval_interval() { return TGenericExec<TPgDirectFunc<&in_range_interval_interval>, true, true, TArgs_in_range_interval_interval_Policy>({}); }
+struct TArgs_in_range_numeric_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {false,false,false,true,true};
+};
+TExecFunc arrow_in_range_numeric_numeric() { return TGenericExec<TPgDirectFunc<&in_range_numeric_numeric>, true, true, TArgs_in_range_numeric_numeric_Policy>({}); }
+struct TArgs_in_range_timestamp_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,false,true,true};
+};
+TExecFunc arrow_in_range_timestamp_interval() { return TGenericExec<TPgDirectFunc<&in_range_timestamp_interval>, true, true, TArgs_in_range_timestamp_interval_Policy>({}); }
+struct TArgs_in_range_timestamptz_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,false,true,true};
+};
+TExecFunc arrow_in_range_timestamptz_interval() { return TGenericExec<TPgDirectFunc<&in_range_timestamptz_interval>, true, true, TArgs_in_range_timestamptz_interval_Policy>({}); }
 struct TArgs_inet_gist_compress_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_inet_gist_compress() { return &GenericExec<TPgDirectFunc<&inet_gist_compress>, true, true, TArgs_inet_gist_compress_Policy>; }
+TExecFunc arrow_inet_gist_compress() { return TGenericExec<TPgDirectFunc<&inet_gist_compress>, true, true, TArgs_inet_gist_compress_Policy>({}); }
 struct TArgs_inet_gist_consistent_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,false,true,true,true};
 };
-TExecFunc arrow_inet_gist_consistent() { return &GenericExec<TPgDirectFunc<&inet_gist_consistent>, true, true, TArgs_inet_gist_consistent_Policy>; }
+TExecFunc arrow_inet_gist_consistent() { return TGenericExec<TPgDirectFunc<&inet_gist_consistent>, true, true, TArgs_inet_gist_consistent_Policy>({}); }
 struct TArgs_inet_gist_fetch_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_inet_gist_fetch() { return &GenericExec<TPgDirectFunc<&inet_gist_fetch>, true, true, TArgs_inet_gist_fetch_Policy>; }
+TExecFunc arrow_inet_gist_fetch() { return TGenericExec<TPgDirectFunc<&inet_gist_fetch>, true, true, TArgs_inet_gist_fetch_Policy>({}); }
 struct TArgs_inet_gist_penalty_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-TExecFunc arrow_inet_gist_penalty() { return &GenericExec<TPgDirectFunc<&inet_gist_penalty>, true, true, TArgs_inet_gist_penalty_Policy>; }
+TExecFunc arrow_inet_gist_penalty() { return TGenericExec<TPgDirectFunc<&inet_gist_penalty>, true, true, TArgs_inet_gist_penalty_Policy>({}); }
 struct TArgs_inet_gist_picksplit_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_inet_gist_picksplit() { return &GenericExec<TPgDirectFunc<&inet_gist_picksplit>, true, true, TArgs_inet_gist_picksplit_Policy>; }
+TExecFunc arrow_inet_gist_picksplit() { return TGenericExec<TPgDirectFunc<&inet_gist_picksplit>, true, true, TArgs_inet_gist_picksplit_Policy>({}); }
 struct TArgs_inet_gist_same_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
 };
-TExecFunc arrow_inet_gist_same() { return &GenericExec<TPgDirectFunc<&inet_gist_same>, true, true, TArgs_inet_gist_same_Policy>; }
+TExecFunc arrow_inet_gist_same() { return TGenericExec<TPgDirectFunc<&inet_gist_same>, true, true, TArgs_inet_gist_same_Policy>({}); }
 struct TArgs_inet_gist_union_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_inet_gist_union() { return &GenericExec<TPgDirectFunc<&inet_gist_union>, true, false, TArgs_inet_gist_union_Policy>; }
-struct TArgs_int24div_Policy {
+TExecFunc arrow_inet_gist_union() { return TGenericExec<TPgDirectFunc<&inet_gist_union>, true, false, TArgs_inet_gist_union_Policy>({}); }
+struct TArgs_int2_accum_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_int24div() { return &GenericExec<TPgDirectFunc<&int24div>, true, true, TArgs_int24div_Policy>; }
-struct TArgs_int24eq_Policy {
+TExecFunc arrow_int2_accum() { return TGenericExec<TPgDirectFunc<&int2_accum>, false, true, TArgs_int2_accum_Policy>({}); }
+struct TArgs_int2_accum_inv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_int24eq() { return &GenericExec<TPgDirectFunc<&int24eq>, true, true, TArgs_int24eq_Policy>; }
-struct TArgs_int24ge_Policy {
+TExecFunc arrow_int2_accum_inv() { return TGenericExec<TPgDirectFunc<&int2_accum_inv>, false, true, TArgs_int2_accum_inv_Policy>({}); }
+struct TArgs_int2_avg_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_int2_avg_accum() { return TGenericExec<TPgDirectFunc<&int2_avg_accum>, true, false, TArgs_int2_avg_accum_Policy>({}); }
+struct TArgs_int2_avg_accum_inv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_int2_avg_accum_inv() { return TGenericExec<TPgDirectFunc<&int2_avg_accum_inv>, true, false, TArgs_int2_avg_accum_inv_Policy>({}); }
+struct TArgs_int2_mul_cash_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_int24ge() { return &GenericExec<TPgDirectFunc<&int24ge>, true, true, TArgs_int24ge_Policy>; }
-struct TArgs_int24gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24gt() { return &GenericExec<TPgDirectFunc<&int24gt>, true, true, TArgs_int24gt_Policy>; }
-struct TArgs_int24le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24le() { return &GenericExec<TPgDirectFunc<&int24le>, true, true, TArgs_int24le_Policy>; }
-struct TArgs_int24lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24lt() { return &GenericExec<TPgDirectFunc<&int24lt>, true, true, TArgs_int24lt_Policy>; }
-struct TArgs_int24mi_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24mi() { return &GenericExec<TPgDirectFunc<&int24mi>, true, true, TArgs_int24mi_Policy>; }
-struct TArgs_int24mul_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24mul() { return &GenericExec<TPgDirectFunc<&int24mul>, true, true, TArgs_int24mul_Policy>; }
-struct TArgs_int24ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24ne() { return &GenericExec<TPgDirectFunc<&int24ne>, true, true, TArgs_int24ne_Policy>; }
-struct TArgs_int24pl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int24pl() { return &GenericExec<TPgDirectFunc<&int24pl>, true, true, TArgs_int24pl_Policy>; }
-struct TArgs_int2abs_Policy {
+TExecFunc arrow_int2_mul_cash() { return TGenericExec<TPgDirectFunc<&int2_mul_cash>, true, true, TArgs_int2_mul_cash_Policy>({}); }
+struct TArgs_int2_numeric_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_int2abs() { return &GenericExec<TPgDirectFunc<&int2abs>, true, true, TArgs_int2abs_Policy>; }
-struct TArgs_int2and_Policy {
+TExecFunc arrow_int2_numeric() { return TGenericExec<TPgDirectFunc<&int2_numeric>, true, false, TArgs_int2_numeric_Policy>({}); }
+struct TArgs_int2_sum_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_int2and() { return &GenericExec<TPgDirectFunc<&int2and>, true, true, TArgs_int2and_Policy>; }
-struct TArgs_int2div_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2div() { return &GenericExec<TPgDirectFunc<&int2div>, true, true, TArgs_int2div_Policy>; }
-struct TArgs_int2eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2eq() { return &GenericExec<TPgDirectFunc<&int2eq>, true, true, TArgs_int2eq_Policy>; }
-struct TArgs_int2ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2ge() { return &GenericExec<TPgDirectFunc<&int2ge>, true, true, TArgs_int2ge_Policy>; }
-struct TArgs_int2gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2gt() { return &GenericExec<TPgDirectFunc<&int2gt>, true, true, TArgs_int2gt_Policy>; }
-struct TArgs_int2in_Policy {
+TExecFunc arrow_int2_sum() { return TGenericExec<TPgDirectFunc<&int2_sum>, false, true, TArgs_int2_sum_Policy>({}); }
+struct TArgs_int2int4_sum_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_int2in() { return &GenericExec<TPgDirectFunc<&int2in>, true, true, TArgs_int2in_Policy>; }
-struct TArgs_int2larger_Policy {
+TExecFunc arrow_int2int4_sum() { return TGenericExec<TPgDirectFunc<&int2int4_sum>, true, true, TArgs_int2int4_sum_Policy>({}); }
+struct TArgs_int4_accum_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_int2larger() { return &GenericExec<TPgDirectFunc<&int2larger>, true, true, TArgs_int2larger_Policy>; }
-struct TArgs_int2le_Policy {
+TExecFunc arrow_int4_accum() { return TGenericExec<TPgDirectFunc<&int4_accum>, false, true, TArgs_int4_accum_Policy>({}); }
+struct TArgs_int4_accum_inv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_int2le() { return &GenericExec<TPgDirectFunc<&int2le>, true, true, TArgs_int2le_Policy>; }
-struct TArgs_int2lt_Policy {
+TExecFunc arrow_int4_accum_inv() { return TGenericExec<TPgDirectFunc<&int4_accum_inv>, false, true, TArgs_int4_accum_inv_Policy>({}); }
+struct TArgs_int4_avg_accum_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_int2lt() { return &GenericExec<TPgDirectFunc<&int2lt>, true, true, TArgs_int2lt_Policy>; }
-struct TArgs_int2mi_Policy {
+TExecFunc arrow_int4_avg_accum() { return TGenericExec<TPgDirectFunc<&int4_avg_accum>, true, false, TArgs_int4_avg_accum_Policy>({}); }
+struct TArgs_int4_avg_accum_inv_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_int2mi() { return &GenericExec<TPgDirectFunc<&int2mi>, true, true, TArgs_int2mi_Policy>; }
-struct TArgs_int2mod_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2mod() { return &GenericExec<TPgDirectFunc<&int2mod>, true, true, TArgs_int2mod_Policy>; }
-struct TArgs_int2mul_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2mul() { return &GenericExec<TPgDirectFunc<&int2mul>, true, true, TArgs_int2mul_Policy>; }
-struct TArgs_int2ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2ne() { return &GenericExec<TPgDirectFunc<&int2ne>, true, true, TArgs_int2ne_Policy>; }
-struct TArgs_int2not_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2not() { return &GenericExec<TPgDirectFunc<&int2not>, true, true, TArgs_int2not_Policy>; }
-struct TArgs_int2or_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2or() { return &GenericExec<TPgDirectFunc<&int2or>, true, true, TArgs_int2or_Policy>; }
-struct TArgs_int2out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2out() { return &GenericExec<TPgDirectFunc<&int2out>, true, false, TArgs_int2out_Policy>; }
-struct TArgs_int2pl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2pl() { return &GenericExec<TPgDirectFunc<&int2pl>, true, true, TArgs_int2pl_Policy>; }
-struct TArgs_int2recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2recv() { return &GenericExec<TPgDirectFunc<&int2recv>, true, true, TArgs_int2recv_Policy>; }
-struct TArgs_int2send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2send() { return &GenericExec<TPgDirectFunc<&int2send>, true, false, TArgs_int2send_Policy>; }
-struct TArgs_int2shl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2shl() { return &GenericExec<TPgDirectFunc<&int2shl>, true, true, TArgs_int2shl_Policy>; }
-struct TArgs_int2shr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2shr() { return &GenericExec<TPgDirectFunc<&int2shr>, true, true, TArgs_int2shr_Policy>; }
-struct TArgs_int2smaller_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2smaller() { return &GenericExec<TPgDirectFunc<&int2smaller>, true, true, TArgs_int2smaller_Policy>; }
-struct TArgs_int2um_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2um() { return &GenericExec<TPgDirectFunc<&int2um>, true, true, TArgs_int2um_Policy>; }
-struct TArgs_int2up_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2up() { return &GenericExec<TPgDirectFunc<&int2up>, true, true, TArgs_int2up_Policy>; }
-struct TArgs_int2vectorin_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_int2vectorin() { return &GenericExec<TPgDirectFunc<&int2vectorin>, true, false, TArgs_int2vectorin_Policy>; }
-struct TArgs_int2vectorout_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_int2vectorout() { return &GenericExec<TPgDirectFunc<&int2vectorout>, true, false, TArgs_int2vectorout_Policy>; }
-struct TArgs_int2vectorrecv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int2vectorrecv() { return &GenericExec<TPgDirectFunc<&int2vectorrecv>, true, false, TArgs_int2vectorrecv_Policy>; }
-struct TArgs_int2vectorsend_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_int2vectorsend() { return &GenericExec<TPgDirectFunc<&int2vectorsend>, true, false, TArgs_int2vectorsend_Policy>; }
-struct TArgs_int2xor_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int2xor() { return &GenericExec<TPgDirectFunc<&int2xor>, true, true, TArgs_int2xor_Policy>; }
-struct TArgs_int42div_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42div() { return &GenericExec<TPgDirectFunc<&int42div>, true, true, TArgs_int42div_Policy>; }
-struct TArgs_int42eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42eq() { return &GenericExec<TPgDirectFunc<&int42eq>, true, true, TArgs_int42eq_Policy>; }
-struct TArgs_int42ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42ge() { return &GenericExec<TPgDirectFunc<&int42ge>, true, true, TArgs_int42ge_Policy>; }
-struct TArgs_int42gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42gt() { return &GenericExec<TPgDirectFunc<&int42gt>, true, true, TArgs_int42gt_Policy>; }
-struct TArgs_int42le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42le() { return &GenericExec<TPgDirectFunc<&int42le>, true, true, TArgs_int42le_Policy>; }
-struct TArgs_int42lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42lt() { return &GenericExec<TPgDirectFunc<&int42lt>, true, true, TArgs_int42lt_Policy>; }
-struct TArgs_int42mi_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42mi() { return &GenericExec<TPgDirectFunc<&int42mi>, true, true, TArgs_int42mi_Policy>; }
-struct TArgs_int42mul_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42mul() { return &GenericExec<TPgDirectFunc<&int42mul>, true, true, TArgs_int42mul_Policy>; }
-struct TArgs_int42ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42ne() { return &GenericExec<TPgDirectFunc<&int42ne>, true, true, TArgs_int42ne_Policy>; }
-struct TArgs_int42pl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int42pl() { return &GenericExec<TPgDirectFunc<&int42pl>, true, true, TArgs_int42pl_Policy>; }
-struct TArgs_int4_bool_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4_bool() { return &GenericExec<TPgDirectFunc<&int4_bool>, true, true, TArgs_int4_bool_Policy>; }
-struct TArgs_int4abs_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4abs() { return &GenericExec<TPgDirectFunc<&int4abs>, true, true, TArgs_int4abs_Policy>; }
-struct TArgs_int4and_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4and() { return &GenericExec<TPgDirectFunc<&int4and>, true, true, TArgs_int4and_Policy>; }
-struct TArgs_int4div_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4div() { return &GenericExec<TPgDirectFunc<&int4div>, true, true, TArgs_int4div_Policy>; }
-struct TArgs_int4eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4eq() { return &GenericExec<TPgDirectFunc<&int4eq>, true, true, TArgs_int4eq_Policy>; }
-struct TArgs_int4gcd_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4gcd() { return &GenericExec<TPgDirectFunc<&int4gcd>, true, true, TArgs_int4gcd_Policy>; }
-struct TArgs_int4ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4ge() { return &GenericExec<TPgDirectFunc<&int4ge>, true, true, TArgs_int4ge_Policy>; }
-struct TArgs_int4gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4gt() { return &GenericExec<TPgDirectFunc<&int4gt>, true, true, TArgs_int4gt_Policy>; }
-struct TArgs_int4in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_int4in() { return &GenericExec<TPgDirectFunc<&int4in>, true, true, TArgs_int4in_Policy>; }
-struct TArgs_int4inc_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4inc() { return &GenericExec<TPgDirectFunc<&int4inc>, true, true, TArgs_int4inc_Policy>; }
-struct TArgs_int4larger_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4larger() { return &GenericExec<TPgDirectFunc<&int4larger>, true, true, TArgs_int4larger_Policy>; }
-struct TArgs_int4lcm_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4lcm() { return &GenericExec<TPgDirectFunc<&int4lcm>, true, true, TArgs_int4lcm_Policy>; }
-struct TArgs_int4le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4le() { return &GenericExec<TPgDirectFunc<&int4le>, true, true, TArgs_int4le_Policy>; }
-struct TArgs_int4lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4lt() { return &GenericExec<TPgDirectFunc<&int4lt>, true, true, TArgs_int4lt_Policy>; }
-struct TArgs_int4mi_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4mi() { return &GenericExec<TPgDirectFunc<&int4mi>, true, true, TArgs_int4mi_Policy>; }
-struct TArgs_int4mod_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4mod() { return &GenericExec<TPgDirectFunc<&int4mod>, true, true, TArgs_int4mod_Policy>; }
-struct TArgs_int4mul_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4mul() { return &GenericExec<TPgDirectFunc<&int4mul>, true, true, TArgs_int4mul_Policy>; }
-struct TArgs_int4ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4ne() { return &GenericExec<TPgDirectFunc<&int4ne>, true, true, TArgs_int4ne_Policy>; }
-struct TArgs_int4not_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4not() { return &GenericExec<TPgDirectFunc<&int4not>, true, true, TArgs_int4not_Policy>; }
-struct TArgs_int4or_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4or() { return &GenericExec<TPgDirectFunc<&int4or>, true, true, TArgs_int4or_Policy>; }
-struct TArgs_int4out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4out() { return &GenericExec<TPgDirectFunc<&int4out>, true, false, TArgs_int4out_Policy>; }
-struct TArgs_int4pl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4pl() { return &GenericExec<TPgDirectFunc<&int4pl>, true, true, TArgs_int4pl_Policy>; }
-struct TArgs_int4range_canonical_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_int4range_canonical() { return &GenericExec<TPgDirectFunc<&int4range_canonical>, true, false, TArgs_int4range_canonical_Policy>; }
-struct TArgs_int4range_subdiff_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4range_subdiff() { return &GenericExec<TPgDirectFunc<&int4range_subdiff>, true, true, TArgs_int4range_subdiff_Policy>; }
-struct TArgs_int4recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4recv() { return &GenericExec<TPgDirectFunc<&int4recv>, true, true, TArgs_int4recv_Policy>; }
-struct TArgs_int4send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4send() { return &GenericExec<TPgDirectFunc<&int4send>, true, false, TArgs_int4send_Policy>; }
-struct TArgs_int4shl_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4shl() { return &GenericExec<TPgDirectFunc<&int4shl>, true, true, TArgs_int4shl_Policy>; }
-struct TArgs_int4shr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4shr() { return &GenericExec<TPgDirectFunc<&int4shr>, true, true, TArgs_int4shr_Policy>; }
-struct TArgs_int4smaller_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4smaller() { return &GenericExec<TPgDirectFunc<&int4smaller>, true, true, TArgs_int4smaller_Policy>; }
-struct TArgs_int4um_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4um() { return &GenericExec<TPgDirectFunc<&int4um>, true, true, TArgs_int4um_Policy>; }
-struct TArgs_int4up_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_int4up() { return &GenericExec<TPgDirectFunc<&int4up>, true, true, TArgs_int4up_Policy>; }
-struct TArgs_int4xor_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int4xor() { return &GenericExec<TPgDirectFunc<&int4xor>, true, true, TArgs_int4xor_Policy>; }
-struct TArgs_int8range_canonical_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_int8range_canonical() { return &GenericExec<TPgDirectFunc<&int8range_canonical>, true, false, TArgs_int8range_canonical_Policy>; }
-struct TArgs_int8range_subdiff_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_int8range_subdiff() { return &GenericExec<TPgDirectFunc<&int8range_subdiff>, true, true, TArgs_int8range_subdiff_Policy>; }
-struct TArgs_interval_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_interval_time() { return &GenericExec<TPgDirectFunc<&interval_time>, true, true, TArgs_interval_time_Policy>; }
-struct TArgs_jsonb_path_exists_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_exists() { return &GenericExec<TPgDirectFunc<&jsonb_path_exists>, true, true, TArgs_jsonb_path_exists_Policy>; }
-struct TArgs_jsonb_path_exists_opr_Policy {
+TExecFunc arrow_int4_avg_accum_inv() { return TGenericExec<TPgDirectFunc<&int4_avg_accum_inv>, true, false, TArgs_int4_avg_accum_inv_Policy>({}); }
+struct TArgs_int4_avg_combine_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_jsonb_path_exists_opr() { return &GenericExec<TPgDirectFunc<&jsonb_path_exists_opr>, true, true, TArgs_jsonb_path_exists_opr_Policy>; }
-struct TArgs_jsonb_path_exists_tz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_exists_tz() { return &GenericExec<TPgDirectFunc<&jsonb_path_exists_tz>, true, true, TArgs_jsonb_path_exists_tz_Policy>; }
-struct TArgs_jsonb_path_match_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_match() { return &GenericExec<TPgDirectFunc<&jsonb_path_match>, true, true, TArgs_jsonb_path_match_Policy>; }
-struct TArgs_jsonb_path_match_opr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_jsonb_path_match_opr() { return &GenericExec<TPgDirectFunc<&jsonb_path_match_opr>, true, true, TArgs_jsonb_path_match_opr_Policy>; }
-struct TArgs_jsonb_path_match_tz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_match_tz() { return &GenericExec<TPgDirectFunc<&jsonb_path_match_tz>, true, true, TArgs_jsonb_path_match_tz_Policy>; }
-struct TArgs_jsonb_path_query_array_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_query_array() { return &GenericExec<TPgDirectFunc<&jsonb_path_query_array>, true, false, TArgs_jsonb_path_query_array_Policy>; }
-struct TArgs_jsonb_path_query_array_tz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_query_array_tz() { return &GenericExec<TPgDirectFunc<&jsonb_path_query_array_tz>, true, false, TArgs_jsonb_path_query_array_tz_Policy>; }
-struct TArgs_jsonb_path_query_first_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_query_first() { return &GenericExec<TPgDirectFunc<&jsonb_path_query_first>, true, false, TArgs_jsonb_path_query_first_Policy>; }
-struct TArgs_jsonb_path_query_first_tz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
-};
-TExecFunc arrow_jsonb_path_query_first_tz() { return &GenericExec<TPgDirectFunc<&jsonb_path_query_first_tz>, true, false, TArgs_jsonb_path_query_first_tz_Policy>; }
-struct TArgs_jsonb_subscript_handler_Policy {
+TExecFunc arrow_int4_avg_combine() { return TGenericExec<TPgDirectFunc<&int4_avg_combine>, true, false, TArgs_int4_avg_combine_Policy>({}); }
+struct TArgs_int4_cash_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_jsonb_subscript_handler() { return &GenericExec<TPgDirectFunc<&jsonb_subscript_handler>, true, true, TArgs_jsonb_subscript_handler_Policy>; }
-struct TArgs_make_date_Policy {
+TExecFunc arrow_int4_cash() { return TGenericExec<TPgDirectFunc<&int4_cash>, true, true, TArgs_int4_cash_Policy>({}); }
+struct TArgs_int4_mul_cash_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_make_date() { return &GenericExec<TPgDirectFunc<&make_date>, true, true, TArgs_make_date_Policy>; }
-struct TArgs_make_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_make_time() { return &GenericExec<TPgDirectFunc<&make_time>, true, true, TArgs_make_time_Policy>; }
-struct TArgs_mxid_age_Policy {
+TExecFunc arrow_int4_mul_cash() { return TGenericExec<TPgDirectFunc<&int4_mul_cash>, true, true, TArgs_int4_mul_cash_Policy>({}); }
+struct TArgs_int4_numeric_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_mxid_age() { return &GenericExec<TPgDirectFunc<&mxid_age>, true, true, TArgs_mxid_age_Policy>; }
-struct TArgs_name_bpchar_Policy {
+TExecFunc arrow_int4_numeric() { return TGenericExec<TPgDirectFunc<&int4_numeric>, true, false, TArgs_int4_numeric_Policy>({}); }
+struct TArgs_int4_sum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int4_sum() { return TGenericExec<TPgDirectFunc<&int4_sum>, false, true, TArgs_int4_sum_Policy>({}); }
+struct TArgs_int4_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_int4_to_char() { return TGenericExec<TPgDirectFunc<&int4_to_char>, true, false, TArgs_int4_to_char_Policy>({}); }
+struct TArgs_int8_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int8_accum() { return TGenericExec<TPgDirectFunc<&int8_accum>, false, true, TArgs_int8_accum_Policy>({}); }
+struct TArgs_int8_accum_inv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int8_accum_inv() { return TGenericExec<TPgDirectFunc<&int8_accum_inv>, false, true, TArgs_int8_accum_inv_Policy>({}); }
+struct TArgs_int8_avg_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_name_bpchar() { return &GenericExec<TPgDirectFunc<&name_bpchar>, true, false, TArgs_name_bpchar_Policy>; }
-struct TArgs_networkjoinsel_Policy {
+TExecFunc arrow_int8_avg() { return TGenericExec<TPgDirectFunc<&int8_avg>, true, false, TArgs_int8_avg_Policy>({}); }
+struct TArgs_int8_avg_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int8_avg_accum() { return TGenericExec<TPgDirectFunc<&int8_avg_accum>, false, true, TArgs_int8_avg_accum_Policy>({}); }
+struct TArgs_int8_avg_accum_inv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int8_avg_accum_inv() { return TGenericExec<TPgDirectFunc<&int8_avg_accum_inv>, false, true, TArgs_int8_avg_accum_inv_Policy>({}); }
+struct TArgs_int8_avg_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int8_avg_combine() { return TGenericExec<TPgDirectFunc<&int8_avg_combine>, false, true, TArgs_int8_avg_combine_Policy>({}); }
+struct TArgs_int8_avg_deserialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_int8_avg_deserialize() { return TGenericExec<TPgDirectFunc<&int8_avg_deserialize>, true, true, TArgs_int8_avg_deserialize_Policy>({}); }
+struct TArgs_int8_avg_serialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_int8_avg_serialize() { return TGenericExec<TPgDirectFunc<&int8_avg_serialize>, true, false, TArgs_int8_avg_serialize_Policy>({}); }
+struct TArgs_int8_cash_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_int8_cash() { return TGenericExec<TPgDirectFunc<&int8_cash>, true, true, TArgs_int8_cash_Policy>({}); }
+struct TArgs_int8_mul_cash_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_int8_mul_cash() { return TGenericExec<TPgDirectFunc<&int8_mul_cash>, true, true, TArgs_int8_mul_cash_Policy>({}); }
+struct TArgs_int8_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_int8_numeric() { return TGenericExec<TPgDirectFunc<&int8_numeric>, true, false, TArgs_int8_numeric_Policy>({}); }
+struct TArgs_int8_sum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_int8_sum() { return TGenericExec<TPgDirectFunc<&int8_sum>, false, false, TArgs_int8_sum_Policy>({}); }
+struct TArgs_int8_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_int8_to_char() { return TGenericExec<TPgDirectFunc<&int8_to_char>, true, false, TArgs_int8_to_char_Policy>({}); }
+struct TArgs_inter_lb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_inter_lb() { return TGenericExec<TPgDirectFunc<&inter_lb>, true, true, TArgs_inter_lb_Policy>({}); }
+struct TArgs_inter_sb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_inter_sb() { return TGenericExec<TPgDirectFunc<&inter_sb>, true, true, TArgs_inter_sb_Policy>({}); }
+struct TArgs_inter_sl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_inter_sl() { return TGenericExec<TPgDirectFunc<&inter_sl>, true, true, TArgs_inter_sl_Policy>({}); }
+struct TArgs_interval_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_accum() { return TGenericExec<TPgDirectFunc<&interval_accum>, true, false, TArgs_interval_accum_Policy>({}); }
+struct TArgs_interval_accum_inv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_accum_inv() { return TGenericExec<TPgDirectFunc<&interval_accum_inv>, true, false, TArgs_interval_accum_inv_Policy>({}); }
+struct TArgs_interval_avg_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_avg() { return TGenericExec<TPgDirectFunc<&interval_avg>, true, false, TArgs_interval_avg_Policy>({}); }
+struct TArgs_interval_cmp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_cmp() { return TGenericExec<TPgDirectFunc<&interval_cmp>, true, true, TArgs_interval_cmp_Policy>({}); }
+struct TArgs_interval_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_combine() { return TGenericExec<TPgDirectFunc<&interval_combine>, true, false, TArgs_interval_combine_Policy>({}); }
+struct TArgs_interval_div_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_interval_div() { return TGenericExec<TPgDirectFunc<&interval_div>, true, false, TArgs_interval_div_Policy>({}); }
+struct TArgs_interval_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_eq() { return TGenericExec<TPgDirectFunc<&interval_eq>, true, true, TArgs_interval_eq_Policy>({}); }
+struct TArgs_interval_finite_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_finite() { return TGenericExec<TPgDirectFunc<&interval_finite>, true, true, TArgs_interval_finite_Policy>({}); }
+struct TArgs_interval_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_ge() { return TGenericExec<TPgDirectFunc<&interval_ge>, true, true, TArgs_interval_ge_Policy>({}); }
+struct TArgs_interval_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_gt() { return TGenericExec<TPgDirectFunc<&interval_gt>, true, true, TArgs_interval_gt_Policy>({}); }
+struct TArgs_interval_hash_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_hash() { return TGenericExec<TPgDirectFunc<&interval_hash>, true, true, TArgs_interval_hash_Policy>({}); }
+struct TArgs_interval_hash_extended_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_interval_hash_extended() { return TGenericExec<TPgDirectFunc<&interval_hash_extended>, true, true, TArgs_interval_hash_extended_Policy>({}); }
+struct TArgs_interval_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_interval_in() { return TGenericExec<TPgDirectFunc<&interval_in>, true, false, TArgs_interval_in_Policy>({}); }
+struct TArgs_interval_justify_days_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_justify_days() { return TGenericExec<TPgDirectFunc<&interval_justify_days>, true, false, TArgs_interval_justify_days_Policy>({}); }
+struct TArgs_interval_justify_hours_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_justify_hours() { return TGenericExec<TPgDirectFunc<&interval_justify_hours>, true, false, TArgs_interval_justify_hours_Policy>({}); }
+struct TArgs_interval_justify_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_justify_interval() { return TGenericExec<TPgDirectFunc<&interval_justify_interval>, true, false, TArgs_interval_justify_interval_Policy>({}); }
+struct TArgs_interval_larger_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_larger() { return TGenericExec<TPgDirectFunc<&interval_larger>, true, false, TArgs_interval_larger_Policy>({}); }
+struct TArgs_interval_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_le() { return TGenericExec<TPgDirectFunc<&interval_le>, true, true, TArgs_interval_le_Policy>({}); }
+struct TArgs_interval_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_lt() { return TGenericExec<TPgDirectFunc<&interval_lt>, true, true, TArgs_interval_lt_Policy>({}); }
+struct TArgs_interval_mi_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_mi() { return TGenericExec<TPgDirectFunc<&interval_mi>, true, false, TArgs_interval_mi_Policy>({}); }
+struct TArgs_interval_mul_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_interval_mul() { return TGenericExec<TPgDirectFunc<&interval_mul>, true, false, TArgs_interval_mul_Policy>({}); }
+struct TArgs_interval_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_ne() { return TGenericExec<TPgDirectFunc<&interval_ne>, true, true, TArgs_interval_ne_Policy>({}); }
+struct TArgs_interval_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_out() { return TGenericExec<TPgDirectFunc<&interval_out>, true, false, TArgs_interval_out_Policy>({}); }
+struct TArgs_interval_part_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_part() { return TGenericExec<TPgDirectFunc<&interval_part>, true, true, TArgs_interval_part_Policy>({}); }
+struct TArgs_interval_pl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_pl() { return TGenericExec<TPgDirectFunc<&interval_pl>, true, false, TArgs_interval_pl_Policy>({}); }
+struct TArgs_interval_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+TExecFunc arrow_interval_recv() { return TGenericExec<TPgDirectFunc<&interval_recv>, true, false, TArgs_interval_recv_Policy>({}); }
+struct TArgs_interval_scale_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_interval_scale() { return TGenericExec<TPgDirectFunc<&interval_scale>, true, false, TArgs_interval_scale_Policy>({}); }
+struct TArgs_interval_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_send() { return TGenericExec<TPgDirectFunc<&interval_send>, true, false, TArgs_interval_send_Policy>({}); }
+struct TArgs_interval_smaller_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_smaller() { return TGenericExec<TPgDirectFunc<&interval_smaller>, true, false, TArgs_interval_smaller_Policy>({}); }
+struct TArgs_interval_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_interval_support() { return TGenericExec<TPgDirectFunc<&interval_support>, true, true, TArgs_interval_support_Policy>({}); }
+struct TArgs_interval_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_to_char() { return TGenericExec<TPgDirectFunc<&interval_to_char>, true, false, TArgs_interval_to_char_Policy>({}); }
+struct TArgs_interval_trunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_interval_trunc() { return TGenericExec<TPgDirectFunc<&interval_trunc>, true, false, TArgs_interval_trunc_Policy>({}); }
+struct TArgs_interval_um_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_interval_um() { return TGenericExec<TPgDirectFunc<&interval_um>, true, false, TArgs_interval_um_Policy>({}); }
+struct TArgs_intervaltypmodin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_intervaltypmodin() { return TGenericExec<TPgDirectFunc<&intervaltypmodin>, true, true, TArgs_intervaltypmodin_Policy>({}); }
+struct TArgs_intervaltypmodout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_intervaltypmodout() { return TGenericExec<TPgDirectFunc<&intervaltypmodout>, true, false, TArgs_intervaltypmodout_Policy>({}); }
+struct TArgs_likejoinsel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
 };
-TExecFunc arrow_networkjoinsel() { return &GenericExec<TPgDirectFunc<&networkjoinsel>, true, true, TArgs_networkjoinsel_Policy>; }
-struct TArgs_networksel_Policy {
+TExecFunc arrow_likejoinsel() { return TGenericExec<TPgDirectFunc<&likejoinsel>, true, true, TArgs_likejoinsel_Policy>({}); }
+struct TArgs_likesel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_networksel() { return &GenericExec<TPgDirectFunc<&networksel>, true, true, TArgs_networksel_Policy>; }
-struct TArgs_numrange_subdiff_Policy {
+TExecFunc arrow_likesel() { return TGenericExec<TPgDirectFunc<&likesel>, true, true, TArgs_likesel_Policy>({}); }
+struct TArgs_line_construct_pp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_numrange_subdiff() { return &GenericExec<TPgDirectFunc<&numrange_subdiff>, true, true, TArgs_numrange_subdiff_Policy>; }
-struct TArgs_overlaps_time_Policy {
+TExecFunc arrow_line_construct_pp() { return TGenericExec<TPgDirectFunc<&line_construct_pp>, true, false, TArgs_line_construct_pp_Policy>({}); }
+struct TArgs_line_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_line_distance() { return TGenericExec<TPgDirectFunc<&line_distance>, true, true, TArgs_line_distance_Policy>({}); }
+struct TArgs_line_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_line_eq() { return TGenericExec<TPgDirectFunc<&line_eq>, true, true, TArgs_line_eq_Policy>({}); }
+struct TArgs_line_horizontal_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_line_horizontal() { return TGenericExec<TPgDirectFunc<&line_horizontal>, true, true, TArgs_line_horizontal_Policy>({}); }
+struct TArgs_line_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_line_in() { return TGenericExec<TPgDirectFunc<&line_in>, true, false, TArgs_line_in_Policy>({}); }
+struct TArgs_line_interpt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_line_interpt() { return TGenericExec<TPgDirectFunc<&line_interpt>, true, false, TArgs_line_interpt_Policy>({}); }
+struct TArgs_line_intersect_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_line_intersect() { return TGenericExec<TPgDirectFunc<&line_intersect>, true, true, TArgs_line_intersect_Policy>({}); }
+struct TArgs_line_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_line_out() { return TGenericExec<TPgDirectFunc<&line_out>, true, false, TArgs_line_out_Policy>({}); }
+struct TArgs_line_parallel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_line_parallel() { return TGenericExec<TPgDirectFunc<&line_parallel>, true, true, TArgs_line_parallel_Policy>({}); }
+struct TArgs_line_perp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_line_perp() { return TGenericExec<TPgDirectFunc<&line_perp>, true, true, TArgs_line_perp_Policy>({}); }
+struct TArgs_line_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_line_recv() { return TGenericExec<TPgDirectFunc<&line_recv>, true, false, TArgs_line_recv_Policy>({}); }
+struct TArgs_line_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_line_send() { return TGenericExec<TPgDirectFunc<&line_send>, true, false, TArgs_line_send_Policy>({}); }
+struct TArgs_line_vertical_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_line_vertical() { return TGenericExec<TPgDirectFunc<&line_vertical>, true, true, TArgs_line_vertical_Policy>({}); }
+struct TArgs_lseg_center_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_center() { return TGenericExec<TPgDirectFunc<&lseg_center>, true, false, TArgs_lseg_center_Policy>({}); }
+struct TArgs_lseg_construct_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_construct() { return TGenericExec<TPgDirectFunc<&lseg_construct>, true, false, TArgs_lseg_construct_Policy>({}); }
+struct TArgs_lseg_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_distance() { return TGenericExec<TPgDirectFunc<&lseg_distance>, true, true, TArgs_lseg_distance_Policy>({}); }
+struct TArgs_lseg_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_eq() { return TGenericExec<TPgDirectFunc<&lseg_eq>, true, true, TArgs_lseg_eq_Policy>({}); }
+struct TArgs_lseg_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_ge() { return TGenericExec<TPgDirectFunc<&lseg_ge>, true, true, TArgs_lseg_ge_Policy>({}); }
+struct TArgs_lseg_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_gt() { return TGenericExec<TPgDirectFunc<&lseg_gt>, true, true, TArgs_lseg_gt_Policy>({}); }
+struct TArgs_lseg_horizontal_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_horizontal() { return TGenericExec<TPgDirectFunc<&lseg_horizontal>, true, true, TArgs_lseg_horizontal_Policy>({}); }
+struct TArgs_lseg_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_in() { return TGenericExec<TPgDirectFunc<&lseg_in>, true, false, TArgs_lseg_in_Policy>({}); }
+struct TArgs_lseg_interpt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_interpt() { return TGenericExec<TPgDirectFunc<&lseg_interpt>, true, false, TArgs_lseg_interpt_Policy>({}); }
+struct TArgs_lseg_intersect_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_intersect() { return TGenericExec<TPgDirectFunc<&lseg_intersect>, true, true, TArgs_lseg_intersect_Policy>({}); }
+struct TArgs_lseg_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_le() { return TGenericExec<TPgDirectFunc<&lseg_le>, true, true, TArgs_lseg_le_Policy>({}); }
+struct TArgs_lseg_length_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_length() { return TGenericExec<TPgDirectFunc<&lseg_length>, true, true, TArgs_lseg_length_Policy>({}); }
+struct TArgs_lseg_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_lt() { return TGenericExec<TPgDirectFunc<&lseg_lt>, true, true, TArgs_lseg_lt_Policy>({}); }
+struct TArgs_lseg_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_ne() { return TGenericExec<TPgDirectFunc<&lseg_ne>, true, true, TArgs_lseg_ne_Policy>({}); }
+struct TArgs_lseg_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_out() { return TGenericExec<TPgDirectFunc<&lseg_out>, true, false, TArgs_lseg_out_Policy>({}); }
+struct TArgs_lseg_parallel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_parallel() { return TGenericExec<TPgDirectFunc<&lseg_parallel>, true, true, TArgs_lseg_parallel_Policy>({}); }
+struct TArgs_lseg_perp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_lseg_perp() { return TGenericExec<TPgDirectFunc<&lseg_perp>, true, true, TArgs_lseg_perp_Policy>({}); }
+struct TArgs_lseg_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_lseg_recv() { return TGenericExec<TPgDirectFunc<&lseg_recv>, true, false, TArgs_lseg_recv_Policy>({}); }
+struct TArgs_lseg_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_send() { return TGenericExec<TPgDirectFunc<&lseg_send>, true, false, TArgs_lseg_send_Policy>({}); }
+struct TArgs_lseg_vertical_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_lseg_vertical() { return TGenericExec<TPgDirectFunc<&lseg_vertical>, true, true, TArgs_lseg_vertical_Policy>({}); }
+struct TArgs_make_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 7> IsFixedArg = {true,true,true,true,true,true,true};
+};
+TExecFunc arrow_make_interval() { return TGenericExec<TPgDirectFunc<&make_interval>, true, false, TArgs_make_interval_Policy>({}); }
+struct TArgs_make_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 6> IsFixedArg = {true,true,true,true,true,true};
+};
+TExecFunc arrow_make_timestamp() { return TGenericExec<TPgDirectFunc<&make_timestamp>, true, true, TArgs_make_timestamp_Policy>({}); }
+struct TArgs_make_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 6> IsFixedArg = {true,true,true,true,true,true};
+};
+TExecFunc arrow_make_timestamptz() { return TGenericExec<TPgDirectFunc<&make_timestamptz>, true, true, TArgs_make_timestamptz_Policy>({}); }
+struct TArgs_make_timestamptz_at_timezone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 7> IsFixedArg = {true,true,true,true,true,true,false};
+};
+TExecFunc arrow_make_timestamptz_at_timezone() { return TGenericExec<TPgDirectFunc<&make_timestamptz_at_timezone>, true, true, TArgs_make_timestamptz_at_timezone_Policy>({}); }
+struct TArgs_md5_bytea_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_md5_bytea() { return TGenericExec<TPgDirectFunc<&md5_bytea>, true, false, TArgs_md5_bytea_Policy>({}); }
+struct TArgs_md5_text_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_md5_text() { return TGenericExec<TPgDirectFunc<&md5_text>, true, false, TArgs_md5_text_Policy>({}); }
+struct TArgs_mul_d_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_mul_d_interval() { return TGenericExec<TPgDirectFunc<&mul_d_interval>, true, false, TArgs_mul_d_interval_Policy>({}); }
+struct TArgs_nlikejoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_nlikejoinsel() { return TGenericExec<TPgDirectFunc<&nlikejoinsel>, true, true, TArgs_nlikejoinsel_Policy>({}); }
+struct TArgs_nlikesel_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_overlaps_time() { return &GenericExec<TPgDirectFunc<&overlaps_time>, false, true, TArgs_overlaps_time_Policy>; }
-struct TArgs_overlaps_timetz_Policy {
+TExecFunc arrow_nlikesel() { return TGenericExec<TPgDirectFunc<&nlikesel>, true, true, TArgs_nlikesel_Policy>({}); }
+struct TArgs_now_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,false};
+    static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_overlaps_timetz() { return &GenericExec<TPgDirectFunc<&overlaps_timetz>, false, true, TArgs_overlaps_timetz_Policy>; }
+TExecFunc arrow_now() { return TGenericExec<TPgDirectFunc<&now>, true, true, TArgs_now_Policy>({}); }
+struct TArgs_numeric_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_numeric() { return TGenericExec<TPgDirectFunc<&numeric>, true, false, TArgs_numeric_Policy>({}); }
+struct TArgs_numeric_abs_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_abs() { return TGenericExec<TPgDirectFunc<&numeric_abs>, true, false, TArgs_numeric_abs_Policy>({}); }
+struct TArgs_numeric_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_numeric_accum() { return TGenericExec<TPgDirectFunc<&numeric_accum>, false, true, TArgs_numeric_accum_Policy>({}); }
+struct TArgs_numeric_accum_inv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_numeric_accum_inv() { return TGenericExec<TPgDirectFunc<&numeric_accum_inv>, false, true, TArgs_numeric_accum_inv_Policy>({}); }
+struct TArgs_numeric_add_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_add() { return TGenericExec<TPgDirectFunc<&numeric_add>, true, false, TArgs_numeric_add_Policy>({}); }
+struct TArgs_numeric_avg_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_avg() { return TGenericExec<TPgDirectFunc<&numeric_avg>, false, false, TArgs_numeric_avg_Policy>({}); }
+struct TArgs_numeric_avg_accum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_numeric_avg_accum() { return TGenericExec<TPgDirectFunc<&numeric_avg_accum>, false, true, TArgs_numeric_avg_accum_Policy>({}); }
+struct TArgs_numeric_avg_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_numeric_avg_combine() { return TGenericExec<TPgDirectFunc<&numeric_avg_combine>, false, true, TArgs_numeric_avg_combine_Policy>({}); }
+struct TArgs_numeric_avg_deserialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_numeric_avg_deserialize() { return TGenericExec<TPgDirectFunc<&numeric_avg_deserialize>, true, true, TArgs_numeric_avg_deserialize_Policy>({}); }
+struct TArgs_numeric_avg_serialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_avg_serialize() { return TGenericExec<TPgDirectFunc<&numeric_avg_serialize>, true, false, TArgs_numeric_avg_serialize_Policy>({}); }
+struct TArgs_numeric_cash_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_cash() { return TGenericExec<TPgDirectFunc<&numeric_cash>, true, true, TArgs_numeric_cash_Policy>({}); }
+struct TArgs_numeric_ceil_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_ceil() { return TGenericExec<TPgDirectFunc<&numeric_ceil>, true, false, TArgs_numeric_ceil_Policy>({}); }
+struct TArgs_numeric_cmp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_cmp() { return TGenericExec<TPgDirectFunc<&numeric_cmp>, true, true, TArgs_numeric_cmp_Policy>({}); }
+struct TArgs_numeric_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_numeric_combine() { return TGenericExec<TPgDirectFunc<&numeric_combine>, false, true, TArgs_numeric_combine_Policy>({}); }
+struct TArgs_numeric_deserialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_numeric_deserialize() { return TGenericExec<TPgDirectFunc<&numeric_deserialize>, true, true, TArgs_numeric_deserialize_Policy>({}); }
+struct TArgs_numeric_div_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_div() { return TGenericExec<TPgDirectFunc<&numeric_div>, true, false, TArgs_numeric_div_Policy>({}); }
+struct TArgs_numeric_div_trunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_div_trunc() { return TGenericExec<TPgDirectFunc<&numeric_div_trunc>, true, false, TArgs_numeric_div_trunc_Policy>({}); }
+struct TArgs_numeric_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_eq() { return TGenericExec<TPgDirectFunc<&numeric_eq>, true, true, TArgs_numeric_eq_Policy>({}); }
+struct TArgs_numeric_exp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_exp() { return TGenericExec<TPgDirectFunc<&numeric_exp>, true, false, TArgs_numeric_exp_Policy>({}); }
+struct TArgs_numeric_fac_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_fac() { return TGenericExec<TPgDirectFunc<&numeric_fac>, true, false, TArgs_numeric_fac_Policy>({}); }
+struct TArgs_numeric_float4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_float4() { return TGenericExec<TPgDirectFunc<&numeric_float4>, true, true, TArgs_numeric_float4_Policy>({}); }
+struct TArgs_numeric_float8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_float8() { return TGenericExec<TPgDirectFunc<&numeric_float8>, true, true, TArgs_numeric_float8_Policy>({}); }
+struct TArgs_numeric_floor_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_floor() { return TGenericExec<TPgDirectFunc<&numeric_floor>, true, false, TArgs_numeric_floor_Policy>({}); }
+struct TArgs_numeric_gcd_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_gcd() { return TGenericExec<TPgDirectFunc<&numeric_gcd>, true, false, TArgs_numeric_gcd_Policy>({}); }
+struct TArgs_numeric_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_ge() { return TGenericExec<TPgDirectFunc<&numeric_ge>, true, true, TArgs_numeric_ge_Policy>({}); }
+struct TArgs_numeric_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_gt() { return TGenericExec<TPgDirectFunc<&numeric_gt>, true, true, TArgs_numeric_gt_Policy>({}); }
+struct TArgs_numeric_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_numeric_in() { return TGenericExec<TPgDirectFunc<&numeric_in>, true, false, TArgs_numeric_in_Policy>({}); }
+struct TArgs_numeric_inc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_inc() { return TGenericExec<TPgDirectFunc<&numeric_inc>, true, false, TArgs_numeric_inc_Policy>({}); }
+struct TArgs_numeric_int2_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_int2() { return TGenericExec<TPgDirectFunc<&numeric_int2>, true, true, TArgs_numeric_int2_Policy>({}); }
+struct TArgs_numeric_int4_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_int4() { return TGenericExec<TPgDirectFunc<&numeric_int4>, true, true, TArgs_numeric_int4_Policy>({}); }
+struct TArgs_numeric_int8_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_int8() { return TGenericExec<TPgDirectFunc<&numeric_int8>, true, true, TArgs_numeric_int8_Policy>({}); }
+struct TArgs_numeric_larger_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_larger() { return TGenericExec<TPgDirectFunc<&numeric_larger>, true, false, TArgs_numeric_larger_Policy>({}); }
+struct TArgs_numeric_lcm_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_lcm() { return TGenericExec<TPgDirectFunc<&numeric_lcm>, true, false, TArgs_numeric_lcm_Policy>({}); }
+struct TArgs_numeric_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_le() { return TGenericExec<TPgDirectFunc<&numeric_le>, true, true, TArgs_numeric_le_Policy>({}); }
+struct TArgs_numeric_ln_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_ln() { return TGenericExec<TPgDirectFunc<&numeric_ln>, true, false, TArgs_numeric_ln_Policy>({}); }
+struct TArgs_numeric_log_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_log() { return TGenericExec<TPgDirectFunc<&numeric_log>, true, false, TArgs_numeric_log_Policy>({}); }
+struct TArgs_numeric_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_lt() { return TGenericExec<TPgDirectFunc<&numeric_lt>, true, true, TArgs_numeric_lt_Policy>({}); }
+struct TArgs_numeric_min_scale_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_min_scale() { return TGenericExec<TPgDirectFunc<&numeric_min_scale>, true, true, TArgs_numeric_min_scale_Policy>({}); }
+struct TArgs_numeric_mod_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_mod() { return TGenericExec<TPgDirectFunc<&numeric_mod>, true, false, TArgs_numeric_mod_Policy>({}); }
+struct TArgs_numeric_mul_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_mul() { return TGenericExec<TPgDirectFunc<&numeric_mul>, true, false, TArgs_numeric_mul_Policy>({}); }
+struct TArgs_numeric_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_ne() { return TGenericExec<TPgDirectFunc<&numeric_ne>, true, true, TArgs_numeric_ne_Policy>({}); }
+struct TArgs_numeric_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_out() { return TGenericExec<TPgDirectFunc<&numeric_out>, true, false, TArgs_numeric_out_Policy>({}); }
+struct TArgs_numeric_pg_lsn_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_pg_lsn() { return TGenericExec<TPgDirectFunc<&numeric_pg_lsn>, true, true, TArgs_numeric_pg_lsn_Policy>({}); }
+struct TArgs_numeric_poly_avg_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_avg() { return TGenericExec<TPgDirectFunc<&numeric_poly_avg>, false, false, TArgs_numeric_poly_avg_Policy>({}); }
+struct TArgs_numeric_poly_combine_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_numeric_poly_combine() { return TGenericExec<TPgDirectFunc<&numeric_poly_combine>, false, true, TArgs_numeric_poly_combine_Policy>({}); }
+struct TArgs_numeric_poly_deserialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_numeric_poly_deserialize() { return TGenericExec<TPgDirectFunc<&numeric_poly_deserialize>, true, true, TArgs_numeric_poly_deserialize_Policy>({}); }
+struct TArgs_numeric_poly_serialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_serialize() { return TGenericExec<TPgDirectFunc<&numeric_poly_serialize>, true, false, TArgs_numeric_poly_serialize_Policy>({}); }
+struct TArgs_numeric_poly_stddev_pop_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_stddev_pop() { return TGenericExec<TPgDirectFunc<&numeric_poly_stddev_pop>, false, false, TArgs_numeric_poly_stddev_pop_Policy>({}); }
+struct TArgs_numeric_poly_stddev_samp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_stddev_samp() { return TGenericExec<TPgDirectFunc<&numeric_poly_stddev_samp>, false, false, TArgs_numeric_poly_stddev_samp_Policy>({}); }
+struct TArgs_numeric_poly_sum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_sum() { return TGenericExec<TPgDirectFunc<&numeric_poly_sum>, false, false, TArgs_numeric_poly_sum_Policy>({}); }
+struct TArgs_numeric_poly_var_pop_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_var_pop() { return TGenericExec<TPgDirectFunc<&numeric_poly_var_pop>, false, false, TArgs_numeric_poly_var_pop_Policy>({}); }
+struct TArgs_numeric_poly_var_samp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_poly_var_samp() { return TGenericExec<TPgDirectFunc<&numeric_poly_var_samp>, false, false, TArgs_numeric_poly_var_samp_Policy>({}); }
+struct TArgs_numeric_power_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_power() { return TGenericExec<TPgDirectFunc<&numeric_power>, true, false, TArgs_numeric_power_Policy>({}); }
+struct TArgs_numeric_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+TExecFunc arrow_numeric_recv() { return TGenericExec<TPgDirectFunc<&numeric_recv>, true, false, TArgs_numeric_recv_Policy>({}); }
+struct TArgs_numeric_round_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_numeric_round() { return TGenericExec<TPgDirectFunc<&numeric_round>, true, false, TArgs_numeric_round_Policy>({}); }
+struct TArgs_numeric_scale_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_scale() { return TGenericExec<TPgDirectFunc<&numeric_scale>, true, true, TArgs_numeric_scale_Policy>({}); }
+struct TArgs_numeric_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_send() { return TGenericExec<TPgDirectFunc<&numeric_send>, true, false, TArgs_numeric_send_Policy>({}); }
+struct TArgs_numeric_serialize_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_serialize() { return TGenericExec<TPgDirectFunc<&numeric_serialize>, true, false, TArgs_numeric_serialize_Policy>({}); }
+struct TArgs_numeric_sign_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_sign() { return TGenericExec<TPgDirectFunc<&numeric_sign>, true, false, TArgs_numeric_sign_Policy>({}); }
+struct TArgs_numeric_smaller_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_smaller() { return TGenericExec<TPgDirectFunc<&numeric_smaller>, true, false, TArgs_numeric_smaller_Policy>({}); }
+struct TArgs_numeric_sortsupport_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_sortsupport() { return TGenericExec<TPgDirectFunc<&numeric_sortsupport>, true, true, TArgs_numeric_sortsupport_Policy>({}); }
+struct TArgs_numeric_sqrt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_sqrt() { return TGenericExec<TPgDirectFunc<&numeric_sqrt>, true, false, TArgs_numeric_sqrt_Policy>({}); }
+struct TArgs_numeric_stddev_pop_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_stddev_pop() { return TGenericExec<TPgDirectFunc<&numeric_stddev_pop>, false, false, TArgs_numeric_stddev_pop_Policy>({}); }
+struct TArgs_numeric_stddev_samp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_stddev_samp() { return TGenericExec<TPgDirectFunc<&numeric_stddev_samp>, false, false, TArgs_numeric_stddev_samp_Policy>({}); }
+struct TArgs_numeric_sub_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_sub() { return TGenericExec<TPgDirectFunc<&numeric_sub>, true, false, TArgs_numeric_sub_Policy>({}); }
+struct TArgs_numeric_sum_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_sum() { return TGenericExec<TPgDirectFunc<&numeric_sum>, false, false, TArgs_numeric_sum_Policy>({}); }
+struct TArgs_numeric_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_support() { return TGenericExec<TPgDirectFunc<&numeric_support>, true, true, TArgs_numeric_support_Policy>({}); }
+struct TArgs_numeric_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_to_char() { return TGenericExec<TPgDirectFunc<&numeric_to_char>, true, false, TArgs_numeric_to_char_Policy>({}); }
+struct TArgs_numeric_to_number_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_numeric_to_number() { return TGenericExec<TPgDirectFunc<&numeric_to_number>, true, false, TArgs_numeric_to_number_Policy>({}); }
+struct TArgs_numeric_trim_scale_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_trim_scale() { return TGenericExec<TPgDirectFunc<&numeric_trim_scale>, true, false, TArgs_numeric_trim_scale_Policy>({}); }
+struct TArgs_numeric_trunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_numeric_trunc() { return TGenericExec<TPgDirectFunc<&numeric_trunc>, true, false, TArgs_numeric_trunc_Policy>({}); }
+struct TArgs_numeric_uminus_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_uminus() { return TGenericExec<TPgDirectFunc<&numeric_uminus>, true, false, TArgs_numeric_uminus_Policy>({}); }
+struct TArgs_numeric_uplus_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numeric_uplus() { return TGenericExec<TPgDirectFunc<&numeric_uplus>, true, false, TArgs_numeric_uplus_Policy>({}); }
+struct TArgs_numeric_var_pop_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_var_pop() { return TGenericExec<TPgDirectFunc<&numeric_var_pop>, false, false, TArgs_numeric_var_pop_Policy>({}); }
+struct TArgs_numeric_var_samp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numeric_var_samp() { return TGenericExec<TPgDirectFunc<&numeric_var_samp>, false, false, TArgs_numeric_var_samp_Policy>({}); }
+struct TArgs_numerictypmodin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_numerictypmodin() { return TGenericExec<TPgDirectFunc<&numerictypmodin>, true, true, TArgs_numerictypmodin_Policy>({}); }
+struct TArgs_numerictypmodout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_numerictypmodout() { return TGenericExec<TPgDirectFunc<&numerictypmodout>, true, false, TArgs_numerictypmodout_Policy>({}); }
+struct TArgs_on_pb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_on_pb() { return TGenericExec<TPgDirectFunc<&on_pb>, true, true, TArgs_on_pb_Policy>({}); }
+struct TArgs_on_pl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_on_pl() { return TGenericExec<TPgDirectFunc<&on_pl>, true, true, TArgs_on_pl_Policy>({}); }
+struct TArgs_on_ppath_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_on_ppath() { return TGenericExec<TPgDirectFunc<&on_ppath>, true, true, TArgs_on_ppath_Policy>({}); }
+struct TArgs_on_ps_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_on_ps() { return TGenericExec<TPgDirectFunc<&on_ps>, true, true, TArgs_on_ps_Policy>({}); }
+struct TArgs_on_sb_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_on_sb() { return TGenericExec<TPgDirectFunc<&on_sb>, true, true, TArgs_on_sb_Policy>({}); }
+struct TArgs_on_sl_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_on_sl() { return TGenericExec<TPgDirectFunc<&on_sl>, true, true, TArgs_on_sl_Policy>({}); }
+struct TArgs_overlaps_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_overlaps_timestamp() { return TGenericExec<TPgDirectFunc<&overlaps_timestamp>, false, true, TArgs_overlaps_timestamp_Policy>({}); }
 struct TArgs_parse_ident_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_parse_ident() { return &GenericExec<TPgDirectFunc<&parse_ident>, true, false, TArgs_parse_ident_Policy>; }
+TExecFunc arrow_parse_ident() { return TGenericExec<TPgDirectFunc<&parse_ident>, true, false, TArgs_parse_ident_Policy>({}); }
+struct TArgs_path_add_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_add() { return TGenericExec<TPgDirectFunc<&path_add>, true, false, TArgs_path_add_Policy>({}); }
+struct TArgs_path_add_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_add_pt() { return TGenericExec<TPgDirectFunc<&path_add_pt>, true, false, TArgs_path_add_pt_Policy>({}); }
+struct TArgs_path_area_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_area() { return TGenericExec<TPgDirectFunc<&path_area>, true, true, TArgs_path_area_Policy>({}); }
+struct TArgs_path_center_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_center() { return TGenericExec<TPgDirectFunc<&path_center>, true, false, TArgs_path_center_Policy>({}); }
+struct TArgs_path_close_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_close() { return TGenericExec<TPgDirectFunc<&path_close>, true, false, TArgs_path_close_Policy>({}); }
+struct TArgs_path_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_distance() { return TGenericExec<TPgDirectFunc<&path_distance>, true, true, TArgs_path_distance_Policy>({}); }
+struct TArgs_path_div_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_div_pt() { return TGenericExec<TPgDirectFunc<&path_div_pt>, true, false, TArgs_path_div_pt_Policy>({}); }
+struct TArgs_path_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_in() { return TGenericExec<TPgDirectFunc<&path_in>, true, false, TArgs_path_in_Policy>({}); }
+struct TArgs_path_inter_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_inter() { return TGenericExec<TPgDirectFunc<&path_inter>, true, true, TArgs_path_inter_Policy>({}); }
+struct TArgs_path_isclosed_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_isclosed() { return TGenericExec<TPgDirectFunc<&path_isclosed>, true, true, TArgs_path_isclosed_Policy>({}); }
+struct TArgs_path_isopen_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_isopen() { return TGenericExec<TPgDirectFunc<&path_isopen>, true, true, TArgs_path_isopen_Policy>({}); }
+struct TArgs_path_length_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_length() { return TGenericExec<TPgDirectFunc<&path_length>, true, true, TArgs_path_length_Policy>({}); }
+struct TArgs_path_mul_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_mul_pt() { return TGenericExec<TPgDirectFunc<&path_mul_pt>, true, false, TArgs_path_mul_pt_Policy>({}); }
+struct TArgs_path_n_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_n_eq() { return TGenericExec<TPgDirectFunc<&path_n_eq>, true, true, TArgs_path_n_eq_Policy>({}); }
+struct TArgs_path_n_ge_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_n_ge() { return TGenericExec<TPgDirectFunc<&path_n_ge>, true, true, TArgs_path_n_ge_Policy>({}); }
+struct TArgs_path_n_gt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_n_gt() { return TGenericExec<TPgDirectFunc<&path_n_gt>, true, true, TArgs_path_n_gt_Policy>({}); }
+struct TArgs_path_n_le_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_n_le() { return TGenericExec<TPgDirectFunc<&path_n_le>, true, true, TArgs_path_n_le_Policy>({}); }
+struct TArgs_path_n_lt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_n_lt() { return TGenericExec<TPgDirectFunc<&path_n_lt>, true, true, TArgs_path_n_lt_Policy>({}); }
+struct TArgs_path_npoints_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_npoints() { return TGenericExec<TPgDirectFunc<&path_npoints>, true, true, TArgs_path_npoints_Policy>({}); }
+struct TArgs_path_open_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_open() { return TGenericExec<TPgDirectFunc<&path_open>, true, false, TArgs_path_open_Policy>({}); }
+struct TArgs_path_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_out() { return TGenericExec<TPgDirectFunc<&path_out>, true, false, TArgs_path_out_Policy>({}); }
+struct TArgs_path_poly_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_poly() { return TGenericExec<TPgDirectFunc<&path_poly>, true, false, TArgs_path_poly_Policy>({}); }
+struct TArgs_path_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_path_recv() { return TGenericExec<TPgDirectFunc<&path_recv>, true, false, TArgs_path_recv_Policy>({}); }
+struct TArgs_path_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_path_send() { return TGenericExec<TPgDirectFunc<&path_send>, true, false, TArgs_path_send_Policy>({}); }
+struct TArgs_path_sub_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_path_sub_pt() { return TGenericExec<TPgDirectFunc<&path_sub_pt>, true, false, TArgs_path_sub_pt_Policy>({}); }
 struct TArgs_pg_collation_for_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_collation_for() { return &GenericExec<TPgDirectFunc<&pg_collation_for>, false, false, TArgs_pg_collation_for_Policy>; }
-struct TArgs_pg_collation_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_collation_is_visible() { return &GenericExec<TPgDirectFunc<&pg_collation_is_visible>, true, true, TArgs_pg_collation_is_visible_Policy>; }
+TExecFunc arrow_pg_collation_for() { return TGenericExec<TPgDirectFunc<&pg_collation_for>, false, false, TArgs_pg_collation_for_Policy>({}); }
 struct TArgs_pg_column_is_updatable_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-TExecFunc arrow_pg_column_is_updatable() { return &GenericExec<TPgDirectFunc<&pg_column_is_updatable>, true, true, TArgs_pg_column_is_updatable_Policy>; }
-struct TArgs_pg_conversion_is_visible_Policy {
+TExecFunc arrow_pg_column_is_updatable() { return TGenericExec<TPgDirectFunc<&pg_column_is_updatable>, true, true, TArgs_pg_column_is_updatable_Policy>({}); }
+struct TArgs_pg_conf_load_time_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_pg_conversion_is_visible() { return &GenericExec<TPgDirectFunc<&pg_conversion_is_visible>, true, true, TArgs_pg_conversion_is_visible_Policy>; }
+TExecFunc arrow_pg_conf_load_time() { return TGenericExec<TPgDirectFunc<&pg_conf_load_time>, true, true, TArgs_pg_conf_load_time_Policy>({}); }
+struct TArgs_pg_copy_logical_replication_slot_a_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,false};
+};
+TExecFunc arrow_pg_copy_logical_replication_slot_a() { return TGenericExec<TPgDirectFunc<&pg_copy_logical_replication_slot_a>, true, false, TArgs_pg_copy_logical_replication_slot_a_Policy>({}); }
+struct TArgs_pg_copy_logical_replication_slot_b_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
+};
+TExecFunc arrow_pg_copy_logical_replication_slot_b() { return TGenericExec<TPgDirectFunc<&pg_copy_logical_replication_slot_b>, true, false, TArgs_pg_copy_logical_replication_slot_b_Policy>({}); }
+struct TArgs_pg_copy_logical_replication_slot_c_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_pg_copy_logical_replication_slot_c() { return TGenericExec<TPgDirectFunc<&pg_copy_logical_replication_slot_c>, true, false, TArgs_pg_copy_logical_replication_slot_c_Policy>({}); }
+struct TArgs_pg_copy_physical_replication_slot_a_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,true};
+};
+TExecFunc arrow_pg_copy_physical_replication_slot_a() { return TGenericExec<TPgDirectFunc<&pg_copy_physical_replication_slot_a>, true, false, TArgs_pg_copy_physical_replication_slot_a_Policy>({}); }
+struct TArgs_pg_copy_physical_replication_slot_b_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_pg_copy_physical_replication_slot_b() { return TGenericExec<TPgDirectFunc<&pg_copy_physical_replication_slot_b>, true, false, TArgs_pg_copy_physical_replication_slot_b_Policy>({}); }
+struct TArgs_pg_create_logical_replication_slot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,true,true};
+};
+TExecFunc arrow_pg_create_logical_replication_slot() { return TGenericExec<TPgDirectFunc<&pg_create_logical_replication_slot>, true, false, TArgs_pg_create_logical_replication_slot_Policy>({}); }
+struct TArgs_pg_create_physical_replication_slot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_pg_create_physical_replication_slot() { return TGenericExec<TPgDirectFunc<&pg_create_physical_replication_slot>, true, false, TArgs_pg_create_physical_replication_slot_Policy>({}); }
 struct TArgs_pg_current_logfile_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_pg_current_logfile() { return &GenericExec<TPgDirectFunc<&pg_current_logfile>, false, false, TArgs_pg_current_logfile_Policy>; }
+TExecFunc arrow_pg_current_logfile() { return TGenericExec<TPgDirectFunc<&pg_current_logfile>, false, false, TArgs_pg_current_logfile_Policy>({}); }
 struct TArgs_pg_current_logfile_1arg_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_pg_current_logfile_1arg() { return &GenericExec<TPgDirectFunc<&pg_current_logfile_1arg>, false, false, TArgs_pg_current_logfile_1arg_Policy>; }
-struct TArgs_pg_dependencies_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_dependencies_in() { return &GenericExec<TPgDirectFunc<&pg_dependencies_in>, true, false, TArgs_pg_dependencies_in_Policy>; }
-struct TArgs_pg_dependencies_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_dependencies_out() { return &GenericExec<TPgDirectFunc<&pg_dependencies_out>, true, false, TArgs_pg_dependencies_out_Policy>; }
-struct TArgs_pg_dependencies_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_dependencies_recv() { return &GenericExec<TPgDirectFunc<&pg_dependencies_recv>, true, false, TArgs_pg_dependencies_recv_Policy>; }
-struct TArgs_pg_dependencies_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_dependencies_send() { return &GenericExec<TPgDirectFunc<&pg_dependencies_send>, true, false, TArgs_pg_dependencies_send_Policy>; }
-struct TArgs_pg_event_trigger_table_rewrite_oid_Policy {
+TExecFunc arrow_pg_current_logfile_1arg() { return TGenericExec<TPgDirectFunc<&pg_current_logfile_1arg>, false, false, TArgs_pg_current_logfile_1arg_Policy>({}); }
+struct TArgs_pg_current_snapshot_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_pg_event_trigger_table_rewrite_oid() { return &GenericExec<TPgDirectFunc<&pg_event_trigger_table_rewrite_oid>, true, true, TArgs_pg_event_trigger_table_rewrite_oid_Policy>; }
-struct TArgs_pg_event_trigger_table_rewrite_reason_Policy {
+TExecFunc arrow_pg_current_snapshot() { return TGenericExec<TPgDirectFunc<&pg_current_snapshot>, true, false, TArgs_pg_current_snapshot_Policy>({}); }
+struct TArgs_pg_current_xact_id_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_pg_event_trigger_table_rewrite_reason() { return &GenericExec<TPgDirectFunc<&pg_event_trigger_table_rewrite_reason>, true, true, TArgs_pg_event_trigger_table_rewrite_reason_Policy>; }
-struct TArgs_pg_export_snapshot_Policy {
+TExecFunc arrow_pg_current_xact_id() { return TGenericExec<TPgDirectFunc<&pg_current_xact_id>, true, true, TArgs_pg_current_xact_id_Policy>({}); }
+struct TArgs_pg_current_xact_id_if_assigned_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_pg_export_snapshot() { return &GenericExec<TPgDirectFunc<&pg_export_snapshot>, true, false, TArgs_pg_export_snapshot_Policy>; }
-struct TArgs_pg_function_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_function_is_visible() { return &GenericExec<TPgDirectFunc<&pg_function_is_visible>, true, true, TArgs_pg_function_is_visible_Policy>; }
-struct TArgs_pg_get_constraintdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_constraintdef() { return &GenericExec<TPgDirectFunc<&pg_get_constraintdef>, true, false, TArgs_pg_get_constraintdef_Policy>; }
-struct TArgs_pg_get_constraintdef_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_pg_get_constraintdef_ext() { return &GenericExec<TPgDirectFunc<&pg_get_constraintdef_ext>, true, false, TArgs_pg_get_constraintdef_ext_Policy>; }
-struct TArgs_pg_get_expr_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_pg_get_expr() { return &GenericExec<TPgDirectFunc<&pg_get_expr>, true, false, TArgs_pg_get_expr_Policy>; }
-struct TArgs_pg_get_expr_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
-};
-TExecFunc arrow_pg_get_expr_ext() { return &GenericExec<TPgDirectFunc<&pg_get_expr_ext>, true, false, TArgs_pg_get_expr_ext_Policy>; }
-struct TArgs_pg_get_function_arg_default_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_pg_get_function_arg_default() { return &GenericExec<TPgDirectFunc<&pg_get_function_arg_default>, true, false, TArgs_pg_get_function_arg_default_Policy>; }
-struct TArgs_pg_get_function_arguments_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_function_arguments() { return &GenericExec<TPgDirectFunc<&pg_get_function_arguments>, true, false, TArgs_pg_get_function_arguments_Policy>; }
-struct TArgs_pg_get_function_identity_arguments_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_function_identity_arguments() { return &GenericExec<TPgDirectFunc<&pg_get_function_identity_arguments>, true, false, TArgs_pg_get_function_identity_arguments_Policy>; }
-struct TArgs_pg_get_function_result_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_function_result() { return &GenericExec<TPgDirectFunc<&pg_get_function_result>, true, false, TArgs_pg_get_function_result_Policy>; }
-struct TArgs_pg_get_function_sqlbody_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_function_sqlbody() { return &GenericExec<TPgDirectFunc<&pg_get_function_sqlbody>, true, false, TArgs_pg_get_function_sqlbody_Policy>; }
-struct TArgs_pg_get_functiondef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_functiondef() { return &GenericExec<TPgDirectFunc<&pg_get_functiondef>, true, false, TArgs_pg_get_functiondef_Policy>; }
-struct TArgs_pg_get_indexdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_indexdef() { return &GenericExec<TPgDirectFunc<&pg_get_indexdef>, true, false, TArgs_pg_get_indexdef_Policy>; }
-struct TArgs_pg_get_indexdef_ext_Policy {
+TExecFunc arrow_pg_current_xact_id_if_assigned() { return TGenericExec<TPgDirectFunc<&pg_current_xact_id_if_assigned>, true, true, TArgs_pg_current_xact_id_if_assigned_Policy>({}); }
+struct TArgs_pg_describe_object_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-TExecFunc arrow_pg_get_indexdef_ext() { return &GenericExec<TPgDirectFunc<&pg_get_indexdef_ext>, true, false, TArgs_pg_get_indexdef_ext_Policy>; }
-struct TArgs_pg_get_partition_constraintdef_Policy {
+TExecFunc arrow_pg_describe_object() { return TGenericExec<TPgDirectFunc<&pg_describe_object>, true, false, TArgs_pg_describe_object_Policy>({}); }
+struct TArgs_pg_drop_replication_slot_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_pg_get_partition_constraintdef() { return &GenericExec<TPgDirectFunc<&pg_get_partition_constraintdef>, true, false, TArgs_pg_get_partition_constraintdef_Policy>; }
-struct TArgs_pg_get_partkeydef_Policy {
+TExecFunc arrow_pg_drop_replication_slot() { return TGenericExec<TPgDirectFunc<&pg_drop_replication_slot>, true, true, TArgs_pg_drop_replication_slot_Policy>({}); }
+struct TArgs_pg_get_object_address_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
 };
-TExecFunc arrow_pg_get_partkeydef() { return &GenericExec<TPgDirectFunc<&pg_get_partkeydef>, true, false, TArgs_pg_get_partkeydef_Policy>; }
+TExecFunc arrow_pg_get_object_address() { return TGenericExec<TPgDirectFunc<&pg_get_object_address>, true, false, TArgs_pg_get_object_address_Policy>({}); }
 struct TArgs_pg_get_replica_identity_index_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_get_replica_identity_index() { return &GenericExec<TPgDirectFunc<&pg_get_replica_identity_index>, true, true, TArgs_pg_get_replica_identity_index_Policy>; }
-struct TArgs_pg_get_ruledef_Policy {
+TExecFunc arrow_pg_get_replica_identity_index() { return TGenericExec<TPgDirectFunc<&pg_get_replica_identity_index>, true, true, TArgs_pg_get_replica_identity_index_Policy>({}); }
+struct TArgs_pg_identify_object_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+TExecFunc arrow_pg_identify_object() { return TGenericExec<TPgDirectFunc<&pg_identify_object>, true, false, TArgs_pg_identify_object_Policy>({}); }
+struct TArgs_pg_identify_object_as_address_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+TExecFunc arrow_pg_identify_object_as_address() { return TGenericExec<TPgDirectFunc<&pg_identify_object_as_address>, true, false, TArgs_pg_identify_object_as_address_Policy>({}); }
+struct TArgs_pg_partition_root_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_get_ruledef() { return &GenericExec<TPgDirectFunc<&pg_get_ruledef>, true, false, TArgs_pg_get_ruledef_Policy>; }
-struct TArgs_pg_get_ruledef_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_pg_get_ruledef_ext() { return &GenericExec<TPgDirectFunc<&pg_get_ruledef_ext>, true, false, TArgs_pg_get_ruledef_ext_Policy>; }
-struct TArgs_pg_get_serial_sequence_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_pg_get_serial_sequence() { return &GenericExec<TPgDirectFunc<&pg_get_serial_sequence>, true, false, TArgs_pg_get_serial_sequence_Policy>; }
-struct TArgs_pg_get_statisticsobjdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_statisticsobjdef() { return &GenericExec<TPgDirectFunc<&pg_get_statisticsobjdef>, true, false, TArgs_pg_get_statisticsobjdef_Policy>; }
-struct TArgs_pg_get_statisticsobjdef_columns_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_statisticsobjdef_columns() { return &GenericExec<TPgDirectFunc<&pg_get_statisticsobjdef_columns>, true, false, TArgs_pg_get_statisticsobjdef_columns_Policy>; }
-struct TArgs_pg_get_statisticsobjdef_expressions_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_statisticsobjdef_expressions() { return &GenericExec<TPgDirectFunc<&pg_get_statisticsobjdef_expressions>, true, false, TArgs_pg_get_statisticsobjdef_expressions_Policy>; }
-struct TArgs_pg_get_triggerdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_triggerdef() { return &GenericExec<TPgDirectFunc<&pg_get_triggerdef>, true, false, TArgs_pg_get_triggerdef_Policy>; }
-struct TArgs_pg_get_triggerdef_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_pg_get_triggerdef_ext() { return &GenericExec<TPgDirectFunc<&pg_get_triggerdef_ext>, true, false, TArgs_pg_get_triggerdef_ext_Policy>; }
-struct TArgs_pg_get_userbyid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_userbyid() { return &GenericExec<TPgDirectFunc<&pg_get_userbyid>, true, false, TArgs_pg_get_userbyid_Policy>; }
-struct TArgs_pg_get_viewdef_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_get_viewdef() { return &GenericExec<TPgDirectFunc<&pg_get_viewdef>, true, false, TArgs_pg_get_viewdef_Policy>; }
-struct TArgs_pg_get_viewdef_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_pg_get_viewdef_ext() { return &GenericExec<TPgDirectFunc<&pg_get_viewdef_ext>, true, false, TArgs_pg_get_viewdef_ext_Policy>; }
-struct TArgs_pg_get_viewdef_name_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_get_viewdef_name() { return &GenericExec<TPgDirectFunc<&pg_get_viewdef_name>, true, false, TArgs_pg_get_viewdef_name_Policy>; }
-struct TArgs_pg_get_viewdef_name_ext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_pg_get_viewdef_name_ext() { return &GenericExec<TPgDirectFunc<&pg_get_viewdef_name_ext>, true, false, TArgs_pg_get_viewdef_name_ext_Policy>; }
-struct TArgs_pg_get_viewdef_wrap_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_pg_get_viewdef_wrap() { return &GenericExec<TPgDirectFunc<&pg_get_viewdef_wrap>, true, false, TArgs_pg_get_viewdef_wrap_Policy>; }
-struct TArgs_pg_is_other_temp_schema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_is_other_temp_schema() { return &GenericExec<TPgDirectFunc<&pg_is_other_temp_schema>, true, true, TArgs_pg_is_other_temp_schema_Policy>; }
-struct TArgs_pg_log_backend_memory_contexts_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_log_backend_memory_contexts() { return &GenericExec<TPgDirectFunc<&pg_log_backend_memory_contexts>, true, true, TArgs_pg_log_backend_memory_contexts_Policy>; }
-struct TArgs_pg_mcv_list_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_mcv_list_in() { return &GenericExec<TPgDirectFunc<&pg_mcv_list_in>, true, false, TArgs_pg_mcv_list_in_Policy>; }
-struct TArgs_pg_mcv_list_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_mcv_list_out() { return &GenericExec<TPgDirectFunc<&pg_mcv_list_out>, true, false, TArgs_pg_mcv_list_out_Policy>; }
-struct TArgs_pg_mcv_list_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_mcv_list_recv() { return &GenericExec<TPgDirectFunc<&pg_mcv_list_recv>, true, false, TArgs_pg_mcv_list_recv_Policy>; }
-struct TArgs_pg_mcv_list_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_pg_mcv_list_send() { return &GenericExec<TPgDirectFunc<&pg_mcv_list_send>, true, false, TArgs_pg_mcv_list_send_Policy>; }
-struct TArgs_pg_my_temp_schema_Policy {
+TExecFunc arrow_pg_partition_root() { return TGenericExec<TPgDirectFunc<&pg_partition_root>, true, true, TArgs_pg_partition_root_Policy>({}); }
+struct TArgs_pg_postmaster_start_time_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_pg_my_temp_schema() { return &GenericExec<TPgDirectFunc<&pg_my_temp_schema>, true, true, TArgs_pg_my_temp_schema_Policy>; }
-struct TArgs_pg_ndistinct_in_Policy {
+TExecFunc arrow_pg_postmaster_start_time() { return TGenericExec<TPgDirectFunc<&pg_postmaster_start_time>, true, true, TArgs_pg_postmaster_start_time_Policy>({}); }
+struct TArgs_pg_read_binary_file_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,true};
+};
+TExecFunc arrow_pg_read_binary_file() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file>, true, false, TArgs_pg_read_binary_file_Policy>({}); }
+struct TArgs_pg_read_binary_file_all_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_pg_ndistinct_in() { return &GenericExec<TPgDirectFunc<&pg_ndistinct_in>, true, false, TArgs_pg_ndistinct_in_Policy>; }
-struct TArgs_pg_ndistinct_out_Policy {
+TExecFunc arrow_pg_read_binary_file_all() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file_all>, true, false, TArgs_pg_read_binary_file_all_Policy>({}); }
+struct TArgs_pg_read_binary_file_off_len_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_pg_read_binary_file_off_len() { return TGenericExec<TPgDirectFunc<&pg_read_binary_file_off_len>, true, false, TArgs_pg_read_binary_file_off_len_Policy>({}); }
+struct TArgs_pg_read_file_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_pg_read_file() { return TGenericExec<TPgDirectFunc<&pg_read_file>, true, false, TArgs_pg_read_file_Policy>({}); }
+struct TArgs_pg_read_file_all_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_pg_ndistinct_out() { return &GenericExec<TPgDirectFunc<&pg_ndistinct_out>, true, false, TArgs_pg_ndistinct_out_Policy>; }
-struct TArgs_pg_ndistinct_recv_Policy {
+TExecFunc arrow_pg_read_file_all() { return TGenericExec<TPgDirectFunc<&pg_read_file_all>, true, false, TArgs_pg_read_file_all_Policy>({}); }
+struct TArgs_pg_read_file_off_len_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_pg_ndistinct_recv() { return &GenericExec<TPgDirectFunc<&pg_ndistinct_recv>, true, false, TArgs_pg_ndistinct_recv_Policy>; }
-struct TArgs_pg_ndistinct_send_Policy {
+TExecFunc arrow_pg_read_file_off_len() { return TGenericExec<TPgDirectFunc<&pg_read_file_off_len>, true, false, TArgs_pg_read_file_off_len_Policy>({}); }
+struct TArgs_pg_read_file_v2_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,true};
 };
-TExecFunc arrow_pg_ndistinct_send() { return &GenericExec<TPgDirectFunc<&pg_ndistinct_send>, true, false, TArgs_pg_ndistinct_send_Policy>; }
-struct TArgs_pg_opclass_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_opclass_is_visible() { return &GenericExec<TPgDirectFunc<&pg_opclass_is_visible>, true, true, TArgs_pg_opclass_is_visible_Policy>; }
-struct TArgs_pg_operator_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_operator_is_visible() { return &GenericExec<TPgDirectFunc<&pg_operator_is_visible>, true, true, TArgs_pg_operator_is_visible_Policy>; }
-struct TArgs_pg_opfamily_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_opfamily_is_visible() { return &GenericExec<TPgDirectFunc<&pg_opfamily_is_visible>, true, true, TArgs_pg_opfamily_is_visible_Policy>; }
+TExecFunc arrow_pg_read_file_v2() { return TGenericExec<TPgDirectFunc<&pg_read_file_v2>, true, false, TArgs_pg_read_file_v2_Policy>({}); }
 struct TArgs_pg_relation_is_updatable_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_pg_relation_is_updatable() { return &GenericExec<TPgDirectFunc<&pg_relation_is_updatable>, true, true, TArgs_pg_relation_is_updatable_Policy>; }
+TExecFunc arrow_pg_relation_is_updatable() { return TGenericExec<TPgDirectFunc<&pg_relation_is_updatable>, true, true, TArgs_pg_relation_is_updatable_Policy>({}); }
+struct TArgs_pg_replication_slot_advance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_pg_replication_slot_advance() { return TGenericExec<TPgDirectFunc<&pg_replication_slot_advance>, true, false, TArgs_pg_replication_slot_advance_Policy>({}); }
 struct TArgs_pg_sleep_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_sleep() { return &GenericExec<TPgDirectFunc<&pg_sleep>, true, true, TArgs_pg_sleep_Policy>; }
-struct TArgs_pg_statistics_obj_is_visible_Policy {
+TExecFunc arrow_pg_sleep() { return TGenericExec<TPgDirectFunc<&pg_sleep>, true, true, TArgs_pg_sleep_Policy>({}); }
+struct TArgs_pg_snapshot_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_pg_snapshot_in() { return TGenericExec<TPgDirectFunc<&pg_snapshot_in>, true, false, TArgs_pg_snapshot_in_Policy>({}); }
+struct TArgs_pg_snapshot_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_pg_snapshot_out() { return TGenericExec<TPgDirectFunc<&pg_snapshot_out>, true, false, TArgs_pg_snapshot_out_Policy>({}); }
+struct TArgs_pg_snapshot_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_statistics_obj_is_visible() { return &GenericExec<TPgDirectFunc<&pg_statistics_obj_is_visible>, true, true, TArgs_pg_statistics_obj_is_visible_Policy>; }
-struct TArgs_pg_table_is_visible_Policy {
+TExecFunc arrow_pg_snapshot_recv() { return TGenericExec<TPgDirectFunc<&pg_snapshot_recv>, true, false, TArgs_pg_snapshot_recv_Policy>({}); }
+struct TArgs_pg_snapshot_send_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_pg_table_is_visible() { return &GenericExec<TPgDirectFunc<&pg_table_is_visible>, true, true, TArgs_pg_table_is_visible_Policy>; }
+TExecFunc arrow_pg_snapshot_send() { return TGenericExec<TPgDirectFunc<&pg_snapshot_send>, true, false, TArgs_pg_snapshot_send_Policy>({}); }
+struct TArgs_pg_snapshot_xmax_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_pg_snapshot_xmax() { return TGenericExec<TPgDirectFunc<&pg_snapshot_xmax>, true, true, TArgs_pg_snapshot_xmax_Policy>({}); }
+struct TArgs_pg_snapshot_xmin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_pg_snapshot_xmin() { return TGenericExec<TPgDirectFunc<&pg_snapshot_xmin>, true, true, TArgs_pg_snapshot_xmin_Policy>({}); }
+struct TArgs_pg_stat_file_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_pg_stat_file() { return TGenericExec<TPgDirectFunc<&pg_stat_file>, true, false, TArgs_pg_stat_file_Policy>({}); }
+struct TArgs_pg_stat_file_1arg_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_pg_stat_file_1arg() { return TGenericExec<TPgDirectFunc<&pg_stat_file_1arg>, true, false, TArgs_pg_stat_file_1arg_Policy>({}); }
 struct TArgs_pg_tablespace_location_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_tablespace_location() { return &GenericExec<TPgDirectFunc<&pg_tablespace_location>, true, false, TArgs_pg_tablespace_location_Policy>; }
-struct TArgs_pg_ts_config_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_ts_config_is_visible() { return &GenericExec<TPgDirectFunc<&pg_ts_config_is_visible>, true, true, TArgs_pg_ts_config_is_visible_Policy>; }
-struct TArgs_pg_ts_dict_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_ts_dict_is_visible() { return &GenericExec<TPgDirectFunc<&pg_ts_dict_is_visible>, true, true, TArgs_pg_ts_dict_is_visible_Policy>; }
-struct TArgs_pg_ts_parser_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_ts_parser_is_visible() { return &GenericExec<TPgDirectFunc<&pg_ts_parser_is_visible>, true, true, TArgs_pg_ts_parser_is_visible_Policy>; }
-struct TArgs_pg_ts_template_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_ts_template_is_visible() { return &GenericExec<TPgDirectFunc<&pg_ts_template_is_visible>, true, true, TArgs_pg_ts_template_is_visible_Policy>; }
-struct TArgs_pg_type_is_visible_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_pg_type_is_visible() { return &GenericExec<TPgDirectFunc<&pg_type_is_visible>, true, true, TArgs_pg_type_is_visible_Policy>; }
+TExecFunc arrow_pg_tablespace_location() { return TGenericExec<TPgDirectFunc<&pg_tablespace_location>, true, false, TArgs_pg_tablespace_location_Policy>({}); }
 struct TArgs_pg_typeof_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_pg_typeof() { return &GenericExec<TPgDirectFunc<&pg_typeof>, false, true, TArgs_pg_typeof_Policy>; }
-struct TArgs_prsd_end_Policy {
+TExecFunc arrow_pg_typeof() { return TGenericExec<TPgDirectFunc<&pg_typeof>, false, true, TArgs_pg_typeof_Policy>({}); }
+struct TArgs_pg_visible_in_snapshot_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_pg_visible_in_snapshot() { return TGenericExec<TPgDirectFunc<&pg_visible_in_snapshot>, true, true, TArgs_pg_visible_in_snapshot_Policy>({}); }
+struct TArgs_pg_xact_status_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_prsd_end() { return &GenericExec<TPgDirectFunc<&prsd_end>, true, true, TArgs_prsd_end_Policy>; }
-struct TArgs_prsd_headline_Policy {
+TExecFunc arrow_pg_xact_status() { return TGenericExec<TPgDirectFunc<&pg_xact_status>, true, false, TArgs_pg_xact_status_Policy>({}); }
+struct TArgs_point_above_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,false};
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_prsd_headline() { return &GenericExec<TPgDirectFunc<&prsd_headline>, true, true, TArgs_prsd_headline_Policy>; }
-struct TArgs_prsd_lextype_Policy {
+TExecFunc arrow_point_above() { return TGenericExec<TPgDirectFunc<&point_above>, true, true, TArgs_point_above_Policy>({}); }
+struct TArgs_point_add_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_add() { return TGenericExec<TPgDirectFunc<&point_add>, true, false, TArgs_point_add_Policy>({}); }
+struct TArgs_point_below_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_below() { return TGenericExec<TPgDirectFunc<&point_below>, true, true, TArgs_point_below_Policy>({}); }
+struct TArgs_point_box_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_point_box() { return TGenericExec<TPgDirectFunc<&point_box>, true, false, TArgs_point_box_Policy>({}); }
+struct TArgs_point_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_distance() { return TGenericExec<TPgDirectFunc<&point_distance>, true, true, TArgs_point_distance_Policy>({}); }
+struct TArgs_point_div_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_div() { return TGenericExec<TPgDirectFunc<&point_div>, true, false, TArgs_point_div_Policy>({}); }
+struct TArgs_point_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_eq() { return TGenericExec<TPgDirectFunc<&point_eq>, true, true, TArgs_point_eq_Policy>({}); }
+struct TArgs_point_horiz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_horiz() { return TGenericExec<TPgDirectFunc<&point_horiz>, true, true, TArgs_point_horiz_Policy>({}); }
+struct TArgs_point_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_point_in() { return TGenericExec<TPgDirectFunc<&point_in>, true, false, TArgs_point_in_Policy>({}); }
+struct TArgs_point_left_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_left() { return TGenericExec<TPgDirectFunc<&point_left>, true, true, TArgs_point_left_Policy>({}); }
+struct TArgs_point_mul_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_mul() { return TGenericExec<TPgDirectFunc<&point_mul>, true, false, TArgs_point_mul_Policy>({}); }
+struct TArgs_point_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_point_ne() { return TGenericExec<TPgDirectFunc<&point_ne>, true, true, TArgs_point_ne_Policy>({}); }
+struct TArgs_point_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_point_out() { return TGenericExec<TPgDirectFunc<&point_out>, true, false, TArgs_point_out_Policy>({}); }
+struct TArgs_point_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_prsd_lextype() { return &GenericExec<TPgDirectFunc<&prsd_lextype>, true, true, TArgs_prsd_lextype_Policy>; }
-struct TArgs_prsd_nexttoken_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_prsd_nexttoken() { return &GenericExec<TPgDirectFunc<&prsd_nexttoken>, true, true, TArgs_prsd_nexttoken_Policy>; }
-struct TArgs_prsd_start_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_prsd_start() { return &GenericExec<TPgDirectFunc<&prsd_start>, true, true, TArgs_prsd_start_Policy>; }
-struct TArgs_query_to_xml_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
-};
-TExecFunc arrow_query_to_xml() { return &GenericExec<TPgDirectFunc<&query_to_xml>, true, false, TArgs_query_to_xml_Policy>; }
-struct TArgs_query_to_xml_and_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
-};
-TExecFunc arrow_query_to_xml_and_xmlschema() { return &GenericExec<TPgDirectFunc<&query_to_xml_and_xmlschema>, true, false, TArgs_query_to_xml_and_xmlschema_Policy>; }
-struct TArgs_query_to_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
-};
-TExecFunc arrow_query_to_xmlschema() { return &GenericExec<TPgDirectFunc<&query_to_xmlschema>, true, false, TArgs_query_to_xmlschema_Policy>; }
-struct TArgs_range_adjacent_Policy {
+TExecFunc arrow_point_recv() { return TGenericExec<TPgDirectFunc<&point_recv>, true, false, TArgs_point_recv_Policy>({}); }
+struct TArgs_point_right_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_range_adjacent() { return &GenericExec<TPgDirectFunc<&range_adjacent>, true, true, TArgs_range_adjacent_Policy>; }
-struct TArgs_range_after_Policy {
+TExecFunc arrow_point_right() { return TGenericExec<TPgDirectFunc<&point_right>, true, true, TArgs_point_right_Policy>({}); }
+struct TArgs_point_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_point_send() { return TGenericExec<TPgDirectFunc<&point_send>, true, false, TArgs_point_send_Policy>({}); }
+struct TArgs_point_slope_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_range_after() { return &GenericExec<TPgDirectFunc<&range_after>, true, true, TArgs_range_after_Policy>; }
-struct TArgs_range_before_Policy {
+TExecFunc arrow_point_slope() { return TGenericExec<TPgDirectFunc<&point_slope>, true, true, TArgs_point_slope_Policy>({}); }
+struct TArgs_point_sub_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_range_before() { return &GenericExec<TPgDirectFunc<&range_before>, true, true, TArgs_range_before_Policy>; }
-struct TArgs_range_cmp_Policy {
+TExecFunc arrow_point_sub() { return TGenericExec<TPgDirectFunc<&point_sub>, true, false, TArgs_point_sub_Policy>({}); }
+struct TArgs_point_vert_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_range_cmp() { return &GenericExec<TPgDirectFunc<&range_cmp>, true, true, TArgs_range_cmp_Policy>; }
-TExecFunc arrow_range_constructor2() { return &GenericExec<TPgDirectFunc<&range_constructor2>, false, false, TDefaultArgsPolicy>; }
-TExecFunc arrow_range_constructor3() { return &GenericExec<TPgDirectFunc<&range_constructor3>, false, false, TDefaultArgsPolicy>; }
-struct TArgs_range_contained_by_Policy {
+TExecFunc arrow_point_vert() { return TGenericExec<TPgDirectFunc<&point_vert>, true, true, TArgs_point_vert_Policy>({}); }
+struct TArgs_points_box_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_range_contained_by() { return &GenericExec<TPgDirectFunc<&range_contained_by>, true, true, TArgs_range_contained_by_Policy>; }
-struct TArgs_range_contains_Policy {
+TExecFunc arrow_points_box() { return TGenericExec<TPgDirectFunc<&points_box>, true, false, TArgs_points_box_Policy>({}); }
+struct TArgs_poly_above_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_range_contains() { return &GenericExec<TPgDirectFunc<&range_contains>, true, true, TArgs_range_contains_Policy>; }
-struct TArgs_range_contains_elem_Policy {
+TExecFunc arrow_poly_above() { return TGenericExec<TPgDirectFunc<&poly_above>, true, true, TArgs_poly_above_Policy>({}); }
+struct TArgs_poly_below_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_below() { return TGenericExec<TPgDirectFunc<&poly_below>, true, true, TArgs_poly_below_Policy>({}); }
+struct TArgs_poly_box_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_box() { return TGenericExec<TPgDirectFunc<&poly_box>, true, false, TArgs_poly_box_Policy>({}); }
+struct TArgs_poly_center_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_center() { return TGenericExec<TPgDirectFunc<&poly_center>, true, false, TArgs_poly_center_Policy>({}); }
+struct TArgs_poly_circle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_circle() { return TGenericExec<TPgDirectFunc<&poly_circle>, true, false, TArgs_poly_circle_Policy>({}); }
+struct TArgs_poly_contain_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_contain() { return TGenericExec<TPgDirectFunc<&poly_contain>, true, true, TArgs_poly_contain_Policy>({}); }
+struct TArgs_poly_contain_pt_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_contain_pt() { return TGenericExec<TPgDirectFunc<&poly_contain_pt>, true, true, TArgs_poly_contain_pt_Policy>({}); }
+struct TArgs_poly_contained_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_contained() { return TGenericExec<TPgDirectFunc<&poly_contained>, true, true, TArgs_poly_contained_Policy>({}); }
+struct TArgs_poly_distance_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_distance() { return TGenericExec<TPgDirectFunc<&poly_distance>, true, true, TArgs_poly_distance_Policy>({}); }
+struct TArgs_poly_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_in() { return TGenericExec<TPgDirectFunc<&poly_in>, true, false, TArgs_poly_in_Policy>({}); }
+struct TArgs_poly_left_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_left() { return TGenericExec<TPgDirectFunc<&poly_left>, true, true, TArgs_poly_left_Policy>({}); }
+struct TArgs_poly_npoints_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_npoints() { return TGenericExec<TPgDirectFunc<&poly_npoints>, true, true, TArgs_poly_npoints_Policy>({}); }
+struct TArgs_poly_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_out() { return TGenericExec<TPgDirectFunc<&poly_out>, true, false, TArgs_poly_out_Policy>({}); }
+struct TArgs_poly_overabove_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_overabove() { return TGenericExec<TPgDirectFunc<&poly_overabove>, true, true, TArgs_poly_overabove_Policy>({}); }
+struct TArgs_poly_overbelow_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_overbelow() { return TGenericExec<TPgDirectFunc<&poly_overbelow>, true, true, TArgs_poly_overbelow_Policy>({}); }
+struct TArgs_poly_overlap_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_overlap() { return TGenericExec<TPgDirectFunc<&poly_overlap>, true, true, TArgs_poly_overlap_Policy>({}); }
+struct TArgs_poly_overleft_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_overleft() { return TGenericExec<TPgDirectFunc<&poly_overleft>, true, true, TArgs_poly_overleft_Policy>({}); }
+struct TArgs_poly_overright_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_overright() { return TGenericExec<TPgDirectFunc<&poly_overright>, true, true, TArgs_poly_overright_Policy>({}); }
+struct TArgs_poly_path_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_path() { return TGenericExec<TPgDirectFunc<&poly_path>, true, false, TArgs_poly_path_Policy>({}); }
+struct TArgs_poly_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_poly_recv() { return TGenericExec<TPgDirectFunc<&poly_recv>, true, false, TArgs_poly_recv_Policy>({}); }
+struct TArgs_poly_right_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_right() { return TGenericExec<TPgDirectFunc<&poly_right>, true, true, TArgs_poly_right_Policy>({}); }
+struct TArgs_poly_same_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_poly_same() { return TGenericExec<TPgDirectFunc<&poly_same>, true, true, TArgs_poly_same_Policy>({}); }
+struct TArgs_poly_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_poly_send() { return TGenericExec<TPgDirectFunc<&poly_send>, true, false, TArgs_poly_send_Policy>({}); }
+struct TArgs_positionjoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_positionjoinsel() { return TGenericExec<TPgDirectFunc<&positionjoinsel>, true, true, TArgs_positionjoinsel_Policy>({}); }
+struct TArgs_positionsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_positionsel() { return TGenericExec<TPgDirectFunc<&positionsel>, true, true, TArgs_positionsel_Policy>({}); }
+struct TArgs_postgresql_fdw_validator_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_range_contains_elem() { return &GenericExec<TPgDirectFunc<&range_contains_elem>, true, true, TArgs_range_contains_elem_Policy>; }
-struct TArgs_range_empty_Policy {
+TExecFunc arrow_postgresql_fdw_validator() { return TGenericExec<TPgDirectFunc<&postgresql_fdw_validator>, true, true, TArgs_postgresql_fdw_validator_Policy>({}); }
+struct TArgs_prefixjoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_prefixjoinsel() { return TGenericExec<TPgDirectFunc<&prefixjoinsel>, true, true, TArgs_prefixjoinsel_Policy>({}); }
+struct TArgs_prefixsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_prefixsel() { return TGenericExec<TPgDirectFunc<&prefixsel>, true, true, TArgs_prefixsel_Policy>({}); }
+struct TArgs_pt_contained_circle_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_pt_contained_circle() { return TGenericExec<TPgDirectFunc<&pt_contained_circle>, true, true, TArgs_pt_contained_circle_Policy>({}); }
+struct TArgs_pt_contained_poly_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_pt_contained_poly() { return TGenericExec<TPgDirectFunc<&pt_contained_poly>, true, true, TArgs_pt_contained_poly_Policy>({}); }
+struct TArgs_quote_ident_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_empty() { return &GenericExec<TPgDirectFunc<&range_empty>, true, true, TArgs_range_empty_Policy>; }
-struct TArgs_range_eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_eq() { return &GenericExec<TPgDirectFunc<&range_eq>, true, true, TArgs_range_eq_Policy>; }
-struct TArgs_range_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_ge() { return &GenericExec<TPgDirectFunc<&range_ge>, true, true, TArgs_range_ge_Policy>; }
-struct TArgs_range_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_gt() { return &GenericExec<TPgDirectFunc<&range_gt>, true, true, TArgs_range_gt_Policy>; }
-struct TArgs_range_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
-};
-TExecFunc arrow_range_in() { return &GenericExec<TPgDirectFunc<&range_in>, true, false, TArgs_range_in_Policy>; }
-struct TArgs_range_intersect_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_intersect() { return &GenericExec<TPgDirectFunc<&range_intersect>, true, false, TArgs_range_intersect_Policy>; }
-struct TArgs_range_intersect_agg_transfn_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_intersect_agg_transfn() { return &GenericExec<TPgDirectFunc<&range_intersect_agg_transfn>, true, false, TArgs_range_intersect_agg_transfn_Policy>; }
-struct TArgs_range_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_le() { return &GenericExec<TPgDirectFunc<&range_le>, true, true, TArgs_range_le_Policy>; }
-struct TArgs_range_lower_Policy {
+TExecFunc arrow_quote_ident() { return TGenericExec<TPgDirectFunc<&quote_ident>, true, false, TArgs_quote_ident_Policy>({}); }
+struct TArgs_quote_literal_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_lower() { return &GenericExec<TPgDirectFunc<&range_lower>, true, true, TArgs_range_lower_Policy>; }
-struct TArgs_range_lower_inc_Policy {
+TExecFunc arrow_quote_literal() { return TGenericExec<TPgDirectFunc<&quote_literal>, true, false, TArgs_quote_literal_Policy>({}); }
+struct TArgs_quote_nullable_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_lower_inc() { return &GenericExec<TPgDirectFunc<&range_lower_inc>, true, true, TArgs_range_lower_inc_Policy>; }
-struct TArgs_range_lower_inf_Policy {
+TExecFunc arrow_quote_nullable() { return TGenericExec<TPgDirectFunc<&quote_nullable>, false, false, TArgs_quote_nullable_Policy>({}); }
+struct TArgs_regclassin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_lower_inf() { return &GenericExec<TPgDirectFunc<&range_lower_inf>, true, true, TArgs_range_lower_inf_Policy>; }
-struct TArgs_range_lt_Policy {
+TExecFunc arrow_regclassin() { return TGenericExec<TPgDirectFunc<&regclassin>, true, true, TArgs_regclassin_Policy>({}); }
+struct TArgs_regclassout_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_lt() { return &GenericExec<TPgDirectFunc<&range_lt>, true, true, TArgs_range_lt_Policy>; }
-struct TArgs_range_merge_Policy {
+TExecFunc arrow_regclassout() { return TGenericExec<TPgDirectFunc<&regclassout>, true, false, TArgs_regclassout_Policy>({}); }
+struct TArgs_regclassrecv_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_merge() { return &GenericExec<TPgDirectFunc<&range_merge>, true, false, TArgs_range_merge_Policy>; }
-struct TArgs_range_minus_Policy {
+TExecFunc arrow_regclassrecv() { return TGenericExec<TPgDirectFunc<&regclassrecv>, true, true, TArgs_regclassrecv_Policy>({}); }
+struct TArgs_regclasssend_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_minus() { return &GenericExec<TPgDirectFunc<&range_minus>, true, false, TArgs_range_minus_Policy>; }
-struct TArgs_range_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_range_ne() { return &GenericExec<TPgDirectFunc<&range_ne>, true, true, TArgs_range_ne_Policy>; }
-struct TArgs_range_out_Policy {
+TExecFunc arrow_regclasssend() { return TGenericExec<TPgDirectFunc<&regclasssend>, true, false, TArgs_regclasssend_Policy>({}); }
+struct TArgs_regcollationin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_out() { return &GenericExec<TPgDirectFunc<&range_out>, true, false, TArgs_range_out_Policy>; }
-struct TArgs_range_overlaps_Policy {
+TExecFunc arrow_regcollationin() { return TGenericExec<TPgDirectFunc<&regcollationin>, true, true, TArgs_regcollationin_Policy>({}); }
+struct TArgs_regcollationout_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_overlaps() { return &GenericExec<TPgDirectFunc<&range_overlaps>, true, true, TArgs_range_overlaps_Policy>; }
-struct TArgs_range_overleft_Policy {
+TExecFunc arrow_regcollationout() { return TGenericExec<TPgDirectFunc<&regcollationout>, true, false, TArgs_regcollationout_Policy>({}); }
+struct TArgs_regcollationrecv_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_overleft() { return &GenericExec<TPgDirectFunc<&range_overleft>, true, true, TArgs_range_overleft_Policy>; }
-struct TArgs_range_overright_Policy {
+TExecFunc arrow_regcollationrecv() { return TGenericExec<TPgDirectFunc<&regcollationrecv>, true, true, TArgs_regcollationrecv_Policy>({}); }
+struct TArgs_regcollationsend_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_overright() { return &GenericExec<TPgDirectFunc<&range_overright>, true, true, TArgs_range_overright_Policy>; }
-struct TArgs_range_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_range_recv() { return &GenericExec<TPgDirectFunc<&range_recv>, true, false, TArgs_range_recv_Policy>; }
-struct TArgs_range_send_Policy {
+TExecFunc arrow_regcollationsend() { return TGenericExec<TPgDirectFunc<&regcollationsend>, true, false, TArgs_regcollationsend_Policy>({}); }
+struct TArgs_regconfigin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_send() { return &GenericExec<TPgDirectFunc<&range_send>, true, false, TArgs_range_send_Policy>; }
-struct TArgs_range_union_Policy {
+TExecFunc arrow_regconfigin() { return TGenericExec<TPgDirectFunc<&regconfigin>, true, true, TArgs_regconfigin_Policy>({}); }
+struct TArgs_regconfigout_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_range_union() { return &GenericExec<TPgDirectFunc<&range_union>, true, false, TArgs_range_union_Policy>; }
-struct TArgs_range_upper_Policy {
+TExecFunc arrow_regconfigout() { return TGenericExec<TPgDirectFunc<&regconfigout>, true, false, TArgs_regconfigout_Policy>({}); }
+struct TArgs_regconfigrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regconfigrecv() { return TGenericExec<TPgDirectFunc<&regconfigrecv>, true, true, TArgs_regconfigrecv_Policy>({}); }
+struct TArgs_regconfigsend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regconfigsend() { return TGenericExec<TPgDirectFunc<&regconfigsend>, true, false, TArgs_regconfigsend_Policy>({}); }
+struct TArgs_regdictionaryin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_upper() { return &GenericExec<TPgDirectFunc<&range_upper>, true, true, TArgs_range_upper_Policy>; }
-struct TArgs_range_upper_inc_Policy {
+TExecFunc arrow_regdictionaryin() { return TGenericExec<TPgDirectFunc<&regdictionaryin>, true, true, TArgs_regdictionaryin_Policy>({}); }
+struct TArgs_regdictionaryout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regdictionaryout() { return TGenericExec<TPgDirectFunc<&regdictionaryout>, true, false, TArgs_regdictionaryout_Policy>({}); }
+struct TArgs_regdictionaryrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regdictionaryrecv() { return TGenericExec<TPgDirectFunc<&regdictionaryrecv>, true, true, TArgs_regdictionaryrecv_Policy>({}); }
+struct TArgs_regdictionarysend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regdictionarysend() { return TGenericExec<TPgDirectFunc<&regdictionarysend>, true, false, TArgs_regdictionarysend_Policy>({}); }
+struct TArgs_regexeqjoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_regexeqjoinsel() { return TGenericExec<TPgDirectFunc<&regexeqjoinsel>, true, true, TArgs_regexeqjoinsel_Policy>({}); }
+struct TArgs_regexeqsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_regexeqsel() { return TGenericExec<TPgDirectFunc<&regexeqsel>, true, true, TArgs_regexeqsel_Policy>({}); }
+struct TArgs_regexnejoinsel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
+};
+TExecFunc arrow_regexnejoinsel() { return TGenericExec<TPgDirectFunc<&regexnejoinsel>, true, true, TArgs_regexnejoinsel_Policy>({}); }
+struct TArgs_regexnesel_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
+};
+TExecFunc arrow_regexnesel() { return TGenericExec<TPgDirectFunc<&regexnesel>, true, true, TArgs_regexnesel_Policy>({}); }
+struct TArgs_regnamespacein_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_upper_inc() { return &GenericExec<TPgDirectFunc<&range_upper_inc>, true, true, TArgs_range_upper_inc_Policy>; }
-struct TArgs_range_upper_inf_Policy {
+TExecFunc arrow_regnamespacein() { return TGenericExec<TPgDirectFunc<&regnamespacein>, true, true, TArgs_regnamespacein_Policy>({}); }
+struct TArgs_regnamespaceout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regnamespaceout() { return TGenericExec<TPgDirectFunc<&regnamespaceout>, true, false, TArgs_regnamespaceout_Policy>({}); }
+struct TArgs_regnamespacerecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regnamespacerecv() { return TGenericExec<TPgDirectFunc<&regnamespacerecv>, true, true, TArgs_regnamespacerecv_Policy>({}); }
+struct TArgs_regnamespacesend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regnamespacesend() { return TGenericExec<TPgDirectFunc<&regnamespacesend>, true, false, TArgs_regnamespacesend_Policy>({}); }
+struct TArgs_regoperatorin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_range_upper_inf() { return &GenericExec<TPgDirectFunc<&range_upper_inf>, true, true, TArgs_range_upper_inf_Policy>; }
+TExecFunc arrow_regoperatorin() { return TGenericExec<TPgDirectFunc<&regoperatorin>, true, true, TArgs_regoperatorin_Policy>({}); }
+struct TArgs_regoperatorout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regoperatorout() { return TGenericExec<TPgDirectFunc<&regoperatorout>, true, false, TArgs_regoperatorout_Policy>({}); }
+struct TArgs_regoperatorrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regoperatorrecv() { return TGenericExec<TPgDirectFunc<&regoperatorrecv>, true, true, TArgs_regoperatorrecv_Policy>({}); }
+struct TArgs_regoperatorsend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regoperatorsend() { return TGenericExec<TPgDirectFunc<&regoperatorsend>, true, false, TArgs_regoperatorsend_Policy>({}); }
+struct TArgs_regoperin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_regoperin() { return TGenericExec<TPgDirectFunc<&regoperin>, true, true, TArgs_regoperin_Policy>({}); }
+struct TArgs_regoperout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regoperout() { return TGenericExec<TPgDirectFunc<&regoperout>, true, false, TArgs_regoperout_Policy>({}); }
+struct TArgs_regoperrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regoperrecv() { return TGenericExec<TPgDirectFunc<&regoperrecv>, true, true, TArgs_regoperrecv_Policy>({}); }
+struct TArgs_regopersend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regopersend() { return TGenericExec<TPgDirectFunc<&regopersend>, true, false, TArgs_regopersend_Policy>({}); }
+struct TArgs_regprocedurein_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_regprocedurein() { return TGenericExec<TPgDirectFunc<&regprocedurein>, true, true, TArgs_regprocedurein_Policy>({}); }
+struct TArgs_regprocedureout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regprocedureout() { return TGenericExec<TPgDirectFunc<&regprocedureout>, true, false, TArgs_regprocedureout_Policy>({}); }
+struct TArgs_regprocedurerecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regprocedurerecv() { return TGenericExec<TPgDirectFunc<&regprocedurerecv>, true, true, TArgs_regprocedurerecv_Policy>({}); }
+struct TArgs_regproceduresend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regproceduresend() { return TGenericExec<TPgDirectFunc<&regproceduresend>, true, false, TArgs_regproceduresend_Policy>({}); }
+struct TArgs_regprocin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_regprocin() { return TGenericExec<TPgDirectFunc<&regprocin>, true, true, TArgs_regprocin_Policy>({}); }
+struct TArgs_regprocout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regprocout() { return TGenericExec<TPgDirectFunc<&regprocout>, true, false, TArgs_regprocout_Policy>({}); }
+struct TArgs_regprocrecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regprocrecv() { return TGenericExec<TPgDirectFunc<&regprocrecv>, true, true, TArgs_regprocrecv_Policy>({}); }
+struct TArgs_regprocsend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regprocsend() { return TGenericExec<TPgDirectFunc<&regprocsend>, true, false, TArgs_regprocsend_Policy>({}); }
+struct TArgs_regrolein_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_regrolein() { return TGenericExec<TPgDirectFunc<&regrolein>, true, true, TArgs_regrolein_Policy>({}); }
+struct TArgs_regroleout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regroleout() { return TGenericExec<TPgDirectFunc<&regroleout>, true, false, TArgs_regroleout_Policy>({}); }
+struct TArgs_regrolerecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regrolerecv() { return TGenericExec<TPgDirectFunc<&regrolerecv>, true, true, TArgs_regrolerecv_Policy>({}); }
+struct TArgs_regrolesend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regrolesend() { return TGenericExec<TPgDirectFunc<&regrolesend>, true, false, TArgs_regrolesend_Policy>({}); }
+struct TArgs_regtypein_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_regtypein() { return TGenericExec<TPgDirectFunc<&regtypein>, true, true, TArgs_regtypein_Policy>({}); }
+struct TArgs_regtypeout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regtypeout() { return TGenericExec<TPgDirectFunc<&regtypeout>, true, false, TArgs_regtypeout_Policy>({}); }
+struct TArgs_regtyperecv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regtyperecv() { return TGenericExec<TPgDirectFunc<&regtyperecv>, true, true, TArgs_regtyperecv_Policy>({}); }
+struct TArgs_regtypesend_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_regtypesend() { return TGenericExec<TPgDirectFunc<&regtypesend>, true, false, TArgs_regtypesend_Policy>({}); }
 struct TArgs_row_security_active_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_row_security_active() { return &GenericExec<TPgDirectFunc<&row_security_active>, true, true, TArgs_row_security_active_Policy>; }
+TExecFunc arrow_row_security_active() { return TGenericExec<TPgDirectFunc<&row_security_active>, true, true, TArgs_row_security_active_Policy>({}); }
 struct TArgs_row_security_active_name_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_row_security_active_name() { return &GenericExec<TPgDirectFunc<&row_security_active_name>, true, true, TArgs_row_security_active_name_Policy>; }
-struct TArgs_schema_to_xml_Policy {
+TExecFunc arrow_row_security_active_name() { return TGenericExec<TPgDirectFunc<&row_security_active_name>, true, true, TArgs_row_security_active_name_Policy>({}); }
+struct TArgs_sha224_bytea_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_schema_to_xml() { return &GenericExec<TPgDirectFunc<&schema_to_xml>, true, false, TArgs_schema_to_xml_Policy>; }
-struct TArgs_schema_to_xml_and_xmlschema_Policy {
+TExecFunc arrow_sha224_bytea() { return TGenericExec<TPgDirectFunc<&sha224_bytea>, true, false, TArgs_sha224_bytea_Policy>({}); }
+struct TArgs_sha256_bytea_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_schema_to_xml_and_xmlschema() { return &GenericExec<TPgDirectFunc<&schema_to_xml_and_xmlschema>, true, false, TArgs_schema_to_xml_and_xmlschema_Policy>; }
-struct TArgs_schema_to_xmlschema_Policy {
+TExecFunc arrow_sha256_bytea() { return TGenericExec<TPgDirectFunc<&sha256_bytea>, true, false, TArgs_sha256_bytea_Policy>({}); }
+struct TArgs_sha384_bytea_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {false,true,true,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_schema_to_xmlschema() { return &GenericExec<TPgDirectFunc<&schema_to_xmlschema>, true, false, TArgs_schema_to_xmlschema_Policy>; }
+TExecFunc arrow_sha384_bytea() { return TGenericExec<TPgDirectFunc<&sha384_bytea>, true, false, TArgs_sha384_bytea_Policy>({}); }
+struct TArgs_sha512_bytea_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_sha512_bytea() { return TGenericExec<TPgDirectFunc<&sha512_bytea>, true, false, TArgs_sha512_bytea_Policy>({}); }
 struct TArgs_spg_bbox_quad_config_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_spg_bbox_quad_config() { return &GenericExec<TPgDirectFunc<&spg_bbox_quad_config>, true, true, TArgs_spg_bbox_quad_config_Policy>; }
+TExecFunc arrow_spg_bbox_quad_config() { return TGenericExec<TPgDirectFunc<&spg_bbox_quad_config>, true, true, TArgs_spg_bbox_quad_config_Policy>({}); }
 struct TArgs_spg_box_quad_choose_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_spg_box_quad_choose() { return &GenericExec<TPgDirectFunc<&spg_box_quad_choose>, true, true, TArgs_spg_box_quad_choose_Policy>; }
+TExecFunc arrow_spg_box_quad_choose() { return TGenericExec<TPgDirectFunc<&spg_box_quad_choose>, true, true, TArgs_spg_box_quad_choose_Policy>({}); }
 struct TArgs_spg_box_quad_config_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_spg_box_quad_config() { return &GenericExec<TPgDirectFunc<&spg_box_quad_config>, true, true, TArgs_spg_box_quad_config_Policy>; }
+TExecFunc arrow_spg_box_quad_config() { return TGenericExec<TPgDirectFunc<&spg_box_quad_config>, true, true, TArgs_spg_box_quad_config_Policy>({}); }
 struct TArgs_spg_box_quad_inner_consistent_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_spg_box_quad_inner_consistent() { return &GenericExec<TPgDirectFunc<&spg_box_quad_inner_consistent>, true, true, TArgs_spg_box_quad_inner_consistent_Policy>; }
+TExecFunc arrow_spg_box_quad_inner_consistent() { return TGenericExec<TPgDirectFunc<&spg_box_quad_inner_consistent>, true, true, TArgs_spg_box_quad_inner_consistent_Policy>({}); }
 struct TArgs_spg_box_quad_leaf_consistent_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_spg_box_quad_leaf_consistent() { return &GenericExec<TPgDirectFunc<&spg_box_quad_leaf_consistent>, true, true, TArgs_spg_box_quad_leaf_consistent_Policy>; }
+TExecFunc arrow_spg_box_quad_leaf_consistent() { return TGenericExec<TPgDirectFunc<&spg_box_quad_leaf_consistent>, true, true, TArgs_spg_box_quad_leaf_consistent_Policy>({}); }
 struct TArgs_spg_box_quad_picksplit_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_spg_box_quad_picksplit() { return &GenericExec<TPgDirectFunc<&spg_box_quad_picksplit>, true, true, TArgs_spg_box_quad_picksplit_Policy>; }
+TExecFunc arrow_spg_box_quad_picksplit() { return TGenericExec<TPgDirectFunc<&spg_box_quad_picksplit>, true, true, TArgs_spg_box_quad_picksplit_Policy>({}); }
 struct TArgs_spg_poly_quad_compress_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_spg_poly_quad_compress() { return &GenericExec<TPgDirectFunc<&spg_poly_quad_compress>, true, false, TArgs_spg_poly_quad_compress_Policy>; }
-struct TArgs_spg_quad_choose_Policy {
+TExecFunc arrow_spg_poly_quad_compress() { return TGenericExec<TPgDirectFunc<&spg_poly_quad_compress>, true, false, TArgs_spg_poly_quad_compress_Policy>({}); }
+struct TArgs_statement_timestamp_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+    static constexpr std::array<bool, 0> IsFixedArg = {};
 };
-TExecFunc arrow_spg_quad_choose() { return &GenericExec<TPgDirectFunc<&spg_quad_choose>, true, true, TArgs_spg_quad_choose_Policy>; }
-struct TArgs_spg_quad_config_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_quad_config() { return &GenericExec<TPgDirectFunc<&spg_quad_config>, true, true, TArgs_spg_quad_config_Policy>; }
-struct TArgs_spg_quad_inner_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_quad_inner_consistent() { return &GenericExec<TPgDirectFunc<&spg_quad_inner_consistent>, true, true, TArgs_spg_quad_inner_consistent_Policy>; }
-struct TArgs_spg_quad_leaf_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_quad_leaf_consistent() { return &GenericExec<TPgDirectFunc<&spg_quad_leaf_consistent>, true, true, TArgs_spg_quad_leaf_consistent_Policy>; }
-struct TArgs_spg_quad_picksplit_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_quad_picksplit() { return &GenericExec<TPgDirectFunc<&spg_quad_picksplit>, true, true, TArgs_spg_quad_picksplit_Policy>; }
-struct TArgs_spg_range_quad_choose_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_range_quad_choose() { return &GenericExec<TPgDirectFunc<&spg_range_quad_choose>, true, true, TArgs_spg_range_quad_choose_Policy>; }
-struct TArgs_spg_range_quad_config_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_range_quad_config() { return &GenericExec<TPgDirectFunc<&spg_range_quad_config>, true, true, TArgs_spg_range_quad_config_Policy>; }
-struct TArgs_spg_range_quad_inner_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_range_quad_inner_consistent() { return &GenericExec<TPgDirectFunc<&spg_range_quad_inner_consistent>, true, true, TArgs_spg_range_quad_inner_consistent_Policy>; }
-struct TArgs_spg_range_quad_leaf_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_range_quad_leaf_consistent() { return &GenericExec<TPgDirectFunc<&spg_range_quad_leaf_consistent>, true, true, TArgs_spg_range_quad_leaf_consistent_Policy>; }
-struct TArgs_spg_range_quad_picksplit_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_range_quad_picksplit() { return &GenericExec<TPgDirectFunc<&spg_range_quad_picksplit>, true, true, TArgs_spg_range_quad_picksplit_Policy>; }
-struct TArgs_spg_text_choose_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_text_choose() { return &GenericExec<TPgDirectFunc<&spg_text_choose>, true, true, TArgs_spg_text_choose_Policy>; }
-struct TArgs_spg_text_config_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_text_config() { return &GenericExec<TPgDirectFunc<&spg_text_config>, true, true, TArgs_spg_text_config_Policy>; }
-struct TArgs_spg_text_inner_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_text_inner_consistent() { return &GenericExec<TPgDirectFunc<&spg_text_inner_consistent>, true, true, TArgs_spg_text_inner_consistent_Policy>; }
-struct TArgs_spg_text_leaf_consistent_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_text_leaf_consistent() { return &GenericExec<TPgDirectFunc<&spg_text_leaf_consistent>, true, true, TArgs_spg_text_leaf_consistent_Policy>; }
-struct TArgs_spg_text_picksplit_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_spg_text_picksplit() { return &GenericExec<TPgDirectFunc<&spg_text_picksplit>, true, true, TArgs_spg_text_picksplit_Policy>; }
-struct TArgs_table_to_xml_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,false};
-};
-TExecFunc arrow_table_to_xml() { return &GenericExec<TPgDirectFunc<&table_to_xml>, true, false, TArgs_table_to_xml_Policy>; }
-struct TArgs_table_to_xml_and_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,false};
-};
-TExecFunc arrow_table_to_xml_and_xmlschema() { return &GenericExec<TPgDirectFunc<&table_to_xml_and_xmlschema>, true, false, TArgs_table_to_xml_and_xmlschema_Policy>; }
-struct TArgs_table_to_xmlschema_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,false};
-};
-TExecFunc arrow_table_to_xmlschema() { return &GenericExec<TPgDirectFunc<&table_to_xmlschema>, true, false, TArgs_table_to_xmlschema_Policy>; }
-struct TArgs_text_char_Policy {
+TExecFunc arrow_statement_timestamp() { return TGenericExec<TPgDirectFunc<&statement_timestamp>, true, true, TArgs_statement_timestamp_Policy>({}); }
+struct TArgs_text_regclass_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_text_char() { return &GenericExec<TPgDirectFunc<&text_char>, true, true, TArgs_text_char_Policy>; }
-struct TArgs_texttoxml_Policy {
+TExecFunc arrow_text_regclass() { return TGenericExec<TPgDirectFunc<&text_regclass>, true, true, TArgs_text_regclass_Policy>({}); }
+struct TArgs_texticlike_support_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_texttoxml() { return &GenericExec<TPgDirectFunc<&texttoxml>, true, false, TArgs_texttoxml_Policy>; }
+TExecFunc arrow_texticlike_support() { return TGenericExec<TPgDirectFunc<&texticlike_support>, true, true, TArgs_texticlike_support_Policy>({}); }
+struct TArgs_texticregexeq_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_texticregexeq_support() { return TGenericExec<TPgDirectFunc<&texticregexeq_support>, true, true, TArgs_texticregexeq_support_Policy>({}); }
+struct TArgs_textlike_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_textlike_support() { return TGenericExec<TPgDirectFunc<&textlike_support>, true, true, TArgs_textlike_support_Policy>({}); }
+struct TArgs_textregexeq_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_textregexeq_support() { return TGenericExec<TPgDirectFunc<&textregexeq_support>, true, true, TArgs_textregexeq_support_Policy>({}); }
 struct TArgs_thesaurus_init_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_thesaurus_init() { return &GenericExec<TPgDirectFunc<&thesaurus_init>, true, true, TArgs_thesaurus_init_Policy>; }
+TExecFunc arrow_thesaurus_init() { return TGenericExec<TPgDirectFunc<&thesaurus_init>, true, true, TArgs_thesaurus_init_Policy>({}); }
 struct TArgs_thesaurus_lexize_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_thesaurus_lexize() { return &GenericExec<TPgDirectFunc<&thesaurus_lexize>, true, true, TArgs_thesaurus_lexize_Policy>; }
+TExecFunc arrow_thesaurus_lexize() { return TGenericExec<TPgDirectFunc<&thesaurus_lexize>, true, true, TArgs_thesaurus_lexize_Policy>({}); }
 struct TArgs_tideq_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tideq() { return &GenericExec<TPgDirectFunc<&tideq>, true, true, TArgs_tideq_Policy>; }
+TExecFunc arrow_tideq() { return TGenericExec<TPgDirectFunc<&tideq>, true, true, TArgs_tideq_Policy>({}); }
 struct TArgs_tidge_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidge() { return &GenericExec<TPgDirectFunc<&tidge>, true, true, TArgs_tidge_Policy>; }
+TExecFunc arrow_tidge() { return TGenericExec<TPgDirectFunc<&tidge>, true, true, TArgs_tidge_Policy>({}); }
 struct TArgs_tidgt_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidgt() { return &GenericExec<TPgDirectFunc<&tidgt>, true, true, TArgs_tidgt_Policy>; }
+TExecFunc arrow_tidgt() { return TGenericExec<TPgDirectFunc<&tidgt>, true, true, TArgs_tidgt_Policy>({}); }
 struct TArgs_tidin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_tidin() { return &GenericExec<TPgDirectFunc<&tidin>, true, false, TArgs_tidin_Policy>; }
+TExecFunc arrow_tidin() { return TGenericExec<TPgDirectFunc<&tidin>, true, false, TArgs_tidin_Policy>({}); }
 struct TArgs_tidlarger_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidlarger() { return &GenericExec<TPgDirectFunc<&tidlarger>, true, false, TArgs_tidlarger_Policy>; }
+TExecFunc arrow_tidlarger() { return TGenericExec<TPgDirectFunc<&tidlarger>, true, false, TArgs_tidlarger_Policy>({}); }
 struct TArgs_tidle_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidle() { return &GenericExec<TPgDirectFunc<&tidle>, true, true, TArgs_tidle_Policy>; }
+TExecFunc arrow_tidle() { return TGenericExec<TPgDirectFunc<&tidle>, true, true, TArgs_tidle_Policy>({}); }
 struct TArgs_tidlt_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidlt() { return &GenericExec<TPgDirectFunc<&tidlt>, true, true, TArgs_tidlt_Policy>; }
+TExecFunc arrow_tidlt() { return TGenericExec<TPgDirectFunc<&tidlt>, true, true, TArgs_tidlt_Policy>({}); }
 struct TArgs_tidne_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidne() { return &GenericExec<TPgDirectFunc<&tidne>, true, true, TArgs_tidne_Policy>; }
+TExecFunc arrow_tidne() { return TGenericExec<TPgDirectFunc<&tidne>, true, true, TArgs_tidne_Policy>({}); }
 struct TArgs_tidout_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_tidout() { return &GenericExec<TPgDirectFunc<&tidout>, true, false, TArgs_tidout_Policy>; }
+TExecFunc arrow_tidout() { return TGenericExec<TPgDirectFunc<&tidout>, true, false, TArgs_tidout_Policy>({}); }
 struct TArgs_tidrecv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_tidrecv() { return &GenericExec<TPgDirectFunc<&tidrecv>, true, false, TArgs_tidrecv_Policy>; }
+TExecFunc arrow_tidrecv() { return TGenericExec<TPgDirectFunc<&tidrecv>, true, false, TArgs_tidrecv_Policy>({}); }
 struct TArgs_tidsend_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_tidsend() { return &GenericExec<TPgDirectFunc<&tidsend>, true, false, TArgs_tidsend_Policy>; }
+TExecFunc arrow_tidsend() { return TGenericExec<TPgDirectFunc<&tidsend>, true, false, TArgs_tidsend_Policy>({}); }
 struct TArgs_tidsmaller_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_tidsmaller() { return &GenericExec<TPgDirectFunc<&tidsmaller>, true, false, TArgs_tidsmaller_Policy>; }
-struct TArgs_time_cmp_Policy {
+TExecFunc arrow_tidsmaller() { return TGenericExec<TPgDirectFunc<&tidsmaller>, true, false, TArgs_tidsmaller_Policy>({}); }
+struct TArgs_timeofday_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 0> IsFixedArg = {};
+};
+TExecFunc arrow_timeofday() { return TGenericExec<TPgDirectFunc<&timeofday>, true, false, TArgs_timeofday_Policy>({}); }
+struct TArgs_timestamp_age_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_time_cmp() { return &GenericExec<TPgDirectFunc<&time_cmp>, true, true, TArgs_time_cmp_Policy>; }
-struct TArgs_time_eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_time_eq() { return &GenericExec<TPgDirectFunc<&time_eq>, true, true, TArgs_time_eq_Policy>; }
-struct TArgs_time_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_time_ge() { return &GenericExec<TPgDirectFunc<&time_ge>, true, true, TArgs_time_ge_Policy>; }
-struct TArgs_time_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_time_gt() { return &GenericExec<TPgDirectFunc<&time_gt>, true, true, TArgs_time_gt_Policy>; }
-struct TArgs_time_hash_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_time_hash() { return &GenericExec<TPgDirectFunc<&time_hash>, true, true, TArgs_time_hash_Policy>; }
-struct TArgs_time_hash_extended_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_time_hash_extended() { return &GenericExec<TPgDirectFunc<&time_hash_extended>, true, true, TArgs_time_hash_extended_Policy>; }
-struct TArgs_time_in_Policy {
+TExecFunc arrow_timestamp_age() { return TGenericExec<TPgDirectFunc<&timestamp_age>, true, false, TArgs_timestamp_age_Policy>({}); }
+struct TArgs_timestamp_bin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_time_in() { return &GenericExec<TPgDirectFunc<&time_in>, true, true, TArgs_time_in_Policy>; }
-struct TArgs_time_interval_Policy {
+TExecFunc arrow_timestamp_bin() { return TGenericExec<TPgDirectFunc<&timestamp_bin>, true, true, TArgs_timestamp_bin_Policy>({}); }
+struct TArgs_timestamp_cmp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_cmp() { return TGenericExec<TPgDirectFunc<&timestamp_cmp>, true, true, TArgs_timestamp_cmp_Policy>({}); }
+struct TArgs_timestamp_cmp_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_cmp_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_cmp_timestamptz>, true, true, TArgs_timestamp_cmp_timestamptz_Policy>({}); }
+struct TArgs_timestamp_eq_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_eq() { return TGenericExec<TPgDirectFunc<&timestamp_eq>, true, true, TArgs_timestamp_eq_Policy>({}); }
+struct TArgs_timestamp_eq_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_eq_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_eq_timestamptz>, true, true, TArgs_timestamp_eq_timestamptz_Policy>({}); }
+struct TArgs_timestamp_finite_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_time_interval() { return &GenericExec<TPgDirectFunc<&time_interval>, true, false, TArgs_time_interval_Policy>; }
-struct TArgs_time_larger_Policy {
+TExecFunc arrow_timestamp_finite() { return TGenericExec<TPgDirectFunc<&timestamp_finite>, true, true, TArgs_timestamp_finite_Policy>({}); }
+struct TArgs_timestamp_ge_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_time_larger() { return &GenericExec<TPgDirectFunc<&time_larger>, true, true, TArgs_time_larger_Policy>; }
-struct TArgs_time_le_Policy {
+TExecFunc arrow_timestamp_ge() { return TGenericExec<TPgDirectFunc<&timestamp_ge>, true, true, TArgs_timestamp_ge_Policy>({}); }
+struct TArgs_timestamp_ge_timestamptz_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_time_le() { return &GenericExec<TPgDirectFunc<&time_le>, true, true, TArgs_time_le_Policy>; }
-struct TArgs_time_lt_Policy {
+TExecFunc arrow_timestamp_ge_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_ge_timestamptz>, true, true, TArgs_timestamp_ge_timestamptz_Policy>({}); }
+struct TArgs_timestamp_gt_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_time_lt() { return &GenericExec<TPgDirectFunc<&time_lt>, true, true, TArgs_time_lt_Policy>; }
-struct TArgs_time_mi_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-TExecFunc arrow_time_mi_interval() { return &GenericExec<TPgDirectFunc<&time_mi_interval>, true, true, TArgs_time_mi_interval_Policy>; }
-struct TArgs_time_mi_time_Policy {
+TExecFunc arrow_timestamp_gt() { return TGenericExec<TPgDirectFunc<&timestamp_gt>, true, true, TArgs_timestamp_gt_Policy>({}); }
+struct TArgs_timestamp_gt_timestamptz_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_time_mi_time() { return &GenericExec<TPgDirectFunc<&time_mi_time>, true, false, TArgs_time_mi_time_Policy>; }
-struct TArgs_time_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_time_ne() { return &GenericExec<TPgDirectFunc<&time_ne>, true, true, TArgs_time_ne_Policy>; }
-struct TArgs_time_out_Policy {
+TExecFunc arrow_timestamp_gt_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_gt_timestamptz>, true, true, TArgs_timestamp_gt_timestamptz_Policy>({}); }
+struct TArgs_timestamp_hash_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_time_out() { return &GenericExec<TPgDirectFunc<&time_out>, true, false, TArgs_time_out_Policy>; }
-struct TArgs_time_part_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_time_part() { return &GenericExec<TPgDirectFunc<&time_part>, true, true, TArgs_time_part_Policy>; }
-struct TArgs_time_pl_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
-};
-TExecFunc arrow_time_pl_interval() { return &GenericExec<TPgDirectFunc<&time_pl_interval>, true, true, TArgs_time_pl_interval_Policy>; }
-struct TArgs_time_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_time_recv() { return &GenericExec<TPgDirectFunc<&time_recv>, true, true, TArgs_time_recv_Policy>; }
-struct TArgs_time_scale_Policy {
+TExecFunc arrow_timestamp_hash() { return TGenericExec<TPgDirectFunc<&timestamp_hash>, true, true, TArgs_timestamp_hash_Policy>({}); }
+struct TArgs_timestamp_hash_extended_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_time_scale() { return &GenericExec<TPgDirectFunc<&time_scale>, true, true, TArgs_time_scale_Policy>; }
-struct TArgs_time_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_time_send() { return &GenericExec<TPgDirectFunc<&time_send>, true, false, TArgs_time_send_Policy>; }
-struct TArgs_time_smaller_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_time_smaller() { return &GenericExec<TPgDirectFunc<&time_smaller>, true, true, TArgs_time_smaller_Policy>; }
-struct TArgs_time_support_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_time_support() { return &GenericExec<TPgDirectFunc<&time_support>, true, true, TArgs_time_support_Policy>; }
-struct TArgs_time_timetz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_time_timetz() { return &GenericExec<TPgDirectFunc<&time_timetz>, true, false, TArgs_time_timetz_Policy>; }
-struct TArgs_timestamp_cmp_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_cmp_date() { return &GenericExec<TPgDirectFunc<&timestamp_cmp_date>, true, true, TArgs_timestamp_cmp_date_Policy>; }
-struct TArgs_timestamp_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_timestamp_date() { return &GenericExec<TPgDirectFunc<&timestamp_date>, true, true, TArgs_timestamp_date_Policy>; }
-struct TArgs_timestamp_eq_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_eq_date() { return &GenericExec<TPgDirectFunc<&timestamp_eq_date>, true, true, TArgs_timestamp_eq_date_Policy>; }
-struct TArgs_timestamp_ge_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_ge_date() { return &GenericExec<TPgDirectFunc<&timestamp_ge_date>, true, true, TArgs_timestamp_ge_date_Policy>; }
-struct TArgs_timestamp_gt_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_gt_date() { return &GenericExec<TPgDirectFunc<&timestamp_gt_date>, true, true, TArgs_timestamp_gt_date_Policy>; }
-struct TArgs_timestamp_le_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_le_date() { return &GenericExec<TPgDirectFunc<&timestamp_le_date>, true, true, TArgs_timestamp_le_date_Policy>; }
-struct TArgs_timestamp_lt_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_lt_date() { return &GenericExec<TPgDirectFunc<&timestamp_lt_date>, true, true, TArgs_timestamp_lt_date_Policy>; }
-struct TArgs_timestamp_ne_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamp_ne_date() { return &GenericExec<TPgDirectFunc<&timestamp_ne_date>, true, true, TArgs_timestamp_ne_date_Policy>; }
-struct TArgs_timestamp_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_timestamp_time() { return &GenericExec<TPgDirectFunc<&timestamp_time>, true, true, TArgs_timestamp_time_Policy>; }
-struct TArgs_timestamptz_cmp_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_cmp_date() { return &GenericExec<TPgDirectFunc<&timestamptz_cmp_date>, true, true, TArgs_timestamptz_cmp_date_Policy>; }
-struct TArgs_timestamptz_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_timestamptz_date() { return &GenericExec<TPgDirectFunc<&timestamptz_date>, true, true, TArgs_timestamptz_date_Policy>; }
-struct TArgs_timestamptz_eq_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_eq_date() { return &GenericExec<TPgDirectFunc<&timestamptz_eq_date>, true, true, TArgs_timestamptz_eq_date_Policy>; }
-struct TArgs_timestamptz_ge_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_ge_date() { return &GenericExec<TPgDirectFunc<&timestamptz_ge_date>, true, true, TArgs_timestamptz_ge_date_Policy>; }
-struct TArgs_timestamptz_gt_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_gt_date() { return &GenericExec<TPgDirectFunc<&timestamptz_gt_date>, true, true, TArgs_timestamptz_gt_date_Policy>; }
-struct TArgs_timestamptz_le_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_le_date() { return &GenericExec<TPgDirectFunc<&timestamptz_le_date>, true, true, TArgs_timestamptz_le_date_Policy>; }
-struct TArgs_timestamptz_lt_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_lt_date() { return &GenericExec<TPgDirectFunc<&timestamptz_lt_date>, true, true, TArgs_timestamptz_lt_date_Policy>; }
-struct TArgs_timestamptz_ne_date_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_timestamptz_ne_date() { return &GenericExec<TPgDirectFunc<&timestamptz_ne_date>, true, true, TArgs_timestamptz_ne_date_Policy>; }
-struct TArgs_timestamptz_time_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_timestamptz_time() { return &GenericExec<TPgDirectFunc<&timestamptz_time>, true, true, TArgs_timestamptz_time_Policy>; }
-struct TArgs_timestamptz_timetz_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_timestamptz_timetz() { return &GenericExec<TPgDirectFunc<&timestamptz_timetz>, true, false, TArgs_timestamptz_timetz_Policy>; }
-struct TArgs_timetypmodin_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_timetypmodin() { return &GenericExec<TPgDirectFunc<&timetypmodin>, true, true, TArgs_timetypmodin_Policy>; }
-struct TArgs_timetypmodout_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_timetypmodout() { return &GenericExec<TPgDirectFunc<&timetypmodout>, true, false, TArgs_timetypmodout_Policy>; }
-struct TArgs_timetz_cmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_cmp() { return &GenericExec<TPgDirectFunc<&timetz_cmp>, true, true, TArgs_timetz_cmp_Policy>; }
-struct TArgs_timetz_eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_eq() { return &GenericExec<TPgDirectFunc<&timetz_eq>, true, true, TArgs_timetz_eq_Policy>; }
-struct TArgs_timetz_ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_ge() { return &GenericExec<TPgDirectFunc<&timetz_ge>, true, true, TArgs_timetz_ge_Policy>; }
-struct TArgs_timetz_gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_gt() { return &GenericExec<TPgDirectFunc<&timetz_gt>, true, true, TArgs_timetz_gt_Policy>; }
-struct TArgs_timetz_hash_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_timetz_hash() { return &GenericExec<TPgDirectFunc<&timetz_hash>, true, true, TArgs_timetz_hash_Policy>; }
-struct TArgs_timetz_hash_extended_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
-};
-TExecFunc arrow_timetz_hash_extended() { return &GenericExec<TPgDirectFunc<&timetz_hash_extended>, true, true, TArgs_timetz_hash_extended_Policy>; }
-struct TArgs_timetz_in_Policy {
+TExecFunc arrow_timestamp_hash_extended() { return TGenericExec<TPgDirectFunc<&timestamp_hash_extended>, true, true, TArgs_timestamp_hash_extended_Policy>({}); }
+struct TArgs_timestamp_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_timetz_in() { return &GenericExec<TPgDirectFunc<&timetz_in>, true, false, TArgs_timetz_in_Policy>; }
-struct TArgs_timetz_izone_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_izone() { return &GenericExec<TPgDirectFunc<&timetz_izone>, true, false, TArgs_timetz_izone_Policy>; }
-struct TArgs_timetz_larger_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_larger() { return &GenericExec<TPgDirectFunc<&timetz_larger>, true, false, TArgs_timetz_larger_Policy>; }
-struct TArgs_timetz_le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_le() { return &GenericExec<TPgDirectFunc<&timetz_le>, true, true, TArgs_timetz_le_Policy>; }
-struct TArgs_timetz_lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_lt() { return &GenericExec<TPgDirectFunc<&timetz_lt>, true, true, TArgs_timetz_lt_Policy>; }
-struct TArgs_timetz_mi_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_mi_interval() { return &GenericExec<TPgDirectFunc<&timetz_mi_interval>, true, false, TArgs_timetz_mi_interval_Policy>; }
-struct TArgs_timetz_ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_ne() { return &GenericExec<TPgDirectFunc<&timetz_ne>, true, true, TArgs_timetz_ne_Policy>; }
-struct TArgs_timetz_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_timetz_out() { return &GenericExec<TPgDirectFunc<&timetz_out>, true, false, TArgs_timetz_out_Policy>; }
-struct TArgs_timetz_part_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_part() { return &GenericExec<TPgDirectFunc<&timetz_part>, true, true, TArgs_timetz_part_Policy>; }
-struct TArgs_timetz_pl_interval_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_timetz_pl_interval() { return &GenericExec<TPgDirectFunc<&timetz_pl_interval>, true, false, TArgs_timetz_pl_interval_Policy>; }
-struct TArgs_timetz_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
-};
-TExecFunc arrow_timetz_recv() { return &GenericExec<TPgDirectFunc<&timetz_recv>, true, false, TArgs_timetz_recv_Policy>; }
-struct TArgs_timetz_scale_Policy {
+TExecFunc arrow_timestamp_in() { return TGenericExec<TPgDirectFunc<&timestamp_in>, true, true, TArgs_timestamp_in_Policy>({}); }
+struct TArgs_timestamp_izone_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_timetz_scale() { return &GenericExec<TPgDirectFunc<&timetz_scale>, true, false, TArgs_timetz_scale_Policy>; }
-struct TArgs_timetz_send_Policy {
+TExecFunc arrow_timestamp_izone() { return TGenericExec<TPgDirectFunc<&timestamp_izone>, true, true, TArgs_timestamp_izone_Policy>({}); }
+struct TArgs_timestamp_larger_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_timetz_send() { return &GenericExec<TPgDirectFunc<&timetz_send>, true, false, TArgs_timetz_send_Policy>; }
-struct TArgs_timetz_smaller_Policy {
+TExecFunc arrow_timestamp_larger() { return TGenericExec<TPgDirectFunc<&timestamp_larger>, true, true, TArgs_timestamp_larger_Policy>({}); }
+struct TArgs_timestamp_le_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_timetz_smaller() { return &GenericExec<TPgDirectFunc<&timetz_smaller>, true, false, TArgs_timetz_smaller_Policy>; }
-struct TArgs_timetz_time_Policy {
+TExecFunc arrow_timestamp_le() { return TGenericExec<TPgDirectFunc<&timestamp_le>, true, true, TArgs_timestamp_le_Policy>({}); }
+struct TArgs_timestamp_le_timestamptz_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_timetz_time() { return &GenericExec<TPgDirectFunc<&timetz_time>, true, true, TArgs_timetz_time_Policy>; }
-struct TArgs_timetz_zone_Policy {
+TExecFunc arrow_timestamp_le_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_le_timestamptz>, true, true, TArgs_timestamp_le_timestamptz_Policy>({}); }
+struct TArgs_timestamp_lt_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_timetz_zone() { return &GenericExec<TPgDirectFunc<&timetz_zone>, true, false, TArgs_timetz_zone_Policy>; }
-struct TArgs_timetztypmodin_Policy {
+TExecFunc arrow_timestamp_lt() { return TGenericExec<TPgDirectFunc<&timestamp_lt>, true, true, TArgs_timestamp_lt_Policy>({}); }
+struct TArgs_timestamp_lt_timestamptz_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
 };
-TExecFunc arrow_timetztypmodin() { return &GenericExec<TPgDirectFunc<&timetztypmodin>, true, true, TArgs_timetztypmodin_Policy>; }
-struct TArgs_timetztypmodout_Policy {
+TExecFunc arrow_timestamp_lt_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_lt_timestamptz>, true, true, TArgs_timestamp_lt_timestamptz_Policy>({}); }
+struct TArgs_timestamp_mi_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_mi() { return TGenericExec<TPgDirectFunc<&timestamp_mi>, true, false, TArgs_timestamp_mi_Policy>({}); }
+struct TArgs_timestamp_mi_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_timestamp_mi_interval() { return TGenericExec<TPgDirectFunc<&timestamp_mi_interval>, true, true, TArgs_timestamp_mi_interval_Policy>({}); }
+struct TArgs_timestamp_ne_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_ne() { return TGenericExec<TPgDirectFunc<&timestamp_ne>, true, true, TArgs_timestamp_ne_Policy>({}); }
+struct TArgs_timestamp_ne_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_ne_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_ne_timestamptz>, true, true, TArgs_timestamp_ne_timestamptz_Policy>({}); }
+struct TArgs_timestamp_out_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_timetztypmodout() { return &GenericExec<TPgDirectFunc<&timetztypmodout>, true, false, TArgs_timetztypmodout_Policy>; }
+TExecFunc arrow_timestamp_out() { return TGenericExec<TPgDirectFunc<&timestamp_out>, true, false, TArgs_timestamp_out_Policy>({}); }
+struct TArgs_timestamp_part_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamp_part() { return TGenericExec<TPgDirectFunc<&timestamp_part>, true, true, TArgs_timestamp_part_Policy>({}); }
+struct TArgs_timestamp_pl_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_timestamp_pl_interval() { return TGenericExec<TPgDirectFunc<&timestamp_pl_interval>, true, true, TArgs_timestamp_pl_interval_Policy>({}); }
+struct TArgs_timestamp_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+TExecFunc arrow_timestamp_recv() { return TGenericExec<TPgDirectFunc<&timestamp_recv>, true, true, TArgs_timestamp_recv_Policy>({}); }
+struct TArgs_timestamp_scale_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_scale() { return TGenericExec<TPgDirectFunc<&timestamp_scale>, true, true, TArgs_timestamp_scale_Policy>({}); }
+struct TArgs_timestamp_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamp_send() { return TGenericExec<TPgDirectFunc<&timestamp_send>, true, false, TArgs_timestamp_send_Policy>({}); }
+struct TArgs_timestamp_smaller_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamp_smaller() { return TGenericExec<TPgDirectFunc<&timestamp_smaller>, true, true, TArgs_timestamp_smaller_Policy>({}); }
+struct TArgs_timestamp_sortsupport_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamp_sortsupport() { return TGenericExec<TPgDirectFunc<&timestamp_sortsupport>, true, true, TArgs_timestamp_sortsupport_Policy>({}); }
+struct TArgs_timestamp_support_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamp_support() { return TGenericExec<TPgDirectFunc<&timestamp_support>, true, true, TArgs_timestamp_support_Policy>({}); }
+struct TArgs_timestamp_timestamptz_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamp_timestamptz() { return TGenericExec<TPgDirectFunc<&timestamp_timestamptz>, true, true, TArgs_timestamp_timestamptz_Policy>({}); }
+struct TArgs_timestamp_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_timestamp_to_char() { return TGenericExec<TPgDirectFunc<&timestamp_to_char>, true, false, TArgs_timestamp_to_char_Policy>({}); }
+struct TArgs_timestamp_trunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamp_trunc() { return TGenericExec<TPgDirectFunc<&timestamp_trunc>, true, true, TArgs_timestamp_trunc_Policy>({}); }
+struct TArgs_timestamp_zone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamp_zone() { return TGenericExec<TPgDirectFunc<&timestamp_zone>, true, true, TArgs_timestamp_zone_Policy>({}); }
+struct TArgs_timestamptypmodin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_timestamptypmodin() { return TGenericExec<TPgDirectFunc<&timestamptypmodin>, true, true, TArgs_timestamptypmodin_Policy>({}); }
+struct TArgs_timestamptypmodout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamptypmodout() { return TGenericExec<TPgDirectFunc<&timestamptypmodout>, true, false, TArgs_timestamptypmodout_Policy>({}); }
+struct TArgs_timestamptz_age_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_age() { return TGenericExec<TPgDirectFunc<&timestamptz_age>, true, false, TArgs_timestamptz_age_Policy>({}); }
+struct TArgs_timestamptz_bin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_timestamptz_bin() { return TGenericExec<TPgDirectFunc<&timestamptz_bin>, true, true, TArgs_timestamptz_bin_Policy>({}); }
+struct TArgs_timestamptz_cmp_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_cmp_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_cmp_timestamp>, true, true, TArgs_timestamptz_cmp_timestamp_Policy>({}); }
+struct TArgs_timestamptz_eq_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_eq_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_eq_timestamp>, true, true, TArgs_timestamptz_eq_timestamp_Policy>({}); }
+struct TArgs_timestamptz_ge_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_ge_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_ge_timestamp>, true, true, TArgs_timestamptz_ge_timestamp_Policy>({}); }
+struct TArgs_timestamptz_gt_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_gt_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_gt_timestamp>, true, true, TArgs_timestamptz_gt_timestamp_Policy>({}); }
+struct TArgs_timestamptz_in_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
+};
+TExecFunc arrow_timestamptz_in() { return TGenericExec<TPgDirectFunc<&timestamptz_in>, true, true, TArgs_timestamptz_in_Policy>({}); }
+struct TArgs_timestamptz_izone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamptz_izone() { return TGenericExec<TPgDirectFunc<&timestamptz_izone>, true, true, TArgs_timestamptz_izone_Policy>({}); }
+struct TArgs_timestamptz_le_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_le_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_le_timestamp>, true, true, TArgs_timestamptz_le_timestamp_Policy>({}); }
+struct TArgs_timestamptz_lt_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_lt_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_lt_timestamp>, true, true, TArgs_timestamptz_lt_timestamp_Policy>({}); }
+struct TArgs_timestamptz_mi_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_timestamptz_mi_interval() { return TGenericExec<TPgDirectFunc<&timestamptz_mi_interval>, true, true, TArgs_timestamptz_mi_interval_Policy>({}); }
+struct TArgs_timestamptz_ne_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_ne_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_ne_timestamp>, true, true, TArgs_timestamptz_ne_timestamp_Policy>({}); }
+struct TArgs_timestamptz_out_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamptz_out() { return TGenericExec<TPgDirectFunc<&timestamptz_out>, true, false, TArgs_timestamptz_out_Policy>({}); }
+struct TArgs_timestamptz_part_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamptz_part() { return TGenericExec<TPgDirectFunc<&timestamptz_part>, true, true, TArgs_timestamptz_part_Policy>({}); }
+struct TArgs_timestamptz_pl_interval_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_timestamptz_pl_interval() { return TGenericExec<TPgDirectFunc<&timestamptz_pl_interval>, true, true, TArgs_timestamptz_pl_interval_Policy>({}); }
+struct TArgs_timestamptz_recv_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
+};
+TExecFunc arrow_timestamptz_recv() { return TGenericExec<TPgDirectFunc<&timestamptz_recv>, true, true, TArgs_timestamptz_recv_Policy>({}); }
+struct TArgs_timestamptz_scale_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+};
+TExecFunc arrow_timestamptz_scale() { return TGenericExec<TPgDirectFunc<&timestamptz_scale>, true, true, TArgs_timestamptz_scale_Policy>({}); }
+struct TArgs_timestamptz_send_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamptz_send() { return TGenericExec<TPgDirectFunc<&timestamptz_send>, true, false, TArgs_timestamptz_send_Policy>({}); }
+struct TArgs_timestamptz_timestamp_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamptz_timestamp() { return TGenericExec<TPgDirectFunc<&timestamptz_timestamp>, true, true, TArgs_timestamptz_timestamp_Policy>({}); }
+struct TArgs_timestamptz_to_char_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
+};
+TExecFunc arrow_timestamptz_to_char() { return TGenericExec<TPgDirectFunc<&timestamptz_to_char>, true, false, TArgs_timestamptz_to_char_Policy>({}); }
+struct TArgs_timestamptz_trunc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamptz_trunc() { return TGenericExec<TPgDirectFunc<&timestamptz_trunc>, true, true, TArgs_timestamptz_trunc_Policy>({}); }
+struct TArgs_timestamptz_trunc_zone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,true,false};
+};
+TExecFunc arrow_timestamptz_trunc_zone() { return TGenericExec<TPgDirectFunc<&timestamptz_trunc_zone>, true, true, TArgs_timestamptz_trunc_zone_Policy>({}); }
+struct TArgs_timestamptz_zone_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,true};
+};
+TExecFunc arrow_timestamptz_zone() { return TGenericExec<TPgDirectFunc<&timestamptz_zone>, true, true, TArgs_timestamptz_zone_Policy>({}); }
+struct TArgs_timestamptztypmodin_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_timestamptztypmodin() { return TGenericExec<TPgDirectFunc<&timestamptztypmodin>, true, true, TArgs_timestamptztypmodin_Policy>({}); }
+struct TArgs_timestamptztypmodout_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
+};
+TExecFunc arrow_timestamptztypmodout() { return TGenericExec<TPgDirectFunc<&timestamptztypmodout>, true, false, TArgs_timestamptztypmodout_Policy>({}); }
 struct TArgs_to_ascii_default_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_to_ascii_default() { return &GenericExec<TPgDirectFunc<&to_ascii_default>, true, false, TArgs_to_ascii_default_Policy>; }
+TExecFunc arrow_to_ascii_default() { return TGenericExec<TPgDirectFunc<&to_ascii_default>, true, false, TArgs_to_ascii_default_Policy>({}); }
 struct TArgs_to_ascii_enc_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,true};
 };
-TExecFunc arrow_to_ascii_enc() { return &GenericExec<TPgDirectFunc<&to_ascii_enc>, true, false, TArgs_to_ascii_enc_Policy>; }
+TExecFunc arrow_to_ascii_enc() { return TGenericExec<TPgDirectFunc<&to_ascii_enc>, true, false, TArgs_to_ascii_enc_Policy>({}); }
 struct TArgs_to_ascii_encname_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_to_ascii_encname() { return &GenericExec<TPgDirectFunc<&to_ascii_encname>, true, false, TArgs_to_ascii_encname_Policy>; }
-struct TArgs_ts_headline_Policy {
+TExecFunc arrow_to_ascii_encname() { return TGenericExec<TPgDirectFunc<&to_ascii_encname>, true, false, TArgs_to_ascii_encname_Policy>({}); }
+struct TArgs_to_date_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_ts_headline() { return &GenericExec<TPgDirectFunc<&ts_headline>, true, false, TArgs_ts_headline_Policy>; }
-struct TArgs_ts_headline_byid_Policy {
+TExecFunc arrow_to_date() { return TGenericExec<TPgDirectFunc<&to_date>, true, true, TArgs_to_date_Policy>({}); }
+struct TArgs_to_regclass_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_ts_headline_byid() { return &GenericExec<TPgDirectFunc<&ts_headline_byid>, true, false, TArgs_ts_headline_byid_Policy>; }
-struct TArgs_ts_headline_byid_opt_Policy {
+TExecFunc arrow_to_regclass() { return TGenericExec<TPgDirectFunc<&to_regclass>, true, true, TArgs_to_regclass_Policy>({}); }
+struct TArgs_to_regcollation_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,false,false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_ts_headline_byid_opt() { return &GenericExec<TPgDirectFunc<&ts_headline_byid_opt>, true, false, TArgs_ts_headline_byid_opt_Policy>; }
-struct TArgs_ts_headline_json_Policy {
+TExecFunc arrow_to_regcollation() { return TGenericExec<TPgDirectFunc<&to_regcollation>, true, true, TArgs_to_regcollation_Policy>({}); }
+struct TArgs_to_regnamespace_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regnamespace() { return TGenericExec<TPgDirectFunc<&to_regnamespace>, true, true, TArgs_to_regnamespace_Policy>({}); }
+struct TArgs_to_regoper_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regoper() { return TGenericExec<TPgDirectFunc<&to_regoper>, true, true, TArgs_to_regoper_Policy>({}); }
+struct TArgs_to_regoperator_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regoperator() { return TGenericExec<TPgDirectFunc<&to_regoperator>, true, true, TArgs_to_regoperator_Policy>({}); }
+struct TArgs_to_regproc_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regproc() { return TGenericExec<TPgDirectFunc<&to_regproc>, true, true, TArgs_to_regproc_Policy>({}); }
+struct TArgs_to_regprocedure_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regprocedure() { return TGenericExec<TPgDirectFunc<&to_regprocedure>, true, true, TArgs_to_regprocedure_Policy>({}); }
+struct TArgs_to_regrole_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regrole() { return TGenericExec<TPgDirectFunc<&to_regrole>, true, true, TArgs_to_regrole_Policy>({}); }
+struct TArgs_to_regtype_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 1> IsFixedArg = {false};
+};
+TExecFunc arrow_to_regtype() { return TGenericExec<TPgDirectFunc<&to_regtype>, true, true, TArgs_to_regtype_Policy>({}); }
+struct TArgs_to_timestamp_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 2> IsFixedArg = {false,false};
 };
-TExecFunc arrow_ts_headline_json() { return &GenericExec<TPgDirectFunc<&ts_headline_json>, true, false, TArgs_ts_headline_json_Policy>; }
-struct TArgs_ts_headline_json_byid_Policy {
+TExecFunc arrow_to_timestamp() { return TGenericExec<TPgDirectFunc<&to_timestamp>, true, true, TArgs_to_timestamp_Policy>({}); }
+struct TArgs_ts_lexize_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
+    static constexpr std::array<bool, 2> IsFixedArg = {true,false};
 };
-TExecFunc arrow_ts_headline_json_byid() { return &GenericExec<TPgDirectFunc<&ts_headline_json_byid>, true, false, TArgs_ts_headline_json_byid_Policy>; }
-struct TArgs_ts_headline_json_byid_opt_Policy {
+TExecFunc arrow_ts_lexize() { return TGenericExec<TPgDirectFunc<&ts_lexize>, true, false, TArgs_ts_lexize_Policy>({}); }
+struct TArgs_ts_typanalyze_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,false,false,false};
+    static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_ts_headline_json_byid_opt() { return &GenericExec<TPgDirectFunc<&ts_headline_json_byid_opt>, true, false, TArgs_ts_headline_json_byid_opt_Policy>; }
-struct TArgs_ts_headline_json_opt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
-};
-TExecFunc arrow_ts_headline_json_opt() { return &GenericExec<TPgDirectFunc<&ts_headline_json_opt>, true, false, TArgs_ts_headline_json_opt_Policy>; }
-struct TArgs_ts_headline_jsonb_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_ts_headline_jsonb() { return &GenericExec<TPgDirectFunc<&ts_headline_jsonb>, true, false, TArgs_ts_headline_jsonb_Policy>; }
-struct TArgs_ts_headline_jsonb_byid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {true,false,false};
-};
-TExecFunc arrow_ts_headline_jsonb_byid() { return &GenericExec<TPgDirectFunc<&ts_headline_jsonb_byid>, true, false, TArgs_ts_headline_jsonb_byid_Policy>; }
-struct TArgs_ts_headline_jsonb_byid_opt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 4> IsFixedArg = {true,false,false,false};
-};
-TExecFunc arrow_ts_headline_jsonb_byid_opt() { return &GenericExec<TPgDirectFunc<&ts_headline_jsonb_byid_opt>, true, false, TArgs_ts_headline_jsonb_byid_opt_Policy>; }
-struct TArgs_ts_headline_jsonb_opt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
-};
-TExecFunc arrow_ts_headline_jsonb_opt() { return &GenericExec<TPgDirectFunc<&ts_headline_jsonb_opt>, true, false, TArgs_ts_headline_jsonb_opt_Policy>; }
-struct TArgs_ts_headline_opt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
-};
-TExecFunc arrow_ts_headline_opt() { return &GenericExec<TPgDirectFunc<&ts_headline_opt>, true, false, TArgs_ts_headline_opt_Policy>; }
+TExecFunc arrow_ts_typanalyze() { return TGenericExec<TPgDirectFunc<&ts_typanalyze>, true, true, TArgs_ts_typanalyze_Policy>({}); }
 struct TArgs_tsm_bernoulli_handler_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_tsm_bernoulli_handler() { return &GenericExec<TPgDirectFunc<&tsm_bernoulli_handler>, true, true, TArgs_tsm_bernoulli_handler_Policy>; }
-struct TArgs_tsrange_subdiff_Policy {
+TExecFunc arrow_tsm_bernoulli_handler() { return TGenericExec<TPgDirectFunc<&tsm_bernoulli_handler>, true, true, TArgs_tsm_bernoulli_handler_Policy>({}); }
+struct TArgs_tsmatchjoinsel_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+    static constexpr std::array<bool, 5> IsFixedArg = {true,true,true,true,true};
 };
-TExecFunc arrow_tsrange_subdiff() { return &GenericExec<TPgDirectFunc<&tsrange_subdiff>, true, true, TArgs_tsrange_subdiff_Policy>; }
-struct TArgs_tstzrange_subdiff_Policy {
+TExecFunc arrow_tsmatchjoinsel() { return TGenericExec<TPgDirectFunc<&tsmatchjoinsel>, true, true, TArgs_tsmatchjoinsel_Policy>({}); }
+struct TArgs_tsmatchsel_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
+    static constexpr std::array<bool, 4> IsFixedArg = {true,true,true,true};
 };
-TExecFunc arrow_tstzrange_subdiff() { return &GenericExec<TPgDirectFunc<&tstzrange_subdiff>, true, true, TArgs_tstzrange_subdiff_Policy>; }
-struct TArgs_varchar_Policy {
+TExecFunc arrow_tsmatchsel() { return TGenericExec<TPgDirectFunc<&tsmatchsel>, true, true, TArgs_tsmatchsel_Policy>({}); }
+struct TArgs_tsquery_rewrite_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
+};
+TExecFunc arrow_tsquery_rewrite() { return TGenericExec<TPgDirectFunc<&tsquery_rewrite>, true, false, TArgs_tsquery_rewrite_Policy>({}); }
+struct TArgs_tsquery_rewrite_query_Policy {
+    static constexpr bool VarArgs = false;
+    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
+};
+TExecFunc arrow_tsquery_rewrite_query() { return TGenericExec<TPgDirectFunc<&tsquery_rewrite_query>, true, false, TArgs_tsquery_rewrite_query_Policy>({}); }
+struct TArgs_varbit_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_varchar() { return &GenericExec<TPgDirectFunc<&varchar>, true, false, TArgs_varchar_Policy>; }
-struct TArgs_varchar_support_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_varchar_support() { return &GenericExec<TPgDirectFunc<&varchar_support>, true, true, TArgs_varchar_support_Policy>; }
-struct TArgs_varcharin_Policy {
+TExecFunc arrow_varbit() { return TGenericExec<TPgDirectFunc<&varbit>, true, false, TArgs_varbit_Policy>({}); }
+struct TArgs_varbit_in_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {false,true,true};
 };
-TExecFunc arrow_varcharin() { return &GenericExec<TPgDirectFunc<&varcharin>, true, false, TArgs_varcharin_Policy>; }
-struct TArgs_varcharout_Policy {
+TExecFunc arrow_varbit_in() { return TGenericExec<TPgDirectFunc<&varbit_in>, true, false, TArgs_varbit_in_Policy>({}); }
+struct TArgs_varbit_out_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_varcharout() { return &GenericExec<TPgDirectFunc<&varcharout>, true, false, TArgs_varcharout_Policy>; }
-struct TArgs_varcharrecv_Policy {
+TExecFunc arrow_varbit_out() { return TGenericExec<TPgDirectFunc<&varbit_out>, true, false, TArgs_varbit_out_Policy>({}); }
+struct TArgs_varbit_recv_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 3> IsFixedArg = {true,true,true};
 };
-TExecFunc arrow_varcharrecv() { return &GenericExec<TPgDirectFunc<&varcharrecv>, true, false, TArgs_varcharrecv_Policy>; }
-struct TArgs_varcharsend_Policy {
+TExecFunc arrow_varbit_recv() { return TGenericExec<TPgDirectFunc<&varbit_recv>, true, false, TArgs_varbit_recv_Policy>({}); }
+struct TArgs_varbit_send_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_varcharsend() { return &GenericExec<TPgDirectFunc<&varcharsend>, true, false, TArgs_varcharsend_Policy>; }
-struct TArgs_varchartypmodin_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_varchartypmodin() { return &GenericExec<TPgDirectFunc<&varchartypmodin>, true, true, TArgs_varchartypmodin_Policy>; }
-struct TArgs_varchartypmodout_Policy {
+TExecFunc arrow_varbit_send() { return TGenericExec<TPgDirectFunc<&varbit_send>, true, false, TArgs_varbit_send_Policy>({}); }
+struct TArgs_varbit_support_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_varchartypmodout() { return &GenericExec<TPgDirectFunc<&varchartypmodout>, true, false, TArgs_varchartypmodout_Policy>; }
-struct TArgs_xid8cmp_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8cmp() { return &GenericExec<TPgDirectFunc<&xid8cmp>, true, true, TArgs_xid8cmp_Policy>; }
-struct TArgs_xid8eq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8eq() { return &GenericExec<TPgDirectFunc<&xid8eq>, true, true, TArgs_xid8eq_Policy>; }
-struct TArgs_xid8ge_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8ge() { return &GenericExec<TPgDirectFunc<&xid8ge>, true, true, TArgs_xid8ge_Policy>; }
-struct TArgs_xid8gt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8gt() { return &GenericExec<TPgDirectFunc<&xid8gt>, true, true, TArgs_xid8gt_Policy>; }
-struct TArgs_xid8in_Policy {
+TExecFunc arrow_varbit_support() { return TGenericExec<TPgDirectFunc<&varbit_support>, true, true, TArgs_varbit_support_Policy>({}); }
+struct TArgs_varbittypmodin_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {false};
 };
-TExecFunc arrow_xid8in() { return &GenericExec<TPgDirectFunc<&xid8in>, true, true, TArgs_xid8in_Policy>; }
-struct TArgs_xid8le_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8le() { return &GenericExec<TPgDirectFunc<&xid8le>, true, true, TArgs_xid8le_Policy>; }
-struct TArgs_xid8lt_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8lt() { return &GenericExec<TPgDirectFunc<&xid8lt>, true, true, TArgs_xid8lt_Policy>; }
-struct TArgs_xid8ne_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xid8ne() { return &GenericExec<TPgDirectFunc<&xid8ne>, true, true, TArgs_xid8ne_Policy>; }
-struct TArgs_xid8out_Policy {
+TExecFunc arrow_varbittypmodin() { return TGenericExec<TPgDirectFunc<&varbittypmodin>, true, true, TArgs_varbittypmodin_Policy>({}); }
+struct TArgs_varbittypmodout_Policy {
     static constexpr bool VarArgs = false;
     static constexpr std::array<bool, 1> IsFixedArg = {true};
 };
-TExecFunc arrow_xid8out() { return &GenericExec<TPgDirectFunc<&xid8out>, true, false, TArgs_xid8out_Policy>; }
-struct TArgs_xid8recv_Policy {
+TExecFunc arrow_varbittypmodout() { return TGenericExec<TPgDirectFunc<&varbittypmodout>, true, false, TArgs_varbittypmodout_Policy>({}); }
+struct TArgs_width_bucket_numeric_Policy {
     static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
+    static constexpr std::array<bool, 4> IsFixedArg = {false,false,false,true};
 };
-TExecFunc arrow_xid8recv() { return &GenericExec<TPgDirectFunc<&xid8recv>, true, true, TArgs_xid8recv_Policy>; }
-struct TArgs_xid8send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xid8send() { return &GenericExec<TPgDirectFunc<&xid8send>, true, false, TArgs_xid8send_Policy>; }
-struct TArgs_xid8toxid_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xid8toxid() { return &GenericExec<TPgDirectFunc<&xid8toxid>, true, true, TArgs_xid8toxid_Policy>; }
-struct TArgs_xid_age_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xid_age() { return &GenericExec<TPgDirectFunc<&xid_age>, true, true, TArgs_xid_age_Policy>; }
-struct TArgs_xideq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xideq() { return &GenericExec<TPgDirectFunc<&xideq>, true, true, TArgs_xideq_Policy>; }
-struct TArgs_xidin_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xidin() { return &GenericExec<TPgDirectFunc<&xidin>, true, true, TArgs_xidin_Policy>; }
-struct TArgs_xidneq_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {true,true};
-};
-TExecFunc arrow_xidneq() { return &GenericExec<TPgDirectFunc<&xidneq>, true, true, TArgs_xidneq_Policy>; }
-struct TArgs_xidout_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xidout() { return &GenericExec<TPgDirectFunc<&xidout>, true, false, TArgs_xidout_Policy>; }
-struct TArgs_xidrecv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xidrecv() { return &GenericExec<TPgDirectFunc<&xidrecv>, true, true, TArgs_xidrecv_Policy>; }
-struct TArgs_xidsend_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xidsend() { return &GenericExec<TPgDirectFunc<&xidsend>, true, false, TArgs_xidsend_Policy>; }
-struct TArgs_xml_in_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xml_in() { return &GenericExec<TPgDirectFunc<&xml_in>, true, false, TArgs_xml_in_Policy>; }
-struct TArgs_xml_is_well_formed_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xml_is_well_formed() { return &GenericExec<TPgDirectFunc<&xml_is_well_formed>, true, true, TArgs_xml_is_well_formed_Policy>; }
-struct TArgs_xml_is_well_formed_content_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xml_is_well_formed_content() { return &GenericExec<TPgDirectFunc<&xml_is_well_formed_content>, true, true, TArgs_xml_is_well_formed_content_Policy>; }
-struct TArgs_xml_is_well_formed_document_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xml_is_well_formed_document() { return &GenericExec<TPgDirectFunc<&xml_is_well_formed_document>, true, true, TArgs_xml_is_well_formed_document_Policy>; }
-struct TArgs_xml_out_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xml_out() { return &GenericExec<TPgDirectFunc<&xml_out>, true, false, TArgs_xml_out_Policy>; }
-struct TArgs_xml_recv_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {true};
-};
-TExecFunc arrow_xml_recv() { return &GenericExec<TPgDirectFunc<&xml_recv>, true, false, TArgs_xml_recv_Policy>; }
-struct TArgs_xml_send_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xml_send() { return &GenericExec<TPgDirectFunc<&xml_send>, true, false, TArgs_xml_send_Policy>; }
-struct TArgs_xmlcomment_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xmlcomment() { return &GenericExec<TPgDirectFunc<&xmlcomment>, true, false, TArgs_xmlcomment_Policy>; }
-struct TArgs_xmlconcat2_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_xmlconcat2() { return &GenericExec<TPgDirectFunc<&xmlconcat2>, false, false, TArgs_xmlconcat2_Policy>; }
-struct TArgs_xmlexists_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_xmlexists() { return &GenericExec<TPgDirectFunc<&xmlexists>, true, true, TArgs_xmlexists_Policy>; }
-struct TArgs_xmltotext_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 1> IsFixedArg = {false};
-};
-TExecFunc arrow_xmltotext() { return &GenericExec<TPgDirectFunc<&xmltotext>, true, false, TArgs_xmltotext_Policy>; }
-struct TArgs_xmlvalidate_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 2> IsFixedArg = {false,false};
-};
-TExecFunc arrow_xmlvalidate() { return &GenericExec<TPgDirectFunc<&xmlvalidate>, true, true, TArgs_xmlvalidate_Policy>; }
-struct TArgs_xpath_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
-};
-TExecFunc arrow_xpath() { return &GenericExec<TPgDirectFunc<&xpath>, true, false, TArgs_xpath_Policy>; }
-struct TArgs_xpath_exists_Policy {
-    static constexpr bool VarArgs = false;
-    static constexpr std::array<bool, 3> IsFixedArg = {false,false,false};
-};
-TExecFunc arrow_xpath_exists() { return &GenericExec<TPgDirectFunc<&xpath_exists>, true, true, TArgs_xpath_exists_Policy>; }
+TExecFunc arrow_width_bucket_numeric() { return TGenericExec<TPgDirectFunc<&width_bucket_numeric>, true, true, TArgs_width_bucket_numeric_Policy>({}); }

@@ -147,6 +147,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
 
     if (query) {
         query->Settings.DocumentApiRestricted = IsDocumentApiRestricted_;
+        query->Settings.IsInternalCall = IsInternalCall();
     }
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;
@@ -182,6 +183,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     if (query) {
         query->Settings.DocumentApiRestricted = IsDocumentApiRestricted_;
+        query->Settings.IsInternalCall = IsInternalCall();
     }
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;

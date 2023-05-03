@@ -2,6 +2,7 @@
 
 #include "aggregated_result.h"
 #include "archive.h"
+#include "config_examples.h"
 #include "yql_single_query.h"
 
 #include <ydb/core/base/appdata.h>
@@ -30,27 +31,6 @@ namespace NKikimr {
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
-
-namespace NKqpConstants {
-    const char* DEFAULT_PROTO = R"_(
-KqpLoad: {
-    DurationSeconds: 30
-    WindowDuration: 1
-    WorkingDir: "%s"
-    NumOfSessions: 64
-    UniformPartitionsCount: 1000
-    DeleteTableOnFinish: 1
-    WorkloadType: 0
-    Kv: {
-        InitRowCount: 1000
-        PartitionsByLoad: true
-        MaxFirstKey: 18446744073709551615
-        StringLen: 8
-        ColumnsCnt: 2
-        RowsCnt: 1
-    }
-})_";
-}
 
 namespace {
 
@@ -210,6 +190,8 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         THashMap<ui32, TEvNodeFinishResponse> NodeResponses;  // key is node id
     };
 
+    TVector<TConfigExample> ConfigExamples;
+
     // info about finished actors
     TVector<TFinishedTestInfo> FinishedTests;
 
@@ -247,20 +229,33 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     TVector<TAggregatedResult> ArchivedResults;
 
 private:
+    TConstArrayRef<TConfigExample> GetConfigExamples() {
+        if (ConfigExamples.empty()) {
+            const TString tenantName = AppData()->TenantName;
+            for (const auto& templ : GetConfigTemplates()) {
+                ConfigExamples.push_back(ApplyTemplateParams(templ, tenantName));
+            }
+        }
+        return ConfigExamples;
+    }
+
     ui64 GetTag(const TEvLoadTestRequest& origRequest, bool legacyRequest) {
         if (legacyRequest) {
             ui64 tag = ExtractTagFromCommand(origRequest);
-            LOG_N("Received legacy request with tag# " << tag);
-            Y_ENSURE(tag >= NextTag, "External tag# " << tag << " should not be less than NextTag = " << NextTag);
-            Y_ENSURE(TakenTags.count(tag) == 0, "External tag# " << tag << " should not be taken");
-            TakenTags.insert(tag);
-            return tag;
-        } else {
-            while (TakenTags.count(NextTag)) {
-                ++NextTag;
+            if (tag) {
+                LOG_N("Received legacy request with tag# " << tag);
+                Y_ENSURE(tag >= NextTag, "External tag# " << tag << " should not be less than NextTag = " << NextTag);
+                Y_ENSURE(TakenTags.count(tag) == 0, "External tag# " << tag << " should not be taken");
+                TakenTags.insert(tag);
+                return tag;
+            } else {
+                LOG_N("Received legacy request with tag# 0, assigning it a proper tag in a regular way");
             }
-            return NextTag++;
         }
+        while (TakenTags.count(NextTag)) {
+            ++NextTag;
+        }
+        return NextTag++;
     }
 
     const TEvLoadTestRequest& AddRequestInProcessing(const TEvLoadTestRequest& origRequest, bool legacyRequest) {
@@ -401,6 +396,22 @@ private:
         Send(info.Origin, result.release());
 
         InfoRequests.erase(it);
+    }
+
+    void RespondToArchiveRequests() {
+        TVector<ui32> archiveRequestIds;
+        for (const auto& [id, req] : InfoRequests) {
+            if (req.Mode == "archive") {
+                archiveRequestIds.push_back(id);
+            }
+        }
+        for (ui32 id : archiveRequestIds) {
+            if (IsJsonContentType(InfoRequests[id].AcceptFormat)) {
+                GenerateArchiveJsonResponse(id);
+            } else {
+                GenerateHttpInfoRes("archive", id);
+            }
+        }
     }
 
 public:
@@ -605,7 +616,7 @@ public:
             const TString& uuid = UuidByTag.at(msg->Tag);
             record.SetUuid(uuid);
             record.SetNodeId(SelfId().NodeId());
-            record.SetSuccess(msg->Report != nullptr);  // TODO check how load actors set the field
+            record.SetSuccess(msg->Report != nullptr);
             record.SetFinishTimestamp(finishTime.Seconds());
             record.SetErrorReason(msg->ErrorReason);
 
@@ -787,7 +798,11 @@ public:
             ui32 limit = GetCgiParamNumber(params, "limit", 1, 100, 10);
             info.Offset = offset;
             info.Limit = limit;
-            StartReadingResultsFromTable(offset, limit);
+            if (AppData()->TenantName.empty()) {
+                RespondToArchiveRequests();
+            } else {
+                StartReadingResultsFromTable(offset, limit);
+            }
         } else {
             GenerateHttpInfoRes(mode, id);
         }
@@ -900,37 +915,33 @@ public:
 
     void Handle(const TEvLoad::TEvYqlSingleQueryResponse::TPtr& ev) {
         const auto* response = ev->Get();
-        if (response->ErrorMessage.Defined()) {
-            LOG_E("Failed to execute YQL query: " << response->ErrorMessage.GetRef());
-            return;
-        }
         if (response->Result == kTableCreatedResult) {
-            LOG_N("Created test results table");
-            StoreResults();
-        } else if (response->Result == kRecordsInsertedResult) {
-            LOG_N("Inserted records with test results");
-        } else if (response->Result == kRecordsSelectedResult) {
-            LOG_N("Selected records from table");
-            Y_ENSURE(response->Response.Defined());
-            if (!LoadResultFromResponseProto(response->Response.GetRef(), ArchivedResults)) {
-                LOG_E("Failed to parse results from table");
-                ArchivedResults.clear();
+            if (response->ErrorMessage.Defined()) {
+                LOG_E("Failed to create test results table: " << response->ErrorMessage.GetRef());
             } else {
-                LOG_N("Got results from table: " << ArchivedResults.size());
+                LOG_N("Created test results table");
+                StoreResults();
             }
-            TVector<ui32> archiveRequestIds;
-            for (const auto& [id, req] : InfoRequests) {
-                if (req.Mode == "archive") {
-                    archiveRequestIds.push_back(id);
-                }
+        } else if (response->Result == kRecordsInsertedResult) {
+            if (response->ErrorMessage.Defined()) {
+                LOG_E("Failed to save test results into table: " << response->ErrorMessage.GetRef());
+            } else {
+                LOG_N("Inserted records with test results");
             }
-            for (ui32 id : archiveRequestIds) {
-                if (IsJsonContentType(InfoRequests[id].AcceptFormat)) {
-                    GenerateArchiveJsonResponse(id);
+        } else if (response->Result == kRecordsSelectedResult) {
+            if (response->ErrorMessage.Defined()) {
+                LOG_E("Failed to select test results from table: " << response->ErrorMessage.GetRef());
+            } else {
+                LOG_N("Selected records from table");
+                Y_ENSURE(response->Response.Defined());
+                if (!LoadResultFromResponseProto(response->Response.GetRef(), ArchivedResults)) {
+                    LOG_E("Failed to parse results from table");
+                    ArchivedResults.clear();
                 } else {
-                    GenerateHttpInfoRes("archive", id);
+                    LOG_N("Got results from table: " << ArchivedResults.size());
                 }
             }
+            RespondToArchiveRequests();
         } else {
             LOG_E("Unsupported result from YQL query: " << response->Result);
         }
@@ -1021,6 +1032,100 @@ public:
         InfoRequests.erase(it);
     }
 
+    void RenderStartForm(IOutputStream& str) {
+        str << R"___(
+            <script>
+                function updateStatus(new_class, new_text) {
+                    let line = $("#start-status-line");
+                    line.removeClass();
+                    if (new_class) {
+                        line.addClass(new_class);
+                    }
+                    line.text(new_text);
+                }
+                function sendStartRequest(button, run_all) {
+                    updateStatus("", "Starting..");
+                    $.ajax({
+                        url: "",
+                        data: {
+                            mode: "start",
+                            all_nodes: run_all,
+                            config: $("#config").val()
+                        },
+                        method: "POST",
+                        contentType: "application/x-protobuf-text",
+                        success: function(result) {
+                            if (result.status == "ok") {
+                                updateStatus(
+                                    "text-success",
+                                    "Started: UUID# " + result.uuid + ", node tag# " + result.tag + ", status# " + result.status
+                                );
+                            } else {
+                                updateStatus(
+                                    "text-danger",
+                                    "Status# " + result.status
+                                );
+                            }
+                        }
+                    });
+                })___";
+
+            str << "let kPresetConfigs=[";
+            bool first = true;
+            for (const auto& example : GetConfigExamples()) {
+                if (first) {
+                    first = false;
+                } else {
+                    str << ", ";
+                }
+                str << '"' << example.Escaped << '"';
+            }
+            str << "];";
+            str << R"___(
+                function loadConfigExample() {
+                    let selectValue = $("#example-select").get(0).value;
+                    let pos = Number(selectValue);
+                    $("#config").val(kPresetConfigs[pos]);
+                }
+            </script>
+        )___";
+
+        HTML(str) {
+            FORM() {
+                DIV_CLASS("form-group") {
+                    LABEL_CLASS_FOR("", "example-select") {
+                        str << "Load example:";
+                    }
+                    str << "<select name='examples' id='example-select' onChange='loadConfigExample()'>\n";
+                    ui32 pos = 0;
+                    for (const auto& example : GetConfigExamples()) {
+                        str << "<option value='" << ToString(pos) << "'>" << example.LoadName << "</option>\n";
+                        ++pos;
+                    }
+                    str << "</select>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<textarea id='config' name='config' rows='20' cols='50'>";
+                    str << GetConfigExamples()[0].Text;
+                    str << "</textarea>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<button type='button' onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>\n";
+                    str << "Start new load on current node\n";
+                    str << "</button>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<button type='button' onClick='sendStartRequest(this, true)' name='startNewLoadAllNodes' class='btn btn-default'>\n";
+                    str << "Start new load on all tenant nodes\n";
+                    str << "</button>\n";
+                }
+                DIV_CLASS("form-group") {
+                    str << "<p id='start-status-line'></p>";
+                }
+            }
+        }
+    }
+
     void GenerateHttpInfoRes(const TString& mode, ui32 id) {
         auto it = InfoRequests.find(id);
         Y_VERIFY(it != InfoRequests.end());
@@ -1041,36 +1146,7 @@ public:
 
             str << "<div>";
             if (mode == "start") {
-                str << R"___(
-                    <script>
-                        function sendStartRequest(button, run_all) {
-                            $.ajax({
-                                url: "",
-                                data: {
-                                    mode: "start",
-                                    all_nodes: run_all,
-                                    config: $('#config').val()
-                                },
-                                method: "POST",
-                                contentType: "application/x-protobuf-text",
-                                success: function(result) {
-                                    $(button).prop('disabled', true);
-                                    $(button).text('started');
-                                    $('#config').val('uuid: ' + result.uuid + ', tag: ' + result.tag + ', status: ' + result.status);
-                                }
-                            });
-                        }
-                    </script>
-                )___";
-                str << R"_(
-                    <textarea id="config" name="config" rows="20" cols="50">)_" << Sprintf(NKqpConstants::DEFAULT_PROTO, AppData()->TenantName.data())
-                    << R"_(
-                    </textarea>
-                    <br><br>
-                    <button onClick='sendStartRequest(this, false)' name='startNewLoadOneNode' class='btn btn-default'>Start new load on current node</button>
-                    <br>
-                    <button onClick='sendStartRequest(this, true)' name='startNewLoadAllNodes' class='btn btn-default'>Start new load on all tenant nodes</button>
-                )_";
+                RenderStartForm(str);
             } else if (mode == "stop") {
                 str << R"___(
                     <script>
@@ -1135,6 +1211,11 @@ public:
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         str << "Archived load test results";
+                    }
+                    if (AppData()->TenantName.empty()) {
+                        DIV_CLASS("panel-body text-warning") {
+                            str << "Table is not available because TenantName is not set";
+                        }
                     }
                     TABLE_CLASS("table-bordered table-condensed") {
                         TABLEHEAD() {

@@ -140,6 +140,12 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
+    Y_UNUSED(typeLen);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
     Y_UNUSED(type);
     Y_UNUSED(value);
@@ -213,6 +219,11 @@ NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
     throw yexception() << "PG types are not supported";
 }
 
+NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
+    Y_UNUSED(typeId);
+    throw yexception() << "PG types are not supported";
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr
 
@@ -269,6 +280,26 @@ public:
         Y_UNUSED(targetTypeId);
         Y_UNUSED(data);
         ythrow yexception() << "TPgDummyBuilder::NewString does nothing";
+    }
+
+    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsCStringBuffer does nothing";
+    }
+
+    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsTextBuffer does nothing";
+    }
+
+    NUdf::TUnboxedValue MakeCString(const char* value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::MakeCString does nothing";
+    }
+
+    NUdf::TUnboxedValue MakeText(const char* value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::MakeText does nothing";
     }
 };
 
@@ -328,6 +359,11 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
 }
 
 bool TypeDescIsComparable(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+i32 TypeDescGetTypeLen(void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }

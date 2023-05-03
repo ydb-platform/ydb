@@ -2256,6 +2256,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("+", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2344,6 +2348,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus SubWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("-", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2431,6 +2439,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus MulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("*", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2505,6 +2517,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus DivWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("/", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2574,6 +2590,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus ModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("%", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+        
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2784,6 +2804,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus PlusMinusWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp(input->Content() == "Plus" ? "+" : "-", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2962,6 +2986,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus ConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("||", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -11522,8 +11550,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListZipAll"] = &ListZipAllWrapper;
         Functions["Sort"] = &SortWrapper;
         Functions["AssumeSorted"] = &SortWrapper;
-        Functions["AssumeUnique"] = &AssumeUniqueWrapper;
-        Functions["AssumeDistinct"] = &AssumeUniqueWrapper;
+        Functions["AssumeUnique"] = &AssumeConstraintWrapper;
+        Functions["AssumeDistinct"] = &AssumeConstraintWrapper;
+        Functions["AssumeChopped"] = &AssumeConstraintWrapper;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["Top"] = &TopWrapper;

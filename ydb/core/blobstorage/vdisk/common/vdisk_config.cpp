@@ -49,7 +49,7 @@ namespace NKikimr {
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
         AdvanceEntryPointTimeout = TDuration::Seconds(10);          // 10 seconds (FIXME: use feedback from PDisk)
         SyncTimeInterval = TDuration::Seconds(3);                   // 3 seconds
-        SyncJobTimeout = TDuration::Minutes(30);                    // 30 minutes
+        SyncJobTimeout = TDuration::Max();                          // disabled
         SyncerRLDRetryTimeout = TDuration::Seconds(1);
         AnubisTimeout = TDuration::Minutes(60);
         RunSyncer = true;

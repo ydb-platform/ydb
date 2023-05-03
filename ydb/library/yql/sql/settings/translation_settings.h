@@ -70,6 +70,7 @@ namespace NSQLTranslation {
 
         // each (name, type) entry in this map is equivalent to
         // DECLARE $name AS type;
+        // NOTE: DECLARE statement in SQL text overrides entry in DeclaredNamedExprs
         TMap<TString, TString> DeclaredNamedExprs;
 
         ESqlMode Mode;

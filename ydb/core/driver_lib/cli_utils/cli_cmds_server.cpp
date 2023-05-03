@@ -317,6 +317,19 @@ protected:
         return 0;
     }
 
+    void AddLabelToAppConfig(const TString& name, const TString& value) {
+        for (auto &label : *RunConfig.AppConfig.MutableLabels()) {
+            if (label.GetName() == name) {
+                label.SetValue(value);
+                return;
+            }
+        }
+
+        auto *label = RunConfig.AppConfig.AddLabels();
+        label->SetName(name);
+        label->SetValue(value);
+    }
+
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
@@ -380,7 +393,40 @@ protected:
             ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
         }
 
-        MaybeRegisterAndLoadConfigs();
+        RunConfig.Labels["node_id"] = ToString(NodeId);
+        RunConfig.Labels["node_host"] = FQDNHostName();
+        RunConfig.Labels["tenant"] = TenantName;
+        RunConfig.Labels["node_type"] = NodeType;
+        // will be replaced with proper version info
+        RunConfig.Labels["branch"] = GetBranch();
+        RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
+        RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
+
+        for (const auto& [name, value] : RunConfig.Labels) {
+            auto *label = RunConfig.AppConfig.AddLabels();
+            label->SetName(name);
+            label->SetValue(value);
+        }
+
+        RunConfig.ClusterName = ClusterName;
+
+        // static node
+        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
+            if (!NodeId) {
+                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
+            }
+
+            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
+                LoadCachedConfigsForStaticNode();
+        } else {
+            RegisterDynamicNode();
+
+            RunConfig.Labels["node_id"] = ToString(RunConfig.NodeId);
+            AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
+
+            if (!HierarchicalCfg && !IgnoreCmsConfigs)
+                LoadConfigForDynamicNode();
+        }
 
         LoadYamlConfig();
 
@@ -687,20 +733,11 @@ protected:
             messageBusConfig->SetTracePath(TracePath);
         }
 
-        RunConfig.Labels["node_id"] = ToString(NodeId);
-        RunConfig.Labels["node_host"] = FQDNHostName();
-        RunConfig.Labels["tenant"] = RunConfig.TenantName;
-        // will be replaced with proper version info
-        RunConfig.Labels["branch"] = GetBranch();
-        RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
-
-        for (const auto& [name, value] : RunConfig.Labels) {
-            auto *label = RunConfig.AppConfig.AddLabels();
-            label->SetName(name);
-            label->SetValue(value);
+        if (RunConfig.AppConfig.HasDynamicNameserviceConfig()) {
+            bool isDynamic = RunConfig.NodeId > RunConfig.AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
+            RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
+            AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
         }
-
-        RunConfig.ClusterName = ClusterName;
     }
 
     inline bool LoadConfigFromCMS() {
@@ -752,6 +789,11 @@ protected:
                             RunConfig.Labels,
                             yamlConfig);
                     }
+
+                    RunConfig.InitialCmsConfig.CopyFrom(appConfig);
+
+                    RunConfig.InitialCmsYamlConfig.CopyFrom(yamlConfig);
+                    NYamlConfig::ReplaceUnmanagedKinds(appConfig, RunConfig.InitialCmsYamlConfig);
 
                     if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
                         BaseConfig.Swap(&yamlConfig);
@@ -880,24 +922,6 @@ protected:
         if (GetCachedConfig(appConfig) && appConfig.HasLogConfig()) {
             AppConfig.MutableLogConfig()->CopyFrom(appConfig.GetLogConfig());
         }
-    }
-
-    void MaybeRegisterAndLoadConfigs()
-    {
-        // static node
-        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
-            if (!NodeId) {
-                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
-            }
-
-            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
-                LoadCachedConfigsForStaticNode();
-            return;
-        }
-
-        RegisterDynamicNode();
-        if (!HierarchicalCfg && !IgnoreCmsConfigs)
-            LoadConfigForDynamicNode();
     }
 
     THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
@@ -1093,6 +1117,11 @@ protected:
                 RunConfig.Labels,
                 yamlConfig);
         }
+
+        RunConfig.InitialCmsConfig.CopyFrom(result.GetConfig());
+
+        RunConfig.InitialCmsYamlConfig.CopyFrom(yamlConfig);
+        NYamlConfig::ReplaceUnmanagedKinds(result.GetConfig(), RunConfig.InitialCmsYamlConfig);
 
         if (yamlConfig.HasYamlConfigEnabled() && yamlConfig.GetYamlConfigEnabled()) {
             appConfig = yamlConfig;

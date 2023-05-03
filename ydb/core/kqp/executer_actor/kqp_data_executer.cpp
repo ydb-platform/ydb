@@ -1533,7 +1533,6 @@ private:
         kqpTx.MutableRuntimeSettings()->SetExecType(NDqProto::TComputeRuntimeSettings::DATA);
         kqpTx.MutableRuntimeSettings()->SetStatsMode(GetDqStatsModeShard(Request.StatsMode));
 
-        kqpTx.MutableRuntimeSettings()->SetUseLLVM(false);
         kqpTx.MutableRuntimeSettings()->SetUseSpilling(false);
 
         NKikimrTxDataShard::TDataTransaction dataTransaction;
@@ -1608,9 +1607,9 @@ private:
         YQL_ENSURE(result.second);
     }
 
-    void ExecuteDataComputeTask(NDqProto::TDqTask&& taskDesc, bool shareMailbox) {
-        auto taskId = taskDesc.GetId();
+    void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox) {
         auto& task = TasksGraph.GetTask(taskId);
+        auto taskDesc = SerializeTaskToProto(TasksGraph, task);
 
         TComputeRuntimeSettings settings;
         if (Deadline) {
@@ -1620,7 +1619,6 @@ private:
         settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
         settings.FailOnUndelivery = true;
         settings.StatsMode = GetDqStatsMode(Request.StatsMode);
-        settings.UseLLVM = false;
         settings.UseSpilling = false;
 
         TComputeMemoryLimits limits;
@@ -2124,31 +2122,39 @@ private:
         // first, start compute tasks
         bool shareMailbox = (ComputeTasks.size() <= 1);
         for (ui64 taskId : ComputeTasks) {
-            const auto& task = TasksGraph.GetTask(taskId);
-            auto taskDesc = SerializeTaskToProto(TasksGraph, task);
-            ExecuteDataComputeTask(std::move(taskDesc), shareMailbox);
+            ExecuteDataComputeTask(taskId, shareMailbox);
         }
 
-        THashMap<ui64, TVector<ui64>> tasksPerNode;
-        for (auto& [shardId, tasks] : RemoteComputeTasks) {
-            auto it = ShardIdToNodeId.find(shardId);
-            YQL_ENSURE(it != ShardIdToNodeId.end());
-            for (ui64 taskId : tasks) {
-                PendingComputeTasks.insert(taskId);
-                tasksPerNode[it->second].emplace_back(taskId);
+        if (ComputeTasks.size() == 0 && RemoteComputeTasks.size() == 1) {
+            // query affects a single key or shard, so it might be more effective
+            // to execute this task locally so we can avoid useless overhead for remote task launching.
+            for(auto& [shardId, tasks]: RemoteComputeTasks) {
+                for(ui64 taskId: tasks) {
+                    ExecuteDataComputeTask(taskId, true);
+                }
             }
-        }
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, std::move(tasksPerNode), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(),
-            ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */);
-        auto err = Planner->PlanExecution();
-        if (err) {
-            TlsActivationContext->Send(err.release());
-            return;
+        } else {
+            THashMap<ui64, TVector<ui64>> tasksPerNode;
+            for (auto& [shardId, tasks] : RemoteComputeTasks) {
+                auto it = ShardIdToNodeId.find(shardId);
+                YQL_ENSURE(it != ShardIdToNodeId.end());
+                for (ui64 taskId : tasks) {
+                    PendingComputeTasks.insert(taskId);
+                    tasksPerNode[it->second].emplace_back(taskId);
+                }
+            }
+
+            Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, std::move(tasksPerNode), GetSnapshot(),
+                Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
+                ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */);
+            auto err = Planner->PlanExecution();
+            if (err) {
+                TlsActivationContext->Send(err.release());
+                return;
+            }
+            Planner->Submit();
         }
-        Planner->Submit();
 
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
@@ -2246,7 +2252,7 @@ private:
             }
             transaction.SetImmediate(ImmediateTx);
 
-            ActorIdToProto(SelfId(), ev->Record.MutableSource());
+            ActorIdToProto(SelfId(), ev->Record.MutableActor());
             ev->Record.MutableData()->Swap(&transaction);
             ev->Record.SetTxId(TxId);
 

@@ -20,7 +20,7 @@ To get started, create tables and populate them with data:
 
 * `init options`: [Initialization options](#init_options).
 
-See the description of the command to run the data load:
+See the description of the command to init the data load:
 
 ```bash
 {{ ydb-cli }} workload init --help
@@ -80,7 +80,7 @@ See the description of the command to run the data load:
 ---|---|---
 | `--seconds <value>` | `-s <value>` | Duration of the test, in seconds. Default: 10. |
 | `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default: 10. |
-| `--quiet` | - | Outputs only the final test result. |
+| `--quiet` | - | Outputs only the total result. |
 | `--print-timestamp` | - | Print the time together with the statistics of each time window. |
 | `--client-timeout` | - | [Transport timeout in milliseconds](../../../../../best_practices/timeouts.md). |
 | `--operation-timeout` | - | [Operation timeout in milliseconds](../../../../../best_practices/timeouts.md). |

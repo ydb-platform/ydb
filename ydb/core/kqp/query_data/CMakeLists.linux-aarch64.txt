@@ -18,6 +18,7 @@ target_link_libraries(core-kqp-query_data PUBLIC
   cpp-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
+  kqp-common-simple
   yql-dq-expr_nodes
   yql-dq-proto
   core-kqp-expr_nodes

@@ -71,6 +71,7 @@ union TBasicKikimrServicesMask {
         bool EnableBackgroundTasks:1;
         bool EnableExternalIndex: 1;
         bool EnableConveyor: 1;
+        bool EnableLocalPgWire:1;
     };
 
     ui64 Raw;
@@ -119,6 +120,9 @@ struct TKikimrRunConfig {
     TMap<TString, TString>     Labels;
 
     TString                    ClusterName;
+
+    NKikimrConfig::TAppConfig  InitialCmsConfig;
+    NKikimrConfig::TAppConfig  InitialCmsYamlConfig;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});

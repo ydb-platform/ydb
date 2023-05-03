@@ -13,6 +13,7 @@ void* TypeDescFromPgTypeName(const TStringBuf name);
 TString TypeModFromPgTypeName(const TStringBuf name);
 
 bool TypeDescIsComparable(void* typeDesc);
+i32  TypeDescGetTypeLen(void* typeDesc);
 ui32 TypeDescGetStoredSize(void* typeDesc);
 bool TypeDescNeedsCoercion(void* typeDesc);
 

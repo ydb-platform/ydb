@@ -1,0 +1,18 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.DynamicConfig.V1;
+
+option java_package = "com.yandex.ydb.dynamic_config.v1";
+
+import "ydb/public/api/protos/draft/ydb_dynamic_config.proto";
+
+service DynamicConfigService {
+    rpc ApplyConfig(DynamicConfig.ApplyConfigRequest) returns (DynamicConfig.ApplyConfigResponse);
+    rpc DropConfig(DynamicConfig.DropConfigRequest) returns (DynamicConfig.DropConfigResponse);
+    rpc AddVolatileConfig(DynamicConfig.AddVolatileConfigRequest) returns (DynamicConfig.AddVolatileConfigResponse);
+    rpc RemoveVolatileConfig(DynamicConfig.RemoveVolatileConfigRequest) returns (DynamicConfig.RemoveVolatileConfigResponse);
+    rpc GetConfig(DynamicConfig.GetConfigRequest) returns (DynamicConfig.GetConfigResponse);
+    rpc ResolveConfig(DynamicConfig.ResolveConfigRequest) returns (DynamicConfig.ResolveConfigResponse);
+    rpc ResolveAllConfig(DynamicConfig.ResolveAllConfigRequest) returns (DynamicConfig.ResolveAllConfigResponse);
+}

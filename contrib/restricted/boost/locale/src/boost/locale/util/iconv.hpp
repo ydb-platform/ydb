@@ -7,9 +7,38 @@
 #ifndef BOOST_LOCALE_ICONV_FIXER_HPP
 #define BOOST_LOCALE_ICONV_FIXER_HPP
 
+#include <boost/core/exchange.hpp>
 #include <iconv.h>
 
 namespace boost { namespace locale {
+    class iconv_handle {
+        iconv_t h_;
+        void close()
+        {
+            if(*this)
+                iconv_close(h_);
+        }
+
+    public:
+        iconv_handle(iconv_t h = iconv_t(-1)) : h_(h) {}
+        iconv_handle(iconv_handle&& rhs) noexcept : h_(exchange(rhs.h_, iconv_t(-1))) {}
+        iconv_handle& operator=(iconv_handle&& rhs) noexcept
+        {
+            h_ = exchange(rhs.h_, iconv_t(-1));
+            return *this;
+        }
+        iconv_handle& operator=(iconv_t h)
+        {
+            close();
+            h_ = h;
+            return *this;
+        }
+        ~iconv_handle() { close(); }
+
+        operator iconv_t() const { return h_; }
+        explicit operator bool() const { return h_ != iconv_t(-1); }
+    };
+
     extern "C" {
 #if defined(__ICONV_F_HIDE_INVALID) && defined(__FreeBSD__)
 #    define BOOST_LOCALE_ICONV_FUNC __iconv

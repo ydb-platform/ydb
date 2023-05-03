@@ -67,12 +67,10 @@ private:
                   const TString &host,
                   const TString &resolveHost,
                   ui16 port,
-                  const TNodeLocation &location,
-                  bool legacyUpdatePending)
+                  const TNodeLocation &location)
             : TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost,
                                          port, location)
             , Lease(0)
-            , LegacyUpdatePending(legacyUpdatePending)
         {
         }
 
@@ -103,7 +101,6 @@ private:
         // Lease is incremented each time node extends its lifetime.
         ui32 Lease;
         TInstant Expire;
-        bool LegacyUpdatePending = false;
         bool AuthorizedByCertificate = false;
     };
 

@@ -9,6 +9,34 @@ on:
       test_label_regexp:
         required: false
         type: string
+      image:
+        type: string
+        required: false
+        default: fd8snjpoq85qqv0mk9gi
+      run_unit_tests:
+        required: true
+        type: boolean
+      run_functional_tests:
+        required: true
+        type: boolean
+  workflow_dispatch:
+    inputs: 
+      sanitizer:
+        required: false
+        type: string
+      test_label_regexp:
+        required: false
+        type: string
+      image:
+        type: string
+        required: false
+        default: fd8snjpoq85qqv0mk9gi
+      run_unit_tests:
+        required: true
+        type: boolean
+      run_functional_tests:
+        required: true
+        type: boolean
     
 jobs:
 
@@ -28,7 +56,7 @@ jobs:
           yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           folder-id: ${{secrets.YC_FOLDER}}
-          image-id: fd8snjpoq85qqv0mk9gi
+          image-id: ${{inputs.image}}
           disk-size: 930GB
           disk-type: network-ssd-nonreplicated
           cores: 32
@@ -65,13 +93,27 @@ jobs:
       uses: ./.github/actions/build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Test
+    - name: Run unit tests
+      if: inputs.run_unit_tests
       uses: ./.github/actions/test
-      with: 
+      with:
+        log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
+        testman_token: ${{secrets.TESTMO_TOKEN}}
+        testman_url: ${{vars.TESTMO_URL}}
+        testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
+    - name: Run functional tests
+      if: inputs.run_functional_tests
+      uses: ./.github/actions/test_python
+      with:
         log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{secrets.AWS_BUCKET}}
 
   release-runner:
     name: Release self-hosted YC runner if provided on-demand
@@ -89,4 +131,4 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           label: ${{ needs.provide-runner.outputs.label }}
           instance-id: ${{ needs.provide-runner.outputs.instance-id }}
-  
+          

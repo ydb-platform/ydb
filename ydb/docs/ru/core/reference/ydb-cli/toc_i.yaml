@@ -59,6 +59,8 @@ items:
       href: topic-consumer-add.md
     - name: Удаление читателя топика
       href: topic-consumer-drop.md
+    - name: Сохранение позиции чтения
+      href: topic-consumer-offset-commit.md
     - name: Чтение из топика
       href: topic-read.md
     - name: Запись в топик
@@ -75,7 +77,7 @@ items:
       href: scripting-yql.md
     - name: Выполнение запроса
       href: table-query-execute.md
-    - name: Передача параметров в команды выполнения YQL-запросов
+    - name: Выполнение параметризованных запросов
       href: parameterized-queries-cli.md
 #  - name: Утилиты
 #    items:
@@ -113,4 +115,5 @@ items:
       href: workload-click-bench.md
     - name: Key-Value нагрузка
       href: workload-kv.md
-
+    - name: Topic нагрузка
+      href: workload-topic.md

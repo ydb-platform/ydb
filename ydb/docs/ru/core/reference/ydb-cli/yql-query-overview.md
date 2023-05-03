@@ -6,4 +6,5 @@
 * [ydb scripting yql](scripting-yql.md) — выполняет запросы и скрипты YQL, имеет ограничения на объем возвращаемых данных. Также с помощью этой команды вы можете просмотреть план выполнения запроса и метаданные ответа.
 * [ydb table query execute](table-query-execute.md) - выполняет [DML-запросы](https://en.wikipedia.org/wiki/Data_manipulation_language#SQL) с заданным уровнем изоляции транзакции и применением типовой политики повторных попыток.
 
-О выполнении параметризованных запросов в {{ ydb-short-name }} CLI читайте в статье [{#T}](./parameterized-queries-cli.md).
+Все перечисленные команды поддерживают одинаковые возможности [параметризации запросов YQL](parameterized-queries-cli.md).
+

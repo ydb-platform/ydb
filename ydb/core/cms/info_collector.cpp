@@ -215,12 +215,11 @@ void TInfoCollector::RequestBootstrapConfig() {
 void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
     const auto& config  = ev->Get()->Config;
     const auto& initialBootstrapConfig = AppData()->BootstrapConfig;
-    const NKikimrConfig::TBootstrap* bootstrapConfig = nullptr;
 
     BootstrapConfigReceived = true;
     if (!config->HasBootstrapConfig()) {
         LOG_I("Couldn't collect bootstrap config from Console. Taking the local config");
-        bootstrapConfig = &initialBootstrapConfig;
+        Info->BootstrapConfig.CopyFrom(initialBootstrapConfig);
     } else {
         const auto& currentBootstrapConfig = config->GetBootstrapConfig();
 
@@ -232,11 +231,8 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev
             Info->IsLocalBootConfDiffersFromConsole = true;
         }
 
-        bootstrapConfig = &currentBootstrapConfig;
+        Info->BootstrapConfig.CopyFrom(currentBootstrapConfig);
     }
-
-    Y_VERIFY(bootstrapConfig);
-    Info->ApplySysTabletsInfo(*bootstrapConfig);
 
     MaybeReplyAndDie();
 }

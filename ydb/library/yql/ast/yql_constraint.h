@@ -6,8 +6,6 @@
 #include <library/cpp/containers/sorted_vector/sorted_vector.h>
 #include <library/cpp/json/json_writer.h>
 
-#include <util/generic/strbuf.h>
-#include <util/generic/string.h>
 #include <util/stream/output.h>
 
 #include <deque>
@@ -151,30 +149,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TColumnSetConstraintNodeBase: public TConstraintNode {
-public:
-    using TSetType = NSorted::TSimpleSet<TStringBuf>;
-
-protected:
-    TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const TSetType& columns);
-    TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const std::vector<TStringBuf>& columns);
-    TColumnSetConstraintNodeBase(TExprContext& ctx, TStringBuf name, const std::vector<TString>& columns);
-    TColumnSetConstraintNodeBase(TColumnSetConstraintNodeBase&& constr);
-
-public:
-    const TSetType& GetColumns() const {
-        return Columns_;
-    }
-
-    bool Equals(const TConstraintNode& node) const override;
-    bool Includes(const TConstraintNode& node) const override;
-    void Out(IOutputStream& out) const override;
-    void ToJson(NJson::TJsonWriter& out) const override;
-
-protected:
-    TSetType Columns_;
-};
-
 class TSortedConstraintNode final: public TConstraintNode {
 public:
     using TContainerType = TSmallVec<std::pair<TSetType, bool>>;
@@ -201,6 +175,7 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     bool IsPrefixOf(const TSortedConstraintNode& node) const;
+    bool StartsWith(const TSetType& prefix) const;
 
     const TSortedConstraintNode* CutPrefix(size_t newPrefixLength, TExprContext& ctx) const;
 
@@ -214,8 +189,45 @@ public:
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
-protected:
+private:
     TContainerType Content_;
+};
+
+class TChoppedConstraintNode final: public TConstraintNode {
+public:
+    using TFullSetType = NSorted::TSimpleSet<TSetType>;
+private:
+    friend struct TExprContext;
+
+    TChoppedConstraintNode(TExprContext& ctx, TFullSetType&& sets);
+    TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys);
+    TChoppedConstraintNode(TChoppedConstraintNode&& constr);
+public:
+    static constexpr std::string_view Name() {
+        return "Chopped";
+    }
+
+    const TFullSetType& GetAllSets() const { return Sets_; }
+
+    bool Equals(const TConstraintNode& node) const override;
+    bool Includes(const TConstraintNode& node) const override;
+    void Out(IOutputStream& out) const override;
+    void ToJson(NJson::TJsonWriter& out) const override;
+
+    bool Equals(const TSetType& prefix) const;
+
+    void FilterUncompleteReferences(TSetType& references) const;
+
+    static const TChoppedConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
+    const TChoppedConstraintNode* MakeCommon(const TChoppedConstraintNode* other, TExprContext& ctx) const;
+
+    const TChoppedConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
+    const TChoppedConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
+
+    bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
+private:
+    TFullSetType Sets_;
 };
 
 template<bool Distinct>
@@ -264,24 +276,6 @@ private:
 using TUniqueConstraintNode = TUniqueConstraintNodeBase<false>;
 using TDistinctConstraintNode = TUniqueConstraintNodeBase<true>;
 
-class TGroupByConstraintNode final: public TColumnSetConstraintNodeBase {
-protected:
-    friend struct TExprContext;
-
-    TGroupByConstraintNode(TExprContext& ctx, const std::vector<TStringBuf>& columns);
-    TGroupByConstraintNode(TExprContext& ctx, const std::vector<TString>& columns);
-    TGroupByConstraintNode(TExprContext& ctx, const TGroupByConstraintNode& constr, size_t prefixLength);
-    TGroupByConstraintNode(TGroupByConstraintNode&& constr);
-
-    size_t GetCommonPrefixLength(const TGroupByConstraintNode& node) const;
-public:
-    static constexpr std::string_view Name() {
-        return "GroupBy";
-    }
-
-    static const TGroupByConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
-};
-
 template<class TOriginalConstraintNode>
 class TPartOfConstraintNode : public TConstraintNode {
 public:
@@ -318,6 +312,7 @@ public:
     static TMapType ExtractField(const TMapType& mapping, const std::string_view& field);
 
     static const TMainConstraint* MakeComplete(TExprContext& ctx, const TMapType& mapping, const TMainConstraint* original, const std::string_view& field = {});
+    static const TMainConstraint* MakeComplete(TExprContext& ctx, const TPartOfConstraintNode* partial, const TMainConstraint* original, const std::string_view& field = {});
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
 private:
@@ -325,12 +320,18 @@ private:
 };
 
 using TPartOfSortedConstraintNode = TPartOfConstraintNode<TSortedConstraintNode>;
+using TPartOfChoppedConstraintNode = TPartOfConstraintNode<TChoppedConstraintNode>;
 using TPartOfUniqueConstraintNode = TPartOfConstraintNode<TUniqueConstraintNode>;
 using TPartOfDistinctConstraintNode = TPartOfConstraintNode<TDistinctConstraintNode>;
 
 template<>
 constexpr std::string_view TPartOfSortedConstraintNode::Name() {
     return "PartOfSorted";
+}
+
+template<>
+constexpr std::string_view TPartOfChoppedConstraintNode::Name() {
+    return "PartOfChopped";
 }
 
 template<>
@@ -373,6 +374,8 @@ public:
 
     static void UniqueMerge(TMapType& output, TMapType&& input);
     const TPassthroughConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
+    const TPassthroughConstraintNode* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const;
+    const TPassthroughConstraintNode* RenameFields(TExprContext& ctx, const TPathReduce& reduce) const;
 
     static const TPassthroughConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
     const TPassthroughConstraintNode* MakeCommon(const TPassthroughConstraintNode* other, TExprContext& ctx) const;

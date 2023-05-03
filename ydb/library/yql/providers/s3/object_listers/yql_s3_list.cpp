@@ -7,9 +7,12 @@
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <contrib/libs/re2/re2/re2.h>
+
 #ifdef THROW
 #undef THROW
 #endif
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/threading/future/async_semaphore.h>
 #include <library/cpp/xml/document/xml-document.h>
 #include <util/folder/iterator.h>
@@ -228,7 +231,7 @@ public:
         const std::shared_ptr<TListEntries> Output;
         // HTTP control
         const IHTTPGateway::TWeakPtr GatewayWeak;
-        const IRetryPolicy<long>::TPtr RetryPolicy;
+        const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
         const TString RequestId;
         const TListingRequest ListingRequest;
         const TMaybe<TString> Delimiter;
@@ -250,6 +253,8 @@ public:
         auto [filter, checker] =
             MakeFilter(listingRequest.Pattern, listingRequest.PatternType, sharedCtx);
 
+        auto request = listingRequest;
+        request.Url = UrlEscapeRet(request.Url, true);
         auto ctx = TListingContext{
             std::move(sharedCtx),
             std::move(filter),
@@ -260,10 +265,11 @@ public:
             IHTTPGateway::TWeakPtr(httpGateway),
             GetHTTPDefaultRetryPolicy(),
             CreateGuidAsString(),
-            listingRequest,
+            std::move(request),
             delimiter,
             Nothing(),
             MaxFilesPerQuery};
+
         YQL_CLOG(TRACE, ProviderS3)
             << "[TS3Lister] Got URL: '" << ctx.ListingRequest.Url
             << "' with path prefix '" << ctx.ListingRequest.Prefix
@@ -276,7 +282,6 @@ public:
     }
 
     ~TS3Lister() override = default;
-
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
         IHTTPGateway::THeaders headers;

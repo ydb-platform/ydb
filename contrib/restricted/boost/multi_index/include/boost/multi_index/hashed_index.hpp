@@ -1,4 +1,4 @@
-/* Copyright 2003-2021 Joaquin M Lopez Munoz.
+/* Copyright 2003-2023 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -19,7 +19,6 @@
 #include <boost/core/addressof.hpp>
 #include <boost/core/no_exceptions_support.hpp>
 #include <boost/detail/workaround.hpp>
-#include <boost/foreach_fwd.hpp>
 #include <boost/limits.hpp>
 #include <boost/move/core.hpp>
 #include <boost/move/utility_core.hpp>
@@ -55,7 +54,7 @@
 #endif
 
 #if !defined(BOOST_MULTI_INDEX_DISABLE_SERIALIZATION)
-#include <boost/serialization/nvp.hpp>
+#include <boost/core/serialization.hpp>
 #endif
 
 #if defined(BOOST_MULTI_INDEX_ENABLE_INVARIANT_CHECKING)
@@ -1238,14 +1237,14 @@ BOOST_MULTI_INDEX_PROTECTED_IF_MEMBER_TEMPLATE_FRIENDS:
   void save_(
     Archive& ar,const unsigned int version,const index_saver_type& sm)const
   {
-    ar<<serialization::make_nvp("position",buckets);
+    ar<<core::make_nvp("position",buckets);
     super::save_(ar,version,sm);
   }
 
   template<typename Archive>
   void load_(Archive& ar,const unsigned int version,const index_loader_type& lm)
   {
-    ar>>serialization::make_nvp("position",buckets);
+    ar>>core::make_nvp("position",buckets);
     super::load_(ar,version,lm);
   }
 #endif
@@ -1890,16 +1889,21 @@ struct hashed_non_unique
 
 /* Boost.Foreach compatibility */
 
+namespace boost{
+namespace foreach{
+
+template<typename>
+struct is_noncopyable;
+
 template<
   typename KeyFromValue,typename Hash,typename Pred,
   typename SuperMeta,typename TagList,typename Category
 >
-inline boost::mpl::true_* boost_foreach_is_noncopyable(
-  boost::multi_index::detail::hashed_index<
-    KeyFromValue,Hash,Pred,SuperMeta,TagList,Category>*&,
-  boost_foreach_argument_dependent_lookup_hack)
-{
-  return 0;
+struct is_noncopyable<boost::multi_index::detail::hashed_index<
+  KeyFromValue,Hash,Pred,SuperMeta,TagList,Category>
+>:boost::mpl::true_{};
+
+}
 }
 
 #undef BOOST_MULTI_INDEX_HASHED_INDEX_CHECK_INVARIANT

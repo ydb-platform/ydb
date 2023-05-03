@@ -35,24 +35,27 @@ std::vector<TGranule*> TNonSorting::DoDetachReadyGranules(THashMap<ui64, NIndexe
     return result;
 }
 
-bool TPKSortingWithLimit::DoOnFilterReady(TBatch& /*batchInfo*/, const TGranule& granule, TGranulesFillingContext& context) {
+bool TPKSortingWithLimit::DoWakeup(const TGranule& granule, TGranulesFillingContext& context) {
     Y_VERIFY(ReadMetadata->Limit);
     if (!CurrentItemsLimit) {
         return false;
     }
     Y_VERIFY(GranulesOutOrderForPortions.size());
-    if (granule.GetGranuleId() != GranulesOutOrderForPortions.front()->GetGranuleId()) {
+    if (GranulesOutOrderForPortions.front().GetGranule()->GetGranuleId() != granule.GetGranuleId()) {
         return false;
     }
     while (GranulesOutOrderForPortions.size()) {
-        auto it = OrderedBatches.find(GranulesOutOrderForPortions.front()->GetGranuleId());
-        auto g = GranulesOutOrderForPortions.front();
-        Y_VERIFY(it != OrderedBatches.end());
-        if (!it->second.GetStarted()) {
-            MergeStream.AddIndependentSource(g->GetNotIndexedBatch(), g->GetNotIndexedBatchFutureFilter());
-            it->second.SetStarted(true);
+        auto& g = GranulesOutOrderForPortions.front();
+        // granule have to wait NotIndexedBatch initialization, at first (StartableFlag initialization).
+        // other batches will be delivered in OrderedBatches[granuleId] order
+        if (!g.GetGranule()->IsNotIndexedBatchReady()) {
+            break;
         }
-        auto& batches = it->second.MutableBatches();
+        if (g.Start()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "granule_started")("granule_id", g.GetGranule()->GetGranuleId())("count", GranulesOutOrderForPortions.size());
+            MergeStream.AddIndependentSource(g.GetGranule()->GetNotIndexedBatch(), g.GetGranule()->GetNotIndexedBatchFutureFilter());
+        }
+        auto& batches = g.MutableBatches();
         while (batches.size() && batches.front()->IsFiltered() && CurrentItemsLimit) {
             auto b = batches.front();
             if (b->IsSortableInGranule()) {
@@ -73,13 +76,16 @@ bool TPKSortingWithLimit::DoOnFilterReady(TBatch& /*batchInfo*/, const TGranule&
                 b->InitBatch(nullptr);
                 batches.pop_front();
             }
-            OrderedBatches.erase(it);
             GranulesOutOrderForPortions.pop_front();
         } else {
             break;
         }
     }
-    return false;
+    return true;
+}
+
+bool TPKSortingWithLimit::DoOnFilterReady(TBatch& /*batchInfo*/, const TGranule& granule, TGranulesFillingContext& context) {
+    return Wakeup(granule, context);
 }
 
 void TPKSortingWithLimit::DoFill(TGranulesFillingContext& context) {
@@ -87,9 +93,8 @@ void TPKSortingWithLimit::DoFill(TGranulesFillingContext& context) {
     for (ui64 granule : granulesOrder) {
         TGranule& g = context.GetGranuleVerified(granule);
         GranulesOutOrder.emplace_back(&g);
-        Y_VERIFY(OrderedBatches.emplace(granule, TGranuleScanInfo(g.SortBatchesByPK(ReadMetadata->IsDescSorted(), ReadMetadata))).second);
+        GranulesOutOrderForPortions.emplace_back(g.SortBatchesByPK(ReadMetadata->IsDescSorted(), ReadMetadata), &g);
     }
-    GranulesOutOrderForPortions = GranulesOutOrder;
 }
 
 std::vector<TGranule*> TPKSortingWithLimit::DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) {

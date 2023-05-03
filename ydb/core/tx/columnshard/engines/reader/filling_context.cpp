@@ -55,22 +55,20 @@ NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::Get
     return Owner.GetTasksProcessor();
 }
 
-void TGranulesFillingContext::AddNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>& batches) {
-    std::shared_ptr<arrow::RecordBatch> externalBatch;
-    for (auto it = batches.begin(); it != batches.end(); ++it) {
-        if (!it->first) {
-            externalBatch = it->second;
-            continue;
+void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches) {
+    for (auto&& [_, g] : Granules) {
+        if (!batches) {
+            g.AddNotIndexedBatch(nullptr);
+        } else {
+            auto it = batches->find(g.GetGranuleId());
+            if (it == batches->end()) {
+                g.AddNotIndexedBatch(nullptr);
+            } else {
+                g.AddNotIndexedBatch(it->second);
+            }
+            batches->erase(it);
         }
-        auto itGranule = Granules.find(it->first);
-        Y_VERIFY(itGranule != Granules.end());
-        itGranule->second.AddNotIndexedBatch(it->second);
     }
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> resultLocal;
-    if (externalBatch) {
-        resultLocal.emplace(0, externalBatch);
-    }
-    std::swap(batches, resultLocal);
 }
 
 }

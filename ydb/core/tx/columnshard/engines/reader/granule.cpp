@@ -12,6 +12,7 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
             return;
         }
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)("batch_no", batchInfo.GetBatchNo())("count", WaitBatches.size());
     Y_VERIFY(!ReadyFlag);
     Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchNo()));
     if (batch && batch->num_rows()) {
@@ -31,10 +32,7 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
         }
     }
     Owner->OnBatchReady(batchInfo, batch);
-    if (WaitBatches.empty()) {
-        ReadyFlag = true;
-        Owner->OnGranuleReady(*this);
-    }
+    CheckReady();
 }
 
 NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const ui32 batchNo, const TPortionInfo& portionInfo) {
@@ -95,18 +93,30 @@ std::deque<TBatch*> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata:
 }
 
 void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
-    if (!batch || !batch->num_rows()) {
+    Y_VERIFY(!NotIndexedBatchReadyFlag || !batch);
+    if (!NotIndexedBatchReadyFlag) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)("batch_no", "add_not_indexed_batch")("count", WaitBatches.size());
+    } else {
         return;
     }
-    AFL_ERROR(NKikimrServices::KQP_COMPUTE)("event", "add_not_indexed_batch");
-    Y_VERIFY(NonSortableBatches.empty());
-    Y_VERIFY(SortableBatches.empty());
-    Y_VERIFY(!NotIndexedBatch);
-    NotIndexedBatch = batch;
-    if (Owner->GetReadMetadata()->Program) {
-        NotIndexedBatchFutureFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Owner->GetReadMetadata()->Program));
+    NotIndexedBatchReadyFlag = true;
+    if (batch && batch->num_rows()) {
+        Y_VERIFY(!NotIndexedBatch);
+        NotIndexedBatch = batch;
+        if (Owner->GetReadMetadata()->Program) {
+            NotIndexedBatchFutureFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Owner->GetReadMetadata()->Program));
+        }
+        DuplicationsAvailableFlag = true;
     }
-    DuplicationsAvailableFlag = true;
+    CheckReady();
+    Owner->Wakeup(*this);
+}
+
+void TGranule::CheckReady() {
+    if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
+        ReadyFlag = true;
+        Owner->OnGranuleReady(*this);
+    }
 }
 
 }

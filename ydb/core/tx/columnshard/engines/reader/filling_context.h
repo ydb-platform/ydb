@@ -34,7 +34,7 @@ public:
 
     NColumnShard::TDataTasksProcessorContainer GetTasksProcessor() const;
 
-    void AddNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>& batches);
+    void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
     TBatch& GetBatchInfo(const ui32 batchNo);
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
@@ -83,6 +83,10 @@ public:
     void OnGranuleReady(TGranule& granule) {
         Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
         Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
+    }
+
+    void Wakeup(TGranule& granule) {
+        SortingPolicy->Wakeup(granule, *this);
     }
 
     void PrepareForStart() {

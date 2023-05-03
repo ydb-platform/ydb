@@ -14,10 +14,13 @@ class TGranulesFillingContext;
 class TGranule {
 private:
     YDB_READONLY(ui64, GranuleId, 0);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> NonSortableBatches;
-    std::vector<std::shared_ptr<arrow::RecordBatch>> SortableBatches;
+
+    YDB_READONLY_FLAG(NotIndexedBatchReady, false);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, NotIndexedBatch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotIndexedBatchFutureFilter);
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> NonSortableBatches;
+    std::vector<std::shared_ptr<arrow::RecordBatch>> SortableBatches;
     YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
     YDB_READONLY_FLAG(Ready, false);
     std::deque<TBatch> Batches;
@@ -25,6 +28,8 @@ private:
     std::set<ui32> GranuleBatchNumbers;
     TGranulesFillingContext* Owner = nullptr;
     YDB_READONLY_DEF(THashSet<const void*>, BatchesToDedup);
+
+    void CheckReady();
 public:
     TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
         : GranuleId(granuleId)

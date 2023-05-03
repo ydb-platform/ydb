@@ -11,6 +11,9 @@ class IOrderPolicy {
 protected:
     TReadMetadata::TConstPtr ReadMetadata;
     virtual void DoFill(TGranulesFillingContext& context) = 0;
+    virtual bool DoWakeup(const TGranule& /*granule*/, TGranulesFillingContext& /*context*/) {
+        return true;
+    }
     virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) = 0;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& /*granule*/, TGranulesFillingContext& context) {
         OnBatchFilterInitialized(batchInfo, context);
@@ -49,6 +52,10 @@ public:
 
     void Fill(TGranulesFillingContext& context) {
         DoFill(context);
+    }
+
+    bool Wakeup(const TGranule& granule, TGranulesFillingContext& context) {
+        return DoWakeup(granule, context);
     }
 };
 
@@ -89,13 +96,25 @@ public:
     }
 };
 
-class TGranuleScanInfo {
+class TGranuleOrdered {
 private:
-    YDB_ACCESSOR(bool, Started, false);
+    bool StartedFlag = false;
     YDB_ACCESSOR_DEF(std::deque<TBatch*>, Batches);
+    YDB_READONLY(const TGranule*, Granule, nullptr);
 public:
-    TGranuleScanInfo(std::deque<TBatch*>&& batches)
+    bool Start() {
+        if (!StartedFlag) {
+            StartedFlag = true;
+            return true;
+        } else {
+            return false;
+        }
+        
+    }
+
+    TGranuleOrdered(std::deque<TBatch*>&& batches, TGranule* granule)
         : Batches(std::move(batches))
+        , Granule(granule)
     {
 
     }
@@ -105,11 +124,11 @@ class TPKSortingWithLimit: public IOrderPolicy {
 private:
     using TBase = IOrderPolicy;
     std::deque<TGranule*> GranulesOutOrder;
-    std::deque<TGranule*> GranulesOutOrderForPortions;
-    THashMap<ui64, TGranuleScanInfo> OrderedBatches;
+    std::deque<TGranuleOrdered> GranulesOutOrderForPortions;
     ui32 CurrentItemsLimit = 0;
     TMergePartialStream MergeStream;
 protected:
+    virtual bool DoWakeup(const TGranule& granule, TGranulesFillingContext& context) override;
     virtual void DoFill(TGranulesFillingContext& context) override;
     virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) override;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) override;

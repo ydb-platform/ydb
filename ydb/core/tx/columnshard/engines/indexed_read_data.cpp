@@ -223,7 +223,7 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
     if (NotIndexed.size()) {
         auto mergedBatch = MergeNotIndexed(std::move(NotIndexed)); // merged has no dups
         if (mergedBatch) {
-            // Init split by granules structs
+            // Init split by granules structures
             Y_VERIFY(ReadMetadata->SelectInfo);
             TColumnEngineForLogs::TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
 
@@ -233,16 +233,20 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
             Y_VERIFY(!marksGranules.Empty());
 
             auto outNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
-            GranulesContext->AddNotIndexedBatches(outNotIndexed);
+            GranulesContext->DrainNotIndexedBatches(&outNotIndexed);
             Y_VERIFY(outNotIndexed.size() <= 1);
             if (outNotIndexed.size() == 1) {
                 auto it = outNotIndexed.find(0);
                 Y_VERIFY(it != outNotIndexed.end());
                 NotIndexedOutscopeBatch = it->second;
             }
+        } else {
+            GranulesContext->DrainNotIndexedBatches(nullptr);
         }
         NotIndexed.clear();
         ReadyNotIndexed = 0;
+    } else {
+        GranulesContext->DrainNotIndexedBatches(nullptr);
     }
 
     // Extract ready to out granules: ready granules that are not blocked by other (not ready) granules
@@ -312,17 +316,11 @@ TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch
     Y_VERIFY(ReadMetadata->IsSorted());
     Y_VERIFY(IndexInfo().GetSortingKey());
 
-    { // remove empty batches
-        size_t dst = 0;
-        for (size_t src = 0; src < batches.size(); ++src) {
-            if (batches[src] && batches[src]->num_rows()) {
-                if (dst != src) {
-                    batches[dst] = batches[src];
-                }
-                ++dst;
-            }
-        }
-        batches.resize(dst);
+    {
+        const auto pred = [](const std::shared_ptr<arrow::RecordBatch>& b) {
+            return !b || !b->num_rows();
+        };
+        batches.erase(std::remove_if(batches.begin(), batches.end(), pred), batches.end());
     }
 
     if (batches.empty()) {

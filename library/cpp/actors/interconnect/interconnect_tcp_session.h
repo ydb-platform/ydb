@@ -355,6 +355,8 @@ namespace NActors {
         ui64 XdcSections = 0;
         ui64 XdcRefs = 0;
 
+        ui64 CpuStarvationEvents = 0;
+
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr ev);
     };
 
@@ -368,6 +370,7 @@ namespace NActors {
             EvRam,
             EvTerminate,
             EvFreeItems,
+            EvWriteData,
         };
 
         struct TEvCheckCloseOnIdle : TEventLocal<TEvCheckCloseOnIdle, EvCheckCloseOnIdle> {};
@@ -393,6 +396,10 @@ namespace NActors {
         ui64 PacketsGenerated = 0;
         ui64 BytesWrittenToSocket = 0;
         ui64 PacketsConfirmed = 0;
+        ui64 BytesAlignedForOutOfBand = 0;
+        ui64 OutOfBandBytesSent = 0;
+        ui64 CpuStarvationEvents = 0;
+        ui64 CpuStarvationEventsOnWriteData = 0;
 
     public:
         static constexpr EActivityType ActorActivityType() {
@@ -446,6 +453,7 @@ namespace NActors {
             hFunc(TEvSocketDisconnect, OnDisconnect)
             hFunc(TEvTerminate, Handle)
             hFunc(TEvProcessPingRequest, Handle)
+            cFunc(EvWriteData, HandleWriteData)
         )
 
         void Handle(TEvUpdateFromInputSession::TPtr& ev);
@@ -457,16 +465,20 @@ namespace NActors {
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
+        void IssueRam();
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
 
         void SendUpdateToWhiteboard(bool connected = true);
         ui32 CalculateQueueUtilization();
 
+        bool WriteDataInFlight = false;
+
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
+        void HandleWriteData();
         void WriteData();
-        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket);
+        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
         ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
@@ -528,13 +540,12 @@ namespace NActors {
         void SwitchStuckPeriod();
 
         NInterconnect::TOutgoingStream OutgoingStream;
+        NInterconnect::TOutgoingStream OutOfBandStream;
         NInterconnect::TOutgoingStream XdcStream;
 
         struct TOutgoingPacket {
             ui32 PacketSize; // including header
             ui32 ExternalSize;
-            ui64 Serial;
-            bool Data;
         };
         std::deque<TOutgoingPacket> SendQueue; // packet boundaries
         size_t OutgoingOffset = 0;

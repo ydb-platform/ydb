@@ -166,7 +166,7 @@ namespace NActors {
             // we can't issue more traffic now; GenerateTraffic will be called upon unblocking
         } else if (TotalOutputQueueSize >= 64 * 1024) {
             // output queue size is quite big to issue some traffic
-            GenerateTraffic();
+            IssueRam();
         } else if (!RamInQueue) {
             Y_VERIFY_DEBUG(NumEventsInReadyChannels == 1);
             RamInQueue = new TEvRam(true);
@@ -282,17 +282,11 @@ namespace NActors {
         OutgoingOffset = XdcOffset = Max<size_t>();
         DropConfirmed(nextPacket);
         OutgoingStream.Rewind();
+        OutOfBandStream = {};
         XdcStream.Rewind();
         OutgoingOffset = XdcOffset = 0;
 
-        ui64 serial = Max<ui64>();
-        for (const auto& packet : SendQueue) {
-            if (packet.Data) {
-                serial = packet.Serial;
-                break;
-            }
-        }
-
+        const ui64 serial = OutputCounter - SendQueue.size() + 1;
         Y_VERIFY(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed);
         LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
@@ -302,7 +296,7 @@ namespace NActors {
         LastHandshakeDone = TActivationContext::Now();
 
         RamInQueue = nullptr;
-        GenerateTraffic();
+        IssueRam();
     }
 
     void TInterconnectSessionTCP::Handle(TEvUpdateFromInputSession::TPtr& ev) {
@@ -339,7 +333,7 @@ namespace NActors {
             // generate more traffic if we have unblocked state now
             if (unblockedSomething) {
                 LWPROBE(UnblockByDropConfirmed, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0);
-                GenerateTraffic();
+                IssueRam();
             }
 
             // if we haven't generated any packets, then make a lone Flush packet without any data
@@ -375,6 +369,15 @@ namespace NActors {
         }
     }
 
+    void TInterconnectSessionTCP::IssueRam() {
+        if (!RamInQueue || (RamInQueue->Batching && Proxy->Common->Settings.BatchPeriod != TDuration::Zero())) {
+            RamInQueue = new TEvRam(false);
+            Send(SelfId(), RamInQueue);
+            LWPROBE(StartRam, Proxy->PeerNodeId);
+            RamStartedCycles = GetCycleCountFast();
+        }
+    }
+
     void TInterconnectSessionTCP::HandleRam(TEvRam::TPtr& ev) {
         if (ev->Get() == RamInQueue) {
             LWPROBE(FinishRam, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0);
@@ -387,26 +390,13 @@ namespace NActors {
         // generate ping request, if needed
         IssuePingRequest();
 
-        if (RamInQueue && !RamInQueue->Batching) {
-            LWPROBE(SkipGenerateTraffic, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - RamStartedCycles) * 1000.0);
-            return; // we'll do it a bit later
-        } else {
-            RamInQueue = nullptr;
-        }
-
         LOG_DEBUG_IC_SESSION("ICS19", "GenerateTraffic");
-
-        // There is a tradeoff between fairness and efficiency.
-        // The less traffic is generated here, the less buffering is after fair scheduler,
-        // the more fair system is, the less latency is present.
-        // The more traffic is generated here, the less syscalls and actor-system overhead occurs,
-        // the less cpu is consumed.
-        static const ui64 generateLimit = 64 * 1024;
 
         const ui64 sizeBefore = TotalOutputQueueSize;
         ui32 generatedPackets = 0;
         ui64 generatedBytes = 0;
         ui64 generateStarted = GetCycleCountFast();
+        bool enoughCpu = true;
 
         // apply traffic changes
         auto accountTraffic = [&] { ChannelScheduler->ForEach([](TEventOutputChannel& channel) { channel.AccountTraffic(); }); };
@@ -415,13 +405,14 @@ namespace NActors {
         // of events in channels queues and in flight fitting into requested limit; after we hit one of these conditions
         // we exit cycle
         if (Socket) {
+            TTimeLimit limit(GetMaxCyclesPerEvent());
+
             while (NumEventsInReadyChannels && InflightDataAmount < GetTotalInflightAmountOfData()) {
-                if (generatedBytes >= generateLimit) {
+                if (generatedPackets && limit.CheckExceeded()) {
                     // resume later but ensure that we have issued at least one packet
-                    RamInQueue = new TEvRam(false);
-                    Send(SelfId(), RamInQueue);
-                    RamStartedCycles = GetCycleCountFast();
-                    LWPROBE(StartRam, Proxy->PeerNodeId);
+                    IssueRam();
+                    enoughCpu = false;
+                    ++CpuStarvationEvents;
                     break;
                 }
 
@@ -437,7 +428,7 @@ namespace NActors {
             }
         }
 
-        SetEnoughCpu(generatedBytes < generateLimit);
+        SetEnoughCpu(enoughCpu);
 
         if (Socket) {
             WriteData();
@@ -529,10 +520,10 @@ namespace NActors {
         bool readPending = false;
 
         if (msg->Socket == Socket) {
-            useful = ReceiveContext->MainWriteBlocked;
+            useful = std::exchange(ReceiveContext->MainWriteBlocked, false);
             readPending = ReceiveContext->MainReadPending;
         } else if (msg->Socket == XdcSocket) {
-            useful = ReceiveContext->XdcWriteBlocked;
+            useful = std::exchange(ReceiveContext->XdcWriteBlocked, false);
             readPending = ReceiveContext->XdcReadPending;
         }
 
@@ -542,11 +533,11 @@ namespace NActors {
             Proxy->Metrics->IncSpuriousWriteWakeups();
         }
 
-        GenerateTraffic();
-
         if (Params.Encryption && readPending && ev->Sender != ReceiverId) {
             Send(ReceiverId, ev->Release().Release());
         }
+
+        IssueRam();
     }
 
     void TInterconnectSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
@@ -565,56 +556,101 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::WriteData() {
-        Y_VERIFY(Socket); // ensure that socket wasn't closed
-
-        auto process = [&](NInterconnect::TOutgoingStream& stream, const TIntrusivePtr<NInterconnect::TStreamSocket>& socket,
-                const TPollerToken::TPtr& token, bool *writeBlocked) {
-            size_t totalWritten = 0;
-
-            *writeBlocked = false;
-
-            while (stream && socket) {
-                ssize_t r = Write(stream, *socket);
-                if (r == -1) {
-                    *writeBlocked = true;
-                    if (token) {
-                        socket->Request(*token, false, true);
-                    }
-                    break;
-                } else if (r == 0) {
-                    break; // error condition
-                }
-
-                stream.Advance(r);
-                totalWritten += r;
-            }
-
-            return totalWritten;
-        };
+    void TInterconnectSessionTCP::HandleWriteData() {
+        Y_VERIFY(WriteDataInFlight);
+        WriteDataInFlight = false;
+        if (!Socket) {
+            return;
+        }
 
         // total bytes written during this call
         ui64 written = 0;
 
-        if (const size_t w = process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked)) {
-            written += w;
-            BytesWrittenToSocket += w;
-            OutgoingOffset += w;
-        }
+        auto process = [&](NInterconnect::TOutgoingStream& stream, const TIntrusivePtr<NInterconnect::TStreamSocket>& socket,
+                const TPollerToken::TPtr& token, bool *writeBlocked, size_t maxBytes) {
+            size_t totalWritten = 0;
 
-        if (const size_t w = process(XdcStream, XdcSocket, XdcPollerToken, &ReceiveContext->XdcWriteBlocked)) {
-            written += w;
-            XdcBytesSent += w;
-            XdcOffset += w;
+            if (stream && socket && !*writeBlocked && maxBytes) {
+                if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
+                    stream.Advance(r);
+                    totalWritten += r;
+                } else if (r == -1) {
+                    *writeBlocked = true;
+                    if (token) {
+                        socket->Request(*token, false, true);
+                    }
+                } else if (r == 0) {
+                    // error condition
+                } else {
+                    Y_UNREACHABLE();
+                }
+            }
+
+            written += totalWritten;
+            return totalWritten;
+        };
+
+        TTimeLimit limit(GetMaxCyclesPerEvent());
+
+        for (;;) {
+            bool progress = false;
+
+            size_t bytesToSendInMain = Max<size_t>();
+
+            if (OutOfBandStream) {
+                bytesToSendInMain = 0;
+                size_t offset = OutgoingOffset;
+                for (const TOutgoingPacket& packet : SendQueue) {
+                    if (!offset) {
+                        break;
+                    } else if (offset < packet.PacketSize) {
+                        bytesToSendInMain = packet.PacketSize - offset;
+                        break;
+                    } else {
+                        offset -= packet.PacketSize;
+                    }
+                }
+            }
+
+            if (const size_t w = process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, bytesToSendInMain)) {
+                BytesWrittenToSocket += w;
+                OutgoingOffset += w;
+                progress = true;
+                bytesToSendInMain -= w;
+                if (OutOfBandStream) {
+                    BytesAlignedForOutOfBand += w;
+                }
+            }
+
+            if (!bytesToSendInMain) {
+                if (const size_t w = process(OutOfBandStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, Max<size_t>())) {
+                    BytesWrittenToSocket += w;
+                    OutOfBandBytesSent += w;
+                    progress = true;
+                }
+            }
+
+            if (const size_t w = process(XdcStream, XdcSocket, XdcPollerToken, &ReceiveContext->XdcWriteBlocked, Max<size_t>())) {
+                XdcBytesSent += w;
+                XdcOffset += w;
+                progress = true;
+            }
+
+            if (!progress) {
+                break;
+            } else if (limit.CheckExceeded()) {
+                WriteData();
+                ++CpuStarvationEventsOnWriteData;
+                break;
+            }
         }
 
         if (written) {
             Proxy->Metrics->AddTotalBytesWritten(written);
         }
 
-        if (DropConfirmed(LastConfirmed) && !RamInQueue) { // issue GenerateTraffic a bit later
-            RamInQueue = new TEvRam(false);
-            Send(SelfId(), RamInQueue);
+        if (DropConfirmed(LastConfirmed)) { // issue GenerateTraffic a bit later
+            IssueRam();
         }
 
         const bool writeBlockedByFullSendBuffer = ReceiveContext->MainWriteBlocked || ReceiveContext->XdcWriteBlocked;
@@ -627,7 +663,15 @@ namespace NActors {
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
     }
 
-    ssize_t TInterconnectSessionTCP::Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket) {
+    void TInterconnectSessionTCP::WriteData() {
+        if (!WriteDataInFlight) {
+            WriteDataInFlight = true;
+            TActivationContext::Send(new IEventHandle(EvWriteData, 0, SelfId(), {}, nullptr, 0));
+        }
+    }
+
+    ssize_t TInterconnectSessionTCP::Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket,
+            size_t maxBytes) {
         LWPROBE_IF_TOO_LONG(SlowICWriteData, Proxy->PeerNodeId, ms) {
             constexpr ui32 iovLimit = 256;
 
@@ -646,7 +690,7 @@ namespace NActors {
 
             TStackVec<TConstIoVec, iovLimit> wbuffers;
 
-            stream.ProduceIoVec(wbuffers, maxElementsInIOV);
+            stream.ProduceIoVec(wbuffers, maxElementsInIOV, maxBytes);
             Y_VERIFY(!wbuffers.empty());
 
             TString err;
@@ -731,12 +775,14 @@ namespace NActors {
     }
 
     ui64 TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) {
+        NInterconnect::TOutgoingStream& stream = data ? OutgoingStream : OutOfBandStream;
+
 #ifndef NDEBUG
-        const size_t outgoingStreamSizeBefore = OutgoingStream.CalculateOutgoingSize();
+        const size_t outgoingStreamSizeBefore = stream.CalculateOutgoingSize();
         const size_t xdcStreamSizeBefore = XdcStream.CalculateOutgoingSize();
 #endif
 
-        TTcpPacketOutTask packet(Params, OutgoingStream, XdcStream);
+        TTcpPacketOutTask packet(Params, stream, XdcStream);
         ui64 serial = 0;
 
         if (data) {
@@ -775,7 +821,7 @@ namespace NActors {
         const size_t packetSize = packet.GetPacketSize();
 
 #ifndef NDEBUG
-        const size_t outgoingStreamSizeAfter = OutgoingStream.CalculateOutgoingSize();
+        const size_t outgoingStreamSizeAfter = stream.CalculateOutgoingSize();
         const size_t xdcStreamSizeAfter = XdcStream.CalculateOutgoingSize();
 
         Y_VERIFY(outgoingStreamSizeAfter == outgoingStreamSizeBefore + packetSize &&
@@ -787,12 +833,12 @@ namespace NActors {
 #endif
 
         // put outgoing packet metadata here
-        SendQueue.push_back(TOutgoingPacket{
-            static_cast<ui32>(packetSize),
-            static_cast<ui32>(packet.GetExternalSize()),
-            serial,
-            data
-        });
+        if (data) {
+            SendQueue.push_back(TOutgoingPacket{
+                static_cast<ui32>(packetSize),
+                static_cast<ui32>(packet.GetExternalSize())
+            });
+        }
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %zu"
             " InflightDataAmount# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(), InflightDataAmount);
@@ -820,17 +866,17 @@ namespace NActors {
         // making Serial <= confirm true
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
-        for (; !SendQueue.empty(); SendQueue.pop_front()) {
-            auto& front = SendQueue.front();
-            if (front.Data && confirm < front.Serial) {
+        ui64 frontPacketSerial = OutputCounter - SendQueue.size() + 1;
+        for (; !SendQueue.empty(); SendQueue.pop_front(), ++frontPacketSerial) {
+            if (confirm < frontPacketSerial) {
                 break;
             }
+
+            auto& front = SendQueue.front();
             if (OutgoingOffset < front.PacketSize || XdcOffset < front.ExternalSize) {
                 break; // packet wasn't actually sent to receiver, can't drop it now
             }
-            if (front.Data) {
-                lastDroppedSerial.emplace(front.Serial);
-            }
+            lastDroppedSerial.emplace(frontPacketSerial);
             OutgoingOffset -= front.PacketSize;
             XdcOffset -= front.ExternalSize;
             bytesDropped += front.PacketSize;
@@ -1231,10 +1277,19 @@ namespace NActors {
                             MON_VAR(OutgoingStream.GetSendQueueSize())
                             MON_VAR(OutgoingOffset)
 
+                            MON_VAR(OutOfBandStream.CalculateOutgoingSize())
+                            MON_VAR(OutOfBandStream.CalculateUnsentSize())
+                            MON_VAR(OutOfBandStream.GetSendQueueSize())
+                            MON_VAR(BytesAlignedForOutOfBand)
+                            MON_VAR(OutOfBandBytesSent)
+
                             MON_VAR(XdcStream.CalculateOutgoingSize())
                             MON_VAR(XdcStream.CalculateUnsentSize())
                             MON_VAR(XdcStream.GetSendQueueSize())
                             MON_VAR(XdcOffset)
+
+                            MON_VAR(CpuStarvationEvents)
+                            MON_VAR(CpuStarvationEventsOnWriteData)
 
                             TString clockSkew;
                             i64 x = GetClockSkew();

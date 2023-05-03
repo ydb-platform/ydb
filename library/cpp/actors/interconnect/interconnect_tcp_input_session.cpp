@@ -218,6 +218,7 @@ namespace NActors {
                 // we have hit processing time limit for this message, send notification to resume processing a bit later
                 TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
                 enoughCpu = false;
+                ++CpuStarvationEvents;
                 break;
             }
 
@@ -639,15 +640,11 @@ namespace NActors {
         LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
             do {
                 const ui64 begin = GetCycleCountFast();
-#ifndef _win_
                 if (num == 1) {
                     recvres = socket.Recv(iov->Data, iov->Size, &err);
                 } else {
                     recvres = socket.ReadV(reinterpret_cast<const iovec*>(iov), num);
                 }
-#else
-                recvres = socket.Recv(iov->Data, iov->Size, &err);
-#endif
                 const ui64 end = GetCycleCountFast();
                 Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
             } while (recvres == -EINTR);
@@ -676,7 +673,7 @@ namespace NActors {
     bool TInputSessionTCP::ReadMore() {
         PreallocateBuffers();
 
-        TStackVec<TIoVec, 16> buffs;
+        TStackVec<TIoVec, MaxBuffers> buffs;
         size_t offset = FirstBufferOffset;
         for (const auto& item : Buffers) {
             TIoVec iov{item->GetBuffer() + offset, item->GetCapacity() - offset};
@@ -684,6 +681,9 @@ namespace NActors {
             if (Params.Encryption) {
                 break; // do not put more than one buffer in queue to prevent using ReadV
             }
+#ifdef _win_
+            break; // do the same thing for Windows build
+#endif
             offset = 0;
         }
 
@@ -998,6 +998,7 @@ namespace NActors {
                             MON_VAR(BytesReadFromXdcSocket)
                             MON_VAR(XdcSections)
                             MON_VAR(XdcRefs)
+                            MON_VAR(CpuStarvationEvents)
 
                             MON_VAR(PayloadSize)
                             MON_VAR(InboundPacketQ.size())

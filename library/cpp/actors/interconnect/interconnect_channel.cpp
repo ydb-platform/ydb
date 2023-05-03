@@ -46,8 +46,8 @@ namespace NActors {
         };
 
         // append them to the packet
-        task.Write(false, &part, sizeof(part));
-        task.Write(false, &descr, sizeof(descr));
+        task.Write<false>(&part, sizeof(part));
+        task.Write<false>(&descr, sizeof(descr));
 
         *weightConsumed += amount;
         OutputQueueSize -= sizeof(TEventDescr2);
@@ -75,7 +75,6 @@ namespace NActors {
                         State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();
                         SerializationInfo = &event.Buffer->GetSerializationInfo();
-                        EventInExternalDataChannel = !SerializationInfo->Sections.empty() && Params.UseExternalDataChannel;
                     } else if (event.Event) {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
@@ -84,13 +83,12 @@ namespace NActors {
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo();
                         SerializationInfo = &SerializationInfoContainer;
-                        EventInExternalDataChannel = !SerializationInfo->Sections.empty() && Params.UseExternalDataChannel;
                     } else { // event without buffer and IEventBase instance
                         State = EState::DESCRIPTOR;
                         SerializationInfoContainer = {};
                         SerializationInfo = &SerializationInfoContainer;
-                        EventInExternalDataChannel = false;
                     }
+                    EventInExternalDataChannel = Params.UseExternalDataChannel && !SerializationInfo->Sections.empty();
                     if (!event.EventSerializedSize) {
                         State = EState::DESCRIPTOR;
                     } else if (EventInExternalDataChannel) {
@@ -157,8 +155,8 @@ namespace NActors {
                         .ChannelFlags = static_cast<ui16>(ChannelId | TChannelPart::XdcFlag),
                         .Size = static_cast<ui16>(XdcData.size())
                     };
-                    task.Write(false, &part, sizeof(part));
-                    task.Write(false, XdcData.data(), XdcData.size());
+                    task.Write<false>(&part, sizeof(part));
+                    task.Write<false>(XdcData.data(), XdcData.size());
                     XdcData.clear();
 
                     if (SectionIndex == SerializationInfo->Sections.size()) {
@@ -171,13 +169,14 @@ namespace NActors {
         }
     }
 
-    bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool external, size_t *bytesSerialized) {
+    template<bool External>
+    bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized) {
         auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
             event.UpdateChecksum(data, len);
-            if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 2 * 64) {
-                task.Write(external, data, len);
+            if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                task.Write<External>(data, len);
             } else {
-                task.Append(external, data, len);
+                task.Append<External>(data, len);
             }
             *bytesSerialized += len;
 
@@ -190,7 +189,7 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting(external);
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>();
                 if (!out.size()) {
                     break;
                 }
@@ -204,7 +203,7 @@ namespace NActors {
                 }
             }
         } else if (event.Buffer) {
-            while (const size_t numb = Min(external ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
+            while (const size_t numb = Min(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize())) {
                 const char *obuf = Iter.ContiguousData();
                 addChunk(obuf, numb, true);
@@ -214,11 +213,9 @@ namespace NActors {
         } else {
             Y_FAIL();
         }
-        if (complete) {
-            Y_VERIFY(event.EventActuallySerialized == event.EventSerializedSize,
-                "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
-                event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);
-        }
+        Y_VERIFY(!complete || event.EventActuallySerialized == event.EventSerializedSize,
+            "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
+            event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);
 
         return complete;
     }
@@ -237,7 +234,7 @@ namespace NActors {
         auto partBookmark = task.Bookmark(sizeof(TChannelPart));
 
         size_t bytesSerialized = 0;
-        const bool complete = SerializeEvent(task, event, false, &bytesSerialized);
+        const bool complete = SerializeEvent<false>(task, event, &bytesSerialized);
 
         Y_VERIFY_DEBUG(bytesSerialized);
         Y_VERIFY(bytesSerialized <= Max<ui16>());
@@ -247,7 +244,7 @@ namespace NActors {
             .Size = static_cast<ui16>(bytesSerialized)
         };
 
-        task.WriteBookmark(std::exchange(partBookmark, {}), &part, sizeof(part));
+        task.WriteBookmark(std::move(partBookmark), &part, sizeof(part));
         *weightConsumed += sizeof(TChannelPart) + part.Size;
         OutputQueueSize -= part.Size;
 
@@ -263,7 +260,7 @@ namespace NActors {
         auto partBookmark = task.Bookmark(partSize);
 
         size_t bytesSerialized = 0;
-        const bool complete = SerializeEvent(task, event, true, &bytesSerialized);
+        const bool complete = SerializeEvent<true>(task, event, &bytesSerialized);
 
         Y_VERIFY(0 < bytesSerialized && bytesSerialized <= Max<ui16>());
 

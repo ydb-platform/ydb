@@ -162,8 +162,9 @@ struct TTcpPacketOutTask : TNonCopyable {
     }
 
     // Acquire raw pointer to write some data.
-    TMutableContiguousSpan AcquireSpanForWriting(bool external) {
-        if (external) {
+    template<bool External>
+    TMutableContiguousSpan AcquireSpanForWriting() {
+        if (External) {
             return XdcStream.AcquireSpanForWriting(GetExternalFreeAmount());
         } else {
             return OutgoingStream.AcquireSpanForWriting(GetInternalFreeAmount());
@@ -171,17 +172,19 @@ struct TTcpPacketOutTask : TNonCopyable {
     }
 
     // Append reference to some data (acquired previously or external pointer).
-    void Append(bool external, const void *buffer, size_t len) {
-        Y_VERIFY_DEBUG(len <= (external ? GetExternalFreeAmount() : GetInternalFreeAmount()));
-        (external ? ExternalSize : InternalSize) += len;
-        (external ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len});
+    template<bool External>
+    void Append(const void *buffer, size_t len) {
+        Y_VERIFY_DEBUG(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
+        (External ? ExternalSize : InternalSize) += len;
+        (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len});
     }
 
     // Write some data with copying.
-    void Write(bool external, const void *buffer, size_t len) {
-        Y_VERIFY_DEBUG(len <= (external ? GetExternalFreeAmount() : GetInternalFreeAmount()));
-        (external ? ExternalSize : InternalSize) += len;
-        (external ? XdcStream : OutgoingStream).Write({static_cast<const char*>(buffer), len});
+    template<bool External>
+    void Write(const void *buffer, size_t len) {
+        Y_VERIFY_DEBUG(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
+        (External ? ExternalSize : InternalSize) += len;
+        (External ? XdcStream : OutgoingStream).Write({static_cast<const char*>(buffer), len});
     }
 
     void Finish(ui64 serial, ui64 confirm) {
@@ -198,15 +201,11 @@ struct TTcpPacketOutTask : TNonCopyable {
             // pre-write header without checksum for correct checksum calculation
             WriteBookmark(NInterconnect::TOutgoingStream::TBookmark(HeaderBookmark), &header, sizeof(header));
 
-            size_t total = 0;
             ui32 checksum = 0;
             OutgoingStream.ScanLastBytes(GetPacketSize(), [&](TContiguousSpan span) {
                 checksum = Crc32cExtendMSanCompatible(checksum, span.data(), span.size());
-                total += span.size();
             });
             header.Checksum = checksum;
-            Y_VERIFY(total == GetPacketSize(), "total# %zu InternalSize# %zu GetPacketSize# %zu", total, InternalSize,
-                GetPacketSize());
         }
 
         WriteBookmark(std::exchange(HeaderBookmark, {}), &header, sizeof(header));

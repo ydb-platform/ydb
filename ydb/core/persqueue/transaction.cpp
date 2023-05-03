@@ -92,7 +92,8 @@ void TDistributedTransaction::InitPartitions(const NKikimrPQ::TPQTabletConfig& c
 }
 
 void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
-                                                   ui64 minStep)
+                                                   ui64 minStep,
+                                                   ui64 extractTabletId)
 {
     Y_VERIFY(event.GetTxBodyCase() != NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET);
     Y_VERIFY(event.GetSourceCase() != NKikimrPQ::TEvProposeTransaction::SOURCE_NOT_SET);
@@ -106,7 +107,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
     case NKikimrPQ::TEvProposeTransaction::kData:
         Y_VERIFY(event.HasData());
         MaxStep = MinStep + TDuration::Seconds(30).MilliSeconds();
-        OnProposeTransaction(event.GetData());
+        OnProposeTransaction(event.GetData(), extractTabletId);
         break;
     case NKikimrPQ::TEvProposeTransaction::kConfig:
         Y_VERIFY(event.HasConfig());
@@ -131,16 +132,21 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
     }
 }
 
-void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody)
+void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody,
+                                                   ui64 extractTabletId)
 {
     Kind = NKikimrPQ::TTransaction::KIND_DATA;
 
     for (ui64 tablet : txBody.GetSendingShards()) {
-        Senders.insert(tablet);
+        if (tablet != extractTabletId) {
+            Senders.insert(tablet);
+        }
     }
 
     for (ui64 tablet : txBody.GetReceivingShards()) {
-        Receivers.insert(tablet);
+        if (tablet != extractTabletId) {
+            Receivers.insert(tablet);
+        }
     }
 
     InitPartitions(txBody.GetOperations());

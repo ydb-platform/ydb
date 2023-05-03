@@ -154,13 +154,6 @@ public:
                     << ", datashard " << x.first << " not finished yet: " << ToString(x.second.State));
             }
         }
-        for (const auto& x : TopicTabletStates) {
-            if (x.second.State != TShardState::EState::Finished) {
-                ++notFinished;
-                LOG_D("ActorState: " << CurrentStateFuncName()
-                    << ", topicTablet " << x.first << " not finished yet: " << ToString(x.second.State));
-            }
-        }
         if (notFinished == 0 && TBase::CheckExecutionComplete()) {
             return;
         }
@@ -175,11 +168,6 @@ public:
             for (const auto& [shardId, shardState] : ShardStates) {
                 if (shardState.State != TShardState::EState::Finished) {
                     sb << "DS " << shardId << " (" << ToString(shardState.State) << "), ";
-                }
-            }
-            for (const auto& [tabletId, tabletState] : TopicTabletStates) {
-                if (tabletState.State != TShardState::EState::Finished) {
-                    sb << "PQ " << tabletId << " (" << ToString(tabletState.State) << "), ";
                 }
             }
             LOG_D(sb);
@@ -330,18 +318,28 @@ private:
     }
 
     void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
-        NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
+        auto& event = ev->Get()->Record;
+        const ui64 tabletId = event.GetOrigin();
 
-        LOG_D("Got propose result, topic tablet: " << event.GetOrigin() << ", status: "
-            << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+        LOG_D("Got propose result" <<
+              ", PQ tablet: " << tabletId <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
 
-        TShardState *state = TopicTabletStates.FindPtr(event.GetOrigin());
-        YQL_ENSURE(state);
+        TShardState* state = ShardStates.FindPtr(tabletId);
+        YQL_ENSURE(state, "Unexpected propose result from unknown PQ tablet " << tabletId);
 
-        YQL_ENSURE(event.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::ERROR);
-
-        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_ABORTED);
-        ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issue);
+        switch (event.GetStatus()) {
+        case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
+            if (!ShardPrepared(*state, event)) {
+                return CancelProposal(tabletId);
+            }
+            return CheckPrepareCompleted();
+        case NKikimrPQ::TEvProposeTransactionResult::COMPLETE:
+            YQL_ENSURE(false);
+        default:
+            CancelProposal(tabletId);
+            return PQTabletError(event);
+        }
     }
 
     void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -531,6 +529,7 @@ private:
 
                 state.State = TShardState::EState::Finished;
 
+                YQL_ENSURE(state.DatashardState.Defined());
                 YQL_ENSURE(!state.DatashardState->Follower);
 
                 Send(MakePipePeNodeCacheID(/* allowFollowers */ false), new TEvPipeCache::TEvForward(
@@ -539,13 +538,13 @@ private:
         }
     }
 
-    bool ShardPrepared(TShardState& state, const NKikimrTxDataShard::TEvProposeTransactionResult& result) {
+    template<class E>
+    bool ShardPreparedImpl(TShardState& state, const E& result) {
         YQL_ENSURE(state.State == TShardState::EState::Preparing);
         state.State = TShardState::EState::Prepared;
 
         state.DatashardState->ShardMinStep = result.GetMinStep();
         state.DatashardState->ShardMaxStep = result.GetMaxStep();
-        state.DatashardState->ReadSize += result.GetReadSize();
 
         ui64 coordinator = 0;
         if (result.DomainCoordinatorsSize()) {
@@ -577,42 +576,20 @@ private:
         return true;
     }
 
+    bool ShardPrepared(TShardState& state, const NKikimrTxDataShard::TEvProposeTransactionResult& result) {
+        bool success = ShardPreparedImpl(state, result);
+        if (success) {
+            state.DatashardState->ReadSize += result.GetReadSize();
+        }
+        return success;
+    }
+
     bool ShardPrepared(TShardState& state, const NKikimrTxColumnShard::TEvProposeTransactionResult& result) {
-        YQL_ENSURE(state.State == TShardState::EState::Preparing);
-        state.State = TShardState::EState::Prepared;
-
-        state.DatashardState->ShardMinStep = result.GetMinStep();
-        state.DatashardState->ShardMaxStep = result.GetMaxStep();
-//        state.DatashardState->ReadSize += result.GetReadSize();
-
-        ui64 coordinator = 0;
-        if (result.DomainCoordinatorsSize()) {
-            auto domainCoordinators = TCoordinators(TVector<ui64>(result.GetDomainCoordinators().begin(),
-                result.GetDomainCoordinators().end()));
-            coordinator = domainCoordinators.Select(TxId);
-        }
-
-        if (coordinator && !TxCoordinator) {
-            TxCoordinator = coordinator;
-        }
-
-        if (!TxCoordinator || TxCoordinator != coordinator) {
-            LOG_E("Handle TEvProposeTransactionResult: unable to select coordinator. Tx canceled, actorId: " << SelfId()
-                << ", previously selected coordinator: " << TxCoordinator
-                << ", coordinator selected at propose result: " << coordinator);
-
-            Counters->TxProxyMon->TxResultAborted->Inc();
-            ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, MakeIssue(
-                NKikimrIssues::TIssuesIds::TX_DECLINED_IMPLICIT_COORDINATOR, "Unable to choose coordinator."));
-            return false;
-        }
-
-        LastPrepareReply = TInstant::Now();
-        if (!FirstPrepareReply) {
-            FirstPrepareReply = LastPrepareReply;
-        }
-
-        return true;
+        return ShardPreparedImpl(state, result);
+    }
+ 
+    bool ShardPrepared(TShardState& state, const NKikimrPQ::TEvProposeTransactionResult& result) {
+        return ShardPreparedImpl(state, result);
     }
 
     void ShardError(const NKikimrTxDataShard::TEvProposeTransactionResult& result) {
@@ -819,10 +796,6 @@ private:
         auto& affectedSet = *transaction.MutableAffectedSet();
         affectedSet.Reserve(static_cast<int>(ShardStates.size()));
 
-        //
-        // TODO(abcdef): учесть таблетки топиков
-        //
-
         ui64 aggrMinStep = 0;
         ui64 aggrMaxStep = Max<ui64>();
         ui64 totalReadSize = 0;
@@ -857,10 +830,6 @@ private:
                     affectedFlags |= NFlatTxCoordinator::TTransactionProposal::TAffectedEntry::AffectedWrite;
                 }
             }
-
-            //
-            // TODO(abcdef): учесть таблетки топиков
-            //
 
             item.SetFlags(affectedFlags);
         }
@@ -920,10 +889,11 @@ private:
     void HandleExecute(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
 
-        LOG_D("Got propose result, topic tablet: " << event.GetOrigin() << ", status: "
-            << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
+        LOG_D("Got propose result" <<
+              ", topic tablet: " << event.GetOrigin() <<
+              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
 
-        TShardState *state = TopicTabletStates.FindPtr(event.GetOrigin());
+        TShardState *state = ShardStates.FindPtr(event.GetOrigin());
         YQL_ENSURE(state);
 
         switch (event.GetStatus()) {
@@ -2028,6 +1998,7 @@ private:
 
                 if (auto tabletIds = Request.TopicOperations.GetSendingTabletIds()) {
                     sendingShardsSet.insert(tabletIds.begin(), tabletIds.end());
+                    receivingShardsSet.insert(tabletIds.begin(), tabletIds.end());
                 }
 
                 if (auto tabletIds = Request.TopicOperations.GetReceivingTabletIds()) {
@@ -2276,7 +2247,7 @@ private:
 
             state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasReadOperations(tabletId);
 
-            auto result = TopicTabletStates.emplace(tabletId, std::move(state));
+            auto result = ShardStates.emplace(tabletId, std::move(state));
             YQL_ENSURE(result.second);
         }
     }
@@ -2352,7 +2323,6 @@ private:
 
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
-    THashMap<ui64, TShardState> TopicTabletStates;
     TVector<NKikimrTxDataShard::TLock> Locks;
     bool ReadOnlyTx = true;
     bool VolatileTx = false;

@@ -3,6 +3,7 @@
 #include "event_helpers.h"
 #include "partition.h"
 #include "read.h"
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -881,6 +882,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     ConfigInited = true;
 
+    InitProcessingParams(ctx);
     InitializeMeteringSink(ctx);
 
     Y_VERIFY(!NewConfigShouldBeApplied);
@@ -2485,6 +2487,8 @@ void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransa
 
 void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvPlanStep");
+
     NKikimrTx::TEvMediatorPlanStep& event = ev->Get()->Record;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
@@ -2499,6 +2503,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvReadSet");
+
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
     Y_VERIFY(event.HasTxId());
 
@@ -2525,6 +2531,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvReadSetAck");
+
     NKikimrTx::TEvReadSetAck& event = ev->Get()->Record;
     Y_VERIFY(event.HasTxId());
 
@@ -2546,6 +2554,14 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorCo
 void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorContext& ctx)
 {
     const TEvPQ::TEvTxCalcPredicateResult& event = *ev->Get();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                " Handle TEvPQ::TEvTxCalcPredicateResult" <<
+                " Step " << event.Step <<
+                " TxId " << event.TxId <<
+                " Partition " << event.Partition <<
+                " Predicate " << (event.Predicate ? "true" : "false"));
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
@@ -2579,6 +2595,8 @@ void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const 
 
 void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvPQ::TEvTxCommitDone");
+
     const TEvPQ::TEvTxCommitDone& event = *ev->Get();
 
     auto tx = GetTransaction(ctx, event.TxId);
@@ -2669,7 +2687,8 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         TDistributedTransaction& tx = Txs[event.GetTxId()];
         switch (tx.State) {
         case NKikimrPQ::TTransaction::UNKNOWN: {
-            tx.OnProposeTransaction(event, GetAllowedStep());
+            tx.OnProposeTransaction(event, GetAllowedStep(),
+                                    TabletID());
             CheckTxState(ctx, tx);
             break;
         }
@@ -2838,6 +2857,10 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
 
+    if (ProcessingParams) {
+        event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
+    }
+
     if (tx.SourceTablet != InvalidTabletId) {
         RepliesToPipe.emplace_back(tx.SourceTablet, tx.TxId, std::move(event));
     } else {
@@ -2875,14 +2898,16 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
     Y_VERIFY(data.SerializeToString(&body));
 
     for (ui64 receiverId : tx.Receivers) {
-        auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(tx.Step,
-                                                                   tx.TxId,
-                                                                   TabletID(),
-                                                                   receiverId,
-                                                                   TabletID(),
-                                                                   body,
-                                                                   0);
-        SendToPipe(receiverId, tx, std::move(event), ctx);
+        if (receiverId != TabletID()) {
+            auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(tx.Step,
+                                                                       tx.TxId,
+                                                                       TabletID(),
+                                                                       receiverId,
+                                                                       TabletID(),
+                                                                       body,
+                                                                       0);
+            SendToPipe(receiverId, tx, std::move(event), ctx);
+        }
     }
 
     tx.ReadSetAcks.clear();
@@ -3238,6 +3263,15 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
         CheckTxState(ctx, *tx);
     }
     ChangedTxs.clear();
+}
+ 
+void TPersQueue::InitProcessingParams(const TActorContext& ctx)
+{
+    auto appdata = AppData(ctx);
+    const ui32 domainId = appdata->DomainsInfo->GetDomainUidByTabletId(TabletID());
+    Y_VERIFY(domainId != appdata->DomainsInfo->BadDomainId);
+    const auto& domain = appdata->DomainsInfo->GetDomain(domainId);
+    ProcessingParams = ExtractProcessingParams(domain);
 }
 
 bool TPersQueue::AllTransactionsHaveBeenProcessed() const

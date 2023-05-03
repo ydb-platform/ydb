@@ -20,8 +20,10 @@ struct TDistributedTransaction {
     explicit TDistributedTransaction(const NKikimrPQ::TTransaction& tx);
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
-                              ui64 minStep);
-    void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody);
+                              ui64 minStep,
+                              ui64 extractTabletId);
+    void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody,
+                              ui64 extractTabletId);
     void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);

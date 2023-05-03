@@ -370,7 +370,6 @@ namespace NActors {
             EvRam,
             EvTerminate,
             EvFreeItems,
-            EvWriteData,
         };
 
         struct TEvCheckCloseOnIdle : TEventLocal<TEvCheckCloseOnIdle, EvCheckCloseOnIdle> {};
@@ -436,25 +435,30 @@ namespace NActors {
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
 
-        STRICT_STFUNC(StateFunc,
-            fFunc(TEvInterconnect::EvForward, Forward)
-            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
-            fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
-            fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
-            fFunc(TEvents::TEvUnsubscribe::EventType, Unsubscribe)
-            cFunc(TEvFlush::EventType, HandleFlush)
-            hFunc(TEvPollerReady, Handle)
-            hFunc(TEvPollerRegisterResult, Handle)
-            hFunc(TEvUpdateFromInputSession, Handle)
-            hFunc(TEvRam, HandleRam)
-            hFunc(TEvCheckCloseOnIdle, CloseOnIdleWatchdog)
-            hFunc(TEvCheckLostConnection, LostConnectionWatchdog)
-            cFunc(TEvents::TSystem::Wakeup, SendUpdateToWhiteboard)
-            hFunc(TEvSocketDisconnect, OnDisconnect)
-            hFunc(TEvTerminate, Handle)
-            hFunc(TEvProcessPingRequest, Handle)
-            cFunc(EvWriteData, HandleWriteData)
-        )
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        std::optional<TTimeLimit> TimeLimit;
+
+        STATEFN(StateFunc) {
+            TimeLimit.emplace(GetMaxCyclesPerEvent());
+            STRICT_STFUNC_BODY(
+                fFunc(TEvInterconnect::EvForward, Forward)
+                cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+                fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
+                fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
+                fFunc(TEvents::TEvUnsubscribe::EventType, Unsubscribe)
+                cFunc(TEvFlush::EventType, HandleFlush)
+                hFunc(TEvPollerReady, Handle)
+                hFunc(TEvPollerRegisterResult, Handle)
+                hFunc(TEvUpdateFromInputSession, Handle)
+                hFunc(TEvRam, HandleRam)
+                hFunc(TEvCheckCloseOnIdle, CloseOnIdleWatchdog)
+                hFunc(TEvCheckLostConnection, LostConnectionWatchdog)
+                cFunc(TEvents::TSystem::Wakeup, SendUpdateToWhiteboard)
+                hFunc(TEvSocketDisconnect, OnDisconnect)
+                hFunc(TEvTerminate, Handle)
+                hFunc(TEvProcessPingRequest, Handle)
+            )
+        }
 
         void Handle(TEvUpdateFromInputSession::TPtr& ev);
 
@@ -465,24 +469,31 @@ namespace NActors {
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
-        void IssueRam();
+        void IssueRam(bool batching);
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
+        void ProducePackets();
+
+        size_t GetUnsentSize() const {
+            return OutgoingStream.CalculateUnsentSize() + OutOfBandStream.CalculateUnsentSize() +
+                XdcStream.CalculateUnsentSize();
+        }
+
+        size_t GetUnsentLimit() const {
+            return 128 * 1024;
+        }
 
         void SendUpdateToWhiteboard(bool connected = true);
         ui32 CalculateQueueUtilization();
 
-        bool WriteDataInFlight = false;
-
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
-        void HandleWriteData();
         void WriteData();
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
-        ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        void MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
-        bool DropConfirmed(ui64 confirm);
+        void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
 
         void StartHandshake();

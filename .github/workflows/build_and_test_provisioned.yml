@@ -35,11 +35,9 @@ on:
         required: false
         type: string
       run_unit_tests:
-        required: true
         type: boolean
         default: true
       run_functional_tests:
-        required: true
         type: boolean
         default: true
       test_label_regexp:

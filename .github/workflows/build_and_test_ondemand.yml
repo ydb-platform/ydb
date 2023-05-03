@@ -14,11 +14,9 @@ on:
         required: false
         default: fd8snjpoq85qqv0mk9gi
       run_unit_tests:
-        required: true
         type: boolean
         default: true
       run_functional_tests:
-        required: true
         type: boolean
         default: true
   workflow_dispatch:
@@ -34,11 +32,9 @@ on:
         required: false
         default: fd8snjpoq85qqv0mk9gi
       run_unit_tests:
-        required: true
         type: boolean
         default: true
       run_functional_tests:
-        required: true
         type: boolean
         default: true
     

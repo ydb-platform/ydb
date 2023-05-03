@@ -8,7 +8,7 @@
 - C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp)
 {% endif %}
 - С# (.NET) [https://github.com/ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk)
-- Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk) (архивные версии [v1](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) и [v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2))
+- Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk)
 - Java [https://github.com/ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk)
 - Node.js [https://github.com/ydb-platform/ydb-nodejs-sdk](https://github.com/ydb-platform/ydb-nodejs-sdk)
 - PHP [https://github.com/yandex-cloud/ydb-php-sdk](https://github.com/yandex-cloud/ydb-php-sdk)

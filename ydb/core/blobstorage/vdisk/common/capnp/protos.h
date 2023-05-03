@@ -388,24 +388,33 @@ namespace NKikimrCapnProto {
                 switch (value) {
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntUnknown);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntBegin:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntBegin);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetFast:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntGetFast);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutLog:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntPutLog);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeForeground:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeForeground);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeBackground);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetDiscover:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntGetDiscover);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntLowRead);
+                        break;
                     case NKikimrBlobStorage::EVDiskInternalQueueId::IntEnd:
                         SetIntQueueId(NKikimrCapnProto::EVDiskInternalQueueId::IntEnd);
+                        break;
                     default:
-                        throw std::runtime_error("invalid protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)) + " --> " + NKikimrBlobStorage::EVDiskInternalQueueId_Name(value).data());
+                        throw std::runtime_error("invalid protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));
                 }
             }
             TMessageId::Builder MutableMsgId() { return getMsgId(); }

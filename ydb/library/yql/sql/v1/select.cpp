@@ -1923,7 +1923,7 @@ private:
         if (Having && !Having->Init(ctx, src)) {
             hasError = true;
         }
-        if (!src->IsCompositeSource() && !Distinct && !Columns.All && src->HasAggregations()) {
+        if (!src->IsCompositeSource() && !Columns.All && src->HasAggregations()) {
             WarnIfAliasFromSelectIsUsedInGroupBy(ctx, Terms, GroupBy, GroupByExpr);
 
             /// verify select aggregation compatibility

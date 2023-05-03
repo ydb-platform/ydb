@@ -5,9 +5,9 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #include <boost/locale/boundary.hpp>
 #include <boost/locale/generator.hpp>
+#include "boost/locale//util/encoding.hpp"
 #include "boost/locale/icu/all_generator.hpp"
 #include "boost/locale/icu/cdata.hpp"
 #include "boost/locale/icu/icu_util.hpp"
@@ -133,7 +133,7 @@ namespace boost { namespace locale {
 #if BOOST_LOCALE_ICU_VERSION >= 306
             UErrorCode err = U_ZERO_ERROR;
             BOOST_LOCALE_START_CONST_CONDITION
-            if(sizeof(CharType) == 2 || (sizeof(CharType) == 1 && encoding == "UTF-8")) {
+            if(sizeof(CharType) == 2 || (sizeof(CharType) == 1 && util::normalize_encoding(encoding) == "utf8")) {
                 UText* ut = 0;
                 try {
                     if(sizeof(CharType) == 1)

@@ -16,20 +16,23 @@ namespace NKikimr::NOlap::NIndexedReader {
         std::shared_ptr<arrow::RecordBatch> FilteredBatch;
         NOlap::TReadMetadata::TConstPtr ReadMetadata;
         std::shared_ptr<NArrow::TColumnFilter> Filter;
+        std::shared_ptr<NArrow::TColumnFilter> EarlyFilter;
         const ui32 BatchNo;
         ui32 OriginalCount = 0;
         bool AllowEarlyFilter = false;
+        std::set<ui32> FilterColumnIds;
     protected:
-        virtual bool DoApply(TIndexedReadData& owner) const override;
+        virtual bool DoApply(TGranulesFillingContext& owner) const override;
         virtual bool DoExecuteImpl() override;
     public:
         TAssembleFilter(TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
-            TBatch& batch, const bool allowEarlyFilter, NColumnShard::IDataTasksProcessor::TPtr processor)
+            TBatch& batch, const bool allowEarlyFilter, const std::set<ui32>& filterColumnIds, NColumnShard::IDataTasksProcessor::TPtr processor)
             : TBase(processor)
             , BatchConstructor(batchConstructor)
             , ReadMetadata(readMetadata)
             , BatchNo(batch.GetBatchNo())
             , AllowEarlyFilter(allowEarlyFilter)
+            , FilterColumnIds(filterColumnIds)
         {
             TBase::SetPriority(TBase::EPriority::Normal);
         }

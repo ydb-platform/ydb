@@ -4,7 +4,6 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #include "boost/locale/icu/codecvt.hpp"
 #include <boost/locale/encoding.hpp>
 #include <boost/locale/encoding_errors.hpp>
@@ -14,6 +13,7 @@
 #include "boost/locale/icu/all_generator.hpp"
 #include "boost/locale/icu/icu_util.hpp"
 #include "boost/locale/icu/uconv.hpp"
+#include "boost/locale/util/encoding.hpp"
 #include <unicode/ucnv.h>
 #include <unicode/ucnv_err.h>
 
@@ -110,7 +110,7 @@ namespace boost { namespace locale { namespace impl_icu {
 
     std::locale create_codecvt(const std::locale& in, const std::string& encoding, char_facet_t type)
     {
-        if(conv::impl::normalize_encoding(encoding.c_str()) == "utf8")
+        if(util::normalize_encoding(encoding) == "utf8")
             return util::create_utf8_codecvt(in, type);
 
         try {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <util/generic/vector.h>
@@ -94,7 +95,19 @@ public:
     bool IsLiteralTx() const;
 };
 
+class TLlvmSettings {
+private:
+    YDB_READONLY(bool, DisableLlvmForUdfStages, false);
+    YDB_READONLY_DEF(std::optional<bool>, UseLlvmExternalDirective);
+public:
+    void Fill(NYql::TKikimrConfiguration::TPtr config, const NKikimrKqp::EQueryType qType);
+
+    bool GetUseLlvm(const NYql::NDqProto::TProgram::TSettings& kqpSettingsProto) const;
+};
+
 class TPreparedQueryHolder {
+private:
+    YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
     TVector<TString> QueryTables;
@@ -142,14 +155,6 @@ public:
 
     const NKqpProto::TKqpPhyQuery& GetPhysicalQuery() const {
         return Proto->GetPhysicalQuery();
-    }
-
-    std::optional<bool> GetEnableLlvm() const {
-        if (Proto->HasEnableLlvm()) {
-            return Proto->GetEnableLlvm();
-         } else {
-            return std::nullopt;
-         }
     }
 };
 

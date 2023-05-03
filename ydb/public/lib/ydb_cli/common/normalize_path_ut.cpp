@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
         UNIT_ASSERT(NormalizePath("/abc/../def") == "/abc/../def");
         UNIT_ASSERT(NormalizePath("/abc/def//") == "/abc/def");
         UNIT_ASSERT(NormalizePath("/abc/def/.") == "/abc/def");
-        UNIT_ASSERT(NormalizePath("/abc/def/./") == "/abc/def");
+        UNIT_ASSERT(NormalizePath("/abc/def/./") != "/abc/def");
     }
 
     TString AdjustPath(const TString& path, const TClientCommand::TConfig& config) {

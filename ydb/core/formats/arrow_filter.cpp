@@ -132,7 +132,7 @@ void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatc
 }
 }
 
-std::shared_ptr<arrow::BooleanArray> TColumnFilter::MakeFilter() const {
+std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter() const {
     arrow::BooleanBuilder builder;
     auto res = builder.Reserve(Count);
     Y_VERIFY_OK(res);
@@ -320,7 +320,7 @@ bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch) {
     if (IsTotalAllowFilter()) {
         return true;
     }
-    auto res = arrow::compute::Filter(batch, MakeFilter());
+    auto res = arrow::compute::Filter(batch, BuildArrowFilter());
     Y_VERIFY_S(res.ok(), res.status().message());
     Y_VERIFY((*res).kind() == arrow::Datum::RECORD_BATCH);
     batch = (*res).record_batch();
@@ -438,7 +438,7 @@ ui32 TColumnFilter::GetInactiveHeadSize() const {
     }
 }
 
-std::vector<bool> TColumnFilter::BuildFilter() const {
+std::vector<bool> TColumnFilter::BuildSimpleFilter() const {
     std::vector<bool> result;
     result.reserve(Count);
     bool currentValue = GetStartValue();

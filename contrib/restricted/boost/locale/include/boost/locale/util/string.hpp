@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 Alexander Grund
+// Copyright (c) 2022-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -18,6 +18,22 @@ namespace boost { namespace locale { namespace util {
             ++str;
         return str;
     }
+
+    inline bool is_upper_ascii(const char c)
+    {
+        return 'A' <= c && c <= 'Z';
+    }
+
+    inline bool is_lower_ascii(const char c)
+    {
+        return 'a' <= c && c <= 'z';
+    }
+
+    inline bool is_numeric_ascii(const char c)
+    {
+        return '0' <= c && c <= '9';
+    }
+
 }}} // namespace boost::locale::util
 
 #endif

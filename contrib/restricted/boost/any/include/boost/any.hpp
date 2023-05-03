@@ -26,7 +26,7 @@
 #include <boost/type_traits/is_const.hpp>
 #include <boost/throw_exception.hpp>
 #include <boost/static_assert.hpp>
-#include <boost/utility/enable_if.hpp>
+#include <boost/core/enable_if.hpp>
 #include <boost/core/addressof.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/type_traits/conditional.hpp>
@@ -335,7 +335,7 @@ namespace boost
 }
 
 // Copyright Kevlin Henney, 2000, 2001, 2002. All rights reserved.
-// Copyright Antony Polukhin, 2013-2022.
+// Copyright Antony Polukhin, 2013-2023.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at

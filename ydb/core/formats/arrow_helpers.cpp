@@ -225,12 +225,12 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
     return *batch;
 }
 
-std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema) {
+std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount) {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(schema->num_fields());
 
     for (auto& field : schema->fields()) {
-        auto result = arrow::MakeArrayOfNull(field->type(), 0);
+        auto result = arrow::MakeArrayOfNull(field->type(), rowsCount);
         Y_VERIFY_OK(result.status());
         columns.emplace_back(*result);
         Y_VERIFY(columns.back());
@@ -708,9 +708,13 @@ bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<a
 }
 
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) < 0;
+}
+
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
     Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
 
-    return SwitchType(x.type->id(), [&](const auto& type) {
+    return SwitchTypeImpl<int, 0>(x.type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
@@ -722,16 +726,34 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
             Y_VERIFY(yval);
             TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());
             TStringBuf yBuf(reinterpret_cast<const char*>(yval->data()), yval->size());
-            return xBuf < yBuf;
+            if (xBuf < yBuf) {
+                return -1;
+            } else if (yBuf < xBuf) {
+                return 1;
+            } else {
+                return 0;
+            }
         }
         if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            return xval < yval;
+            if (xval < yval) {
+                return -1;
+            } else if (yval < xval) {
+                return 1;
+            } else {
+                return 0;
+            }
         }
         Y_VERIFY(false); // TODO: non primitive types
-        return false;
+        return 0;
     });
+}
+
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_VERIFY(x);
+    Y_VERIFY(y);
+    return ScalarCompare(*x, *y);
 }
 
 std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
@@ -893,6 +915,17 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
     }
     result = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), columns);
     return true;
+}
+
+int ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {
+    auto result = TRawReplaceKey(&x, xRow).CompareNotNull(TRawReplaceKey(&y, yRow));
+    if (result == std::partial_ordering::greater) {
+        return 1;
+    } else if (result == std::partial_ordering::less) {
+        return -1;
+    } else {
+        return 0;
+    }
 }
 
 }

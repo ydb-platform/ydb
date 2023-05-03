@@ -83,7 +83,12 @@ public:
 };
 
 bool CanRewriteToEmptyContainer(const TExprNode& src) {
-    if (auto multi = src.GetConstraint<TMultiConstraintNode>()) {
+    if (src.GetConstraint<TPartOfSortedConstraintNode>() ||
+        src.GetConstraint<TPartOfChoppedConstraintNode>() ||
+        src.GetConstraint<TPartOfUniqueConstraintNode>() ||
+        src.GetConstraint<TPartOfDistinctConstraintNode>())
+        return false;
+    if (const auto multi = src.GetConstraint<TMultiConstraintNode>()) {
         for (auto& item: multi->GetItems()) {
             for (auto c: item.second.GetAllConstraints()) {
                 if (c->GetName() != TEmptyConstraintNode::Name()) {
@@ -5341,14 +5346,14 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables); IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content();
-            return ctx.Builder(node->Pos())
+            return KeepConstraints(ctx.Builder(node->Pos())
                 .Callable(ETypeAnnotationKind::Flow == node->GetTypeAnn()->GetKind() ? "ToFlow" : "ToStream")
                     .Callable(0, "Just")
                         .Callable(0, "Dict")
                             .Add(0, ExpandType(node->Pos(), GetSeqItemType(*node->GetTypeAnn()), ctx))
                         .Seal()
                     .Seal()
-                .Seal().Build();
+                .Seal().Build(), *node, ctx);
         }
 
         return node;
@@ -5357,7 +5362,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["ToDict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables); IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content();
-            return ctx.NewCallable(inputToCheck.Pos(), "Dict", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+            return KeepConstraints(ctx.NewCallable(inputToCheck.Pos(), "Dict", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
         }
 
         if (node->Head().IsCallable("AsList") && node->Child(2)->Child(1)->IsCallable("Void")) {
@@ -6703,7 +6708,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
-            return ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, node->HeadPtr()).Seal().Build();
+            return ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
         }
         return node;
     };

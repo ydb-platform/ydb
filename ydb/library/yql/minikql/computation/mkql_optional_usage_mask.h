@@ -32,16 +32,6 @@ public:
         }
     }
 
-    ui32 GetOptionalCount() const {
-        return CountOfOptional;
-    }
-
-    void Shrink(ui32 newSize) {
-        Y_VERIFY(newSize <= CountOfOptional, "Invalid shrink size");
-        Mask.Reset(newSize, CountOfOptional);
-        CountOfOptional = newSize;
-    }
-
     void SetNextEmptyOptional(bool empty) {
         if (empty) {
             Mask.Set(CountOfOptional);

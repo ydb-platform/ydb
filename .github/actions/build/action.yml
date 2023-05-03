@@ -10,7 +10,7 @@ runs:
   steps:
   - name: Configure for sanitizer
     shell: bash
-    if: startsWith(inputs.sanitizer,'sanitize=')
+    if: inputs.sanitizer
     run: |
       mkdir -p ../build
       patch -p1 < ydb/deploy/patches/0001-sanitizer-build.patch
@@ -18,12 +18,12 @@ runs:
       rm -rf *
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        -DCMAKE_CXX_FLAGS="-f${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
-        -DCMAKE_C_FLAGS="-f${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
+        -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
         ../ydb
   - name: Configure
     shell: bash
-    if: false == startsWith(inputs.sanitizer,'sanitize=')
+    if: ${{!inputs.sanitizer}}
     run: |
       mkdir -p ../build
       cd ../build

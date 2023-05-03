@@ -7,7 +7,10 @@ bool TAssembleFilter::DoExecuteImpl() {
     /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-    auto batch = BatchConstructor.Assemble();
+
+    TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+    options.SetIncludedColumnIds(FilterColumnIds);
+    auto batch = BatchConstructor.Assemble(options);
     Y_VERIFY(batch);
     Y_VERIFY(batch->num_rows());
     OriginalCount = batch->num_rows();
@@ -17,59 +20,42 @@ bool TAssembleFilter::DoExecuteImpl() {
         FilteredBatch = nullptr;
         return true;
     }
-    if (ReadMetadata->Program && AllowEarlyFilter) {
-        auto filter = NOlap::EarlyFilter(batch, ReadMetadata->Program);
-        Filter->CombineSequential(filter);
-        if (!filter.Apply(batch)) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
-            FilteredBatch = nullptr;
-            return true;
+    if (ReadMetadata->Program) {
+        auto earlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
+        if (AllowEarlyFilter) {
+            Filter->CombineSequential(*earlyFilter);
+            if (!earlyFilter->Apply(batch)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
+                FilteredBatch = nullptr;
+                return true;
+            }
+        } else {
+            EarlyFilter = earlyFilter;
         }
     }
+
+    if ((size_t)batch->schema()->num_fields() < BatchConstructor.GetColumnsCount()) {
+        TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+        options.SetExcludedColumnIds(FilterColumnIds);
+        auto addBatch = BatchConstructor.Assemble(options);
+        Y_VERIFY(addBatch);
+        Y_VERIFY(Filter->Apply(addBatch));
+        Y_VERIFY(NArrow::MergeBatchColumns({ batch, addBatch }, batch, BatchConstructor.GetSchemaColumnNames(), true));
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
-        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter);
+        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter)
+        ("filter_columns", FilterColumnIds.size());
 
     FilteredBatch = batch;
     return true;
 }
 
-bool TAssembleFilter::DoApply(TIndexedReadData& owner) const {
+bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
     TBatch& batch = owner.GetBatchInfo(BatchNo);
     Y_VERIFY(OriginalCount);
     owner.GetCounters().GetOriginalRowsCount()->Add(OriginalCount);
-    batch.InitFilter(Filter, FilteredBatch);
     owner.GetCounters().GetAssembleFilterCount()->Add(1);
-    if (!FilteredBatch || FilteredBatch->num_rows() == 0) {
-        owner.GetCounters().GetEmptyFilterCount()->Add(1);
-        owner.GetCounters().GetEmptyFilterFetchedBytes()->Add(batch.GetFetchedBytes());
-        owner.GetCounters().GetSkippedBytes()->Add(batch.GetFetchBytes(&owner.GetPostFilterColumns()));
-        batch.InitBatch(FilteredBatch);
-    } else {
-        owner.GetCounters().GetFilteredRowsCount()->Add(FilteredBatch->num_rows());
-        if (batch.AskedColumnsAlready(owner.GetPostFilterColumns())) {
-            owner.GetCounters().GetFilterOnlyCount()->Add(1);
-            owner.GetCounters().GetFilterOnlyFetchedBytes()->Add(batch.GetFetchedBytes());
-            owner.GetCounters().GetFilterOnlyUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
-            owner.GetCounters().GetSkippedBytes()->Add(batch.GetFetchBytes(&owner.GetPostFilterColumns()));
-
-            batch.InitBatch(FilteredBatch);
-        } else {
-            owner.GetCounters().GetTwoPhasesFilterFetchedBytes()->Add(batch.GetFetchedBytes());
-            owner.GetCounters().GetTwoPhasesFilterUsefulBytes()->Add(batch.GetFetchedBytes() * FilteredBatch->num_rows() / OriginalCount);
-
-            batch.Reset(&owner.GetPostFilterColumns());
-
-            owner.GetCounters().GetTwoPhasesCount()->Add(1);
-            owner.GetCounters().GetTwoPhasesPostFilterFetchedBytes()->Add(batch.GetWaitingBytes());
-            owner.GetCounters().GetTwoPhasesPostFilterUsefulBytes()->Add(batch.GetWaitingBytes() * FilteredBatch->num_rows() / OriginalCount);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "additional_data")
-                ("filtered_count", FilteredBatch->num_rows())
-                ("blobs_count", batch.GetWaitingBlobs().size())
-                ("columns_count", batch.GetCurrentColumnIds()->size())
-                ("fetch_size", batch.GetWaitingBytes())
-                ;
-        }
-    }
+    batch.InitFilter(Filter, FilteredBatch, OriginalCount, EarlyFilter);
     return true;
 }
 

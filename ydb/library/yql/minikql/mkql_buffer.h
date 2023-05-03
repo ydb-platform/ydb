@@ -25,16 +25,8 @@ public:
         return Next_;
     }
 
-    inline const TBufferPage* Prev() const {
-        return Prev_;
-    }
-
     inline TBufferPage* Next() {
         return Next_;
-    }
-
-    inline TBufferPage* Prev() {
-        return Prev_;
     }
 
     inline size_t Size() const {
@@ -55,7 +47,6 @@ public:
 
 private:
     TBufferPage* Next_ = nullptr;
-    TBufferPage* Prev_ = nullptr;
     size_t Size_ = 0;
 
     static TBufferPage* Allocate();
@@ -192,25 +183,6 @@ public:
     inline void EraseBack(size_t len) {
         Y_VERIFY_DEBUG(Tail_ && TailSize_ >= len);
         TailSize_ -= len;
-    }
-
-    inline void Resize(size_t newSize) {
-        size_t sz = Size();
-        if (newSize >= sz) {
-            return Advance(newSize - sz);
-        }
-        size_t delta = sz - newSize;
-        Y_VERIFY_DEBUG(Tail_);
-        while (delta > TailSize_) {
-            delta -= TailSize_;
-            auto prev = TBufferPage::GetPage(Tail_)->Prev();
-            Y_VERIFY_DEBUG(prev);
-            Y_VERIFY_DEBUG(prev->Size() <= ClosedPagesSize_);
-            ClosedPagesSize_ -= prev->Size();
-            TailSize_ = prev->Size();
-            Tail_ = prev->Data();
-        }
-        TailSize_ -= delta;
     }
 
     inline void Advance(size_t len) {

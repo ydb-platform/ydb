@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -167,7 +168,8 @@ struct TTaskOutput {
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 struct TTask {
 private:
-    std::optional<ui32> MetaId;
+    YDB_OPT(ui32, MetaId);
+    YDB_ACCESSOR(bool, UseLlvm, false);
 public:
     using TInputType = TTaskInput<TInputMeta>;
     using TOutputType = TTaskOutput<TOutputMeta>;
@@ -176,19 +178,6 @@ public:
         : StageId(stageInfo.Id)
         , Inputs(stageInfo.InputsCount)
         , Outputs(stageInfo.OutputsCount) {
-    }
-
-    bool HasMetaId() const {
-        return !!MetaId;
-    }
-
-    void SetMetaId(const ui32 value) {
-        MetaId = value;
-    }
-
-    ui32 GetMetaIdUnsafe() const {
-        Y_VERIFY(MetaId);
-        return *MetaId;
     }
 
     ui64 Id = 0;

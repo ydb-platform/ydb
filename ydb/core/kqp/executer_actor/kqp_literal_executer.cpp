@@ -41,7 +41,6 @@ TDqTaskRunnerSettings CreateTaskRunnerSettings(Ydb::Table::QueryStatsCollection:
     settings.CollectProfileStats = CollectProfileStats(statsMode);
     settings.OptLLVM = "OFF";
     settings.TerminateOnError = false;
-    settings.AllowGeneratorsInUnboxedValues = false;
     return settings;
 }
 
@@ -241,9 +240,10 @@ public:
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
                     auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
-                    NKikimr::NMiniKQL::TUnboxedValueVector outputRows;
-                    outputChannel->PopAll(outputRows);
-                    ResponseEv->TakeResult(channelDesc.DstInputIndex, outputRows);
+                    NDqProto::TData outputData;
+                    while (outputChannel->Pop(outputData)) {
+                        ResponseEv->TakeResult(channelDesc.DstInputIndex, outputData);
+                    }
                     YQL_ENSURE(outputChannel->IsFinished());
                 }
             }

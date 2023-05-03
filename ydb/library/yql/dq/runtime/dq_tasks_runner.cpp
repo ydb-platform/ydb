@@ -642,7 +642,6 @@ public:
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.CollectProfileStats = Settings.CollectProfileStats;
-                    settings.AllowGeneratorsInUnboxedValues = Settings.AllowGeneratorsInUnboxedValues;
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);

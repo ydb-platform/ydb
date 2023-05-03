@@ -44,6 +44,9 @@ message TProgram {
         bool HasLookup = 12;
         double InputDataPrediction = 13;
         double OutputDataPrediction = 14;
+
+        bool HasCondense = 15;
+        uint32 NodesCount = 16;
     }
 
     uint32 RuntimeVersion = 1;
@@ -178,4 +181,5 @@ message TDqTask {
     map<string, bytes> TaskParams = 13;
     map<string, string> SecureParams = 14;
     optional uint32 MetaId = 15;
+    optional bool UseLlvm = 16;
 }

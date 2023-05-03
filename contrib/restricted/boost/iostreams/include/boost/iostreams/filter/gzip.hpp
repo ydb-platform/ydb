@@ -138,15 +138,15 @@ const int os_unknown        = 255;
 struct gzip_params : zlib_params {
 
     // Non-explicit constructor.
-    gzip_params( int level              = gzip::default_compression,
-                 int method             = gzip::deflated,
-                 int window_bits        = gzip::default_window_bits,
-                 int mem_level          = gzip::default_mem_level,
-                 int strategy           = gzip::default_strategy,
+    gzip_params( int level_              = gzip::default_compression,
+                 int method_             = gzip::deflated,
+                 int window_bits_        = gzip::default_window_bits,
+                 int mem_level_          = gzip::default_mem_level,
+                 int strategy_           = gzip::default_strategy,
                  std::string file_name_  = "",
                  std::string comment_    = "",
                  std::time_t mtime_      = 0 )
-        : zlib_params(level, method, window_bits, mem_level, strategy),
+        : zlib_params(level_, method_, window_bits_, mem_level_, strategy_),
           file_name(file_name_), comment(comment_), mtime(mtime_)
         { }
     std::string  file_name;

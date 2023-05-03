@@ -2306,6 +2306,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
             "<main>:1:17: Error: Column `subkey` must either be a key column in GROUP BY or it should be used in aggregation function\n");
     }
 
+    Y_UNIT_TEST(SelectDistinctWithBadAggregation) {
+        ExpectFailWithError("select distinct count(*), 1 + key from plato.Input",
+            "<main>:1:31: Error: Column `key` must either be a key column in GROUP BY or it should be used in aggregation function\n");
+        ExpectFailWithError("select distinct key, 2 * subkey from plato.Input group by key",
+            "<main>:1:26: Error: Column `subkey` must either be a key column in GROUP BY or it should be used in aggregation function\n");
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregationInHaving) {
         ExpectFailWithError("select key from plato.Input group by key\n"
                             "having \"f\" || value == \"foo\"",

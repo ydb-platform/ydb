@@ -19,6 +19,10 @@ struct TColumnRecord {
     TBlobRange BlobRange;
     TString Metadata;
 
+    std::optional<ui32> GetChunkRowsCount() const {
+        return {};
+    }
+
     bool operator == (const TColumnRecord& rec) const {
         return (Granule == rec.Granule) && (ColumnId == rec.ColumnId) &&
             (PlanStep == rec.PlanStep) && (TxId == rec.TxId) && (Portion == rec.Portion) && (Chunk == rec.Chunk);

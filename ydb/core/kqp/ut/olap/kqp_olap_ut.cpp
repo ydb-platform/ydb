@@ -1234,7 +1234,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
                     (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR
                     (`timestamp` > CAST(1002000 AS Timestamp))
-                ORDER BY `timestamp` DESC;
+                ORDER BY `timestamp` DESC
+                LIMIT 1000;
         )");
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -1693,7 +1694,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             TString query = fmt::format(R"(
                 --!syntax_v1
-                PRAGMA ydb.EnableLlvm = "{}";
+                PRAGMA ydb.UseLlvm = "{}";
 
                 SELECT
                     COUNT(*)

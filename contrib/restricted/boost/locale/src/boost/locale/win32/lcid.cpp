@@ -4,13 +4,12 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #ifndef NOMINMAX
 #    define NOMINMAX
 #endif
 
 #include "boost/locale/win32/lcid.hpp"
-#include "boost/locale/util/locale_data.hpp"
+#include <boost/locale/util/locale_data.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 #include <map>
@@ -95,13 +94,13 @@ namespace boost { namespace locale { namespace impl_win {
         }
         boost::locale::util::locale_data d;
         d.parse(locale_name);
-        std::string id = d.language;
+        std::string id = d.language();
 
-        if(!d.country.empty()) {
-            id += "_" + d.country;
+        if(!d.country().empty()) {
+            id += "_" + d.country();
         }
-        if(!d.variant.empty()) {
-            id += "@" + d.variant;
+        if(!d.variant().empty()) {
+            id += "@" + d.variant();
         }
 
         const table_type& tbl = get_ready_lcid_table();

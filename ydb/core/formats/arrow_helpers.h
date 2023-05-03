@@ -70,7 +70,7 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
 
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
                                                      const std::shared_ptr<arrow::Schema>& schema);
-std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema);
+std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount = 0);
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::vector<TString>& columnNames);
@@ -130,6 +130,9 @@ std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& colu
 std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
 bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+int ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 

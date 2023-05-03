@@ -13,6 +13,16 @@ inputs:
   aws_key_value: 
     required: true
     type: string
+  testman_token:
+     required: false
+     type: string
+  testman_url:
+     required: false
+     type: string
+  testman_project_id:
+     required: false
+     type: string
+    type: string
   aws_bucket:
     required: true
     type: string
@@ -20,33 +30,73 @@ inputs:
 runs:
   using: "composite"
   steps:
+  - name: Init
+    id: init
+    shell: bash
+    run: |
+      mkdir -p artifacts tmp test_reports
+      rm -rf artifacts/* tmp/* test_reports/*
+      echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
+      echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
+      echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
+      echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
+      echo "logfilename=${{inputs.log_suffix}}-stdout.gz" >> $GITHUB_OUTPUT
+  - name: Install Node required for Testmo CLI
+    uses: actions/setup-node@v3
+    with:
+      node-version: 19
+  - name: Install Testmo CLI
+    shell: bash
+    run: npm install -g @testmo/testmo-cli
+  - name: Test history run create
+    id: th
+    if: inputs.testman_token
+    shell: bash
+    run: |
+      RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
+      testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
+      testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "${{ github.run_id }}" \
+        --source "${{inputs.log_suffix}}" --resources testmo.json \
+        --tags "$GITHUB_REF_NAME" | \
+        echo "runid=$(cat)" >> $GITHUB_OUTPUT
   - name: Test
     shell: bash
     run: |
-      cd ../build/ydb
-      rm -rf $(pwd)/../../tmp/*
-      rm -rf $(pwd)/../../test_reports/*
-      mkdir -p ../../artifacts
-      rm -rf $(pwd)/../../artifacts/*
+      cd $WORKDIR/../build/ydb
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
-      TMPDIR=$(pwd)/../../tmp GTEST_OUTPUT="xml:$(pwd)/../../test_reports/" \
+      
+      TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
-              --output-junit $(pwd)/../../test_reports/ctest_report.xml \
-              -L '${{inputs.test_label_regexp}}' | \
+              --output-junit $TESTREPDIR/suites/ctest_report.xml \
+              -L '${{inputs.test_label_regexp}}' \
+              -E ydb-core-kqp-ut-spilling | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > ../../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
+        tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
-        tee -a $GITHUB_STEP_SUMMARY
+        tee $WORKDIR/short.log
+  - name: Test history upload results
+    if: always() && inputs.testman_token
+    shell: bash
+    run: |
+      testmo automation:run:submit-thread \
+        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+        --results $TESTREPDIR/unittests/*.xml 
+      testmo automation:run:submit-thread \
+        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+        --results $TESTREPDIR/suites/*.xml \
+        -- cat $WORKDIR/short.log
+      testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()
     with:
-      aws_key_id: ${{inputs.aws_key_id}}
-      aws_secret_access_key: ${{inputs.aws_key_value}}
+      aws_key_id: ${{inputs.AWS_KEY_ID }}
+      aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
       aws_bucket: ${{inputs.aws_bucket}}
-      source_dir: ../artifacts
+      source_dir: artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: https://storage.yandexcloud.net

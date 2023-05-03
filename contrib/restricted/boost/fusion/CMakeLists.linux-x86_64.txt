@@ -17,8 +17,10 @@ target_link_libraries(restricted-boost-fusion INTERFACE
   restricted-boost-config
   restricted-boost-container_hash
   restricted-boost-core
+  restricted-boost-describe
   restricted-boost-function_types
   restricted-boost-functional
+  restricted-boost-mp11
   restricted-boost-mpl
   restricted-boost-preprocessor
   restricted-boost-static_assert

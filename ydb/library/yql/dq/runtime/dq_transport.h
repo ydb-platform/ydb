@@ -26,22 +26,17 @@ public:
 
     template <class TForwardIterator>
     NDqProto::TData Serialize(TForwardIterator first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType) const {
-        return Serialize(first, last, itemType, {});
-    }
-
-    template <class TForwardIterator>
-    NDqProto::TData Serialize(TForwardIterator& first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType, TMaybe<size_t> limit) const {
         const auto listType = NKikimr::NMiniKQL::TListType::Create(const_cast<NKikimr::NMiniKQL::TType*>(itemType), TypeEnv);
         if (TransportVersion == NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED ||
             TransportVersion == NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0)
         {
             NKikimr::NMiniKQL::TValuePackerTransport<false> packer(listType);
-            return SerializeBatch(packer, first, last, limit);
+            return SerializeBatch(packer, first, last);
         }
         
         if (TransportVersion == NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0) {
             NKikimr::NMiniKQL::TValuePackerTransport<true> packer(listType);
-            return SerializeBatch(packer, first, last, limit);
+            return SerializeBatch(packer, first, last);
         }
         YQL_ENSURE(false, "Unsupported TransportVersion");
     }
@@ -49,8 +44,6 @@ public:
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType,
         NKikimr::NMiniKQL::TUnboxedValueVector& buffer) const;
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
-
-    ui64 CalcSerializedSize(NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* type) const;
 
     struct TEstimateSizeSettings {
         bool WithHeaders;
@@ -75,14 +68,10 @@ public:
     const NDqProto::EDataTransportVersion TransportVersion;
 private:
     template <class TForwardIterator, class TPacker>
-    NDqProto::TData SerializeBatch(TPacker& packer, TForwardIterator& first, TForwardIterator last, TMaybe<size_t> limit) const {
+    NDqProto::TData SerializeBatch(TPacker& packer, TForwardIterator first, TForwardIterator last) const {
         size_t count = 0;
         while (first != last) {
             packer.AddItem(*first);
-            if (limit.Defined() && count && packer.PackedSizeEstimate() > *limit) {
-                packer.Rollback(*first);
-                break;
-            }
             ++first;
             ++count;
         }

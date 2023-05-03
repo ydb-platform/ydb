@@ -7,7 +7,6 @@
 #ifndef BOOST_LOCALE_BOUNDARY_SEGMENT_HPP_INCLUDED
 #define BOOST_LOCALE_BOUNDARY_SEGMENT_HPP_INCLUDED
 
-#include <boost/locale/config.hpp>
 #include <boost/locale/util/string.hpp>
 #include <iosfwd>
 #include <iterator>

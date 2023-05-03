@@ -2,7 +2,20 @@
 
 #include "blob_cache.h"
 #include "engines/reader/conveyor_task.h"
-#include "engines/indexed_read_data.h"
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
+namespace NKikimr::NOlap {
+// Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
+struct TPartialReadResult {
+    std::shared_ptr<arrow::RecordBatch> ResultBatch;
+
+    // This 1-row batch contains the last key that was read while producing the ResultBatch.
+    // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
+    std::shared_ptr<arrow::RecordBatch> LastReadKey;
+
+    std::string ErrorString;
+};
+}
 
 namespace NKikimr::NColumnShard {
 

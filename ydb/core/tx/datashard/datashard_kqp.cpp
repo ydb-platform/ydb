@@ -86,6 +86,17 @@ NUdf::EFetchStatus FetchAllOutput(NDq::IDqOutputChannel* channel, NDqProto::TDat
     return NUdf::EFetchStatus::Yield;
 }
 
+NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDqProto::TData& buffer) {
+    auto result = channel->Pop(buffer);
+    Y_UNUSED(result);
+
+    if (channel->IsFinished()) {
+        return NUdf::EFetchStatus::Finish;
+    }
+
+    return NUdf::EFetchStatus::Yield;
+}
+
 NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
     const TInputOpData::TInReadSets* inReadSets, const NKikimrTxDataShard::TKqpTransaction& kqpTx,
     NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
@@ -526,29 +537,30 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
             for (auto& channel : task.GetOutputs(i).GetChannels()) {
                 auto computeActor = computeCtx.GetTaskOutputChannel(task.GetId(), channel.GetId());
                 if (computeActor) {
-                    auto dataEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelData>();
-                    dataEv->Record.SetSeqNo(1);
-                    dataEv->Record.MutableChannelData()->SetChannelId(channel.GetId());
-                    dataEv->Record.MutableChannelData()->SetFinished(true);
-                    dataEv->Record.SetNoAck(true);
-                    auto outputData = dataEv->Record.MutableChannelData()->MutableData();
-
-                    auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), *outputData);
-                    MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-
-                    if (outputData->GetRaw().size() > MaxDatashardReplySize) {
-                        auto message = TStringBuilder() << "Datashard " << origin
-                            << ": reply size limit exceeded (" << outputData->GetRaw().size() << " > "
-                            << MaxDatashardReplySize << ")";
-
-                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
-                        result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
-                    } else {
-                        ctx.Send(computeActor, dataEv.Release());
+                    size_t seqNo = 1;
+                    auto fetchStatus = NUdf::EFetchStatus::Yield;
+                    while (fetchStatus != NUdf::EFetchStatus::Finish) {
+                        auto dataEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelData>();
+                        dataEv->Record.SetSeqNo(seqNo++);
+                        dataEv->Record.MutableChannelData()->SetChannelId(channel.GetId());
+                        dataEv->Record.SetNoAck(true);
+                        auto outputData = dataEv->Record.MutableChannelData()->MutableData();
+                        fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), *outputData);
+                        dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
+                        if (outputData->GetRaw().size() > MaxDatashardReplySize) {
+                            auto message = TStringBuilder() << "Datashard " << origin
+                                << ": reply size limit exceeded (" << outputData->GetRaw().size() << " > "
+                                << MaxDatashardReplySize << ")";
+                            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
+                            result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
+                            break;
+                        } else {
+                            ctx.Send(computeActor, dataEv.Release());
+                        }
                     }
                 } else {
                     NDqProto::TData outputData;
-                    auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
+                    auto fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
                     MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
                     MKQL_ENSURE_S(outputData.GetRows() == 0);
                 }

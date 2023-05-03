@@ -38,5 +38,7 @@ namespace NKikimr {
         const TVDiskID &selfVDiskId,
         const TActorId &notifyId,
         std::vector<TDefragRecord> &&recs);
+        
+    bool IsDefragRewriter(const IActor* actor);
 
 } // NKikimr

@@ -8,7 +8,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/draft/ydb_console.pb.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 namespace NKikimr::NConsole {
 

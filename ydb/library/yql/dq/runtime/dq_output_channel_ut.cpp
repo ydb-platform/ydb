@@ -84,13 +84,12 @@ struct TTestContext {
     }
 };
 
-void TestSingleRead(TTestContext& ctx, bool quantum) {
+void TestSingleRead(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 1000;
     settings.MaxChunkBytes = 200;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = quantum;
 
     auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
 
@@ -105,7 +104,7 @@ void TestSingleRead(TTestContext& ctx, bool quantum) {
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
 
     NDqProto::TData data;
-    UNIT_ASSERT(ch->Pop(data, 1000));
+    UNIT_ASSERT(ch->Pop(data));
 
     UNIT_ASSERT_VALUES_EQUAL(10, data.GetRows());
     UNIT_ASSERT_VALUES_EQUAL(1, ch->GetStats()->Chunks);
@@ -122,16 +121,15 @@ void TestSingleRead(TTestContext& ctx, bool quantum) {
     }
 
     data.Clear();
-    UNIT_ASSERT(!ch->Pop(data, 1000));
+    UNIT_ASSERT(!ch->Pop(data));
 }
 
-void TestPartialRead(TTestContext& ctx, bool quantum) {
+void TestPartialRead(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 100;
+    settings.MaxChunkBytes = 17;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = quantum;
 
     auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
 
@@ -146,19 +144,15 @@ void TestPartialRead(TTestContext& ctx, bool quantum) {
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
 
     int req = 0;
-    ui32 expected[] = {3, 3, 3};
-    ui32 expectedQ[] = {3, 3, 3};
+    ui32 expected[] = {2, 2, 2, 2, 1};
 
     ui32 readChunks = 0;
     ui32 readRows = 0;
     while (readRows < 9) {
         NDqProto::TData data;
-        size_t limit = quantum ? 
-             // packed size is 13 byte header + 2 bytes for each row
-             20 : 50;
-        UNIT_ASSERT(ch->Pop(data, limit));
+        UNIT_ASSERT(ch->Pop(data));
 
-        ui32 v = quantum ? expectedQ[req] : expected[req];
+        ui32 v = expected[req];
         ++req;
 
         UNIT_ASSERT_VALUES_EQUAL(v, data.GetRows());
@@ -180,16 +174,15 @@ void TestPartialRead(TTestContext& ctx, bool quantum) {
     }
 
     NDqProto::TData data;
-    UNIT_ASSERT(!ch->Pop(data, 1000));
+    UNIT_ASSERT(!ch->Pop(data));
 }
 
-void TestOverflow(TTestContext& ctx, bool quantum) {
+void TestOverflow(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
+    settings.MaxStoredBytes = 30;
     settings.MaxChunkBytes = 10;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = quantum;
 
     auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
 
@@ -212,13 +205,12 @@ void TestOverflow(TTestContext& ctx, bool quantum) {
     }
 }
 
-void TestPopAll(TTestContext& ctx, bool quantum) {
+void TestPopAll(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 1000;
     settings.MaxChunkBytes = 10;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = quantum;
 
     auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
 
@@ -247,16 +239,15 @@ void TestPopAll(TTestContext& ctx, bool quantum) {
     }
 
     data.Clear();
-    UNIT_ASSERT(!ch->Pop(data, 100'500));
+    UNIT_ASSERT(!ch->Pop(data));
 }
 
-void TestBigRow(TTestContext& ctx, bool quantum) {
+void TestBigRow(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = std::numeric_limits<ui32>::max();
     settings.MaxChunkBytes = 2_MB;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = quantum;
 
     auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
 
@@ -277,12 +268,31 @@ void TestBigRow(TTestContext& ctx, bool quantum) {
     UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
 
-    for (ui32 i = 1; i < 10; ++i) {
+    {
         NDqProto::TData data;
-        UNIT_ASSERT(ch->Pop(data, 1_MB));
+        UNIT_ASSERT(ch->Pop(data));
+
+        UNIT_ASSERT_VALUES_EQUAL(2, data.GetRows());
+        UNIT_ASSERT_VALUES_EQUAL(1, ch->GetStats()->Chunks);
+        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
+        UNIT_ASSERT_VALUES_EQUAL(2, ch->GetStats()->RowsOut);
+
+        TUnboxedValueVector buffer;
+        ctx.Ds.Deserialize(data, ctx.OutputType, buffer);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, buffer.size());
+        for (ui32 i = 1; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(i, buffer[i - 1].GetElement(0).Get<i32>());
+            UNIT_ASSERT_VALUES_EQUAL(i * i, buffer[i - 1].GetElement(1).Get<ui64>());
+        }
+    }
+
+    for (ui32 i = 3; i < 10; ++i) {
+        NDqProto::TData data;
+        UNIT_ASSERT(ch->Pop(data));
 
         UNIT_ASSERT_VALUES_EQUAL(1, data.GetRows());
-        UNIT_ASSERT_VALUES_EQUAL(i, ch->GetStats()->Chunks);
+        UNIT_ASSERT_VALUES_EQUAL(i - 1, ch->GetStats()->Chunks);
         UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
         UNIT_ASSERT_VALUES_EQUAL(i, ch->GetStats()->RowsOut);
 
@@ -295,17 +305,15 @@ void TestBigRow(TTestContext& ctx, bool quantum) {
     }
 
     NDqProto::TData data;
-    UNIT_ASSERT(!ch->Pop(data, 10_MB));
+    UNIT_ASSERT(!ch->Pop(data));
 }
-
 
 void TestSpillWithMockStorage(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 10;
+    settings.MaxChunkBytes = 20;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = false;
 
     auto storage = MakeIntrusive<TMockChannelStorage>(100'500ul);
     settings.ChannelStorage = storage;
@@ -318,74 +326,35 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
         ch->Push(std::move(row));
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(7, ch->GetValuesCount(/* inMemoryOnly */ true));
-    UNIT_ASSERT_VALUES_EQUAL(35, ch->GetValuesCount(/* inMemoryOnly */ false));
+    UNIT_ASSERT_VALUES_EQUAL(35, ch->GetValuesCount());
 
     UNIT_ASSERT_VALUES_EQUAL(35, ch->GetStats()->RowsIn);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
-    UNIT_ASSERT_VALUES_EQUAL(35 - 7, ch->GetStats()->SpilledRows);
-    UNIT_ASSERT_VALUES_EQUAL(35 - 7, ch->GetStats()->SpilledBlobs);
-    UNIT_ASSERT(ch->GetStats()->SpilledBytes > 200);
+    UNIT_ASSERT_VALUES_EQUAL(18, ch->GetStats()->SpilledRows);
+    UNIT_ASSERT_VALUES_EQUAL(5, ch->GetStats()->SpilledBlobs);
+    UNIT_ASSERT(ch->GetStats()->SpilledBytes > 5 * 8);
 
     ui32 loadedRows = 0;
-    storage->SetBlankGetRequests(2);
 
-    {
-        Cerr << "-- pop rows before spilled ones\n";
-        NDqProto::TData data;
-        while (ch->Pop(data, 1000)) {
-            TUnboxedValueVector buffer;
-            ctx.Ds.Deserialize(data, ctx.OutputType, buffer);
+    NDqProto::TData data;
+    while (ch->Pop(data)) {
+        TUnboxedValueVector buffer;
+        ctx.Ds.Deserialize(data, ctx.OutputType, buffer);
 
-            UNIT_ASSERT_VALUES_EQUAL(data.GetRows(), buffer.size());
-            for (ui32 i = 0; i < data.GetRows(); ++i) {
-                auto j = loadedRows + i;
-                UNIT_ASSERT_VALUES_EQUAL(j, buffer[i].GetElement(0).Get<i32>());
-                UNIT_ASSERT_VALUES_EQUAL(j * j, buffer[i].GetElement(1).Get<ui64>());
-            }
-
-            loadedRows += data.GetRows();
+        UNIT_ASSERT_VALUES_EQUAL(data.GetRows(), buffer.size());
+        for (ui32 i = 0; i < data.GetRows(); ++i) {
+            auto j = loadedRows + i;
+            UNIT_ASSERT_VALUES_EQUAL(j, buffer[i].GetElement(0).Get<i32>());
+            UNIT_ASSERT_VALUES_EQUAL(j * j, buffer[i].GetElement(1).Get<ui64>());
         }
+
+        loadedRows += data.GetRows();
     }
-
-    UNIT_ASSERT_VALUES_EQUAL(7 - loadedRows, ch->GetValuesCount(/* inMemoryOnly */ true));
-    UNIT_ASSERT_VALUES_EQUAL(35 - loadedRows, ch->GetValuesCount(/* inMemoryOnly */ false));
-
-    // just blank request
-    {
-        NDqProto::TData data;
-        UNIT_ASSERT(!ch->Pop(data, 1000));
-
-        UNIT_ASSERT_VALUES_EQUAL(7 - loadedRows, ch->GetValuesCount(/* inMemoryOnly */ true));
-        UNIT_ASSERT_VALUES_EQUAL(35 - loadedRows, ch->GetValuesCount(/* inMemoryOnly */ false));
-    }
-
-    while (loadedRows < 35) {
-        NDqProto::TData data;
-        while (ch->Pop(data, 10)) {
-            storage->SetBlankGetRequests(1);
-
-            TUnboxedValueVector buffer;
-            ctx.Ds.Deserialize(data, ctx.OutputType, buffer);
-
-            UNIT_ASSERT_VALUES_EQUAL(data.GetRows(), buffer.size());
-            for (ui32 i = 0; i < data.GetRows(); ++i) {
-                auto j = loadedRows + i;
-                UNIT_ASSERT_VALUES_EQUAL(j, buffer[i].GetElement(0).Get<i32>());
-                UNIT_ASSERT_VALUES_EQUAL(j * j, buffer[i].GetElement(1).Get<ui64>());
-            }
-
-            loadedRows += data.GetRows();
-
-            UNIT_ASSERT_VALUES_EQUAL(35 - loadedRows, ch->GetValuesCount(/* inMemoryOnly */ false));
-        }
-    }
-
     UNIT_ASSERT_VALUES_EQUAL(35, loadedRows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount());
 
     // in memory only
     {
-        storage->SetBlankGetRequests(0);
         loadedRows = 0;
 
         for (i32 i = 100; i < 105; ++i) {
@@ -394,11 +363,10 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
             ch->Push(std::move(row));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(5, ch->GetValuesCount(/* inMemoryOnly */ true));
-        UNIT_ASSERT_VALUES_EQUAL(5, ch->GetValuesCount(/* inMemoryOnly */ false));
+        UNIT_ASSERT_VALUES_EQUAL(5, ch->GetValuesCount());
 
         NDqProto::TData data;
-        while (ch->Pop(data, 1000)) {
+        while (ch->Pop(data)) {
             TUnboxedValueVector buffer;
             ctx.Ds.Deserialize(data, ctx.OutputType, buffer);
 
@@ -411,19 +379,17 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
             loadedRows += data.GetRows();
         }
+        UNIT_ASSERT_VALUES_EQUAL(5, loadedRows);
+        UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount());
     }
-
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount(/* inMemoryOnly */ true));
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount(/* inMemoryOnly */ false));
 }
 
 void TestOverflowWithMockStorage(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
+    settings.MaxStoredBytes = 500;
     settings.MaxChunkBytes = 10;
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
-    settings.AllowGeneratorsInUnboxedValues = false;
 
     auto storage = MakeIntrusive<TMockChannelStorage>(500ul);
     settings.ChannelStorage = storage;
@@ -441,66 +407,40 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
 
     // UNIT_ASSERT(ch->IsFull()); it can be false-negative with storage enabled
     try {
-        auto row = ctx.CreateRow(100'500);
-        ch->Push(std::move(row));
+        ch->Push(ctx.CreateBigRow(0, 100'500));
         UNIT_FAIL("");
-    } catch (yexception& e) {
+    } catch (yexception &e) {
         UNIT_ASSERT(TString(e.what()).Contains("Space limit exceeded"));
     }
 }
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(DqOutputChannelNoStorageTests) {
+Y_UNIT_TEST_SUITE(DqOutputChannelTests) {
 
 Y_UNIT_TEST(SingleRead) {
     TTestContext ctx;
-    TestSingleRead(ctx, false);
-}
-
-Y_UNIT_TEST(SingleReadQ) {
-    TTestContext ctx;
-    TestSingleRead(ctx, true);
+    TestSingleRead(ctx);
 }
 
 Y_UNIT_TEST(PartialRead) {
     TTestContext ctx;
-    TestPartialRead(ctx, false);
-}
-
-Y_UNIT_TEST(PartialReadQ) {
-    TTestContext ctx;
-    TestPartialRead(ctx, true);
+    TestPartialRead(ctx);
 }
 
 Y_UNIT_TEST(Overflow) {
     TTestContext ctx;
-    TestOverflow(ctx, false);
-}
-
-Y_UNIT_TEST(OverflowQ) {
-    TTestContext ctx;
-    TestOverflow(ctx, true);
+    TestOverflow(ctx);
 }
 
 Y_UNIT_TEST(PopAll) {
     TTestContext ctx;
-    TestPopAll(ctx, false);
-}
-
-Y_UNIT_TEST(PopAllQ) {
-    TTestContext ctx;
-    TestPopAll(ctx, true);
+    TestPopAll(ctx);
 }
 
 Y_UNIT_TEST(BigRow) {
     TTestContext ctx(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
-    TestBigRow(ctx, false);
-}
-
-Y_UNIT_TEST(BigRowQ) {
-    TTestContext ctx(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
-    TestBigRow(ctx, true);
+    TestBigRow(ctx);
 }
 
 }
@@ -513,7 +453,7 @@ Y_UNIT_TEST(Spill) {
 }
 
 Y_UNIT_TEST(Overflow) {
-    TTestContext ctx;
+    TTestContext ctx(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestOverflowWithMockStorage(ctx);
 }
 

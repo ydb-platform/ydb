@@ -8,6 +8,7 @@ Distributed under the Boost Software License, Version 1.0.
 #ifndef BOOST_SMART_PTR_MAKE_UNIQUE_HPP
 #define BOOST_SMART_PTR_MAKE_UNIQUE_HPP
 
+#include <boost/smart_ptr/detail/requires_cxx11.hpp>
 #include <boost/type_traits/enable_if.hpp>
 #include <boost/type_traits/is_array.hpp>
 #include <boost/type_traits/is_unbounded_array.hpp>

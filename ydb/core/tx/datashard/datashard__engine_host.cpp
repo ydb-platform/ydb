@@ -1269,7 +1269,6 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
 
         settings.OptLLVM = "OFF";
         settings.TerminateOnError = false;
-        settings.AllowGeneratorsInUnboxedValues = false;
 
         KqpAlloc->SetLimit(10_MB);
         KqpTasksRunner = NKqp::CreateKqpTasksRunner(tx.GetTasks(), KqpExecCtx, settings, KqpLogFunc);

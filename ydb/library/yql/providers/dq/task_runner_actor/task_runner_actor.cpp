@@ -317,7 +317,7 @@ private:
                 NDqProto::TPopResponse response;
                 for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
                     NDqProto::TData data;
-                    const auto lastPop = std::move(channel->Pop(data, remain));
+                    const auto lastPop = std::move(channel->Pop(data));
 
                     for (auto& metric : lastPop.GetMetric()) {
                         *response.AddMetric() = metric;

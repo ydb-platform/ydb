@@ -65,4 +65,13 @@
 #    define BOOST_LOCALE_END_CONST_CONDITION
 #endif
 
+/// \cond INTERNAL
+#if defined(BOOST_WINDOWS) || defined(__CYGWIN__)
+// Internal define to check if we have access to the Win32 API
+#    define BOOST_LOCALE_USE_WIN32_API 1
+#else
+#    define BOOST_LOCALE_USE_WIN32_API 0
+#endif
+/// \endcond
+
 #endif // boost/locale/config.hpp

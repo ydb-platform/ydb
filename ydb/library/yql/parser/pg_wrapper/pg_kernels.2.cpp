@@ -28,7 +28,11 @@ namespace NYql {
 
 extern "C" {
 
+#ifdef USE_SLOW_PG_KERNELS
+#include "pg_kernels.slow.2.inc"
+#else
 #include "pg_kernels.2.inc"
+#endif
 
 }
 

@@ -306,6 +306,15 @@ void TQueryExecutionStats::Finish() {
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
     if (CollectProfileStats(StatsMode)) {
+        for (auto&& s : UseLlvmByStageId) {
+            for (auto&& pbs : *Result->MutableStages()) {
+                if (pbs.GetStageId() == s.first) {
+                    pbs.SetUseLlvm(s.second);
+                    break;
+                }
+            }
+        }
+
         for (auto&& s : ShardsCountByNode) {
             for (auto&& pbs : *Result->MutableStages()) {
                 if (pbs.GetStageId() == s.first) {

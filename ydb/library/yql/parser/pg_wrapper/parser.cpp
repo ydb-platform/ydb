@@ -1,7 +1,7 @@
 #include "parser.h"
+#include "arena_ctx.h"
 
 #include <util/generic/scope.h>
-#include <util/memory/segmented_string_pool.h>
 #include <fcntl.h>
 #include <stdint.h>
 
@@ -157,73 +157,6 @@ void pg_query_free_error(PgQueryError *error) {
     free(error);
 }
 
-struct TAlloc {
-    segmented_string_pool Pool;
-};
-
-__thread TAlloc* CurrentAlloc;
-
-void *MyAllocSetAlloc(MemoryContext context, Size size) {
-    auto fullSize = size + MAXIMUM_ALIGNOF - 1 + sizeof(void*);
-    auto ptr = CurrentAlloc->Pool.Allocate(fullSize);
-    auto aligned = (void*)MAXALIGN(ptr + sizeof(void*));
-    *(MemoryContext *)(((char *)aligned) - sizeof(void *)) = context;
-    return aligned;
-}
-
-void MyAllocSetFree(MemoryContext context, void* pointer) {
-}
-
-void* MyAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
-    if (!size) {
-        return nullptr;
-    }
-
-    void* ret = MyAllocSetAlloc(context, size);
-    if (pointer) {
-        memmove(ret, pointer, size);
-    }
-
-    return ret;
-}
-
-void MyAllocSetReset(MemoryContext context) {
-}
-
-void MyAllocSetDelete(MemoryContext context) {
-}
-
-Size MyAllocSetGetChunkSpace(MemoryContext context, void* pointer) {
-    return 0;
-}
-
-bool MyAllocSetIsEmpty(MemoryContext context) {
-    return false;
-}
-
-void MyAllocSetStats(MemoryContext context,
-    MemoryStatsPrintFunc printfunc, void *passthru,
-    MemoryContextCounters *totals,
-    bool print_to_stderr) {
-}
-
-void MyAllocSetCheck(MemoryContext context) {
-}
-
-const MemoryContextMethods MyMethods = {
-    MyAllocSetAlloc,
-    MyAllocSetFree,
-    MyAllocSetRealloc,
-    MyAllocSetReset,
-    MyAllocSetDelete,
-    MyAllocSetGetChunkSpace,
-    MyAllocSetIsEmpty,
-    MyAllocSetStats
-#ifdef MEMORY_CONTEXT_CHECKING
-    ,MyAllocSetCheck
-#endif
-};
-
 }
 
 namespace NYql {
@@ -242,27 +175,12 @@ void PGParse(const TString& input, IPGParseEvents& events) {
 
     PgQueryInternalParsetreeAndError parsetree_and_error;
 
-    auto prevCurrentMemoryContext = CurrentMemoryContext;
+    TArenaMemoryContext arena;
     auto prevErrorContext = ErrorContext;
-
-    CurrentMemoryContext = (MemoryContext)malloc(sizeof(MemoryContextData));
-    MemoryContextCreate(CurrentMemoryContext,
-        T_AllocSetContext,
-        &MyMethods,
-        nullptr,
-        "parser");
     ErrorContext = CurrentMemoryContext;
 
     Y_DEFER {
-        free(CurrentMemoryContext);
-        CurrentMemoryContext = prevCurrentMemoryContext;
         ErrorContext = prevErrorContext;
-    };
-
-    TAlloc alloc;
-    CurrentAlloc = &alloc;
-    Y_DEFER {
-        CurrentAlloc = nullptr;
     };
 
     parsetree_and_error = pg_query_raw_parse(input.c_str());

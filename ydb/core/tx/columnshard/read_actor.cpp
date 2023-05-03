@@ -23,7 +23,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata, IndexedBlobsForFetch, true, counters)
+        , IndexedData(ReadMetadata, IndexedBlobsForFetch, true, counters, TDataTasksProcessorContainer())
         , Deadline(deadline)
         , ColumnShardActorId(columnShardActorId)
         , RequestCookie(requestCookie)
@@ -51,7 +51,7 @@ public:
                 return; // ignore duplicate parts
             }
             WaitIndexed.erase(event.BlobRange);
-            IndexedData.AddIndexed(event.BlobRange, event.Data, NColumnShard::TDataTasksProcessorContainer());
+            IndexedData.AddIndexed(event.BlobRange, event.Data);
         } else if (CommittedBlobs.contains(blobId)) {
             auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
             if (cmt.empty()) {

@@ -838,7 +838,7 @@ public:
     { }
 
     [[nodiscard]]
-    NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64) override {
+    NDqProto::TPopResponse Pop(NDqProto::TData& data) override {
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::POP);
@@ -896,8 +896,7 @@ public:
         return ChannelId;
     }
 
-    ui64 GetValuesCount(bool inMemoryOnly) const override {
-        Y_UNUSED(inMemoryOnly);
+    ui64 GetValuesCount() const override {
         ythrow yexception() << "unimplemented";
     }
 
@@ -952,9 +951,9 @@ public:
     }
     // can throw TDqChannelStorageException
     [[nodiscard]]
-    bool Pop(NDqProto::TData& data, ui64 bytes) override {
+    bool Pop(NDqProto::TData& data) override {
         try {
-            auto response = Delegate->Pop(data, bytes);
+            auto response = Delegate->Pop(data);
             return response.GetResult();
         } catch (...) {
             TaskRunner->RaiseException();
@@ -977,11 +976,6 @@ public:
     [[nodiscard]]
     bool PopAll(NDqProto::TData& data) override {
         Y_UNUSED(data);
-        ythrow yexception() << "unimplemented";
-    }
-
-    bool PopAll(NKikimr::NMiniKQL::TUnboxedValueVector& rows) override {
-        Y_UNUSED(rows);
         ythrow yexception() << "unimplemented";
     }
     // |>

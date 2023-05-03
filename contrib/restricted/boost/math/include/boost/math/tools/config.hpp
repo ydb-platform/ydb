@@ -168,9 +168,6 @@
 #include <cmath>
 #include <climits>
 #include <cfloat>
-#if (defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__))
-#  include <math.h>
-#endif
 
 #include <boost/math/tools/user.hpp>
 

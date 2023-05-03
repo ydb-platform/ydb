@@ -855,6 +855,13 @@ struct TTypeBuilderHelper<TOptional<T>> {
     }
 };
 
+template <typename T>
+struct TTypeBuilderHelper<TAutoMap<T>> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return TTypeBuilderHelper<T>::Build(builder);
+    }
+};
+
 template <typename TKey, typename TValue>
 struct TTypeBuilderHelper<TDict<TKey, TValue>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {

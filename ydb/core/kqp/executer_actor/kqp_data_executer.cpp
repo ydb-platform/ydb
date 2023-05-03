@@ -1533,7 +1533,6 @@ private:
         kqpTx.MutableRuntimeSettings()->SetExecType(NDqProto::TComputeRuntimeSettings::DATA);
         kqpTx.MutableRuntimeSettings()->SetStatsMode(GetDqStatsModeShard(Request.StatsMode));
 
-        kqpTx.MutableRuntimeSettings()->SetUseLLVM(false);
         kqpTx.MutableRuntimeSettings()->SetUseSpilling(false);
 
         NKikimrTxDataShard::TDataTransaction dataTransaction;
@@ -1620,7 +1619,6 @@ private:
         settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
         settings.FailOnUndelivery = true;
         settings.StatsMode = GetDqStatsMode(Request.StatsMode);
-        settings.UseLLVM = false;
         settings.UseSpilling = false;
 
         TComputeMemoryLimits limits;
@@ -2148,8 +2146,7 @@ private:
             }
 
             Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, std::move(tasksPerNode), GetSnapshot(),
-                Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-                Request.DisableLlvmForUdfStages, Request.LlvmEnabled, false, Nothing(),
+                Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
                 ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */);
             auto err = Planner->PlanExecution();
             if (err) {

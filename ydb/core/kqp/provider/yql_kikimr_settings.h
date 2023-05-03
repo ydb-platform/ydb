@@ -39,7 +39,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<TString, false> _DefaultCluster;
     NCommon::TConfSetting<ui32, false> _ResultRowsLimit;
     NCommon::TConfSetting<bool, false> EnableSystemColumns;
-    NCommon::TConfSetting<bool, false> EnableLlvm;
+    NCommon::TConfSetting<bool, false> UseLlvm;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableJoinRewrite;
@@ -72,7 +72,7 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptUseFinalizeByKey() const;
     EOptionalFlag GetOptPredicateExtract() const;
-    EOptionalFlag GetEnableLlvm() const;
+    EOptionalFlag GetUseLlvm() const;
 
     // WARNING: For testing purposes only, inplace update is not ready for production usage.
     bool HasOptEnableInplaceUpdate() const;

@@ -50,7 +50,7 @@ TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpRead
 
 class TKqpScanExecuter : public TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan> {
     using TBase = TKqpExecuterBase<TKqpScanExecuter, EExecType::Scan>;
-
+    TPreparedQueryHolder::TConstPtr PreparedQuery;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
@@ -59,8 +59,9 @@ public:
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
+        const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, TPreparedQueryHolder::TConstPtr preparedQuery)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, TWilsonKqp::ScanExecuter, "ScanExecuter")
+        , PreparedQuery(preparedQuery)
         , AggregationSettings(aggregation)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -537,6 +538,19 @@ private:
                 YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
             }
 
+            {
+                const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+                const bool useLlvm = PreparedQuery ? PreparedQuery->GetLlvmSettings().GetUseLlvm(stage.GetProgram().GetSettings()) : false;
+                for (auto& taskId : stageInfo.Tasks) {
+                    auto& task = TasksGraph.GetTask(taskId);
+                    task.SetUseLlvm(useLlvm);
+                }
+                if (Stats && CollectProfileStats(Request.StatsMode)) {
+                    Stats->SetUseLlvm(stageInfo.Id.StageId, useLlvm);
+                }
+
+            }
+
             if (stage.GetIsSinglePartition()) {
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
@@ -665,8 +679,7 @@ private:
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), std::move(computeTasks),
             std::move(tasksPerNode), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling,
+            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */);
         LOG_D("Execute scan tx, PendingComputeTasks: " << PendingComputeTasks.size());
         auto err = Planner->PlanExecution();
@@ -723,9 +736,9 @@ private:
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig)
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, TPreparedQueryHolder::TConstPtr preparedQuery)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig);
+    return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig, preparedQuery);
 }
 
 } // namespace NKqp

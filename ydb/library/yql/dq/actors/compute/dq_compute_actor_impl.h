@@ -1459,10 +1459,6 @@ protected:
         return RuntimeSettings.StatsMode;
     }
 
-    bool GetUseLLVM() const {
-        return RuntimeSettings.UseLLVM;
-    }
-
     const TComputeMemoryLimits& GetMemoryLimits() const {
         return MemoryLimits;
     }

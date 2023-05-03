@@ -720,10 +720,7 @@ public:
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
-        request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
         YQL_ENSURE(queryState);
-        bool enableLlvm = queryState->PreparedQuery->GetEnableLlvm().value_or(true);
-        request.LlvmEnabled = enableLlvm && IsSqlQuery(queryState->GetType());
         request.Snapshot = queryState->TxCtx->GetSnapshot();
 
         return request;
@@ -1003,7 +1000,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig(),
-            AsyncIoFactory);
+            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);

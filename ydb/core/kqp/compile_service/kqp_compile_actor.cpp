@@ -279,11 +279,12 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            if (Config->EnableLlvm.Get()) {
-                kqpResult.PreparingQuery->SetEnableLlvm(*Config->EnableLlvm.Get());
+            {
+                auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
+                    kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
+                preparedQueryHolder->MutableLlvmSettings().Fill(Config, Query.QueryType);
+                KqpCompileResult->PreparedQuery = preparedQueryHolder;
             }
-            KqpCompileResult->PreparedQuery = std::make_shared<const TPreparedQueryHolder>(
-                kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;

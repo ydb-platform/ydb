@@ -1702,6 +1702,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         if (auto stageGuid = node.GetMapSafe().FindPtr("StageGuid")) {
             if (auto stat = stages.FindPtr(stageGuid->GetStringSafe())) {
                 auto& stats = node["Stats"];
+                if ((*stat)->HasUseLlvm()) {
+                    stats["UseLlvm"] = (*stat)->GetUseLlvm();
+                } else {
+                    stats["UseLlvm"] = "undefined";
+                }
 
                 stats["TotalTasks"] = (*stat)->GetTotalTasksCount();
                 stats["TotalDurationMs"] = (*stat)->GetFinishTimeMs().GetMax() - (*stat)->GetFirstRowTimeMs().GetMin();
@@ -1719,7 +1724,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         nodeInfo.InsertValue("shards_count", i.GetShardsCount());
                         nodeInfo.InsertValue("node_id", i.GetNodeId());
                     }
-                    
                 }
 
                 for (auto& caStats : (*stat)->GetComputeActors()) {

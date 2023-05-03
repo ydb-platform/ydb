@@ -226,7 +226,6 @@ struct TComputeRuntimeSettings {
     ui32 ExtraMemoryAllocationPool = 0;
 
     bool FailOnUndelivery = true;
-    bool UseLLVM = false;
     bool UseSpilling = false;
 
     std::function<void(bool success, const TIssues& issues)> TerminateHandler;

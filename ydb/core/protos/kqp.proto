@@ -225,7 +225,6 @@ message TPreparedQuery {
     repeated TParameterDescription Parameters = 4;
     optional string Text = 5;
     optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
-    optional bool EnableLlvm = 7;
 };
 
 message TQueryResponse {

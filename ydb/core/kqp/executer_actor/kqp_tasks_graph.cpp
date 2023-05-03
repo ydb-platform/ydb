@@ -980,6 +980,7 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, c
     ActorIdToProto(task.Meta.ExecuterId, result.MutableExecuter()->MutableActorId());
     result.SetId(task.Id);
     result.SetStageId(stageInfo.Id.StageId);
+    result.SetUseLlvm(task.GetUseLlvm());
     if (task.HasMetaId()) {
         result.SetMetaId(task.GetMetaIdUnsafe());
     }

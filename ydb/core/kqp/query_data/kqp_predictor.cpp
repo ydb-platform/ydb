@@ -37,16 +37,17 @@ void TStagePredictor::Prepare() {
 void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
     NYql::VisitExpr(stageNode, [&](const NYql::TExprNode::TPtr& exprNode) {
         NYql::NNodes::TExprBase node(exprNode);
-        if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
+        ++NodesCount;
+        if (node.Maybe<NYql::NNodes::TCoCondense>() || node.Ref().Content() == "WideCondense1" || node.Maybe<NYql::NNodes::TCoCondense1>()) {
+            HasCondenseFlag = true;
+        } else if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
             HasRangeScanFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpLookupTable>()) {
             HasLookupFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpUpsertRows>()) {
         } else if (node.Maybe<NYql::NNodes::TKqpDeleteRows>()) {
 
-        } else if (node.Maybe<NYql::NNodes::TKqpWideReadTableRanges>()) {
-            HasRangeScanFlag = true;
-        } else if (node.Maybe<NYql::NNodes::TKqpWideReadOlapTableRanges>()) {
+        } else if (node.Maybe<NYql::NNodes::TKqpWideReadTableRanges>() || node.Maybe<NYql::NNodes::TKqpWideReadOlapTableRanges>()) {
             HasRangeScanFlag = true;
         } else if (node.Maybe<NYql::NNodes::TCoSort>()) {
             HasSortFlag = true;
@@ -89,7 +90,9 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetHasFilter(HasFilterFlag);
     kqpProto.SetHasTop(HasTopFlag);
     kqpProto.SetHasRangeScan(HasRangeScanFlag);
+    kqpProto.SetHasCondense(HasCondenseFlag);
     kqpProto.SetHasLookup(HasLookupFlag);
+    kqpProto.SetNodesCount(NodesCount);
     kqpProto.SetInputDataPrediction(InputDataPrediction);
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
     kqpProto.SetStageLevel(StageLevel);
@@ -106,7 +109,9 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     HasFilterFlag = kqpProto.GetHasFilter();
     HasTopFlag = kqpProto.GetHasTop();
     HasRangeScanFlag = kqpProto.GetHasRangeScan();
+    HasCondenseFlag = kqpProto.GetHasCondense();
     HasLookupFlag = kqpProto.GetHasLookup();
+    NodesCount = kqpProto.GetNodesCount();
     InputDataPrediction = kqpProto.GetInputDataPrediction();
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();
     StageLevel = kqpProto.GetStageLevel();
@@ -138,6 +143,10 @@ ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, co
         result = std::min<ui32>(result, *previousStageTasksCount);
     }
     return std::max<ui32>(1, result);
+}
+
+bool TStagePredictor::NeedLLVM() const {
+    return HasStateCombinerFlag || HasFinalCombinerFlag || HasCondenseFlag;
 }
 
 TStagePredictor& TRequestPredictor::BuildForStage(const NYql::NNodes::TDqPhyStage& stage, NYql::TExprContext& ctx) {

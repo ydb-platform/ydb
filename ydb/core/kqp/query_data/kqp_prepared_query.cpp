@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/services.pb.h>
 
@@ -151,6 +152,29 @@ TString TPreparedQueryHolder::GetText() const {
     return Proto->GetText();
 }
 
+void TLlvmSettings::Fill(NYql::TKikimrConfiguration::TPtr config, const NKikimrKqp::EQueryType qType) {
+    DisableLlvmForUdfStages = config->DisableLlvmForUdfStages();
+    if (config->GetUseLlvm() == NYql::EOptionalFlag::Disabled) {
+        UseLlvmExternalDirective = false;
+    } else if (config->GetUseLlvm() == NYql::EOptionalFlag::Enabled) {
+        UseLlvmExternalDirective = true;
+    }
+    if (!IsSqlQuery(qType)) {
+        UseLlvmExternalDirective = false;
+    }
+}
+
+bool TLlvmSettings::GetUseLlvm(const NYql::NDqProto::TProgram::TSettings& kqpSettingsProto) const {
+    TStagePredictor stagePredictor;
+    stagePredictor.DeserializeFromKqpSettings(kqpSettingsProto);
+    if (DisableLlvmForUdfStages && stagePredictor.IsHasUdf()) {
+        return false;
+    } else if (UseLlvmExternalDirective) {
+        return *UseLlvmExternalDirective;
+    } else {
+        return stagePredictor.NeedLLVM();
+    }
+}
 
 } // namespace NKikimr::NKqp
 

@@ -113,6 +113,13 @@ NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
             }
             ++idx;
         }
+        if (Program) {
+            for (ui32 i = 1; i < Program->Steps.size(); ++i) {
+                if (Program->Steps[i]->Filters.size()) {
+                    return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
+                }
+            }
+        }
         
         return std::make_shared<NIndexedReader::TPKSortingWithLimit>(this->shared_from_this());
     } else {

@@ -150,23 +150,23 @@ namespace NKikimrCapnProtoUtil {
 
     inline NKikimrCapnProto::EVDiskInternalQueueId convertToCapnProto(const NKikimrBlobStorage::EVDiskInternalQueueId &value) {
         switch (value) {
-            case NKikimrBlobStorage::IntUnknown:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntUnknown;
-            case NKikimrBlobStorage::IntBegin:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntBegin:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntBegin;
-            case NKikimrBlobStorage::IntGetFast:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetFast:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntGetFast;
-            case NKikimrBlobStorage::IntPutLog:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutLog:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntPutLog;
-            case NKikimrBlobStorage::IntPutHugeForeground:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeForeground:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeForeground;
-            case NKikimrBlobStorage::IntPutHugeBackground:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntPutHugeBackground;
-            case NKikimrBlobStorage::IntGetDiscover:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntGetDiscover:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntGetDiscover;
-            case NKikimrBlobStorage::IntLowRead:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntLowRead;
-            case NKikimrBlobStorage::IntEnd:
+            case NKikimrBlobStorage::EVDiskInternalQueueId::IntEnd:
                 return NKikimrCapnProto::EVDiskInternalQueueId::IntEnd;
             default:
                 throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));

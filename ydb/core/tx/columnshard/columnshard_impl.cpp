@@ -747,15 +747,12 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     }
 
     auto actualIndexInfo = TablesManager.GetIndexInfo();
-    if (Tiers) {
-        auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
-        actualIndexInfo.UpdatePathTiering(pathTiering);
-        actualIndexInfo.SetPathTiering(std::move(pathTiering));
-    }
-
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
+    if (Tiers) {
+        ev->SetTiering(Tiers->GetTiering());
+    }
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
 
@@ -788,15 +785,12 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     }
 
     auto actualIndexInfo = TablesManager.GetIndexInfo();
-    if (Tiers) {
-        auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
-        actualIndexInfo.UpdatePathTiering(pathTiering);
-        actualIndexInfo.SetPathTiering(std::move(pathTiering));
-    }
-
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterCompaction);
+    if (Tiers) {
+        ev->SetTiering(Tiers->GetTiering());
+    }    
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);
 }
 
@@ -835,12 +829,8 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     auto actualIndexInfo = TablesManager.GetIndexInfo();
-    actualIndexInfo.UpdatePathTiering(eviction);
-
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction);
-
-    actualIndexInfo.SetPathTiering(std::move(eviction));
+    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.ArrowSchema());
 
     if (!indexChanges) {
         LOG_S_DEBUG("Cannot prepare TTL at tablet " << TabletID());
@@ -854,6 +844,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     ActiveTtl = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
+    ev->SetTiering(eviction);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
 

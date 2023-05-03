@@ -28,6 +28,7 @@ struct TEvPrivate {
     struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
         NOlap::TIndexInfo IndexInfo;
+        THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
         TVector<TString> Blobs;
@@ -48,6 +49,11 @@ struct TEvPrivate {
             , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)
         {}
+
+        TEvWriteIndex& SetTiering(const THashMap<ui64, NKikimr::NOlap::TTiering>& tiering) {
+            Tiering = tiering;
+            return *this;
+        }
     };
 
     struct TEvIndexing : public TEventLocal<TEvIndexing, EvIndexing> {

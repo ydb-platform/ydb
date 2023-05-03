@@ -146,10 +146,6 @@ public:
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }
 
-    void UpdatePathTiering(THashMap<ui64, NOlap::TTiering>& pathTiering) const;
-    void SetPathTiering(THashMap<ui64, TTiering>&& pathTierings);
-    const TTiering* GetTiering(ui64 pathId) const;
-
 private:
     ui32 Id;
     TString Name;
@@ -162,7 +158,6 @@ private:
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     TCompression DefaultCompression;
-    THashMap<ui64, TTiering> PathTiering;
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids);

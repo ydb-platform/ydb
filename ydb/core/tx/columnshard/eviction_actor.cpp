@@ -127,7 +127,7 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
 
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::EvictBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
+            TxEvent->Blobs = NOlap::TColumnEngineForLogs::EvictBlobs(TxEvent->IndexInfo, TxEvent->Tiering, TxEvent->IndexChanges);
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK;
             }

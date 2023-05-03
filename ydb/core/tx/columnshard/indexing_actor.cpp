@@ -123,7 +123,7 @@ private:
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
 
             TCpuGuard guard(TxEvent->ResourceUsage);
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::IndexBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
+            TxEvent->Blobs = NOlap::TColumnEngineForLogs::IndexBlobs(TxEvent->IndexInfo, TxEvent->Tiering, TxEvent->IndexChanges);
 
             LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
         } else {

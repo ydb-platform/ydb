@@ -130,7 +130,7 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
 
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::CompactBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
+            TxEvent->Blobs = NOlap::TColumnEngineForLogs::CompactBlobs(TxEvent->IndexInfo, TxEvent->Tiering, TxEvent->IndexChanges);
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
             }

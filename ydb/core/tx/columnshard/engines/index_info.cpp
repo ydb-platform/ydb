@@ -320,37 +320,6 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
     return MinMaxIdxColumnsIds.contains(it->second);
 }
 
-void TIndexInfo::UpdatePathTiering(THashMap<ui64, NOlap::TTiering>& pathTiering) const {
-    auto schema = ArrowSchema(); // init Schema if not yet
-
-    for (auto& [pathId, tiering] : pathTiering) {
-        for (auto& [tierName, tierInfo] : tiering.TierByName) {
-            if (!tierInfo->EvictColumn) {
-                tierInfo->EvictColumn = schema->GetFieldByName(tierInfo->EvictColumnName);
-            }
-            // TODO: eviction with recompression is not supported yet
-            if (tierInfo->NeedExport) {
-                tierInfo->Compression = {};
-            }
-        }
-        if (tiering.Ttl && !tiering.Ttl->EvictColumn) {
-            tiering.Ttl->EvictColumn = schema->GetFieldByName(tiering.Ttl->EvictColumnName);
-        }
-    }
-}
-
-void TIndexInfo::SetPathTiering(THashMap<ui64, TTiering>&& pathTierings) {
-    PathTiering = std::move(pathTierings);
-}
-
-const TTiering* TIndexInfo::GetTiering(ui64 pathId) const {
-    auto it = PathTiering.find(pathId);
-    if (it != PathTiering.end()) {
-        return &it->second;
-    }
-    return nullptr;
-}
-
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(ids.size());

@@ -62,13 +62,13 @@ std::shared_ptr<arrow::RecordBatch> AddSpecials(const std::shared_ptr<arrow::Rec
     return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
 }
 
-bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo,
+bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                           TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
                           TVector<TColumnRecord>& evictedRecords, TVector<TString>& newBlobs)
 {
     Y_VERIFY(portionInfo.TierName != evictFeatures.TargetTierName);
 
-    auto* tiering = indexInfo.GetTiering(evictFeatures.PathId);
+    auto* tiering = tieringMap.FindPtr(evictFeatures.PathId);
     Y_VERIFY(tiering);
     auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
     if (!compression) {
@@ -111,6 +111,7 @@ bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo
 }
 
 TVector<TPortionInfo> MakeAppendedPortions(const ui64 pathId, const TIndexInfo& indexInfo,
+                                           const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                                            const std::shared_ptr<arrow::RecordBatch> batch,
                                            const ui64 granule,
                                            const TSnapshot& minSnapshot,
@@ -122,7 +123,7 @@ TVector<TPortionInfo> MakeAppendedPortions(const ui64 pathId, const TIndexInfo& 
     TString tierName;
     TCompression compression = indexInfo.GetDefaultCompression();
     if (pathId) {
-        if (auto* tiering = indexInfo.GetTiering(pathId)) {
+        if (auto* tiering = tieringMap.FindPtr(pathId)) {
             tierName = tiering->GetHottestTierName();
             if (const auto& tierCompression = tiering->GetCompression(tierName)) {
                 compression = *tierCompression;
@@ -867,7 +868,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
     return changes;
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
                                                                      ui64 maxEvictBytes) {
     if (pathEviction.empty()) {
         return {};
@@ -885,7 +886,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
             continue; // It's not an error: allow TTL over multiple shards with different pathIds presented
         }
 
-        auto expireTimestamp = ttl.EvictScalar();
+        auto expireTimestamp = ttl.EvictScalar(schema);
         Y_VERIFY(expireTimestamp);
 
         auto ttlColumnNames = ttl.GetTtlColumns();
@@ -911,13 +912,13 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
 
                     if (keep && tryEvictPortion) {
                         TString tierName;
-                        for (auto& tierRef : ttl.OrderedTiers) { // TODO: lower/upper_bound + move into TEviction
+                        for (auto& tierRef : ttl.GetOrderedTiers()) { // TODO: lower/upper_bound + move into TEviction
                             auto& tierInfo = tierRef.Get();
-                            if (!IndexInfo.AllowTtlOverColumn(tierInfo.EvictColumnName)) {
+                            if (!IndexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
                                 continue; // Ignore tiers with bad ttl column
                             }
-                            if (NArrow::ScalarLess(tierInfo.EvictScalar(), max)) {
-                                tierName = tierInfo.Name;
+                            if (NArrow::ScalarLess(tierInfo.EvictScalar(schema), max)) {
+                                tierName = tierInfo.GetName();
                             } else {
                                 break;
                             }
@@ -1609,7 +1610,7 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
     return {};
 }
 
-TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo,
+TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                                                   std::shared_ptr<TColumnEngineChanges> indexChanges) {
     auto changes = std::static_pointer_cast<TChanges>(indexChanges);
     Y_VERIFY(!changes->DataToIndex.empty());
@@ -1663,7 +1664,7 @@ TVector<TString> TColumnEngineForLogs::IndexBlobs(const TIndexInfo& indexInfo,
 
         auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], indexInfo);
         for (auto& [granule, batch] : granuleBatches) {
-            auto portions = MakeAppendedPortions(pathId, indexInfo, batch, granule, minSnapshot, blobs);
+            auto portions = MakeAppendedPortions(pathId, indexInfo, tieringMap, batch, granule, minSnapshot, blobs);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 changes->AppendedPortions.emplace_back(std::move(portion));
@@ -1696,7 +1697,7 @@ static std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(const TIndexInfo&
     return sortedBatch;
 }
 
-static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo,
+static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                                          std::shared_ptr<TColumnEngineForLogs::TChanges> changes) {
     const ui64 pathId = changes->SrcGranule->PathId;
     TVector<TString> blobs;
@@ -1716,13 +1717,13 @@ static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo,
             if (!slice || slice->num_rows() == 0) {
                 continue;
             }
-            auto tmp = MakeAppendedPortions(pathId, indexInfo, slice, granule, TSnapshot{}, blobs);
+            auto tmp = MakeAppendedPortions(pathId, indexInfo, tieringMap, slice, granule, TSnapshot{}, blobs);
             for (auto&& portionInfo : tmp) {
                 portions.emplace_back(std::move(portionInfo));
             }
         }
     } else {
-        portions = MakeAppendedPortions(pathId, indexInfo, batch, granule, TSnapshot{}, blobs);
+        portions = MakeAppendedPortions(pathId, indexInfo, tieringMap, batch, granule, TSnapshot{}, blobs);
     }
 
     Y_VERIFY(portions.size() > 0);
@@ -1962,7 +1963,7 @@ static ui64 TryMovePortions(const TMark& ts0,
     return numRows;
 }
 
-static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
+static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                                             const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes)
 {
     const ui64 pathId = changes->SrcGranule->PathId;
@@ -2063,7 +2064,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
 
             for (const auto& batch : idBatches[id]) {
                 // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-                auto newPortions = MakeAppendedPortions(pathId, indexInfo, batch, tmpGranule, TSnapshot{}, blobs);
+                auto newPortions = MakeAppendedPortions(pathId, indexInfo, tieringMap, batch, tmpGranule, TSnapshot{}, blobs);
                 Y_VERIFY(newPortions.size() > 0);
                 for (auto& portion : newPortions) {
                     changes->AppendedPortions.emplace_back(std::move(portion));
@@ -2079,7 +2080,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
             ui64 tmpGranule = changes->SetTmpGranule(pathId, ts);
 
             // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-            auto portions = MakeAppendedPortions(pathId, indexInfo, batch, tmpGranule, TSnapshot{}, blobs);
+            auto portions = MakeAppendedPortions(pathId, indexInfo, tieringMap, batch, tmpGranule, TSnapshot{}, blobs);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 changes->AppendedPortions.emplace_back(std::move(portion));
@@ -2090,7 +2091,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
     return blobs;
 }
 
-TVector<TString> TColumnEngineForLogs::CompactBlobs(const TIndexInfo& indexInfo,
+TVector<TString> TColumnEngineForLogs::CompactBlobs(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                                                     std::shared_ptr<TColumnEngineChanges> changes) {
     Y_VERIFY(changes);
     Y_VERIFY(changes->CompactionInfo);
@@ -2101,12 +2102,12 @@ TVector<TString> TColumnEngineForLogs::CompactBlobs(const TIndexInfo& indexInfo,
 
     auto castedChanges = std::static_pointer_cast<TChanges>(changes);
     if (castedChanges->CompactionInfo->InGranule) {
-        return CompactInGranule(indexInfo, castedChanges);
+        return CompactInGranule(indexInfo, tieringMap, castedChanges);
     }
-    return CompactSplitGranule(indexInfo, castedChanges);
+    return CompactSplitGranule(indexInfo, tieringMap, castedChanges);
 }
 
-TVector<TString> TColumnEngineForLogs::EvictBlobs(const TIndexInfo& indexInfo,
+TVector<TString> TColumnEngineForLogs::EvictBlobs(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
                                                   std::shared_ptr<TColumnEngineChanges> changes) {
     Y_VERIFY(changes);
     Y_VERIFY(!changes->Blobs.empty()); // src data
@@ -2121,7 +2122,7 @@ TVector<TString> TColumnEngineForLogs::EvictBlobs(const TIndexInfo& indexInfo,
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(portionInfo.IsActive());
 
-        if (UpdateEvictedPortion(portionInfo, indexInfo, evictFeatures, changes->Blobs,
+        if (UpdateEvictedPortion(portionInfo, indexInfo, tieringMap, evictFeatures, changes->Blobs,
                 changes->EvictedRecords, newBlobs)) {
             Y_VERIFY(portionInfo.TierName == evictFeatures.TargetTierName);
             evicted.emplace_back(std::move(portionInfo), evictFeatures);

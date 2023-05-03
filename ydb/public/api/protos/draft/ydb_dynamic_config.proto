@@ -8,6 +8,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 
 message ApplyConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // YAML stream with two documents: header and body
     optional string config = 2;
 }
 
@@ -17,7 +18,9 @@ message ApplyConfigResponse {
 
 message DropConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Cluster name (should be set on node with console tablet, unknown by default)
     optional string cluster = 2;
+    // Current config version
     optional uint32 version = 3;
 }
 
@@ -27,9 +30,13 @@ message DropConfigResponse {
 
 message AddVolatileConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Config id must strictly be set to the current max config id increment by one.
     optional uint64 id = 2;
+    // YAML document with volatile config
     optional string config = 3;
+    // Current config version
     optional uint64 version = 4;
+    // Cluster name (should be set on node with console tablet, unknown by default)
     optional string cluster = 5;
 }
 
@@ -38,7 +45,9 @@ message AddVolatileConfigResponse {
 }
 
 message VolatileConfig {
+    // Config id
     optional uint64 id = 1;
+    // Volatile config YAML document
     optional string config = 2;
 }
 
@@ -48,16 +57,23 @@ message GetConfigRequest {
 
 message GetConfigResponse {
     Ydb.Operations.Operation operation = 1;
+    // Main dynamic config with header in YAML stream
     optional string config = 2;
+    // All volatile configs
     repeated VolatileConfig volatile_configs = 3;
+    // Cluster name (should be set on node with console tablet, unknown by default)
     optional string cluster = 4;
+    // Current config version
     optional uint32 version = 5;
 }
 
 message RemoveVolatileConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Current config version
     optional uint64 version = 2;
+    // Cluster name (should be set on node with console tablet, unknown by default)
     optional string cluster = 3;
+    // ids to delete or *empty to delete all*
     repeated uint64 ids = 4;
 }
 
@@ -66,29 +82,39 @@ message RemoveVolatileConfigResponse {
 }
 
 message YamlLabel {
+    // Name of the label
     optional string label = 1;
+    // Value of the label
     optional string value = 2;
 }
 
 message ResolveConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Config to resolve
     optional string config = 2;
+    // Additional configs which will be apended to selectors
     repeated VolatileConfig volatile_configs = 3;
+    // Target labels
     repeated YamlLabel labels = 4;
 }
 
 message ResolveConfigResponse {
     Ydb.Operations.Operation operation = 1;
+    // YAML document with resolved config
     optional string config = 2;
 }
 
 message ResolveAllConfigRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Config to resolve
     optional string config = 2;
+    // Additional configs which will be apended to selectors
     repeated VolatileConfig volatile_configs = 3;
 }
 
 message ResolveAllConfigResponse {
     Ydb.Operations.Operation operation = 1;
+    // YAML stream with resolved configs
+    // Label combinations shown in comments
     optional string config = 2;
 }

@@ -4,7 +4,7 @@
 
 {% note info %}
 
-Prerequisites: you'll need a Linux machine with x86\_64 CPU to follow this guide. If you don't have access to one, [run YDB with Docker](self_hosted/ydb_docker.md) and then return to step 3 below.
+Prerequisites: you'll need a Linux machine with x86\_64 CPU to follow this guide. If you don't have access to one, [run {{ ydb-short-name }} with Docker](self_hosted/ydb_docker.md) and then return to step 3 below.
 
 {% endnote %}
 
@@ -12,23 +12,23 @@ Prerequisites: you'll need a Linux machine with x86\_64 CPU to follow this guide
 curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 ```
 
-# 2. Start the YDB server
+# 2. Start the {{ ydb-short-name }} server
 
-After the previous step, everything will be prepared in the current working directory to launch `ydbd`, the YDB server-side daemon. The simplest way to do so is with this command:
+After the previous step, everything will be prepared in the current working directory to launch `ydbd`, the {{ ydb-short-name }} server-side daemon. The simplest way to do so is with this command:
 
 ```
 ./start.sh ram
 ```
 
-With this command, YDB will store data only transiently in RAM which is perfect for playing around. In production environments, YDB normally works directly with multiple SSD/NVMe or HDD drives via block devices (avoiding any filesystem), setting this up is out of the scope of this guide - see [production storage configuration](../administration/production-storage-config.md) to learn more. There's also an intermediate option, launched with `./start.sh disk`, which emulates a block device with a file in a filesystem (80Gb by default), but this is also only for experimentation purposes and shouldn't be used for production workloads or even benchmarks.
+With this command, {{ ydb-short-name }} will store data only transiently in RAM which is perfect for playing around. In production environments, {{ ydb-short-name }} normally works directly with multiple SSD/NVMe or HDD drives via block devices (avoiding any filesystem), setting this up is out of the scope of this guide - see [production storage configuration](../administration/production-storage-config.md) to learn more. There's also an intermediate option, launched with `./start.sh disk`, which emulates a block device with a file in a filesystem (80Gb by default), but this is also only for experimentation purposes and shouldn't be used for production workloads or even benchmarks.
 
 # 3. Run your first "Hello, world!" query
 
-The simplest way to launch your first YDB query is via the built-in web interface. It is launched by default on port 8765 of the YDB server, so assuming you have launched it locally, you need to open [localhost:8765](http://localhost:8765) in your web browser. If not, replace `localhost` with your server's hostname in this URL, or use `ssh -L 8765:localhost:8765 <my-hostname>` to setup port forwarding and still open [localhost:8765](http://localhost:8765). You'll see something like this:
+The simplest way to launch your first {{ ydb-short-name }} query is via the built-in web interface. It is launched by default on port 8765 of the {{ ydb-short-name }} server, so assuming you have launched it locally, you need to open [localhost:8765](http://localhost:8765) in your web browser. If not, replace `localhost` with your server's hostname in this URL, or use `ssh -L 8765:localhost:8765 <my-hostname>` to setup port forwarding and still open [localhost:8765](http://localhost:8765). You'll see something like this:
 
 ![Web UI home page](_assets/web-ui-home.png)
 
-YDB is designed to be a multi-tenant system, with potentially thousands of users working with the same cluster simultaneously. Hence, most logical entities inside a YDB cluster resides in a flexible hierarchical structure more akin to Unix's virtual filesystem rather than a fixed-depth schema you might be familiar with from other database management systems. As you can see, the first level of hierarchy consists of databases that are running inside a single YDB process, that might belong to different tenants. `/Root` is for system purposes, while `/Root/test` is a playground that `start.sh` created for us in the previous step. Let's click on the latter, `/Root/test`, then enter our first query and hit the run button:
+{{ ydb-short-name }} is designed to be a multi-tenant system, with potentially thousands of users working with the same cluster simultaneously. Hence, most logical entities inside a {{ ydb-short-name }} cluster resides in a flexible hierarchical structure more akin to Unix's virtual filesystem rather than a fixed-depth schema you might be familiar with from other database management systems. As you can see, the first level of hierarchy consists of databases that are running inside a single {{ ydb-short-name }} process, that might belong to different tenants. `/Root` is for system purposes, while `/Root/test` is a playground that `start.sh` created for us in the previous step. Let's click on the latter, `/Root/test`, then enter our first query and hit the run button:
 
 ```sql
 SELECT "Hello, world!"u;
@@ -40,15 +40,15 @@ The query returns the salute back, as it is supposed to:
 
 {% note info %}
 
-Have you noticed an odd `u` suffix? YDB and its query language YQL are strongly typed. Regular strings in YDB can contain any binary data, while this suffix indicates that this string literal is of `Utf8` data type, which can contain only valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8) sequences. [Learn more](../yql/reference/types/index.md) about YDB's type system.
+Have you noticed an odd `u` suffix? {{ ydb-short-name }} and its query language YQL are strongly typed. Regular strings in {{ ydb-short-name }} can contain any binary data, while this suffix indicates that this string literal is of `Utf8` data type, which can contain only valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8) sequences. [Learn more](../yql/reference/types/index.md) about {{ ydb-short-name }}'s type system.
 
 {% endnote %}
 
-The second simplest way to run a SQL query with YDB is the [command line interface (CLI)](../reference/ydb-cli/index.md), while most real-world applications will likely talk with YDB via one of the available [software development kits (SDK)](../reference/ydb-sdk/index.md). Feel free to follow the rest of the guide with one of those methods instead of the web UI if you feel comfortable doing so.
+The second simplest way to run a SQL query with {{ ydb-short-name }} is the [command line interface (CLI)](../reference/ydb-cli/index.md), while most real-world applications will likely talk with {{ ydb-short-name }} via one of the available [software development kits (SDK)](../reference/ydb-sdk/index.md). Feel free to follow the rest of the guide with one of those methods instead of the web UI if you feel comfortable doing so.
 
 # 4. Create your first table
 
-The main purpose why database management systems exist is to store some data for later retrieval. As an SQL-based system, YDB's main abstraction for data storage is a table. To create our first one, run the following query:
+The main purpose why database management systems exist is to store some data for later retrieval. As an SQL-based system, {{ ydb-short-name }}'s main abstraction for data storage is a table. To create our first one, run the following query:
 
 ```sql
 CREATE TABLE example
@@ -130,5 +130,5 @@ What the `SELECT COUNT(*) FROM example;` query will return now?
 After getting hold of some basics demonstrated in this guide, you should be ready to jump into more advanced topics. Choose what looks the most relevant depending on your use case and role:
 
 * Walk through a more detailed [YQL tutorial](../yql/reference/) that focuses on writing queries.
-* Try to build your first app storing data in YDB using [one of SDKs](../reference/ydb-sdk/index.md).
-* Learn how to set up a [production-ready deployment of YDB](../cluster/index.md).
+* Try to build your first app storing data in {{ ydb-short-name }} using [one of SDKs](../reference/ydb-sdk/index.md).
+* Learn how to set up a [production-ready deployment of {{ ydb-short-name }}](../cluster/index.md).

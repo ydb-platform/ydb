@@ -1137,7 +1137,7 @@ namespace NKikimr {
         }
 
         template <typename TProtoMsgQoS>
-        void FillInCostSettingsAndTimestampIfRequired(TProtoMsgQoS *qos, TInstant now) const {
+        void FillInCostSettingsAndTimestampIfRequired(TProtoMsgQoS qos, TInstant now) const {
             qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue());
             if (qos->GetSendMeCostSettings() && CostModel) {
                 auto &settings = *qos->MutableCostSettings();
@@ -1157,19 +1157,19 @@ namespace NKikimr {
             CheckEvent(ev, msgName);
             const ui32 recByteSize = ev->Get()->GetCachedByteSize();
             auto &record = ev->Get()->Record;
-            auto &msgQoS = *record.MutableMsgQoS();
+            auto msgQoS = record.MutableMsgQoS();
 
             // set up reception time
             TInstant now = TAppData::TimeProvider->Now();
 
-            const NBackpressure::TMessageId msgId(msgQoS.GetMsgId());
-            const TInstant deadline = CalcDeadline(msgQoS.GetDeadlineSeconds());
-            auto extQueueId = msgQoS.GetExtQueueId();
+            const NBackpressure::TMessageId msgId(msgQoS->GetMsgId());
+            const TInstant deadline = CalcDeadline(msgQoS->GetDeadlineSeconds());
+            auto extQueueId = msgQoS->GetExtQueueId();
             auto intQueueId = intQueue.IntQueueId;
-            msgQoS.SetCost(cost);
-            msgQoS.SetIntQueueId(intQueueId);
-            ActorIdToProto(ev->Sender, msgQoS.MutableSenderActorId());
-            FillInCostSettingsAndTimestampIfRequired(&msgQoS, now);
+            msgQoS->SetCost(cost);
+            msgQoS->SetIntQueueId(intQueueId);
+            ActorIdToProto(ev->Sender, msgQoS->MutableSenderActorId());
+            FillInCostSettingsAndTimestampIfRequired(msgQoS, now);
 
             // check queue compatibility: it's a contract between BlobStorage Proxy and VDisk,
             // we don't work if queues are incompatible
@@ -1180,7 +1180,7 @@ namespace NKikimr {
                    NKikimrBlobStorage::EVDiskQueueId_Name(NKikimrCapnProtoUtil::convertToProtobuf(extQueueId)).data());
 
             TExtQueueClass &extQueue = GetExtQueue(NKikimrCapnProtoUtil::convertToProtobuf(extQueueId));
-            NBackpressure::TQueueClientId clientId(msgQoS);
+            NBackpressure::TQueueClientId clientId(*msgQoS);
             std::unique_ptr<IEventHandle> event = extQueue.Enqueue(ctx, std::unique_ptr<IEventHandle>(
                 ev->Forward(SkeletonId).Release()), msgId, cost, *this, clientId);
             if (event) {

@@ -1,4 +1,3 @@
-
 # {{ ydb-short-name }} Quick Start
 
 ## 1. Download the executable

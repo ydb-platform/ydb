@@ -386,8 +386,7 @@ class WriterAsyncIOReconnector:
                 done, _ = await asyncio.wait(
                     [send_loop, receive_loop], return_when=asyncio.FIRST_COMPLETED
                 )
-                await stream_writer.close()
-                done.pop().result()
+                done.pop().result()  # need for raise exception - reason of stop task
             except issues.Error as err:
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable:
@@ -400,11 +399,11 @@ class WriterAsyncIOReconnector:
                 self._stop(err)
                 return
             finally:
-                if stream_writer:
-                    await stream_writer.close()
                 for task in tasks:
                     task.cancel()
                 await asyncio.wait(tasks)
+                if stream_writer:
+                    await stream_writer.close()
 
     async def _encode_loop(self):
         while True:

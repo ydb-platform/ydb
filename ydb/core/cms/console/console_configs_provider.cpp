@@ -1088,6 +1088,16 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "Send TEvGetNodeConfigResponse: " << response->Record.ShortDebugString());
 
+    if (rec.HasServeYaml() && rec.GetServeYaml()) {
+        response->Record.SetYamlConfig(YamlConfig);
+
+        for (auto &[id, config] : VolatileYamlConfigs) {
+            auto &item = *response->Record.AddVolatileConfigs();
+            item.SetId(id);
+            item.SetConfig(config);
+        }
+    }
+
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 

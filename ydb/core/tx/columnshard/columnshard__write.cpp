@@ -49,7 +49,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(logoBlobId.IsValid());
 
     bool ok = false;
-    if (!Self->PrimaryIndex || !Self->IsTableWritable(tableId)) {
+    if (!Self->TablesManager.HasPrimaryIndex() || !Self->TablesManager.IsWritableTable(tableId)) {
         status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
     } else {
         if (record.HasLongTxId()) {
@@ -138,15 +138,15 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     TString dedupId = record.GetDedupId();
     auto putStatus = ev->Get()->PutStatus;
 
-    bool isWritable = IsTableWritable(tableId);
-    bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !PrimaryIndex || !isWritable;
+    bool isWritable = TablesManager.IsWritableTable(tableId);
+    bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !TablesManager.HasPrimaryIndex() || !isWritable;
     bool errorReturned = (putStatus != NKikimrProto::OK) && (putStatus != NKikimrProto::UNKNOWN);
     bool isOutOfSpace = IsAnyChannelYellowStop();
 
     if (error || errorReturned) {
         LOG_S_NOTICE("Write (fail) " << data.size() << " bytes into pathId " << tableId
             << ", status " << putStatus
-            << (PrimaryIndex? "": ", no index") << (isWritable? "": ", ro")
+            << (TablesManager.HasPrimaryIndex()? "": ", no index") << (isWritable? "": ", ro")
             << " at tablet " << TabletID());
 
         IncCounter(COUNTER_WRITE_FAIL);
@@ -221,7 +221,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
 
         ++WritesInFly; // write started
-        ctx.Register(CreateWriteActor(TabletID(), PrimaryIndex->GetIndexInfo(), ctx.SelfID,
+        ctx.Register(CreateWriteActor(TabletID(), TablesManager.GetIndexInfo(), ctx.SelfID,
             BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
     }
 

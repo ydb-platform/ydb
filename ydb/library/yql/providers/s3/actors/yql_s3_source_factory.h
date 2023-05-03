@@ -26,7 +26,7 @@ void RegisterS3ReadActorFactory(
     TDqAsyncIoFactory& factory,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),
-    const IRetryPolicy<long>::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
     const TS3ReadActorFactoryConfig& = {},
     ::NMonitoring::TDynamicCounterPtr counters = nullptr,
     IArrowReader::TPtr arrowReader = MakeArrowReader(TArrowReaderSettings()));

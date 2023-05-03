@@ -484,7 +484,7 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     default:
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
+        ALOG_WARN(NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
     }
 }
 

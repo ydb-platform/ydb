@@ -1,11 +1,11 @@
 #pragma once
 
 #include "config_helpers.h"
-#include "config_index.h"
 #include "console_configs_provider.h"
 #include "console_impl.h"
 #include "console_tenants_manager.h"
 
+#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/testlib/tenant_helpers.h>
 
@@ -303,6 +303,21 @@ inline void CheckApplyConfig(TTenantTestRuntime &runtime,
         runtime.SendToConsole(event);
 
         auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvApplyConfigResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+}
+
+inline void CheckDropConfig(TTenantTestRuntime &runtime,
+                            Ydb::StatusIds::StatusCode code,
+                            TString clusterName,
+                            ui64 version)
+{
+        TAutoPtr<IEventHandle> handle;
+        auto *event = new TEvConsole::TEvDropConfigRequest;
+        event->Record.MutableRequest()->set_cluster(clusterName);
+        event->Record.MutableRequest()->set_version(version);
+        runtime.SendToConsole(event);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvDropConfigResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
 }
 

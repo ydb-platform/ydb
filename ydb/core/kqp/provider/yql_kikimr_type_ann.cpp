@@ -203,6 +203,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Topic:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -955,7 +959,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
 
-
     virtual TStatus HandleDropTable(TKiDropTable node, TExprContext& ctx) override {
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
         if (!table) {
@@ -1139,6 +1142,134 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
+
+    static bool CheckTopicSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+        ui32 minParts = 0, partsLimit = 0;
+        TPosition errorPos;
+        for (const auto& setting : settings) {
+            auto name = setting.Name().Value();
+            if (name == "setMeteringMode") {
+                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                    return false;
+                }
+                auto val = to_lower(TString(setting.Value().template Cast<TCoAtom>().Value()));
+                Ydb::Topic::MeteringMode meteringMode;
+                auto result = GetTopicMeteringModeFromString(val, meteringMode);
+                if (!result) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                                        TStringBuilder() << "unknown metering_mode: " << val));
+                }
+
+            } else if (name == "setMinPartitions") {
+                ui32 value = FromString<ui32>(
+                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
+                );
+                minParts = value;
+                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name == "setPartitionsLimit") {
+                ui32 value = FromString<ui32>(
+                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
+                );
+                partsLimit = value;
+                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name.StartsWith("reset")) {
+                ctx.AddError(TIssue(
+                        errorPos,
+                        TStringBuilder() << "RESET is currently not supported for topic options")
+                );
+                return false;
+            }
+            if (minParts && partsLimit && partsLimit < minParts) {
+                ctx.AddError(TIssue(
+                        errorPos,
+                        TStringBuilder() << "partitions_limit cannot be less than min_partitions")
+                );
+                return false;
+            }
+        }
+        return true;
+    }
+    static bool CheckConsumerSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+        for (const auto& setting : settings) {
+            auto name = setting.Name().Value();
+            auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
+            if (name == "setSupportedCodecs") {
+                auto codecsList = GetTopicCodecsFromString(val);
+                if (codecsList.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                                        TStringBuilder() << "unknown codec found or codecs list is malformed : " << val));
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
+        if (!CheckTopicSettings(node.Settings(), ctx)) {
+            return TStatus::Error;
+        }
+
+        for (const auto& consumer : node.Consumers()) {
+            if(!CheckConsumerSettings(consumer.Settings(), ctx)) {
+                return TStatus::Error;
+            }
+        }
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
+        if (!CheckTopicSettings(node.Settings(), ctx)) {
+            return TStatus::Error;
+        }
+       THashSet<TString> allConsumers;
+        auto CheckConsumerIsUnique = [&] (const auto& consumer) {
+            auto res = allConsumers.insert(consumer.Name().StringValue());
+            if (!res.second) {
+                ctx.AddError(TIssue(
+                        ctx.GetPosition(consumer.Name().Ref().Pos()),
+                        TStringBuilder() << "consumer '" << consumer.Name().StringValue() << "' referenced more than once"
+                ));
+                return false;
+            }
+            return true;
+        };
+        for (const auto& consumer : node.AddConsumers()) {
+            if (!CheckConsumerIsUnique(consumer)) {
+                return TStatus::Error;
+            }
+            if(!CheckConsumerSettings(consumer.Settings(), ctx)) {
+                return TStatus::Error;
+            }
+        }
+        for (const auto& consumer : node.AlterConsumers()) {
+            if (!CheckConsumerIsUnique(consumer)) {
+                return TStatus::Error;
+            }
+            if(!CheckConsumerSettings(consumer.Settings(), ctx)) {
+                return TStatus::Error;
+            }
+        }
+        for (const auto& consumer : node.DropConsumers()) {
+            auto res = allConsumers.insert(consumer.StringValue());
+            if (!res.second) {
+                ctx.AddError(TIssue(
+                        ctx.GetPosition(consumer.Ref().Pos()),
+                        TStringBuilder() << "consumer '" << consumer.StringValue() << "' referenced more than once"
+                ));
+                return TStatus::Error;
+            }
+        }
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropTopic(TKiDropTopic node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {

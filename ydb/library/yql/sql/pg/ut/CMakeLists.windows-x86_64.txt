@@ -14,7 +14,6 @@ target_include_directories(ydb-library-yql-sql-pg-ut PRIVATE
 target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-sql-pg
@@ -56,5 +55,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-sql-pg-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-sql-pg-ut)

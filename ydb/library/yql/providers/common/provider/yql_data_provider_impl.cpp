@@ -88,6 +88,10 @@ TExprNode::TPtr TDataProviderBase::GetClusterInfo(const TString& cluster, TExprC
     return {};
 }
 
+void TDataProviderBase::AddCluster(const TString& name, const THashMap<TString, TString>& properties) {
+    Y_UNUSED(name, properties);
+}
+
 const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() {
     return nullptr;
 }

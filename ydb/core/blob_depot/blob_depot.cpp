@@ -105,7 +105,7 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvUpdateThroughputs, UpdateThroughputs);
 
                 default:
-                    if (!HandleDefaultEvents(ev, ctx)) {
+                    if (!HandleDefaultEvents(ev, SelfId())) {
                         Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
                     }
                     break;

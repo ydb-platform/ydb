@@ -51,7 +51,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx);
-    void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    void StateFunc(TAutoPtr<IEventHandle>& ev);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_PROXY;
@@ -200,7 +200,7 @@ void LogRequest(const TEvent& event) {
     }
 }
 
-void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TEvListEndpointsRequest, PreHandle);

@@ -29,10 +29,10 @@ public:
         Proceed(ctx);
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 
@@ -103,6 +103,11 @@ public:
 
 void DoExecuteYqlScript(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TExecuteYqlScriptRPC(p.release()));
+}
+
+template<>
+IActor* TEvExecuteYqlScriptRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TExecuteYqlScriptRPC(msg);
 }
 
 } // namespace NGRpcService

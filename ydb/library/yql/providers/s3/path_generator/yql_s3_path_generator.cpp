@@ -709,21 +709,21 @@ private:
         return {.Name=name, .Type=NUdf::EDataSlot::Int64, .Value=ToString(value)};
     }
 
-    void CheckCastInt32(int64_t value, const TString& column) {
+    static void CheckCastInt32(int64_t value, const TString& column) {
         if (std::numeric_limits<int32_t>::min() <= value && value <= std::numeric_limits<int32_t>::max()) {
             return;
         }
         ythrow yexception() << "The value " << value << " is not representable as an int32 type for column " << column;
     }
 
-    void CheckCastUint32(int64_t value, const TString& column) {
+    static void CheckCastUint32(int64_t value, const TString& column) {
         if (value >= 0 && value <= std::numeric_limits<uint32_t>::max()) {
             return;
         }
         ythrow yexception() << "The value " << value << " is not representable as an uint32 type for column " << column;
     }
 
-    void CheckCastUint64(int64_t value, const TString& column) {
+    static void CheckCastUint64(int64_t value, const TString& column) {
         if (value >= 0) {
             return;
         }

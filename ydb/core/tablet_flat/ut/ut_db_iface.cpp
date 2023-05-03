@@ -441,6 +441,36 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(closed->Frozen.at(0)->GetBlobs()->Head == 3);
     }
 
+    Y_UNIT_TEST(AnnexRollbackChanges)
+    {
+        auto alter = MakeAlter(1);
+
+        alter.SetRedo(32).SetFamilyBlobs(1, 0, Max<ui32>(), 24);
+
+        TDbExec me;
+
+        me.To(10).Begin().Apply(*alter.Flush()).Commit();
+
+        const TString large35("0123456789abcdef0123456789abcdef012");
+        const TString large42("0123456789abcdef0123456789abcdef0123456789");
+
+        me.To(12).Begin().PutN(1, "l35", 35_u64, large35);
+        me.To(13).RollbackChanges().PutN(1, "l42", 42_u64, large42).Commit();
+        me.To(14).Iter(1)
+            .Seek({}, ESeek::Lower).IsN("l42", 42_u64, large42)
+            .Next().Is(EReady::Gone);
+
+        UNIT_ASSERT(me.BackLog().Annex.size() == 1);
+        UNIT_ASSERT(me.BackLog().Annex[0].Data.size() == 8 + 42);
+
+        me.To(21).Replay(EPlay::Boot).Iter(1)
+            .Seek({}, ESeek::Lower).IsN("l42", 42_u64, large42)
+            .Next().Is(EReady::Gone);
+        me.To(22).Replay(EPlay::Redo).Iter(1)
+            .Seek({}, ESeek::Lower).IsN("l42", 42_u64, large42)
+            .Next().Is(EReady::Gone);
+    }
+
     Y_UNIT_TEST(Outer)
     {
         auto alter = MakeAlter(1);

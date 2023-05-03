@@ -560,12 +560,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": count# " << record->RowsSize()
             << ", size# " << record->ByteSizeLong());
 
-        Send(DataShard, new TEvDataShard::TEvUnsafeUploadRowsRequest(TxId, record, {
+        Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
             ETag, ProcessedBytes, WrittenBytes, WrittenRows
         }));
     }
 
-    void Handle(TEvDataShard::TEvUnsafeUploadRowsResponse::TPtr& ev) {
+    void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
@@ -761,7 +761,7 @@ public:
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
 
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
-            hFunc(TEvDataShard::TEvUnsafeUploadRowsResponse, Handle);
+            hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
 
             hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);

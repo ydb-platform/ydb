@@ -41,7 +41,7 @@ public:
 
     // Forget completed request
     void RemoveInFlightRequest(ui64 cookie, IBlobInUseTracker& blobTracker) {
-        Y_VERIFY(RequestsMeta.count(cookie), "Unknown request cookie %" PRIu64, cookie);
+        Y_VERIFY(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
         const auto& readMetaList = RequestsMeta[cookie];
 
         for (const auto& readMetaBase : readMetaList) {
@@ -75,7 +75,7 @@ public:
 
     // Checks if the portion is in use by any in-flight request
     bool IsPortionUsed(ui64 portionId) const {
-        return PortionUseCount.count(portionId);
+        return PortionUseCount.contains(portionId);
     }
 
     NOlap::TSelectInfo::TStats GetSelectStatsDelta() {

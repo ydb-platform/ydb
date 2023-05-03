@@ -272,7 +272,7 @@ protected:
 
     void Enqueue(STFUNC_SIG) override {
         SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE,
+        ALOG_DEBUG(NKikimrServices::KEYVALUE,
                 "KeyValue# " << TabletID()
                 << " Enqueue, event type# " << (ui32)ev->GetTypeRewrite()
                 << " event# " << ev->ToString());
@@ -492,20 +492,19 @@ public:
     virtual bool HandleHook(STFUNC_SIG)
     {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
         return false;
     }
 
     STFUNC(StateInit) {
         RestoreActorActivity();
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " StateInit flat event type# " << (ui32)ev->GetTypeRewrite()
                 << " event# " << ev->ToString());
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
-        if (HandleHook(ev, ctx))
+        if (HandleHook(ev))
             return;
         RestoreActorActivity();
         switch (ev->GetTypeRewrite()) {
@@ -529,8 +528,8 @@ public:
             HFunc(TEvents::TEvPoisonPill, Handle);
 
             default:
-                if (!HandleDefaultEvents(ev, ctx)) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                if (!HandleDefaultEvents(ev, SelfId())) {
+                    ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                             << " StateWork unexpected event type# " << (ui32)ev->GetTypeRewrite()
                             << " event# " << ev->ToString());
                 }
@@ -544,7 +543,7 @@ public:
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
 
             default:
-                LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                         << " BrokenState unexpected event type# " << (ui32)ev->GetTypeRewrite()
                         << " event# " << ev->ToString());
                 break;

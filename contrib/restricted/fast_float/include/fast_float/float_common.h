@@ -7,23 +7,8 @@
 #include <cstring>
 #include <type_traits>
 
-#ifdef __has_include
-#if __has_include(<version>)
-#include <version>
-#endif
-#endif
-
-#if __cpp_lib_bit_cast >= 201806L
+#if FASTFLOAT_HAS_BIT_CAST
 #include <bit>
-#define FASTFLOAT_HAS_BIT_CAST 1
-#else
-#define FASTFLOAT_HAS_BIT_CAST 0
-#endif
-
-#if __cpp_lib_is_constant_evaluated >= 201811L
-#define FASTFLOAT_HAS_IS_CONSTANT_EVALUATED 1
-#else
-#define FASTFLOAT_HAS_IS_CONSTANT_EVALUATED 0
 #endif
 
 #if (defined(__x86_64) || defined(__x86_64__) || defined(_M_X64)   \
@@ -109,22 +94,6 @@
 
 // rust style `try!()` macro, or `?` operator
 #define FASTFLOAT_TRY(x) { if (!(x)) return false; }
-
-// Testing for https://wg21.link/N3652, adopted in C++14
-#if __cpp_constexpr >= 201304
-#define FASTFLOAT_CONSTEXPR14 constexpr
-#else
-#define FASTFLOAT_CONSTEXPR14
-#endif
-
-// Testing for relevant C++20 constexpr library features
-#if FASTFLOAT_HAS_IS_CONSTANT_EVALUATED \
-    && FASTFLOAT_HAS_BIT_CAST \
-    && __cpp_lib_constexpr_algorithms >= 201806L /*For std::copy and std::fill*/
-#define FASTFLOAT_CONSTEXPR20 constexpr
-#else
-#define FASTFLOAT_CONSTEXPR20
-#endif
 
 namespace fast_float {
 

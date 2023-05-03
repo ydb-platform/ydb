@@ -11,6 +11,7 @@ struct TEvLoad {
         EvLoadTestRequest = EventSpaceBegin(TKikimrEvents::ES_TEST_LOAD),
         EvLoadTestFinished,
         EvLoadTestResponse,
+        EvNodeFinishResponse,
         EvYqlSingleQueryResponse,
     };
 
@@ -75,8 +76,8 @@ struct TEvLoad {
 
     struct TEvLoadTestFinished : public TEventLocal<TEvLoadTestFinished, TEvLoad::EvLoadTestFinished> {
         ui64 Tag;
-        TIntrusivePtr<TLoadReport> Report; // nullptr indicates error
-        TString ErrorReason;
+        TIntrusivePtr<TLoadReport> Report; // nullptr indicates an error or an early stop
+        TString ErrorReason; // human readable status, might be nonempty even in the case of success
         TString LastHtmlPage;
         NJson::TJsonValue JsonResult;
 
@@ -87,13 +88,22 @@ struct TEvLoad {
         {}
     };
 
+    struct TEvNodeFinishResponse : public TEventPB<TEvNodeFinishResponse,
+        NKikimr::TEvNodeFinishResponse, EvNodeFinishResponse>
+    {};
+
     struct TEvYqlSingleQueryResponse : public TEventLocal<TEvYqlSingleQueryResponse, TEvLoad::EvYqlSingleQueryResponse> {
+        TString Result;  // empty in case if there is an error
         TMaybe<TString> ErrorMessage;
-        
-        TEvYqlSingleQueryResponse(TMaybe<TString> errorMessage)
-            : ErrorMessage(std::move(errorMessage))
+        TMaybe<NKikimrKqp::TQueryResponse> Response;
+
+        TEvYqlSingleQueryResponse(TString result, TMaybe<TString> errorMessage, TMaybe<NKikimrKqp::TQueryResponse> response)
+            : Result(std::move(result))
+            , ErrorMessage(std::move(errorMessage))
+            , Response(std::move(response))
         {}
     };
+
 };
 
 }

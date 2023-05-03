@@ -55,6 +55,15 @@ ydb:
     # If unspecified, will be used /counters/counters=%s/prometheus
     # metricsPath: <url to prometheus metrics>
     #
+    # Metrics path params
+    # If specified, will be set as params variables for scrape configs or service monitor spec
+    # Specified as key: value, where value can be specified as {{ .counter.<counter field> }} or {{ .target.<target field> }}
+    # metricsPathParams: {}
+    #
+    # Skip Name Relabeling
+    # If specified, will skip relabel metric name to counter_<__name__>
+    # skipNameRelabeling: true
+    #
     - counter: ydb
       metricsPath: /counters/counters=ydb/name_label=name/prometheus
     # - counter: ydb_serverless
@@ -80,6 +89,19 @@ ydb:
     - counter: interconnect
     - counter: vdisks
       type: static
+    - counter: healthcheck
+      type: static
+      metricsPath: /healthcheck
+      metricsPathParams:
+        format: prometheus
+      skipNameRelabeling: true
+    - counter: healthcheck-dynamic
+      type: dynamic
+      metricsPath: /healthcheck
+      metricsPathParams:
+        format: prometheus
+        tenant: "{{ .target.path }}"
+      skipNameRelabeling: true
 
   # Cluster which will be monitored
   clusters: []
@@ -111,6 +133,7 @@ ydb:
   # Each item represents ydb database
   # databases:
   # - name: <name of prometheus job/target>
+  #   path: <path to database>
   #
   #   Internal cluster specific spec
   #   namespace: <namespace of ydb database pods>

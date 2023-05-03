@@ -41,7 +41,7 @@ public:
             errors.AddError("Sharding is not set");
             return false;
         }
-        
+
         if (!DoDeserialize(description, errors)) {
             return false;
         }
@@ -58,7 +58,7 @@ public:
     TColumnTableInfo::TPtr BuildTableInfo(IErrorCollector& errors) const {
         TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
         tableInfo->AlterVersion = 1;
-        
+
         BuildDescription(tableInfo->Description);
         tableInfo->Description.SetColumnShardCount(ShardsCount);
         tableInfo->Description.SetName(Name);
@@ -99,7 +99,6 @@ private:
                     errors.AddError(Sprintf("Hash sharding requires a non-empty list of columns"));
                     return false;
                 }
-                bool keysOnly = true;
                 for (const TString& columnName : sharding.GetColumns()) {
                     auto* pColumn = schema.GetColumnByName(columnName);
                     if (!pColumn) {
@@ -107,11 +106,12 @@ private:
                         return false;
                     }
                     if (!pColumn->IsKeyColumn()) {
-                        keysOnly = false;
+                        errors.AddError(Sprintf("Hash sharding is using a non-key column '%s'", columnName.c_str()));
+                        return false;
                     }
                 }
                 sharding.SetUniqueShardKey(true);
-                tableInfo->Sharding.SetUniquePrimaryKey(keysOnly);
+                tableInfo->Sharding.SetUniquePrimaryKey(true);
                 break;
             }
             default: {
@@ -220,33 +220,6 @@ private:
 };
 
 
-void SetShardingTablets(
-        TColumnTableInfo::TPtr tableInfo,
-        const TVector<TShardIdx>& columnShards, ui32 columnShardCount, bool shuffle,
-        const TSchemeShard& ss)
-{
-    tableInfo->ColumnShards.reserve(columnShards.size());
-    for (const auto& shardIdx : columnShards) {
-        auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);
-        Y_VERIFY(shardInfo, "ColumnShard not found");
-        tableInfo->ColumnShards.push_back(shardInfo->TabletID.GetValue());
-    }
-    if (shuffle) {
-        ShuffleRange(tableInfo->ColumnShards);
-    }
-    tableInfo->ColumnShards.resize(columnShardCount);
-
-    tableInfo->Sharding.SetVersion(1);
-
-    tableInfo->Sharding.MutableColumnShards()->Clear();
-    tableInfo->Sharding.MutableColumnShards()->Reserve(tableInfo->ColumnShards.size());
-    for (ui64 columnShard : tableInfo->ColumnShards) {
-        tableInfo->Sharding.AddColumnShards(columnShard);
-    }
-    tableInfo->Sharding.ClearAdditionalColumnShards();
-}
-
-
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -275,7 +248,7 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
@@ -409,7 +382,9 @@ public:
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
             Y_VERIFY(table->ColumnShards.empty());
-            SetShardingTablets(table.GetPtr(), table->OwnedColumnShards, table->OwnedColumnShards.size(), false, *context.SS);
+            auto currentLayout = TColumnTablesLayout::BuildTrivial(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
+            auto layoutPolicy = std::make_shared<TOlapStoreInfo::TMinimalTablesCountLayout>();
+            Y_VERIFY(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -682,6 +657,12 @@ public:
             return result;
         }
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
+            return result;
+        }
+
         TProposeErrorCollector errors(*result);
         TColumnTableInfo::TPtr tableInfo;
         if (storeInfo) {
@@ -691,7 +672,15 @@ public:
             }
             tableInfo = tableConstructor.BuildTableInfo(errors);
             if (tableInfo) {
-                SetShardingTablets(tableInfo, storeInfo->ColumnShards, shardsCount, true, *context.SS);
+                auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
+                auto currentLayout = context.SS->ColumnTables.GetTablesLayout(
+                    TColumnTablesLayout::ShardIdxToTabletId(storeInfo->ColumnShards, *context.SS));
+                TTablesStorage::TTableCreateOperator createOperator(tableInfo);
+                if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy)) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "cannot layout table by shards");
+                    return result;
+                }
             }
         } else {
             TOlapTableConstructor tableConstructor;

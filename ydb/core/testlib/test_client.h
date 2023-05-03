@@ -205,6 +205,7 @@ namespace Tests {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
+            FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
         }
 
         TServerSettings(const TServerSettings& settings) = default;

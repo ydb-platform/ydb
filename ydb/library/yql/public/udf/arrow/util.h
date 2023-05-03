@@ -13,6 +13,12 @@
 namespace NYql {
 namespace NUdf {
 
+enum class EPgStringType {
+    None,
+    Text,
+    CString
+};
+
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
@@ -22,6 +28,9 @@ std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayDa
 
 /// \brief Chops first len items of `data` as new ArrayData object
 std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, size_t len);
+
+/// \brief Unwrap array (decrease optional level)
+std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, bool isNestedOptional);
 
 void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func);
 arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks);

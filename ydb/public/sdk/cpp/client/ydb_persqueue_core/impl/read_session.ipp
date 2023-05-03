@@ -258,7 +258,7 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     std::function<void(bool)> connectTimeoutCallback;
 
     if (!status.Ok()) {
-        LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got error. Status: " << status.Status
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Got error. Status: " << status.Status
                                             << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 

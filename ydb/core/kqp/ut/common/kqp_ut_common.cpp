@@ -580,8 +580,12 @@ void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& write
     }
 }
 
+bool IsTimeoutError(NYdb::EStatus status) {
+    return status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED || status == NYdb::EStatus::TIMEOUT;
+}
+
 template<typename TIterator>
-TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
+TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool throwOnTimeout = false) {
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -591,6 +595,9 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
     for (;;) {
         auto streamPart = it.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
+            if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
+                throw TStreamReadError(streamPart.GetStatus());
+            }
             UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
             break;
         }
@@ -609,11 +616,11 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles) {
     return out.Str();
 }
 
-TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it) {
-    return StreamResultToYsonImpl(it, nullptr);
+TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTimeout) {
+    return StreamResultToYsonImpl(it, nullptr, throwOnTimeout);
 }
 
-TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it) {
+TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTimeout) {
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -623,6 +630,9 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it) {
     for (;;) {
         auto streamPart = it.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
+            if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
+                throw TStreamReadError(streamPart.GetStatus());
+            }
             UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
             break;
         }
@@ -638,7 +648,7 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it) {
     return out.Str();
 }
 
-TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) {
+TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTimeout) {
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -650,6 +660,9 @@ TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) {
     for (;;) {
         auto streamPart = it.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
+            if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
+                throw TStreamReadError(streamPart.GetStatus());
+            }
             UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
             break;
         }

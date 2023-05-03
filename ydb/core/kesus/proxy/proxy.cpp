@@ -207,7 +207,6 @@ private:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKesusProxy::TEvResolveKesusProxy, Handle);
             hFunc(TEvPrivate::TEvResolveResult, Handle);
@@ -254,7 +253,6 @@ private:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 

@@ -14,7 +14,6 @@ target_include_directories(ydb-library-persqueue-topic_parser-ut PRIVATE
 target_link_libraries(ydb-library-persqueue-topic_parser-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   library-persqueue-topic_parser
@@ -70,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   30
+)
+target_allocator(ydb-library-persqueue-topic_parser-ut
+  system_allocator
 )
 vcs_info(ydb-library-persqueue-topic_parser-ut)

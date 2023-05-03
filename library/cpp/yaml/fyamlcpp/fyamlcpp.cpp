@@ -155,18 +155,6 @@ enum EEmitterCfgFlags {
     Default = FYECF_DEFAULT,
 };
 
-enum class ENodeStyle {
-    Any = FYNS_ANY,
-    Flow = FYNS_FLOW,
-    Block = FYNS_BLOCK,
-    Plain = FYNS_PLAIN,
-    SingleQuoted = FYNS_SINGLE_QUOTED,
-    DoubleQuoted = FYNS_DOUBLE_QUOTED,
-    Literal = FYNS_LITERAL,
-    Folded = FYNS_FOLDED,
-    Alias = FYNS_ALIAS,
-};
-
 enum class ENodeWalkFlags {
     DontFollow = FYNWF_DONT_FOLLOW,
     Follow = FYNWF_FOLLOW,
@@ -398,6 +386,16 @@ std::unique_ptr<char, void(*)(char*)> TNodeRef::EmitToCharArray() const {
             Node_,
             (fy_emitter_cfg_flags)(FYECF_DEFAULT)), &NDetail::FreeChar);
     return res;
+}
+
+void TNodeRef::SetStyle(ENodeStyle style) {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    fy_node_set_style(Node_, (enum fy_node_style)style);
+}
+
+ENodeStyle TNodeRef::Style() const {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    return (ENodeStyle)fy_node_get_style(Node_);
 }
 
 void TNodeRef::SetUserData(NDetail::IBasicUserData* data) {
@@ -819,7 +817,7 @@ std::unique_ptr<char, void(*)(char*)> TDocument::EmitToCharArray() const {
     std::unique_ptr<char, void(*)(char*)> res(
         fy_emit_document_to_string(
             Document_.get(),
-            (fy_emitter_cfg_flags)(FYECF_DEFAULT | FYECF_OUTPUT_COMMENTS)), &NDetail::FreeChar);
+            (fy_emitter_cfg_flags)(FYECF_DEFAULT | FYECF_MODE_PRETTY | FYECF_OUTPUT_COMMENTS)), &NDetail::FreeChar);
     return res;
 }
 

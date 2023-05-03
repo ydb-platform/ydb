@@ -489,6 +489,7 @@ void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const
     msg.TotalParts = 1;
     msg.TotalSize = data.size();
     msg.CreateTimestamp = TMonotonic::Now().Seconds();
+    msg.WriteTimestamp = TMonotonic::Now().Seconds();
     msg.ReceiveTimestamp = TMonotonic::Now().Seconds();
     msg.DisableDeduplication = false;
     msg.Data = data;
@@ -730,7 +731,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
 {
     auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
 
-    ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
+    ActorIdToProto(Ctx->Edge, event->Record.MutableActor());
     auto* body = event->Record.MutableData();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);

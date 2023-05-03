@@ -1,10 +1,10 @@
 #include "ydb_service_scheme.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/string/join.h>
 
@@ -111,25 +111,17 @@ namespace {
             Cout << "none" << Endl;
         }
     }
+}
 
-    void PrintAllPermissions(
-        const TString& owner,
-        const TVector<NScheme::TPermissions>& permissions,
-        const TVector<NScheme::TPermissions>& effectivePermissions
-    ) {
-        Cout << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
-        PrintPermissions(permissions);
-        Cout << Endl << "Effective permissions: " << Endl;
-        PrintPermissions(effectivePermissions);
-    }
-
-    void PrintEntryVerbose(const NScheme::TSchemeEntry& entry, bool permissions) {
-        Cout << "<" << EntryTypeToString(entry.Type) << "> " << entry.Name << Endl;
-        if (permissions) {
-            Cout << Endl;
-            PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);
-        }
-    }
+void PrintAllPermissions(
+    const TString& owner,
+    const TVector<NScheme::TPermissions>& permissions,
+    const TVector<NScheme::TPermissions>& effectivePermissions
+) {
+    Cout << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
+    PrintPermissions(permissions);
+    Cout << Endl << "Effective permissions: " << Endl;
+    PrintPermissions(effectivePermissions);
 }
 
 TCommandDescribe::TCommandDescribe()
@@ -174,6 +166,7 @@ int TCommandDescribe::Run(TConfig& config) {
 
 int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result) {
     NScheme::TSchemeEntry entry = result.GetEntry();
+    Cout << "<" << EntryTypeToString(entry.Type) << "> " << entry.Name << Endl;
     switch (entry.Type) {
     case NScheme::ESchemeEntryType::Table:
         return DescribeTable(driver);
@@ -182,10 +175,20 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::PqGroup:
     case NScheme::ESchemeEntryType::Topic:
         return DescribeTopic(driver);
+    case NScheme::ESchemeEntryType::CoordinationNode:
+        return DescribeCoordinationNode(driver);
     default:
-        WarnAboutTableOptions();
-        PrintEntryVerbose(entry, ShowPermissions);
+        return DescribeEntryDefault(entry);
     }
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::DescribeEntryDefault(NScheme::TSchemeEntry entry) {
+    if (ShowPermissions) {
+        Cout << Endl;
+        PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);
+    }
+    WarnAboutTableOptions();
     return EXIT_SUCCESS;
 }
 
@@ -275,6 +278,8 @@ int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescrip
         Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
     }
     PrintTopicConsumers(description.GetConsumers());
+
+    PrintPermissionsIfNeeded(description);
 
     if (ShowStats) {
         PrintStatistics(description);
@@ -366,11 +371,66 @@ int TCommandDescribe::DescribeColumnTable(TDriver& driver) {
     return PrintTableResponse(result);
 }
 
+int TCommandDescribe::PrintCoordinationNodeResponse(const NYdb::NCoordination::TDescribeNodeResult& result) const {
+    switch (OutputFormat) {
+    case EOutputFormat::Default:
+    case EOutputFormat::Pretty:
+        return PrintCoordinationNodeResponsePretty(result.GetResult());
+    case EOutputFormat::Json:
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+            << "Use \"--format proto-json-base64\" option instead." << Endl;
+        [[fallthrough]];
+    case EOutputFormat::ProtoJsonBase64:
+        return PrintCoordinationNodeResponseProtoJsonBase64(result.GetResult());
+    default:
+        throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
+    }
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const {
+    Cout << Endl << "AttachConsistencyMode: " << result.GetAttachConsistencyMode() << Endl;
+    Cout << "ReadConsistencyMode: " << result.GetReadConsistencyMode() << Endl;
+    if (result.GetSessionGracePeriod().Defined()) {
+        Cout << "SessionGracePeriod: " << result.GetSessionGracePeriod() << Endl;
+    }
+    if (result.GetSelfCheckPeriod().Defined()) {
+        Cout << "SelfCheckPeriod: " << result.GetSelfCheckPeriod() << Endl;
+    }
+    Cout << "RatelimiterCountersMode: " << result.GetRateLimiterCountersMode() << Endl;
+    return EXIT_SUCCESS;
+}
+
+int TCommandDescribe::PrintCoordinationNodeResponseProtoJsonBase64(const NYdb::NCoordination::TNodeDescription& result) const {
+    TString json;
+    google::protobuf::util::JsonPrintOptions jsonOpts;
+    jsonOpts.preserve_proto_field_names = true;
+    auto convertStatus = google::protobuf::util::MessageToJsonString(
+        NYdb::TProtoAccessor::GetProto(result),
+        &json,
+        jsonOpts
+    );
+    if (convertStatus.ok()) {
+        Cout << json << Endl;
+        return EXIT_SUCCESS;
+    }
+    Cerr << "Error occurred while converting result proto to json: " << TString(convertStatus.message().ToString()) << Endl;
+    return EXIT_FAILURE;
+}
+
+int TCommandDescribe::DescribeCoordinationNode(const TDriver& driver) {
+    NCoordination::TClient client(driver);
+    NCoordination::TDescribeNodeResult description = client.DescribeNode(Path).GetValueSync();
+
+    return PrintCoordinationNodeResponse(description);
+}
+
 namespace {
     void PrintColumns(const NTable::TTableDescription& tableDescription) {
         if (!tableDescription.GetTableColumns().size()) {
             return;
         }
+        Cerr << Endl;
         TPrettyTable table({ "Name", "Type", "Family", "Key" }, TPrettyTableConfig().WithoutRowDelimiters());
 
         const TVector<TString>& keyColumns = tableDescription.GetPrimaryKeyColumns();
@@ -721,16 +781,7 @@ void TCommandDescribe::PrintResponsePretty(const NTable::TTableDescription& tabl
             << (tableDescription.GetKeyBloomFilter().GetRef() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription);
-    if (ShowPermissions) {
-        if (tableDescription.GetColumns().size()) {
-            Cout << Endl;
-        }
-        PrintAllPermissions(
-            tableDescription.GetOwner(),
-            tableDescription.GetPermissions(),
-            tableDescription.GetEffectivePermissions()
-        );
-    }
+    PrintPermissionsIfNeeded(tableDescription);
     if (ShowStats) {
         PrintStatistics(tableDescription);
     }

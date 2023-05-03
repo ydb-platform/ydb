@@ -52,7 +52,6 @@ public:
     { }
 
     STFUNC(Handler) {
-        Y_UNUSED(ctx);
         try {
             switch (ev->GetTypeRewrite()) {
                 cFunc(NActors::TEvents::TEvPoison::EventType, TLocalTaskRunnerActor::PassAway);
@@ -331,7 +330,7 @@ private:
         TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing();
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
             NDqProto::TData data;
-            hasData = channel->Pop(data, remain);
+            hasData = channel->Pop(data);
 
             NDqProto::TWatermark poppedWatermark;
             bool hasWatermark = channel->Pop(poppedWatermark);

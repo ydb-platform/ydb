@@ -15,8 +15,6 @@ target_link_libraries(mt_param PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-yql-minikql
   yql-minikql-comp_nodes
@@ -38,5 +36,9 @@ target_link_options(mt_param PRIVATE
 )
 target_sources(mt_param PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/mt_param/mt_param.cpp
+)
+target_allocator(mt_param
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(mt_param)

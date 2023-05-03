@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -166,6 +167,10 @@ struct TTaskOutput {
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 struct TTask {
+private:
+    YDB_OPT(ui32, MetaId);
+    YDB_ACCESSOR(bool, UseLlvm, false);
+public:
     using TInputType = TTaskInput<TInputMeta>;
     using TOutputType = TTaskOutput<TOutputMeta>;
 
@@ -185,7 +190,7 @@ struct TTask {
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
 };
 
-template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
+template <class TGraphMeta, class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 class TDqTasksGraph : private TMoveOnly {
 public:
     using TStageInfoType = TStageInfo<TStageInfoMeta>;
@@ -193,6 +198,14 @@ public:
 
 public:
     TDqTasksGraph() = default;
+
+    const TGraphMeta& GetMeta() const {
+        return Meta;
+    }
+
+    TGraphMeta& GetMeta() {
+        return Meta;
+    }
 
     const TChannel& GetChannel(ui64 id) const {
         YQL_ENSURE(id <= Channels.size());
@@ -292,6 +305,7 @@ private:
     THashMap<TStageId, TStageInfoType> StagesInfo;
     TVector<TTaskType> Tasks;
     TVector<TChannel> Channels;
+    TGraphMeta Meta;
 };
 
 } // namespace NYql::NDq

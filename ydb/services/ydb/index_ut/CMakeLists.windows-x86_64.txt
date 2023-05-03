@@ -17,7 +17,6 @@ target_include_directories(ydb-services-ydb-index_ut PRIVATE
 target_link_libraries(ydb-services-ydb-index_ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-ydb
@@ -69,5 +68,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-services-ydb-index_ut
+  system_allocator
 )
 vcs_info(ydb-services-ydb-index_ut)

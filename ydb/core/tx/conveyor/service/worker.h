@@ -19,7 +19,11 @@ public:
     TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId)
         : Task(task)
         , OwnerId(ownerId) {
+        Y_VERIFY(task);
+    }
 
+    bool operator<(const TWorkerTask& wTask) const {
+        return Task->GetPriority() < wTask.Task->GetPriority();
     }
 };
 

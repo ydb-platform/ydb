@@ -28,13 +28,13 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
     private:
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
-                FFunc(TEvents::TEvPing::EventType, OnPing);
+                fFunc(TEvents::TEvPing::EventType, OnPing);
             }
         }
 
         void OnPing(STFUNC_SIG) noexcept
         {
-            ctx.Send(ev->Sender, new TEvents::TEvPong, (ev->GetChannel() << IEventHandle::ChannelShift) | (ev->GetSubChannel() ? IEventHandle::FlagUseSubChannel : 0) , ev->Cookie);
+            Send(ev->Sender, new TEvents::TEvPong, (ev->GetChannel() << IEventHandle::ChannelShift) | (ev->GetSubChannel() ? IEventHandle::FlagUseSubChannel : 0) , ev->Cookie);
         }
     };
 
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     private:
         STFUNC(StateFunc) {
-            ctx.Send(ev->InterconnectSession, new TEvents::TEvPoisonPill);
+            Send(ev->InterconnectSession, new TEvents::TEvPoisonPill);
         }
     };
 
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
-                FFunc(TEvents::TEvPong::EventType, OnPong);
+                fFunc(TEvents::TEvPong::EventType, OnPong);
             }
         }
 
@@ -97,8 +97,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             UNIT_ASSERT_EQUAL(Responses, ev->Cookie);
 
             if (++Responses == Counter) {
-               ctx.Send(Edge, new TEvents::TEvWakeup);
-               LOG_NOTICE(ctx, NActorsServices::TEST, "Done.");
+               Send(Edge, new TEvents::TEvWakeup);
+               ALOG_NOTICE(NActorsServices::TEST, "Done.");
             }
         }
 

@@ -578,6 +578,263 @@ TVector<TTableShardInfo> NTableState::ApplyPartitioningCopyTable(const TShardInf
     return dstPartitions;
 }
 
+namespace NPQState {
+
+bool CollectProposeTransactionResults(const TOperationId& operationId,
+                                      const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
+                                      TOperationContext& context)
+{
+    auto prepared = [](NKikimrPQ::TEvProposeTransactionResult::EStatus status) -> bool {
+        return status == NKikimrPQ::TEvProposeTransactionResult::PREPARED;
+    };
+
+    auto toString = [](NKikimrPQ::TEvProposeTransactionResult::EStatus status) -> TString {
+        return NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(status);
+    };
+
+    return CollectProposeTxResults(ev, operationId, context, prepared, toString);
+}
+
+bool CollectSchemaChanged(const TOperationId& operationId,
+                          const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
+                          TOperationContext& context)
+{
+    Y_VERIFY(context.SS->FindTx(operationId));
+    TTxState& txState = *context.SS->FindTx(operationId);
+
+    const auto& evRecord = ev->Get()->Record;
+    if (evRecord.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
+        const auto ssId = context.SS->SelfTabletId();
+        const TTabletId shardId(evRecord.GetOrigin());
+
+        const auto shardIdx = context.SS->MustGetShardIdx(shardId);
+        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+
+        Y_VERIFY(txState.State == TTxState::Propose);
+
+        txState.ShardsInProgress.erase(shardIdx);
+
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CollectSchemaChanged accept TEvPersQueue::TEvProposeTransactionResult"
+                    << ", operationId: " << operationId
+                    << ", shardIdx: " << shardIdx
+                    << ", shard: " << shardId
+                    << ", left await: " << txState.ShardsInProgress.size()
+                    << ", txState.State: " << TTxState::StateName(txState.State)
+                    << ", txState.ReadyForNotifications: " << txState.ReadyForNotifications
+                    << ", at schemeshard: " << ssId);
+    }
+
+    return txState.ShardsInProgress.empty();
+}
+
+bool TConfigureParts::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
+{
+    const TTabletId ssId = context.SS->SelfTabletId();
+
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+               DebugHint() << " HandleReply TEvProposeTransactionResult"
+               << ", at schemeshard: " << ssId);
+
+    return CollectProposeTransactionResults(OperationId, ev, context);
+}
+
+THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTransaction(TTxId txId,
+                                                                                       const TTopicInfo& pqGroup,
+                                                                                       const TTopicTabletInfo& pqShard,
+                                                                                       const TString& topicName,
+                                                                                       const TString& topicPath,
+                                                                                       const TString& cloudId,
+                                                                                       const TString& folderId,
+                                                                                       const TString& databaseId,
+                                                                                       const TString& databasePath,
+                                                                                       TTxState::ETxType txType,
+                                                                                       TTabletId ssId,
+                                                                                       const TOperationContext& context)
+{
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    event->Record.SetTxId(ui64(txId));
+    event->Record.SetTablet(ui64(ssId));
+    event->Record.MutableConfig()->SetSchemeShardId(ui64(ssId));
+
+    MakePQTabletConfig(*event->Record.MutableConfig()->MutableTabletConfig(),
+                       pqGroup,
+                       pqShard,
+                       topicName,
+                       topicPath,
+                       cloudId,
+                       folderId,
+                       databaseId,
+                       databasePath);
+    MakeBootstrapConfig(*event->Record.MutableConfig()->MutableBootstrapConfig(),
+                        pqGroup,
+                        txType);
+
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Propose configure PersQueue" <<
+                ", message: " << event->Record.ShortUtf8DebugString());
+
+    return event;
+}
+
+THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId txId,
+                                                                           const TTopicInfo& pqGroup,
+                                                                           const TTopicTabletInfo& pqShard,
+                                                                           const TString& topicName,
+                                                                           const TString& topicPath,
+                                                                           const TString& cloudId,
+                                                                           const TString& folderId,
+                                                                           const TString& databaseId,
+                                                                           const TString& databasePath,
+                                                                           TTxState::ETxType txType,
+                                                                           const TOperationContext& context)
+{
+    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfig>();
+    event->Record.SetTxId(ui64(txId));
+
+    MakePQTabletConfig(*event->Record.MutableTabletConfig(),
+                       pqGroup,
+                       pqShard,
+                       topicName,
+                       topicPath,
+                       cloudId,
+                       folderId,
+                       databaseId,
+                       databasePath);
+    MakeBootstrapConfig(*event->Record.MutableBootstrapConfig(),
+                        pqGroup,
+                        txType);
+
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Propose configure PersQueue" <<
+                ", message: " << event->Record.ShortUtf8DebugString());
+
+    return event;
+}
+
+bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context)
+{
+    const TTabletId ssId = context.SS->SelfTabletId();
+    const auto& evRecord = ev->Get()->Record;
+
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+               DebugHint() << " HandleReply TEvProposeTransactionResult"
+               << " triggers early"
+               << ", at schemeshard: " << ssId
+               << " message# " << evRecord.ShortDebugString());
+
+    const bool collected = CollectSchemaChanged(OperationId, ev, context);
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply TEvProposeTransactionResult"
+                << " CollectSchemaChanged: " << (collected ? "true" : "false"));
+
+    return TryPersistState(context);
+}
+ 
+bool TPropose::HandleReply(TEvTxProcessing::TEvReadSet::TPtr& ev, TOperationContext& context)
+{
+    const ui64 tabletId = ev->Get()->Record.GetTabletProducer();
+    if (auto p = ReadSetAcks.find(tabletId); p != ReadSetAcks.end()) {
+        TReadSetAck& ack = p->second;
+
+        if (!ack.Event) {
+            ++ReadSetCount;
+        }
+
+        ack.Event =
+            MakeHolder<TEvTxProcessing::TEvReadSetAck>(*ev->Get(),
+                                                       ui64(context.SS->SelfTabletId()));
+        ack.Receiver = ev->Sender;
+    }
+
+    return TryPersistState(context);
+}
+
+void TPropose::PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context)
+{
+    txState.UpdateShardsInProgress();
+ 
+    ReadSetAcks.clear();
+    ReadSetCount = 0;
+
+    for (const auto& shard : txState.Shards) {
+        const TShardIdx idx = shard.Idx;
+        //
+        // The operation involves the ETabletType::PersQueue and Tabletype::PersQueueReadBalancer shards.
+        // The program receives responses from PersQueueReadBalancer at the previous stage. At this stage,
+        // it only expects TEvProposeTransactionResult from PersQueue
+        //
+        if (shard.TabletType == ETabletType::PersQueue) {
+            const TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
+
+            shardSet.insert(tablet);
+
+            auto& ack = ReadSetAcks[ui64(tablet)];
+            ack.Event = nullptr;
+            ack.Receiver = TActorId();
+        } else {
+            txState.ShardsInProgress.erase(idx);
+        }
+    }
+}
+
+bool TPropose::TryPersistState(TOperationContext& context)
+{
+    if (ReadSetCount < ReadSetAcks.size()) {
+        return false;
+    }
+
+    TTxState* txState = context.SS->FindTx(OperationId);
+    Y_VERIFY(txState);
+
+    if (!txState->ShardsInProgress.empty()) {
+        return false;
+    }
+
+    const TPathId pathId = txState->TargetPathId;
+    const TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+
+    if (path->StepCreated == InvalidStepId) {
+        return false;
+    }
+
+    NIceDb::TNiceDb db(context.GetDB());
+
+    if (txState->TxType == TTxState::TxCreatePQGroup  || txState->TxType == TTxState::TxAllocatePQ) {
+        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
+        ++parentDir->DirAlterVersion;
+        context.SS->PersistPathDirAlterVersion(db, parentDir);
+        context.SS->ClearDescribePathCaches(parentDir);
+        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+    }
+
+    context.SS->ClearDescribePathCaches(path);
+    context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
+    TTopicInfo::TPtr pqGroup = context.SS->Topics[pathId];
+    pqGroup->FinishAlter();
+
+    context.SS->PersistPersQueueGroup(db, pathId, pqGroup);
+    context.SS->PersistRemovePersQueueGroupAlter(db, pathId);
+
+    context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+
+    SendEvReadSetAck(context);
+
+    return true;
+}
+
+void TPropose::SendEvReadSetAck(TOperationContext& context)
+{
+    for (auto& [_, ack] : ReadSetAcks) {
+        Y_VERIFY(ack.Event);
+
+        context.Ctx.Send(ack.Receiver, ack.Event.Release());
+    }
+}
+
+}
+
 TSet<ui32> AllIncomingEvents() {
     TSet<ui32> result;
 

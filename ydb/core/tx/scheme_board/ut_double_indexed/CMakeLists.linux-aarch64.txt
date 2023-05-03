@@ -15,7 +15,6 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_double_indexed PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest
@@ -67,5 +66,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-tx-scheme_board-ut_double_indexed
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-scheme_board-ut_double_indexed)

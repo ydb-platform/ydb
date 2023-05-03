@@ -18,7 +18,6 @@ target_link_libraries(ydb-library-yql-udfs-common-stat-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   common-stat-static
   library-yql-minikql
@@ -79,5 +78,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   300
+)
+target_allocator(ydb-library-yql-udfs-common-stat-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-udfs-common-stat-ut)

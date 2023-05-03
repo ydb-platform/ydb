@@ -24,7 +24,7 @@ private:
             HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
             HFunc(NMetering::TEvMetering::TEvWriteMeteringJson, HandleWriteMeteringJson);
         default:
-            HandleUnexpectedEvent(ev, ctx);
+            HandleUnexpectedEvent(ev);
             break;
         }
     }
@@ -50,9 +50,7 @@ private:
 
     void HandleUnexpectedEvent(STFUNC_SIG)
     {
-        Y_UNUSED(ctx);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
+        ALOG_DEBUG(NKikimrServices::KESUS_PROXY,
                     "TFakeMetering:"
                         << " unhandled event type: " << ev->GetTypeRewrite()
                         << " event: " << ev->ToString());

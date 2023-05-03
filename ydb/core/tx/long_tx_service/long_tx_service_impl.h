@@ -235,7 +235,6 @@ namespace NLongTxService {
             }
 
             STFUNC(StateWork) {
-                Y_UNUSED(ctx);
                 switch (ev->GetTypeRewrite()) {
                     hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                     hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -278,7 +277,6 @@ namespace NLongTxService {
 
     private:
         STFUNC(StateWork) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 sFunc(TEvents::TEvPoison, HandlePoison);
                 hFunc(TEvLongTxService::TEvBeginTx, Handle);

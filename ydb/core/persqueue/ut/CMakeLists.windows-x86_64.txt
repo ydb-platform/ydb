@@ -25,7 +25,6 @@ target_include_directories(ydb-core-persqueue-ut PRIVATE
 target_link_libraries(ydb-core-persqueue-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-persqueue
@@ -107,5 +106,8 @@ resources(ydb-core-persqueue-ut
   counters_topics.html
   counters_pqproxy.html
   counters_labeled.json
+)
+target_allocator(ydb-core-persqueue-ut
+  system_allocator
 )
 vcs_info(ydb-core-persqueue-ut)

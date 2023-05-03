@@ -1,7 +1,9 @@
 #pragma once
 
-#include <ydb/core/protos/services.pb.h>
 #include "kqp_compute.h"
+#include "kqp_scan_data_meta.h"
+
+#include <ydb/core/protos/services.pb.h>
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow_helpers.h>
@@ -77,7 +79,9 @@ public:
 
 class TKqpScanComputeContext : public TKqpComputeContextBase {
 public:
-    class TScanData {
+    class TScanData: public TScanDataMeta {
+    private:
+        using TBase = TScanDataMeta;
     public:
         TScanData(TScanData&&) = default; // needed to create TMap<ui32, TScanData> Scans
         TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns,
@@ -118,8 +122,6 @@ public:
 
     public:
         ui64 TaskId = 0;
-        TTableId TableId;
-        TString TablePath;
         TSerializedTableRange Range;
 
         // shared with actor via TableReader
@@ -150,18 +152,13 @@ public:
         std::unique_ptr<TProfileStats> ProfileStats;
 
     private:
-        class IDataBatchReader {
+        class IDataBatchReader: public TScanDataColumnsMeta {
+        private:
+            using TBase = TScanDataColumnsMeta;
         public:
-            IDataBatchReader(const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns,
-                const TSmallVec<TColumn>& resultColumns);
-
-            IDataBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta);
+            using TBase::TBase;
 
             virtual ~IDataBatchReader() = default;
-
-            const TSmallVec<TColumn>& GetColumns() const {
-                return Columns;
-            }
 
             ui64 GetStoredBytes() const {
                 return StoredBytes;
@@ -173,10 +170,6 @@ public:
             virtual void Clear() = 0;
             virtual bool IsEmpty() const = 0;
         protected:
-            TSmallVec<TColumn> Columns;
-            TSmallVec<TColumn> SystemColumns;
-            TSmallVec<TColumn> ResultColumns;
-            ui32 TotalColumnsCount;
             double StoredBytes = 0;
         };
 

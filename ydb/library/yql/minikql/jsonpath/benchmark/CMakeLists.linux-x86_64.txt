@@ -15,8 +15,6 @@ target_link_libraries(benchmark PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   testing-benchmark-main
   library-cpp-json
@@ -41,5 +39,9 @@ target_link_options(benchmark PRIVATE
 )
 target_sources(benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
+)
+target_allocator(benchmark
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(benchmark)

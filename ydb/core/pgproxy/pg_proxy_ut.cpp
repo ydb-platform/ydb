@@ -8,6 +8,7 @@
 #include <ydb/core/pgproxy/pg_listener.h>
 #include <ydb/core/pgproxy/pg_log.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
+#include <ydb/core/protos/services.pb.h>
 
 #include <util/network/socket.h>
 #include <util/string/hex.h>
@@ -23,9 +24,9 @@ public:
     void InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) override {
         NActors::TTestActorRuntimeBase::InitNodeImpl(node, nodeIndex);
         node->LogSettings->Append(
-            NPG::EService::MIN,
-            NPG::EService::MAX,
-            NPG::GetEServiceName
+            NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            NKikimrServices::EServiceKikimr_Name
         );
     }
 };
@@ -49,7 +50,7 @@ Y_UNIT_TEST_SUITE(TPGTest) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        actorSystem.SetLogPriority(NPG::PGWIRE, NActors::NLog::PRI_DEBUG);
+        actorSystem.SetLogPriority(NKikimrServices::PGWIRE, NActors::NLog::PRI_DEBUG);
         NActors::TActorId database = actorSystem.AllocateEdgeActor();
         NActors::TActorId poller = actorSystem.Register(NActors::CreatePollerActor());
         NActors::IActor* listener = NPG::CreatePGListener(poller, database, {

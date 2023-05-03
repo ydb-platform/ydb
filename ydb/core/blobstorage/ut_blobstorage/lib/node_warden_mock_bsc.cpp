@@ -159,7 +159,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
             if (vdiskp) {
                 UNIT_ASSERT(vdiskp->Actor);
                 TAutoPtr<IEventHandle> ev = new IEventHandle(TEvents::TSystem::Poison, 0, {}, {}, nullptr, 0);
-                InvokeOtherActor(*vdiskp->Actor, &IActor::Receive, ev, TActivationContext::ActorContextFor(vdiskp->Actor->SelfId()));
+                InvokeOtherActor(*vdiskp->Actor, &IActor::Receive, ev);
                 UNIT_ASSERT(!vdiskp->Actor);
             }
             auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(SelfId().NodeId());

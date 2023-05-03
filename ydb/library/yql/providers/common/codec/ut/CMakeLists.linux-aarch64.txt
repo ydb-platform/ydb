@@ -18,7 +18,6 @@ target_link_libraries(ydb-library-yql-providers-common-codec-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   providers-common-codec
   cpp-testing-unittest
@@ -71,5 +70,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-common-codec-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-providers-common-codec-ut)

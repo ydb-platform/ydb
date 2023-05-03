@@ -79,8 +79,11 @@ class TS3IODiscoveryTransformer : public TGraphTransformerBase {
 public:
     TS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway)
         : State_(std::move(state))
-        , ListerFactory_(
-              NS3Lister::MakeS3ListerFactory(State_->Configuration->MaxInflightListsPerQuery, 1, 100, 100))
+        , ListerFactory_(NS3Lister::MakeS3ListerFactory(
+              State_->Configuration->MaxInflightListsPerQuery,
+              State_->Configuration->ListingCallbackThreadCount,
+              State_->Configuration->ListingCallbackPerThreadQueueSize,
+              State_->Configuration->RegexpCacheSize))
         , ListingStrategy_(MakeS3ListingStrategy(
               gateway,
               ListerFactory_,
@@ -718,7 +721,11 @@ private:
             config.Columns = partitionedBy;
             config.SchemaTypeNode = schema->ChildPtr(1);
             if (!projection.empty()) {
-                config.Generator = CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(*schema, ctx));
+                config.Generator = CreatePathGenerator(
+                    projection,
+                    partitionedBy,
+                    GetDataSlotColumns(*schema, ctx),
+                    State_->Configuration->GeneratorPathsLimit);
                 if (!ValidateProjection(projectionPos, config.Generator, partitionedBy, ctx)) {
                     return false;
                 }

@@ -29,49 +29,6 @@ public:
     void ResetRetry();
 };
 
-class TShardCostsState: public TCommonRetriesState {
-public:
-    using TReadData = NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta;
-private:
-    const ui32 ScanId;
-    const TReadData* ReadData;
-public:
-    using TPtr = std::shared_ptr<TShardCostsState>;
-    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& GetReadData() const {
-        return *ReadData;
-    }
-
-    static TVector<TSerializedTableRange> BuildSerializedTableRanges(const TReadData& readData) {
-        TVector<TSerializedTableRange> resultLocal;
-        resultLocal.reserve(readData.GetKeyRanges().size());
-        for (const auto& range : readData.GetKeyRanges()) {
-            auto& sr = resultLocal.emplace_back(TSerializedTableRange(range));
-            if (!range.HasTo()) {
-                sr.To = sr.From;
-                sr.FromInclusive = sr.ToInclusive = true;
-            }
-        }
-        Y_VERIFY_DEBUG(!resultLocal.empty());
-        return resultLocal;
-    }
-
-
-    ui32 GetScanId() const {
-        return ScanId;
-    }
-
-    ui64 GetShardId() const {
-        return ReadData->GetShardId();
-    }
-
-    TShardCostsState(const ui32 scanId, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta* readData)
-        : ScanId(scanId)
-        , ReadData(readData)
-    {
-
-    }
-};
-
 struct TShardState: public TCommonRetriesState {
     using TPtr = std::shared_ptr<TShardState>;
     const ui64 TabletId;

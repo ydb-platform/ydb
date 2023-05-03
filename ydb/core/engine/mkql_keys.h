@@ -44,7 +44,11 @@ struct TTableStrings {
 THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& strings, const TTypeEnvironment& env);
 TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env);
 TTableId ExtractTableId(const TRuntimeNode& node);
-TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy = true);
+
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TTypeEnvironment& env, bool copy = true,
+    i32 typmod = -1, TMaybe<TString>* error = {});
+
 void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices,
     const TVector<NScheme::TTypeInfo>& rowTypes, TVector<TCell>& cells, const TTypeEnvironment& env);
 

@@ -286,6 +286,9 @@ void FillKeyRange(const TKqlKeyRange& range, NKqpProto::TKqpPhyKeyRange& rangePr
 
     FillKeyBound(range.From(), *rangeProto.MutableFrom());
     FillKeyBound(range.To(), *rangeProto.MutableTo());
+    if (rangeProto.GetFrom().SerializeAsString() == rangeProto.GetTo().SerializeAsString()) {
+        rangeProto.SetRangeIsPoint(true);
+    }
 }
 
 void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& tableMeta,
@@ -482,20 +485,25 @@ public:
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
-        for (const auto& result : query.Results()) {
+        for (ui32 i = 0; i < query.Results().Size(); ++i) {
+            const auto& result = query.Results().Item(i);
+
             YQL_ENSURE(result.Maybe<TKqpTxResultBinding>());
             auto binding = result.Cast<TKqpTxResultBinding>();
-
             auto txIndex = FromString<ui32>(binding.TxIndex().Value());
-            auto resultIndex = FromString<ui32>(binding.ResultIndex());
+            auto txResultIndex = FromString<ui32>(binding.ResultIndex());
 
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
-            YQL_ENSURE(resultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
+            YQL_ENSURE(txResultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
+            auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
-            auto& bindingProto = *queryProto.AddResultBindings();
-            auto& txResultProto = *bindingProto.MutableTxResultBinding();
-            txResultProto.SetTxIndex(txIndex);
-            txResultProto.SetResultIndex(resultIndex);
+            YQL_ENSURE(txResult.GetIsStream());
+            txResult.SetQueryResultIndex(i);
+
+            auto& queryBindingProto = *queryProto.AddResultBindings();
+            auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
+            txBindingProto.SetTxIndex(txIndex);
+            txBindingProto.SetResultIndex(txResultIndex);
         }
 
         return true;

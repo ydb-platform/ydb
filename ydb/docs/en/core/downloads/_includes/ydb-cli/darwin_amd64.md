@@ -1,10 +1,12 @@
-Version | Release date | Download
-:--- | :--- | :---
-v.2.1.0 | 18.11.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.0/darwin/amd64/ydb)
-v.2.0.0 | 20.09.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.0.0/darwin/amd64/ydb)
-v.1.9.2 | 30.06.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.2/darwin/amd64/ydb)
-v.1.9.1 | 25.06.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.1/darwin/amd64/ydb)
-v.1.9.0 | 22.06.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.0/darwin/amd64/ydb)
-v.1.8.0 | 19.04.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.8.0/darwin/amd64/ydb)
-v.1.7.0 | 01.03.22 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.7.0/darwin/amd64/ydb)
-v.1.6.0 | 24.12.21 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.6.0/darwin/amd64/ydb)
+| Version | Release date | Download | Changelog |
+:--- | :--- | :--- | :---
+| v.2.2.0 | 03/03/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.2.0/darwin/amd64/ydb) | [See the changelog](../../../changelog-cli.md#2-2-0) |
+| v.2.1.1 | 30/12/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.1/darwin/amd64/ydb) | [See the changelog](../../../changelog-cli.md#2-1-1) |
+| v.2.1.0 | 18/11/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.0/darwin/amd64/ydb) | [See the changelog](../../../changelog-cli.md#2-1-0) |
+| v.2.0.0 | 20/09/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.0.0/darwin/amd64/ydb) | [See the changelog](../../../changelog-cli.md#2-0-0) |
+| v.1.9.2 | 30/06/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.2/darwin/amd64/ydb) |
+| v.1.9.1 | 25/06/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.1/darwin/amd64/ydb) | [See the changelog](../../../changelog-cli.md#1-9-1) |
+| v.1.9.0 | 22/06/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.9.0/darwin/amd64/ydb) |
+| v.1.8.0 | 19/04/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.8.0/darwin/amd64/ydb) |
+| v.1.7.0 | 01/03/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.7.0/darwin/amd64/ydb) |
+| v.1.6.0 | 24/12/2021 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.6.0/darwin/amd64/ydb) |

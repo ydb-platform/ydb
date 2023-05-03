@@ -30,5 +30,5 @@
 Удалите [созданный ранее](topic-create.md) топик:
 
 ```bash
-{{ ydb-cli }} -p db1 topic drop my-topic
+{{ ydb-cli }} -p quickstart topic drop my-topic
 ```

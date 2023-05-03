@@ -38,7 +38,7 @@
 Добавьте партицию и метод сжатия `lzop` [созданному ранее](topic-create.md) топику:
 
 ```bash
-{{ ydb-cli }} -p db1 topic alter \
+{{ ydb-cli }} -p quickstart topic alter \
   --partitions-count 3 \
   --supported-codecs raw,gzip,lzop \
   my-topic
@@ -47,7 +47,7 @@
 Убедитесь, что параметры топика изменились:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme describe my-topic
+{{ ydb-cli }} -p quickstart scheme describe my-topic
 ```
 
 Результат:

@@ -31,19 +31,19 @@
 Создайте в базе данных директорию `backup`:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme mkdir backup
+{{ ydb-cli }} -p quickstart scheme mkdir backup
 ```
 
 Скопируйте таблицу `series` в таблицу `series-v1`, таблицу `seasons` в `seasons-v1`, таблицу `episodes` в `episodes-v1` директории `backup`:
 
 ```bash
-{{ ydb-cli }} -p db1 tools copy --item destination=backup/series-v1,source=series --item destination=backup/seasons-v1,source=seasons --item destination=backup/episodes-v1,source=episodes
+{{ ydb-cli }} -p quickstart tools copy --item destination=backup/series-v1,source=series --item destination=backup/seasons-v1,source=seasons --item destination=backup/episodes-v1,source=episodes
 ```
 
 Посмотрите листинг объектов директории `backup`:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme ls backup
+{{ ydb-cli }} -p quickstart scheme ls backup
 ```
 
 Результат:

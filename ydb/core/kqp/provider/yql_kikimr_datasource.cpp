@@ -5,7 +5,13 @@
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <util/generic/is_in.h>
 
@@ -76,6 +82,8 @@ private:
 
             case TKikimrKey::Type::Object:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Topic:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;
@@ -89,9 +97,16 @@ class TKiSourceLoadTableMetadataTransformer : public TGraphTransformerBase {
 public:
     TKiSourceLoadTableMetadataTransformer(
         TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        TTypeAnnotationContext& types,
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+        bool isInternalCall)
         : Gateway(gateway)
-        , SessionCtx(sessionCtx) {}
+        , SessionCtx(sessionCtx)
+        , Types(types)
+        , ExternalSourceFactory(externalSourceFactory)
+        , IsInternalCall(isInternalCall)
+        {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -121,7 +136,7 @@ public:
             auto& result = emplaceResult.first->second;
 
             auto future = Gateway->LoadTableMetadata(clusterName, tableName,
-                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats()));
+                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats()).WithPrivateTables(IsInternalCall));
 
             futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
@@ -159,6 +174,31 @@ public:
         return AsyncFuture;
     }
 
+    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx) {
+        const auto& metadata = *res.Metadata;
+        if (metadata.Kind != EKikimrTableKind::External) {
+            return true;
+        }
+        auto source = ExternalSourceFactory->GetOrCreate(metadata.ExternalSource.Type);
+        auto it = Types.DataSourceMap.find(source->GetName());
+        if (it == Types.DataSourceMap.end()) {
+            TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {
+                return MakeIntrusive<TIssue>(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                    << "Failed to load metadata for table (data source doesn't exist): "
+                    << NCommon::FullTableName(table.first, table.second)));
+            });
+
+            res.ReportIssues(ctx.IssueManager);
+            LoadResults.clear();
+            return false;
+        }
+        it->second->AddCluster(metadata.ExternalSource.DataSourcePath, {{
+            {"location", metadata.ExternalSource.DataSourceLocation },
+            {"installation", metadata.ExternalSource.DataSourceInstallation }
+            }});
+        return true;
+    }
+
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
         YQL_ENSURE(AsyncFuture.HasValue());
@@ -187,6 +227,10 @@ public:
                     LoadResults.clear();
                     return TStatus::Error;
                 }
+
+                if (!AddCluster(table, res, input, ctx)) {
+                    return TStatus::Error;
+                }
             } else {
                 TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {
                     return MakeIntrusive<TIssue>(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
@@ -212,6 +256,9 @@ public:
 private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TTypeAnnotationContext& Types;
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+    const bool IsInternalCall;
 
     THashMap<std::pair<TString, TString>, std::shared_ptr<IKikimrGateway::TTableMetadataResult>> LoadResults;
     NThreading::TFuture<void> AsyncFuture;
@@ -285,14 +332,17 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+        bool isInternalCall)
         : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
+        , ExternalSourceFactory(externalSourceFactory)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
-        , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx))
+        , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx))
 
@@ -477,12 +527,54 @@ public:
         return false;
     }
 
+    static Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
+        Ydb::Type ydbType;
+        if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+            auto* typeDesc = typeInfo.GetTypeDesc();
+            auto* pg = ydbType.mutable_pg_type();
+            pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+        } else {
+            auto& item = notNull
+                ? ydbType
+                : *ydbType.mutable_optional_type()->mutable_item();
+            item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+        }
+        return ydbType;
+    }
+
+    TExprNode::TPtr BuildSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NExternalSource::IExternalSource::TPtr& source, const TString& content) {
+        TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;
+        typedColumns.reserve(columns.size());
+        for (const auto& [n, c] : columns) {
+            NYdb::TTypeParser parser(NYdb::TType(CreateYdbType(c.TypeInfo, c.NotNull)));
+            auto type = NFq::MakeType(parser, ctx);
+            typedColumns.emplace_back(n, type);
+        }
+
+        const TString ysonSchema = NYql::NCommon::WriteTypeToYson(NFq::MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text);
+        TExprNode::TListType items;
+        auto schema = ctx.NewAtom(pos, ysonSchema);
+        auto type = ctx.NewCallable(pos, "SqlTypeFromYson"sv, { schema });
+        auto order = ctx.NewCallable(pos, "SqlColumnOrderFromYson"sv, { schema });
+        auto userSchema = ctx.NewAtom(pos, "userschema"sv);
+        items.emplace_back(ctx.NewList(pos, {userSchema, type, order}));
+
+        for (const auto& [key, value]: source->GetParamters(content)) {
+            auto keyAtom = ctx.NewAtom(pos, key);
+            auto valueAtom = ctx.NewAtom(pos, value);
+            items.emplace_back(ctx.NewList(pos, {keyAtom, valueAtom}));
+        }
+        return ctx.NewList(pos, std::move(items));
+    }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         auto read = node->Child(0);
         if (!read->IsCallable(ReadName)) {
             ythrow yexception() << "Expected Read!";
         }
 
+        TKiDataSource source(read->ChildPtr(1));
         TKikimrKey key(ctx);
         if (!key.Extract(*read->Child(2))) {
             return nullptr;
@@ -501,6 +593,38 @@ public:
                 break;
             default:
                 YQL_ENSURE(false, "Unsupported Kikimr KeyType.");
+        }
+
+        auto& tableDesc = SessionCtx->Tables().GetTable(TString{source.Cluster()}, key.GetTablePath());
+        if (key.GetKeyType() == TKikimrKey::Type::Table && tableDesc.Metadata->Kind == EKikimrTableKind::External) {
+            const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+            ctx.Step.Repeat(TExprStep::DiscoveryIO)
+                    .Repeat(TExprStep::Epochs)
+                    .Repeat(TExprStep::Intents)
+                    .Repeat(TExprStep::LoadTablesMetadata)
+                    .Repeat(TExprStep::RewriteIO);
+            TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
+            auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
+            auto key = ctx.NewCallable(node->Pos(), "Key", {table});
+            auto newRead = Build<TCoRead>(ctx, node->Pos())
+                                    .World(read->Child(0))
+                                    .DataSource(
+                                        Build<TCoDataSource>(ctx, node->Pos())
+                                            .Category(ctx.NewAtom(node->Pos(), source->GetName()))
+                                            .FreeArgs()
+                                                .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                                            .Build()
+                                        .Done().Ptr()
+                                    )
+                                    .FreeArgs()
+                                        .Add(ctx.NewCallable(node->Pos(), "MrTableConcat", {key}))
+                                        .Add(ctx.NewCallable(node->Pos(), "Void", {}))
+                                        .Add(BuildSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
+                                    .Build()
+                                    .Done().Ptr();
+            auto retChildren = node->ChildrenList();
+            retChildren[0] = newRead;
+            return ctx.ChangeChildren(*node, std::move(retChildren));
         }
 
         auto newRead = ctx.RenameNode(*read, newName);
@@ -611,6 +735,7 @@ private:
     TTypeAnnotationContext& Types;
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
 
     TAutoPtr<IGraphTransformer> ConfigurationTransformer;
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
@@ -648,15 +773,20 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+    bool isInternalCall)
 {
-    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx);
+    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, externalSourceFactory, isInternalCall);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TTypeAnnotationContext& types,
+    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
+    bool isInternalCall)
 {
-    return new TKiSourceLoadTableMetadataTransformer(gateway, sessionCtx);
+    return new TKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall);
 }
 
 } // namespace NYql

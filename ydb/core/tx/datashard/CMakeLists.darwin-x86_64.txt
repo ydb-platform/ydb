@@ -107,7 +107,6 @@ target_link_libraries(core-tx-datashard PUBLIC
   contrib-libs-zstd
   cpp-actors-core
   cpp-containers-absl_flat_hash
-  cpp-containers-flat_hash
   cpp-containers-stack_vector
   cpp-digest-md5
   cpp-html-pcdata
@@ -140,6 +139,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   lib-deprecated-kicli
   dq-actors-compute
   services-lib-sharding
+  ydb-library-chunks_limiter
 )
 target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
@@ -230,9 +230,9 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_pipeline.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_downloads.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_uploads.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_upload_rows.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_schema_snapshots.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_snapshots.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_unsafe_upload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_compute.cpp
@@ -366,7 +366,6 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   contrib-libs-zstd
   cpp-actors-core
   cpp-containers-absl_flat_hash
-  cpp-containers-flat_hash
   cpp-containers-stack_vector
   cpp-digest-md5
   cpp-html-pcdata
@@ -399,6 +398,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   lib-deprecated-kicli
   dq-actors-compute
   services-lib-sharding
+  ydb-library-chunks_limiter
 )
 target_sources(core-tx-datashard.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp

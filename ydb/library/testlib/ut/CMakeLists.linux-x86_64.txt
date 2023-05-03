@@ -12,8 +12,6 @@ target_link_libraries(ydb-library-testlib-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-gtest
   cpp-testing-gtest_main
@@ -50,5 +48,9 @@ set_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-testlib-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-testlib-ut)

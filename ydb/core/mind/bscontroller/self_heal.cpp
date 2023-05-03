@@ -251,16 +251,10 @@ namespace NKikimr::NBsController {
         TIntrusiveList<TGroupRecord, TWithFaultyDisks> GroupsWithFaultyDisks;
         TIntrusiveList<TGroupRecord, TWithInvalidLayout> GroupsWithInvalidLayout;
         std::shared_ptr<std::atomic_uint64_t> UnreassignableGroups;
-        bool GroupLayoutSanitizer = false;
+        bool GroupLayoutSanitizerEnabled = false;
         THostRecordMap HostRecords;
 
-        enum EPeriodicProcess {
-            SELF_HEAL = 0,
-            GROUP_LAYOUT_SANITIZER,
-        };
-
         static constexpr TDuration SelfHealWakeupPeriod = TDuration::Seconds(10);
-        static constexpr TDuration GroupLayoutSanitizerWakeupPeriod = TDuration::Seconds(60);
 
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords)
@@ -272,14 +266,16 @@ namespace NKikimr::NBsController {
         void Bootstrap(const TActorId& parentId) {
             ControllerId = parentId;
             Become(&TThis::StateFunc);
-            HandleWakeup(EPeriodicProcess::SELF_HEAL);
-            HandleWakeup(EPeriodicProcess::GROUP_LAYOUT_SANITIZER);
+            HandleWakeup();
         }
 
         void Handle(TEvControllerUpdateSelfHealInfo::TPtr& ev) {
             const TInstant now = TActivationContext::Now();
-            if (const auto& setting = ev->Get()->GroupLayoutSanitizer) {
-                GroupLayoutSanitizer = *setting;
+            if (const auto& setting = ev->Get()->GroupLayoutSanitizerEnabled) {
+                bool previousSetting = std::exchange(GroupLayoutSanitizerEnabled, *setting);
+                if (!previousSetting && GroupLayoutSanitizerEnabled) {
+                    UpdateLayoutInformationForAllGroups();
+                }
             }
             for (const auto& [groupId, data] : ev->Get()->GroupsToUpdate) {
                 if (data) {
@@ -289,7 +285,7 @@ namespace NKikimr::NBsController {
                     
                     g.Content = std::move(*data);
 
-                    if (GroupLayoutSanitizer) {
+                    if (GroupLayoutSanitizerEnabled) {
                         UpdateGroupLayoutInformation(g);
                     }
 
@@ -357,7 +353,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            if (GroupLayoutSanitizer) {
+            if (GroupLayoutSanitizerEnabled) {
                 for (auto it = GroupsWithInvalidLayout.begin(); it != GroupsWithInvalidLayout.end(); ) {
                     TGroupRecord& group = *it++;
                     Y_VERIFY(!group.LayoutValid);
@@ -407,6 +403,12 @@ namespace NKikimr::NBsController {
                 GroupsWithInvalidLayout.Remove(&group);
             }
             group.LayoutValid = isValid;
+        }
+
+        void UpdateLayoutInformationForAllGroups() {
+            for (auto& [_, group] : Groups) {
+                UpdateGroupLayoutInformation(group);
+            }
         }
 
         std::optional<TVDiskID> FindVDiskToReplace(const THashMap<TVDiskID, TVDiskStatusTracker>& tracker,
@@ -472,26 +474,9 @@ namespace NKikimr::NBsController {
             return std::move(groupDefinition);
         }
 
-        void HandleWakeup(EPeriodicProcess process) {
-            switch (process) {
-            case EPeriodicProcess::SELF_HEAL:
-                CheckGroups();
-                Schedule(SelfHealWakeupPeriod, new TEvents::TEvWakeup(EPeriodicProcess::SELF_HEAL));
-                break;
-
-            case EPeriodicProcess::GROUP_LAYOUT_SANITIZER:
-                if (GroupLayoutSanitizer) {
-                    for (auto& [_, group] : Groups) {
-                        UpdateGroupLayoutInformation(group);
-                    }
-                }
-                Schedule(GroupLayoutSanitizerWakeupPeriod, new TEvents::TEvWakeup(EPeriodicProcess::GROUP_LAYOUT_SANITIZER));
-                break;
-            }
-        }
-
-        void Handle(TEvents::TEvWakeup::TPtr& ev) {
-            HandleWakeup(EPeriodicProcess(ev->Get()->Tag));
+        void HandleWakeup() {
+            CheckGroups();
+            Schedule(SelfHealWakeupPeriod, new TEvents::TEvWakeup());
         }
 
         void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -634,7 +619,7 @@ namespace NKikimr::NBsController {
                         out << "Group Layout Sanitizer";
                     }
                     DIV_CLASS("panel-body") {
-                        out << "Status: " << (GroupLayoutSanitizer ? "enabled" : "disabled");
+                        out << "Status: " << (GroupLayoutSanitizerEnabled ? "enabled" : "disabled");
                     }
                 }
 
@@ -723,7 +708,7 @@ namespace NKikimr::NBsController {
             hFunc(TEvControllerUpdateSelfHealInfo, Handle);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             hFunc(TEvReassignerDone, Handle);
-            hFunc(TEvents::TEvWakeup, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(TEvPrivate::TEvUpdateHostRecords, Handle);
         })
     };
@@ -739,7 +724,7 @@ namespace NKikimr::NBsController {
             ev->GroupsToUpdate.emplace(groupId, TEvControllerUpdateSelfHealInfo::TGroupContent());
         }
         FillInSelfHealGroups(*ev, nullptr);
-        ev->GroupLayoutSanitizer = GroupLayoutSanitizer;
+        ev->GroupLayoutSanitizerEnabled = GroupLayoutSanitizerEnabled;
         Send(SelfHealId, ev.Release());
     }
 
@@ -786,7 +771,7 @@ namespace NKikimr::NBsController {
         THashSet<TGroupInfo*> groups;
         const TInstant now = TActivationContext::Now();
         const TMonotonic mono = TActivationContext::Monotonic();
-        std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
+        std::vector<TVDiskAvailabilityTiming> timingQ;
 
         std::unique_ptr<TEvPrivate::TEvDropDonor> dropDonorEv;
 
@@ -799,14 +784,15 @@ namespace NKikimr::NBsController {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    slot->SetStatus(m.GetStatus(), mono);
-                    if (slot->IsReady != wasReady) {
-                        ScrubState.UpdateVDiskState(slot);
-                        if (wasReady) {
-                            slot->LastSeenReady = now;
-                            lastSeenReadyQ.emplace_back(slot->VSlotId, now);
-                            NotReadyVSlotIds.insert(slot->VSlotId);
+                    if (slot->Status != m.GetStatus()) {
+                        slot->SetStatus(m.GetStatus(), mono, now);
+                        if (slot->IsReady != wasReady) {
+                            ScrubState.UpdateVDiskState(slot);
+                            if (wasReady) {
+                                NotReadyVSlotIds.insert(slot->VSlotId);
+                            }
                         }
+                        timingQ.emplace_back(*slot);
                     }
                     ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus());
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
@@ -850,8 +836,8 @@ namespace NKikimr::NBsController {
             Execute(CreateTxUpdateSeenOperational(std::move(groupIds)));
         }
 
-        if (!lastSeenReadyQ.empty()) {
-            Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
+        if (!timingQ.empty()) {
+            Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
         }
 
         ScheduleVSlotReadyUpdate();

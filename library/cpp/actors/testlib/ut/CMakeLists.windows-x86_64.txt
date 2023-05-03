@@ -14,7 +14,6 @@ target_include_directories(library-cpp-actors-testlib-ut PRIVATE
 target_link_libraries(library-cpp-actors-testlib-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-actors-testlib
@@ -55,5 +54,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(library-cpp-actors-testlib-ut
+  system_allocator
 )
 vcs_info(library-cpp-actors-testlib-ut)

@@ -411,10 +411,9 @@ namespace NKikimr {
         std::vector<std::unique_ptr<IEventHandle>> Bunch;
 
         void Process(IActor *actor) {
-            const TActorContext& ctx = TActivationContext::AsActorContext();
             for (auto& ev : Bunch) {
                 TAutoPtr<IEventHandle> handle(ev.release());
-                actor->Receive(handle, ctx);
+                actor->Receive(handle);
             }
         }
     };

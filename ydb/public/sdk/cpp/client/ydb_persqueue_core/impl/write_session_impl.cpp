@@ -98,7 +98,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    LOG_LAZY(DbDriverState->Log, TLOG_INFO,
+    LOG_LAZY(DbDriverState->Log, TLOG_ERR,
         LogPrefix() << "Got error. Status: " << status.Status
             << ". Description: " << IssuesSingleLineString(status.Issues)
     );
@@ -119,7 +119,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         ResetForRetryImpl();
 
     } else {
-        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will not restart after a fatal error");
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
     }

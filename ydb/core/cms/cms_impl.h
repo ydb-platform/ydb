@@ -11,6 +11,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -41,6 +42,7 @@ public:
             EvLogAndSend,
             EvCleanupLog,
             EvStartCollecting,
+            EvProcessQueue,
 
             EvEnd
         };
@@ -70,6 +72,8 @@ public:
         };
 
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
+
+        struct TEvProcessQueue : public TEventLocal<TEvProcessQueue, EvProcessQueue> {};
     };
 
     void PersistNodeTenants(TTransactionContext &txc, const TActorContext &ctx);
@@ -169,9 +173,9 @@ private:
     }
 
     STFUNC(StateInit) {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
+        LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateInit event type: %" PRIx32 " event: %s",
                   ev->GetTypeRewrite(), ev->ToString().data());
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     template <typename TEvRequest, typename TEvResponse>
@@ -199,10 +203,12 @@ private:
                                                                             TEvCms::TEvManageNotificationResponse>));
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_DEBUG(ctx, NKikimrServices::CMS, "StateNotSupported unexpected event type: %" PRIx32 " event: %s",
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateNotSupported unexpected event type: %" PRIx32 " event: %s",
                           ev->GetTypeRewrite(), ev->ToString().data());
             }
         }
@@ -216,7 +222,8 @@ private:
             CFunc(TEvPrivate::EvCleanupExpired, CleanupExpired);
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
-            CFunc(TEvPrivate::EvStartCollecting, StartCollecting);
+            cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
+            cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
@@ -245,10 +252,12 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_DEBUG(ctx, NKikimrServices::CMS, "StateWork unexpected event type: %" PRIx32 " event: %s",
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "StateWork unexpected event type: %" PRIx32 " event: %s",
                           ev->GetTypeRewrite(), ev->ToString().data());
             }
         }
@@ -258,7 +267,7 @@ private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
 
-    void Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) override;
+    void Enqueue(TAutoPtr<IEventHandle> &ev) override;
     void ProcessInitQueue(const TActorContext &ctx);
 
     void SubscribeForConfig(const TActorContext &ctx);
@@ -292,8 +301,7 @@ private:
     bool CheckActionReplaceDevices(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         TErrorInfo &error) const;
-    bool CheckSysTabletsNode(const NKikimrCms::TAction &action,
-        const TActionOptions &opts,
+    bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,
@@ -329,7 +337,7 @@ private:
     void DoPermissionsCleanup(const TActorContext &ctx);
     void CleanupWalleTasks(const TActorContext &ctx);
     void RemoveEmptyWalleTasks(const TActorContext &ctx);
-    void StartCollecting(const TActorContext &ctx);
+    void StartCollecting();
     bool CheckNotificationDeadline(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;
     bool CheckNotificationRestartServices(const NKikimrCms::TAction &action, TInstant time,
@@ -360,8 +368,8 @@ private:
     void CheckAndEnqueueRequest(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvConditionalPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvNotification::TPtr &ev, const TActorContext &ctx);
-    void ProcessQueue(const TActorContext &ctx);
-    void ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
+    void ProcessQueue();
+    void ProcessRequest(TAutoPtr<IEventHandle> &ev);
 
     void AddPermissionExtensions(const NKikimrCms::TAction &action, NKikimrCms::TPermission &perm) const;
     void AddHostExtensions(const TString &host, NKikimrCms::TPermission &perm) const;

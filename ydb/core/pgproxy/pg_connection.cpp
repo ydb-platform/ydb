@@ -45,7 +45,6 @@ public:
         {"IntervalStyle", "postgres"},
         {"integer_datetimes", "on"},
     };
-    std::unordered_map<TString, TString> ClientParams;
     TSocketBuffer BufferOutput;
     TActorId DatabaseProxy;
     std::shared_ptr<TPGInitial> InitialMessage;
@@ -305,7 +304,7 @@ protected:
         }
         SendReadyForQuery();
         ConnectionEstablished = true;
-        Send(DatabaseProxy, new TEvPGEvents::TEvConnectionOpened(std::move(InitialMessage)));
+        Send(DatabaseProxy, new TEvPGEvents::TEvConnectionOpened(std::move(InitialMessage), Address));
     }
 
     void HandleMessage(const TPGInitial* message) {
@@ -344,7 +343,7 @@ protected:
         }
         InitialMessage = MakePGMessageCopy(message);
         if (IsAuthRequired) {
-            Send(DatabaseProxy, new TEvPGEvents::TEvAuth(InitialMessage), 0, IncomingSequenceNumber++);
+            Send(DatabaseProxy, new TEvPGEvents::TEvAuth(InitialMessage, Address), 0, IncomingSequenceNumber++);
         } else {
             SendAuthOk();
             FinishHandshake();
@@ -353,7 +352,7 @@ protected:
 
     void HandleMessage(const TPGPasswordMessage* message) {
         PasswordWasSupplied = true;
-        Send(DatabaseProxy, new TEvPGEvents::TEvAuth(InitialMessage, MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
+        Send(DatabaseProxy, new TEvPGEvents::TEvAuth(InitialMessage, Address, MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
         return;
     }
 
@@ -455,7 +454,7 @@ protected:
         if (!PostponedEvents.empty()) {
             TAutoPtr<IEventHandle> event = std::move(PostponedEvents.front());
             PostponedEvents.pop_front();
-            StateConnected(event, TActivationContext::AsActorContext());
+            StateConnected(event);
         }
     }
 

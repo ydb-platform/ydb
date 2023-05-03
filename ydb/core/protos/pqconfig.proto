@@ -820,12 +820,16 @@ message TDataTransaction {
 }
 
 message TConfigTransaction {
+    optional uint64 SchemeShardId = 1;
     optional TPQTabletConfig TabletConfig = 2;
     optional TBootstrapConfig BootstrapConfig = 3;
 }
 
 message TEvProposeTransaction {
-    optional NActorsProto.TActorId Source = 1;
+    oneof Source {
+        NActorsProto.TActorId Actor = 1;
+        uint64 Tablet = 5;
+    }
     optional uint64 TxId = 2;
     oneof TxBody {
         TDataTransaction Data = 3;
@@ -908,13 +912,22 @@ message TTransaction {
     repeated uint64 Receivers = 6;
     repeated TPartitionOperation Operations = 7;
     optional bool SelfPredicate = 9;  // только предикаты партиций. предикаты коллег отдельно
-    optional bool AggrPredicate = 10; // заполненено одно из полей Senders or AggrPredicate
+    optional bool AggrPredicate = 10;
 
     //
     // TConfigTransaction
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
+    optional uint64 SchemeShardId = 16;
+
+    //
+    // получатель результата
+    //
+    oneof Source {
+        NActorsProto.TActorId Actor = 14;
+        uint64 Tablet = 15;
+    }
 };
 
 message TTabletTxInfo {

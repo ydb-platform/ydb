@@ -74,10 +74,6 @@ void TCommandYql::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
-    if (!Interactive) {
-        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-            ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
-    }
     ParseParameters(config);
 }
 
@@ -143,6 +139,8 @@ int TCommandYql::RunCommand(TConfig& config, const TString &script) {
     }
 
     if (!Parameters.empty() || !IsStdinInteractive()) {
+        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+            ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && 
             GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {

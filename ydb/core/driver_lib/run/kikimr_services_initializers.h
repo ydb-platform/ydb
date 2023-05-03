@@ -459,6 +459,8 @@ public:
 
 private:
     TMap<TString, TString> Labels;
+    NKikimrConfig::TAppConfig InitialCmsConfig;
+    NKikimrConfig::TAppConfig InitialCmsYamlConfig;
 };
 
 class TConfigsCacheInitializer : public IKikimrServicesInitializer {
@@ -546,6 +548,13 @@ private:
 class TReplicationServiceInitializer : public IKikimrServicesInitializer {
 public:
     TReplicationServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TLocalPgWireServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

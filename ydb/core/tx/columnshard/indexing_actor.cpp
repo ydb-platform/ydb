@@ -30,7 +30,7 @@ public:
         auto& blobsToIndex = indexChanges->DataToIndex;
         for (size_t i = 0; i < blobsToIndex.size(); ++i) {
             auto& blobId = blobsToIndex[i].BlobId;
-            if (indexChanges->CachedBlobs.count(blobId)) {
+            if (indexChanges->CachedBlobs.contains(blobId)) {
                 continue;
             }
 
@@ -66,7 +66,7 @@ public:
         TString blobData = event.Data;
         Y_VERIFY(blobData.size() == blobId.BlobSize());
 
-        if (!BlobsToRead.count(blobId)) {
+        if (!BlobsToRead.contains(blobId)) {
             return;
         }
 

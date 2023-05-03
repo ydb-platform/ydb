@@ -1,6 +1,6 @@
 # Выполнение запроса
 
-С помощью подкоманды `table query execute` вы можете выполнять единичные ad hoc запросы конкретных типов для тестирования и диагностики.
+Подкоманда `table query execute` предназначена для надежного исполнения YQL-запросов. Подкоманда обеспечивает успешное исполнение запроса при кратковременной недоступности отдельных партиций таблиц, например, связанной с [их разделением или слиянием](../../concepts/datamodel/table.md#partitioning), за счет применения встроенных политик повторных попыток (retry policies).
 
 Общий вид команды:
 
@@ -22,41 +22,104 @@
 Имя | Описание
 ---|---
 `--timeout` | Время, в течение которого должна быть выполнена операция на сервере.
-`-t`, `--type` | Тип запроса.<br>Возможные значения:<ul><li>`data` — запрос над данными;</li><li>`scheme` — запрос над схемой данных;</li><li>`scan` — [скан-запрос](../../concepts/scan_query.md).</li></ul>Значение по умолчанию — `data`.
+`-t`, `--type` | Тип запроса.<br>Возможные значения:<ul><li>`data` — YQL-запрос, содержащий [DML]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Manipulation_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Manipulation_Language){% endif %} операции, допускает как изменение данных в базе, так и получение нескольких выборок с ограничением в 1000 строк в каждой выборке.</li><li>`scan` — YQL-запрос типа [скан](../../concepts/scan_query.md), допускает только чтение данных из базы, может вернуть только одну выборку, но без ограничения на количество записей в ней. Алгоритм исполнения запроса типа `scan` на сервере более сложный по сравнению с `data`, поэтому в отсутствие требований по возврату более 1000 строк эффективнее использовать тип запроса `data`.</li><li>`scheme` — YQL-запрос, содержащий [DDL]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Definition_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Definition_Language){% endif %} операции.</li></ul>Значение по умолчанию — `data`.
 `--stats` | Режим сбора статистики.<br>Возможные значения:<ul><li>`none` — не собирать;</li><li>`basic` — собирать по основным событиям;</li><li>`full` — собирать по всем событиям.</li></ul>Значение по умолчанию — `none`.
 `-s` | Включить сбор статистики в режиме `basic`.
-`--tx-mode` | Указать [режим транзакций](../../concepts/transactions.md#modes) (для запросов типа `data`).<br>Возможные значения:<ul><li>`serializable-rw` — результат успешно выполненных параллельных транзакций эквивалентен определенному последовательному порядку их выполнения;</li><li>`online-ro` — каждое из чтений в транзакции читает последние на момент своего выполнения данные;</li><li>`stale-ro`  — чтения данных в транзакции возвращают результаты с возможным отставанием от актуальных (доли секунды).</li></ul>Значение по умолчанию — `serializable-rw`.
+`--tx-mode` | [Режим транзакций](../../concepts/transactions.md#modes) (для запросов типа `data`).<br>Возможные значения:<ul><li>`serializable-rw` — результат успешно выполненных параллельных транзакций эквивалентен определенному последовательному порядку их выполнения;</li><li>`online-ro` — каждое из чтений в транзакции читает последние на момент своего выполнения данные;</li><li>`stale-ro`  — чтения данных в транзакции возвращают результаты с возможным отставанием от актуальных (доли секунды).</li></ul>Значение по умолчанию — `serializable-rw`.
 `-q`, `--query` | Текст YQL-запроса для выполнения.
 `-f,` `--file` | Путь к файлу с текстом YQL-запроса для выполнения.
-`-p`, `--param` | [Параметры запроса](../../getting_started/yql.md#param) (для запросов над данными и скан-запросах).<br>Может быть указано несколько параметров. Для изменения формата ввода используйте параметр подкоманды `--input-format`.
-`--input-format` | Формат ввода.<br>Возможные значения:<ul><li>`json-unicode` — ввод в формате [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, бинарные строки закодированы в [Юникод]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %};</li><li>`json-base64` — ввод в формате JSON, бинарные строки закодированы в [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}.</li></ul>
-`--format` | Формат вывода.<br>Значение по умолчанию — `pretty`.<br>Возможные значения:<ul><li>`pretty` — человекочитаемый формат;</li><li>`json-unicode` — вывод в формате [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, бинарные строки закодированы в [Юникод]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}, каждая строка JSON выводится в отдельной строке;</li><li>`json-unicode-array` — вывод в формате JSON, бинарные строки закодированы в Юникод, результат выводится в виде массива строк JSON, каждая строка JSON выводится в отдельной строке;</li><li>`json-base64` — вывод в формате JSON, бинарные строки закодированы в [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}, каждая строка JSON выводится в отдельной строке;</li><li>`json-base64-array` — вывод в формате JSON, бинарные строки закодированы в Base64, результат выводится в виде массива строк JSON, каждая строка JSON выводится в отдельной строке.</li></ul>
+`--format` | Формат вывода.<br>Возможные значения:<ul><li>`pretty` (по умолчанию) — Человекочитаемый формат;</li><li>`json-unicode` — [Newline-delimited JSON stream](https://en.wikipedia.org/wiki/JSON_streaming). Каждая строка выборки выводится в отдельной строке вывода, каждая строка представлена в виде однострочного JSON. Если в запросе несколько выборок, записи из них будут выведены последовательно без дополнительных разделителей.</li><li>`json-unicode-array` — Один JSON документ, содержащего массив строк выборки.</li><li>`json-base64` — аналогично `json-unicode`, но колонки с бинарными строками (тип `String`) представлены в кодировке [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}.</li><li>`json-base64-array` — аналогично `json-unicode-array`, но колонки с бинарными строками (тип `String`) представлены в кодировке [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}</li><li>`csv` —вывод в формате [CSV](https://ru.wikipedia.org/wiki/CSV);</li><li>`tsv` —вывод в формате [TSV](https://ru.wikipedia.org/wiki/TSV).</li></ul>
+
+### Работа с параметризованными запросами {#parameterized-query}
+
+{% include [parameterized-query](../../_includes/parameterized-query.md) %}
 
 ## Примеры {#examples}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Выполните data-запрос к данным:
+### Создание таблиц {#examples-create-tables}
 
 ```bash
-{{ ydb-cli }} table query execute \
-  --query "SELECT season_id, episode_id, title \
-  FROM episodes \
-  WHERE series_id = 1 AND season_id > 1 \
-  ORDER BY season_id, episode_id \
-  LIMIT 3"
+{{ ydb-cli }} -p quickstart table query execute \
+  --type scheme \
+  -q '
+  CREATE TABLE series (series_id Uint64 NOT NULL, title Utf8, series_info Utf8, release_date Date, PRIMARY KEY (series_id));
+  CREATE TABLE seasons (series_id Uint64, season_id Uint64, title Utf8, first_aired Date, last_aired Date, PRIMARY KEY (series_id, season_id));
+  CREATE TABLE episodes (series_id Uint64, season_id Uint64, episode_id Uint64, title Utf8, air_date Date, PRIMARY KEY (series_id, season_id, episode_id));
+  '
+```
+
+### Заполнение таблиц данными {#examples-upsert}
+```bash
+{{ ydb-cli }} -p quickstart table query execute \
+  -q '
+UPSERT INTO series (series_id, title, release_date, series_info) VALUES
+  (1, "IT Crowd", Date("2006-02-03"), "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by Ash Atalla and starring Chris O'"'"'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."),
+  (2, "Silicon Valley", Date("2014-04-06"), "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.");
+
+UPSERT INTO seasons (series_id, season_id, title, first_aired, last_aired) VALUES
+    (1, 1, "Season 1", Date("2006-02-03"), Date("2006-03-03")),
+    (1, 2, "Season 2", Date("2007-08-24"), Date("2007-09-28")),
+    (2, 1, "Season 1", Date("2014-04-06"), Date("2014-06-01")),
+    (2, 2, "Season 2", Date("2015-04-12"), Date("2015-06-14"));
+
+UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date) VALUES
+    (1, 1, 1, "Yesterday'"'"'s Jam", Date("2006-02-03")),
+    (1, 1, 2, "Calamity Jen", Date("2006-02-03")),
+    (2, 1, 1, "Minimum Viable Product", Date("2014-04-06")),
+    (2, 1, 2, "The Cap Table", Date("2014-04-13"));
+'
+```
+
+### Простая выборка данных {#examples-simple-query}
+
+```bash
+{{ ydb-cli }} -p quickstart table query execute -q '
+    SELECT season_id, episode_id, title 
+    FROM episodes 
+    WHERE series_id = 1
+  '
 ```
 
 Результат:
 
 ```text
-┌───────────┬────────────┬──────────────────────────────┐
-| season_id | episode_id | title                        |
-├───────────┼────────────┼──────────────────────────────┤
-| 2         | 1          | "The Work Outing"            |
-├───────────┼────────────┼──────────────────────────────┤
-| 2         | 2          | "Return of the Golden Child" |
-├───────────┼────────────┼──────────────────────────────┤
-| 2         | 3          | "Moss and the German"        |
-└───────────┴────────────┴──────────────────────────────┘
+┌───────────┬────────────┬───────────────────┐
+| season_id | episode_id | title             |
+├───────────┼────────────┼───────────────────┤
+| 1         | 1          | "Yesterday's Jam" |
+├───────────┼────────────┼───────────────────┤
+| 1         | 2          | "Calamity Jen"    |
+└───────────┴────────────┴───────────────────┘
 ```
+
+### Неограниченная по размеру выборка для автоматизированной обработки {#examples-query-stream}
+
+Выборка данных запросом, текст которого сохранен в файле, без ограничения на количество строк в выборке, с выводом в формате [Newline-delimited JSON stream](https://en.wikipedia.org/wiki/JSON_streaming).
+
+Запишем текст запроса в файл `request1.yql`:
+
+```bash
+echo 'SELECT season_id, episode_id, title FROM episodes' > request1.yql
+```
+
+Выполним запрос:
+
+```bash
+{{ ydb-cli }} -p quickstart table query execute -f request1.yql --type scan --format json-unicode
+```
+
+Результат:
+
+```text
+{"season_id":1,"episode_id":1,"title":"Yesterday's Jam"}
+{"season_id":1,"episode_id":2,"title":"Calamity Jen"}
+{"season_id":1,"episode_id":1,"title":"Minimum Viable Product"}
+{"season_id":1,"episode_id":2,"title":"The Cap Table"}
+```
+
+### Передача параметров {#examples-params}
+
+Примеры исполнения параметризованных запросов, включая потоковое исполнение, приведены в статье [Передача параметров в команды исполнения YQL](parameterized-queries-cli.md).
+

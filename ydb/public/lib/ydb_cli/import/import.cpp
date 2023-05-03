@@ -14,11 +14,13 @@
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
+#include <library/cpp/threading/future/async.h>
 
 #include <util/folder/path.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
+#include <util/system/mutex.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
@@ -29,6 +31,13 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
 
 #include <stack>
+
+#if defined(_win32_)
+#include <windows.h>
+#elif defined(_unix_)
+#include <unistd.h>
+#endif
+
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -64,6 +73,179 @@ TStatus WaitForQueue(const size_t maxQueueSize, std::vector<TAsyncStatus>& inFli
 
     return MakeStatus();
 }
+
+FHANDLE GetStdinFileno() {
+#if defined(_win32_)
+    return GetStdHandle(STD_INPUT_HANDLE);
+#elif defined(_unix_)
+    return STDIN_FILENO;
+#endif
+}
+
+class TCsvFileReader {
+private:
+    // This class exists because NCsvFormat::TLinesSplitter doesn't return a number of characters read(including '\r' and '\n')
+    class TLinesSplitter {
+    private:
+        IInputStream& Input;
+        const char Quote;
+    public:
+        TLinesSplitter(IInputStream& input, const char quote = '"')
+            : Input(input)
+            , Quote(quote) {
+        }
+
+        size_t ConsumeLine(TString& result) {
+            bool escape = false;
+            TString line;
+            size_t length = 0;
+            while (size_t lineLength = Input.ReadLine(line)) {
+                length += lineLength;
+            
+                for (auto it = line.begin(); it != line.end(); ++it) {
+                    if (*it == Quote) {
+                        escape = !escape;
+                    }
+                }
+                if (!result) {
+                    result = line;
+                } else {
+                    result += line;
+                }
+                if (!escape) {
+                    break;
+                } else {
+                    result += "\n";
+                }
+            }
+            return length;
+        }
+    };
+
+    class TFileChunk {
+    public:
+        TFileChunk(TFile file, THolder<IInputStream>&& stream, i64 currentPos = 0, i64 endPos = std::numeric_limits<i64>::max())
+            : File(file)
+            , Stream(std::move(stream))
+            , CurrentPos(currentPos)
+            , EndPos(endPos) {
+        }
+
+        void UpdateEndPos(i64 endPos) {
+            EndPos = endPos;
+        }
+
+        size_t ConsumeLine(TString& line) {
+            size_t len = TLinesSplitter(*Stream).ConsumeLine(line);
+            MoveCurrentPos(len);
+            return len;
+        }
+
+        bool IsEndReached() const {
+            return EndPos <= CurrentPos;
+        }
+
+    private:
+        void MoveCurrentPos(size_t len) {
+            if (len > 0) {
+                CurrentPos += len;
+            } else {
+                CurrentPos = EndPos;
+            }
+        }
+
+        TFile File;
+        THolder<IInputStream> Stream;
+        i64 CurrentPos;
+        i64 EndPos;
+    };
+
+public:
+    TCsvFileReader(const TString& filePath, const TImportFileSettings& settings, TString& headerRow) {
+        TFile file;
+        if (filePath) {
+            file = TFile(filePath, RdOnly);
+        } else {
+            file = TFile(GetStdinFileno());
+        }
+        auto input = MakeHolder<TFileInput>(file);
+        i64 skipSize = 0;
+        TString temp;
+        if (settings.Header_) {
+            skipSize += TLinesSplitter(*input).ConsumeLine(headerRow);
+        }
+        for (ui32 i = 0; i < settings.SkipRows_; ++i) {
+            skipSize += TLinesSplitter(*input).ConsumeLine(temp);
+        }
+
+        MaxInFlight = settings.MaxInFlightRequests_;
+        i64 fileSize = file.GetLength();
+        if (filePath.empty() || fileSize == -1) {
+            SplitCount = 1;
+            Chunks.emplace_back(file, std::move(input));
+            return;
+        }
+
+        SplitCount = Min(settings.MaxInFlightRequests_, (fileSize - skipSize) / settings.BytesPerRequest_ + 1);
+        i64 chunkSize = (fileSize - skipSize) / SplitCount;
+        if (chunkSize == 0) {
+            SplitCount = 1;
+            chunkSize = fileSize - skipSize;
+        }
+
+        i64 seekPos = skipSize;
+        Chunks.reserve(SplitCount);
+        for (size_t i = 0; i < SplitCount; ++i) {
+            i64 beginPos = seekPos;
+            file = TFile(filePath, RdOnly);
+            file.Seek(seekPos, sSet);
+            if (seekPos > 0) {
+                file.Seek(-1, sCur);
+            }
+
+            auto stream = MakeHolder<TFileInput>(file);
+            if (seekPos > 0) {
+                beginPos += stream->ReadLine(temp);
+            }
+            if (!Chunks.empty()) {
+                Chunks.back().UpdateEndPos(beginPos);
+            }
+            Chunks.emplace_back(file, std::move(stream), beginPos);
+            seekPos += chunkSize;
+        }
+        Chunks.back().UpdateEndPos(fileSize);
+    }
+
+    TFileChunk& GetChunk(size_t threadId) {
+        if (threadId >= Chunks.size()) {
+            throw yexception() << "File chunk number is too big";
+        }
+        return Chunks[threadId];
+    }
+
+    static size_t ConsumeLine(TFileChunk& chunk, TString& line) {
+        if (chunk.IsEndReached()) {
+            return 0;
+        }
+
+        line.clear();
+        size_t len = chunk.ConsumeLine(line);
+        return len;
+    }
+
+    size_t GetThreadLimit(size_t thread_id) const {
+        return MaxInFlight / SplitCount + (thread_id < MaxInFlight % SplitCount ? 1 : 0);
+    }
+
+    size_t GetSplitCount() const {
+        return SplitCount;
+    }
+
+private:
+    TVector<TFileChunk> Chunks;
+    size_t SplitCount;
+    size_t MaxInFlight;
+};
 
 } // namespace
 
@@ -118,7 +300,11 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
         case EOutputFormat::Default:
         case EOutputFormat::Csv:
         case EOutputFormat::Tsv:
-            return UpsertCsv(input, dbPath, settings);
+            if (settings.NewlineDelimited_) {
+                return UpsertCsvByBlocks(filePath, dbPath, settings);
+            } else {
+                return UpsertCsv(input, dbPath, settings);
+            }
         case EOutputFormat::Json:
         case EOutputFormat::JsonUnicode:
         case EOutputFormat::JsonBase64:
@@ -162,8 +348,13 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     NCsvFormat::TLinesSplitter splitter(input);
     TString headerRow;
-    if (settings.Header_) {
-        headerRow = splitter.ConsumeLine();
+    if (settings.Header_ || settings.HeaderRow_) {
+        if (settings.Header_) {
+            headerRow = splitter.ConsumeLine();
+        }
+        if (settings.HeaderRow_) {
+            headerRow = settings.HeaderRow_;
+        }
         headerRow += '\n';
         buffer = headerRow;
         csvSettings.set_header(true);
@@ -185,15 +376,14 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     ui32 idx = settings.SkipRows_;
     ui64 readSize = 0;
-    const ui32 mb100 = 1 << 27;
-    ui64 nextBorder = mb100;
+    ui64 nextBorder = VerboseModeReadSize;
     while (TString line = splitter.ConsumeLine()) {
         buffer += line;
         buffer += '\n';
         readSize += line.size();
         ++idx;
         if (readSize >= nextBorder && RetrySettings.Verbose_) {
-            nextBorder += mb100;
+            nextBorder += VerboseModeReadSize;
             Cerr << "Processed " << 1.0 * readSize / (1 << 20) << "Mb and " << idx << " records" << Endl;
         }
         if (buffer.Size() >= settings.BytesPerRequest_) {
@@ -212,6 +402,87 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     }
 
     return WaitForQueue(0, inFlightRequests);
+}
+
+TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings) {
+    Ydb::Formats::CsvSettings csvSettings;
+    bool special = false;
+    if (settings.Delimiter_ != settings.DefaultDelimiter) {
+        csvSettings.set_delimiter(settings.Delimiter_);
+        special = true;
+    }
+
+    if (settings.NullValue_.size()) {
+        csvSettings.set_null_value(settings.NullValue_);
+        special = true;
+    }
+    TString headerRow;
+    TCsvFileReader splitter(filePath, settings, headerRow);
+
+    if (settings.Header_ || settings.HeaderRow_) {
+        if (settings.HeaderRow_) {
+            headerRow = settings.HeaderRow_;
+        }
+        headerRow += '\n';
+        csvSettings.set_header(true);
+        special = true;
+    }
+
+    if (special) {
+        TString formatSettings;
+        Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+        UpsertSettings.FormatSettings(formatSettings);
+    }
+
+    TVector<TAsyncStatus> threadResults(splitter.GetSplitCount());
+    THolder<IThreadPool> pool = CreateThreadPool(splitter.GetSplitCount());
+    for (size_t threadId = 0; threadId < splitter.GetSplitCount(); ++threadId) {
+        auto loadCsv = [this, &settings, &headerRow, &splitter, &dbPath, threadId] () {
+            std::vector<TAsyncStatus> inFlightRequests;
+            TString buffer;
+            buffer = headerRow;
+            ui32 idx = settings.SkipRows_;
+            ui64 readSize = 0;
+            ui64 nextBorder = VerboseModeReadSize;
+            TAsyncStatus status;
+            TString line;
+            while (TCsvFileReader::ConsumeLine(splitter.GetChunk(threadId), line)) {
+                buffer += line;
+                buffer += '\n';
+                readSize += line.size();
+                ++idx;
+                if (readSize >= nextBorder && RetrySettings.Verbose_) {
+                    nextBorder += VerboseModeReadSize;
+                    TStringBuilder builder;
+                    builder << "Processed " << 1.0 * readSize / (1 << 20) << "Mb and " << idx << " records" << Endl;
+                    Cerr << builder;
+                }
+                if (buffer.Size() >= settings.BytesPerRequest_) {
+                    auto status = WaitForQueue(splitter.GetThreadLimit(threadId), inFlightRequests);
+                    if (!status.IsSuccess()) {
+                        return status;
+                    }
+
+                    inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer));
+                    buffer = headerRow;
+                }
+            }
+
+            if (!buffer.Empty()) {
+                inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer));
+            }
+
+            return WaitForQueue(0, inFlightRequests);
+        };
+        threadResults[threadId] = NThreading::Async(loadCsv, *pool);
+    }
+    NThreading::WaitAll(threadResults).Wait();
+    for (size_t i = 0; i < splitter.GetSplitCount(); ++i) {
+        if (!threadResults[i].GetValueSync().IsSuccess()) {
+            return threadResults[i].GetValueSync();
+        }
+    }
+    return MakeStatus();
 }
 
 inline

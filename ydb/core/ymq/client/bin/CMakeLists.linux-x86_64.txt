@@ -12,8 +12,6 @@ target_link_libraries(sqs PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-getopt
   ymq-client-cpp
@@ -31,5 +29,9 @@ target_link_options(sqs PRIVATE
 )
 target_sources(sqs PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
+)
+target_allocator(sqs
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(sqs)

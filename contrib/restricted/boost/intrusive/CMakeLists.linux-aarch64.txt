@@ -17,7 +17,6 @@ target_link_libraries(restricted-boost-intrusive INTERFACE
   restricted-boost-assert
   restricted-boost-config
   restricted-boost-container_hash
-  restricted-boost-core
   restricted-boost-move
   restricted-boost-static_assert
 )

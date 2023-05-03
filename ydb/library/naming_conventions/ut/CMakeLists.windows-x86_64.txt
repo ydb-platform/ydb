@@ -14,7 +14,6 @@ target_include_directories(ydb-library-naming_conventions-ut PRIVATE
 target_link_libraries(ydb-library-naming_conventions-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-naming_conventions
@@ -54,5 +53,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-naming_conventions-ut
+  system_allocator
 )
 vcs_info(ydb-library-naming_conventions-ut)

@@ -421,8 +421,11 @@ private:
             items.push_back(std::make_pair(GetComputationNode(item.first.GetNode()), GetComputationNode(item.second.GetNode())));
         }
 
+        bool isSorted = !CanHash(keyType);
         AddNode(node, NodeFactory->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr,
-            useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr));
+            useIHash && !isSorted ? MakeHashImpl(keyType) : nullptr, 
+            useIHash ? MakeEquateImpl(keyType) : nullptr,
+            useIHash && isSorted ? MakeCompareImpl(keyType) : nullptr, isSorted));
     }
 
     void Visit(TCallable& node) override {

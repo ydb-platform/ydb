@@ -34,6 +34,7 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   cpp-client-iam_private
   ydb-services-datastreams
   services-persqueue_v1-actors
+  api-grpc
   api-protos
 )
 target_sources(ydb-core-http_proxy PRIVATE

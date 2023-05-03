@@ -14,7 +14,6 @@ target_include_directories(ydb-core-tx-balance_coverage-ut PRIVATE
 target_link_libraries(ydb-core-tx-balance_coverage-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-balance_coverage
@@ -63,5 +62,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   60
+)
+target_allocator(ydb-core-tx-balance_coverage-ut
+  system_allocator
 )
 vcs_info(ydb-core-tx-balance_coverage-ut)

@@ -294,7 +294,7 @@ public:
 private:
     size_t MaxSize = 0;
     TRequestsList Queue;
-    THashMap<TKqpQueryId, TRequestsIteratorSet, THash<TKqpQueryId>> QueryIndex;
+    THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
     THashMap<TKqpQueryId, TKqpCompileRequest> ActiveRequests;
 };
 
@@ -382,7 +382,7 @@ private:
             Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract || 
+            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
             Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,

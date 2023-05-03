@@ -31,7 +31,7 @@ public:
             IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TSVPMigrator StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }

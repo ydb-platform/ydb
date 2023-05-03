@@ -53,28 +53,6 @@ namespace {
         ClientLostTag = 1,
         ClientTimeoutTag = 2
     };
-
-    bool FillKqpRequest(const Ydb::Scripting::ExecuteYqlRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
-        TParseRequestError& error)
-    {
-        kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
-
-        auto& script = req.script();
-        NYql::TIssues issues;
-        if (!CheckQuery(script, issues)) {
-            error = TParseRequestError(Ydb::StatusIds::BAD_REQUEST, issues);
-            return false;
-        }
-
-        kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING);
-        kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats()));
-        kqpRequest.MutableRequest()->SetCollectStats(req.collect_stats());
-        kqpRequest.MutableRequest()->SetKeepSession(false);
-        kqpRequest.MutableRequest()->SetQuery(script);
-
-        return true;
-    }
 }
 
 class TStreamExecuteYqlScriptRPC
@@ -123,45 +101,60 @@ public:
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(NKqp::TEvKqp::TEvDataQueryStreamPart, Handle);
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            // Overide default forget action which terminate this actor on client disconnect
+            hFunc(TRpcServices::TEvForgetOperation, HandleForget);
+            hFunc(TEvSubscribeGrpcCancel, HandleSubscribeiGrpcCancel);
             default: {
                 return ReplyFinishStream(TStringBuilder()
-                    << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite(), ctx);
+                    << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite());
             }
         }
+    }
+
+    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev) {
+        Y_UNUSED(ev);
     }
 
     void Proceed(const TActorContext &ctx) {
         const auto& featureFlags = AppData(ctx)->FeatureFlags;
         if (!featureFlags.GetAllowStreamExecuteYqlScript()) {
-            return ReplyFinishStream("StreamExecuteYqlScript request is not supported", ctx);
+            return ReplyFinishStream("StreamExecuteYqlScript request is not supported");
         }
 
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
+        auto script = req->script();
 
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
+        NYql::TIssues issues;
+        if (!CheckQuery(script, issues)) {
+            return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, issues);
         }
 
-        ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId());
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            NKikimrKqp::QUERY_ACTION_EXECUTE,
+            NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING,
+            SelfId(),
+            Request_,
+            TString(), //sessionId
+            std::move(script),
+            TString(), //queryId
+            nullptr, //tx_control
+            &req->parameters(),
+            req->collect_stats(),
+            nullptr, // query_cache_policy
+            req->has_operation_params() ? &req->operation_params() : nullptr
+        );
 
-        TParseRequestError parseError;
-        if (!FillKqpRequest(*req, ev->Record, parseError)) {
-            return ReplyFinishStream(parseError.Status, parseError.Issues, ctx);
-        }
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
-            return ReplyFinishStream("Couldn't send request to KqpProxy", ctx);
+            return ReplyFinishStream("Couldn't send request to KqpProxy");
         }
     }
 
@@ -182,7 +175,7 @@ private:
         }
     }
 
-    void SendDataQueryResultPart(const TActorContext& ctx) {
+    void SendDataQueryResultPart(const TActorContext&) {
         ++ResultsReceived_;
         const auto& kqpResult = *DataQueryStreamContext->ResultIterator;
 
@@ -193,7 +186,7 @@ private:
         try {
             NKqp::ConvertKqpQueryResultToDbResult(kqpResult, result->mutable_result_set());
         } catch (std::exception ex) {
-            ReplyFinishStream(ex.what(), ctx);
+            ReplyFinishStream(ex.what());
         }
 
         result->set_result_set_index(ResultsReceived_ - 1);
@@ -212,12 +205,10 @@ private:
         GatewayRequestHandlerActorId_ = ActorIdFromProto(ev->Get()->Record.GetGatewayActorId());
 
         if (!ev->Get()->Record.GetResults().size()) {
-            return ReplyFinishStream("Received TEvDataQueryStreamPart with no results",
-                ctx);
+            return ReplyFinishStream("Received TEvDataQueryStreamPart with no results");
         }
         if (DataQueryStreamContext) {
-            return ReplyFinishStream("Received TEvDataQueryStreamPart event while previous data query is in progress",
-                ctx);
+            return ReplyFinishStream("Received TEvDataQueryStreamPart event while previous data query is in progress");
         }
 
         DataQueryStreamContext = MakeHolder<TDataQueryStreamContext>(ev);
@@ -316,7 +307,7 @@ private:
     }
 
     // Final response
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;
@@ -339,7 +330,7 @@ private:
             RequestPtr()->SendSerializedResult(std::move(out), record.GetYdbStatus());
         }
 
-        ReplyFinishStream(record.GetYdbStatus(), issues, ctx);
+        ReplyFinishStream(record.GetYdbStatus(), issues);
     }
 
 private:
@@ -352,18 +343,12 @@ private:
     }
 
     void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost, send abort event to executer " << GatewayRequestHandlerActorId_);
-
-        if (GatewayRequestHandlerActorId_) {
-            auto abortEv = NKqp::TEvKqp::TEvAbortExecution::Aborted("Client lost");
-
-            ctx.Send(GatewayRequestHandlerActorId_, abortEv.Release());
-        }
+        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
         // this call do nothing but Die will be called after reply to grpc
-        ReplyFinishStream("Client should not see this message, if so... may the force be with you", ctx);
+        ReplyFinishStream("Client should not see this message, if so... may the force be with you");
     }
 
     void HandleClientTimeout(const TActorContext& ctx) {
@@ -383,7 +368,7 @@ private:
                 }
 
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
-                return ReplyFinishStream(StatusIds::TIMEOUT, issue, ctx);
+                return ReplyFinishStream(StatusIds::TIMEOUT, issue);
             }
             TDuration remain = InactiveClientTimeout_ - processTime;
             timeout = timeout ? Min(timeout, remain) : remain;
@@ -403,36 +388,36 @@ private:
         }
 
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Operation timeout");
-        return ReplyFinishStream(StatusIds::TIMEOUT, issue, ctx);
+        return ReplyFinishStream(StatusIds::TIMEOUT, issue);
     }
 
-    void ReplyFinishStream(const TString& message, const TActorContext& ctx) {
+    void ReplyFinishStream(const TString& message) {
         NYql::TIssues issues;
         issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
-        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         NYql::IssueToMessage(issue, issuesMessage.Add());
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         for (auto& issue : issues) {
             auto item = issuesMessage.Add();
             NYql::IssueToMessage(issue, item);
         }
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        LOG_INFO_S(ctx, NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
+        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
             << Ydb::StatusIds::StatusCode_Name(status));
 
         // Skip sending empty result in case of success status - simplify client logic
@@ -457,6 +442,11 @@ private:
     }
 
 private:
+    void HandleSubscribeiGrpcCancel(TEvSubscribeGrpcCancel::TPtr& ev) {
+        auto as = TActivationContext::ActorSystem();
+        PassSubscription(ev->Get(), Request_.get(), as);
+    }
+
     const ui64 RpcBufferSize_;
 
     TDuration InactiveClientTimeout_;

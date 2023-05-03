@@ -235,21 +235,21 @@ public:
     }
 
 private:
-    void AlterStateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void AlterStateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
            HFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
-           default: TBase::StateWork(ev, ctx);
+           default: TBase::StateWork(ev);
         }
     }
 
-    void AlterStateGetConfig(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void AlterStateGetConfig(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
-        default: TBase::StateFuncBase(ev, ctx);
+        default: TBase::StateFuncBase(ev);
         }
     }
 

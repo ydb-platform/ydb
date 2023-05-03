@@ -60,7 +60,7 @@ protected:
         return op->HasAsyncJobResult();
     }
 
-    void ProcessResult(TOperation::TPtr op, const TActorContext&) override {
+    bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -74,6 +74,8 @@ protected:
 
         op->SetAsyncJobResult(nullptr);
         tx->SetAsyncJobActor(TActorId());
+
+        return true;
     }
 
     void Cancel(TActiveTransaction* tx, const TActorContext& ctx) override {

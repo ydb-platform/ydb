@@ -31,7 +31,7 @@
 Удалите [созданного ранее](#consumer-add) читателя с именем `my-consumer` для топика `my-topic`:
 
 ```bash
-{{ ydb-cli }} -p db1 topic consumer drop \
+{{ ydb-cli }} -p quickstart topic consumer drop \
   --consumer my-consumer \
   my-topic
 ```

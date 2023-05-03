@@ -2,7 +2,7 @@ import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/config.proto";
 import "ydb/core/protos/console_base.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
-import "ydb/public/api/protos/draft/ydb_console.proto";
+import "ydb/public/api/protos/draft/ydb_dynamic_config.proto";
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";
@@ -116,7 +116,12 @@ message TConfigItem {
         HttpProxyConfigItem = 53;
         SchemeShardConfigItem = 54;
         ClientCertificateAuthorizationConfigItem = 55;
-        YamlConfigEnabledItem = 63;
+        MetadataProviderConfigItem = 59;
+        BackgroundTasksConfigItem = 60;
+        ExternalIndexConfigItem = 63;
+        YamlConfigEnabledItem = 64;
+        ConveyorConfigItem = 65;
+        ColumnShardConfigItem = 66;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
@@ -231,57 +236,66 @@ message TConfigureResponse {
 }
 
 message TApplyConfigRequest {
-    optional Ydb.Console.ApplyConfigRequest Request = 1;
+    optional Ydb.DynamicConfig.ApplyConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
 message TApplyConfigResponse {
-    optional Ydb.Console.ApplyConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.ApplyConfigResponse Response = 1;
+}
+
+message TDropConfigRequest {
+    optional Ydb.DynamicConfig.DropConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TDropConfigResponse {
+    optional Ydb.DynamicConfig.DropConfigResponse Response = 1;
 }
 
 message TAddVolatileConfigRequest {
-    optional Ydb.Console.AddVolatileConfigRequest Request = 1;
+    optional Ydb.DynamicConfig.AddVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
 message TAddVolatileConfigResponse {
-    optional Ydb.Console.AddVolatileConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.AddVolatileConfigResponse Response = 1;
 }
 
 message TGetAllConfigsRequest {
-    optional Ydb.Console.GetConfigRequest Request = 1;
+    optional Ydb.DynamicConfig.GetConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
 message TGetAllConfigsResponse {
-    optional Ydb.Console.GetConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.GetConfigResponse Response = 1;
 }
 
 message TRemoveVolatileConfigRequest {
-    optional Ydb.Console.RemoveVolatileConfigRequest Request = 1;
+    optional Ydb.DynamicConfig.RemoveVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
 message TRemoveVolatileConfigResponse {
-    optional Ydb.Console.RemoveVolatileConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.RemoveVolatileConfigResponse Response = 1;
 }
 
 message TResolveConfigRequest {
-    optional Ydb.Console.ResolveConfigRequest Request = 1;
+    optional Ydb.DynamicConfig.ResolveConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
 message TResolveConfigResponse {
-    optional Ydb.Console.ResolveConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.ResolveConfigResponse Response = 1;
 }
 
 message TResolveAllConfigRequest {
-    optional Ydb.Console.ResolveAllConfigRequest Request = 1;
+    optional Ydb.DynamicConfig.ResolveAllConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
 message TResolveAllConfigResponse {
-    optional Ydb.Console.ResolveAllConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.ResolveAllConfigResponse Response = 1;
 }
 
 message TGetYamlConfigRequest {
@@ -347,11 +361,14 @@ message TGetNodeConfigRequest {
     optional TNodeAttributes Node = 1;
     // Filter items by specified kinds (return full config by default).
     repeated uint32 ItemKinds = 2;
+    optional bool ServeYaml = 3;
 }
 
 message TGetNodeConfigResponse {
     optional TStatus Status = 1;
     optional NKikimrConfig.TAppConfig Config = 2;
+    optional string YamlConfig = 3;
+    repeated TVolatileYamlConfig VolatileConfigs = 4;
 }
 
 message TSubscriber {
@@ -486,6 +503,8 @@ message TConfigNotificationRequest {
     // Updated config.
     optional NKikimrConfig.TAppConfig Config = 3;
     repeated uint32 ItemKinds = 4;
+    // Used to show that message are sent from ConfigsDispatcher
+    optional bool Local = 5;
 }
 
 message TConfigNotificationResponse {

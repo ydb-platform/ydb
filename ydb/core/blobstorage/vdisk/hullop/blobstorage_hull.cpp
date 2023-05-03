@@ -136,7 +136,7 @@ namespace NKikimr {
         // for that data
         auto& deleterInfo = HullDs->LogoBlobs->DelayedCompactionDeleterInfo;
         auto hugeBlobDeleterAid = ctx.RegisterWithSameMailbox(CreateDelayedCompactionDeleterActor(hullLogCtx->HugeKeeperId,
-            hullLogCtx->SkeletonId, hullLogCtx->PDiskCtx, deleterInfo));
+            hullLogCtx->SkeletonId, hullLogCtx->PDiskCtx, hullLogCtx->VCtx, deleterInfo));
         deleterInfo->SetActorId(hugeBlobDeleterAid);
         activeActors.Insert(hugeBlobDeleterAid);
 

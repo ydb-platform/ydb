@@ -127,6 +127,7 @@ message TKqpPhyKeyBound {
 message TKqpPhyKeyRange {
     TKqpPhyKeyBound From = 1;
     TKqpPhyKeyBound To = 2;
+    bool RangeIsPoint = 3;
 }
 
 message TKqpPhyOpReadRange {
@@ -318,6 +319,7 @@ message TKqpPhyResult {
     NKikimrMiniKQL.TType ItemType = 2;
     bool IsStream = 3;
     repeated string ColumnHints = 4;
+    uint32 QueryResultIndex = 5;
 }
 
 message TKqpPhyTx {

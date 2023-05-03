@@ -115,7 +115,6 @@ namespace NSequenceProxy {
 
     private:
         STFUNC(StateWork) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 sFunc(TEvents::TEvPoison, HandlePoison);
                 hFunc(TEvSequenceProxy::TEvNextVal, Handle);

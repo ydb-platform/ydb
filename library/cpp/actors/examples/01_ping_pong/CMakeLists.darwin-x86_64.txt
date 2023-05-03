@@ -11,7 +11,6 @@ add_executable(example_01_ping_pong)
 target_link_libraries(example_01_ping_pong PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-actors-core
 )
@@ -24,5 +23,8 @@ target_link_options(example_01_ping_pong PRIVATE
 )
 target_sources(example_01_ping_pong PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/examples/01_ping_pong/main.cpp
+)
+target_allocator(example_01_ping_pong
+  library-cpp-lfalloc
 )
 vcs_info(example_01_ping_pong)

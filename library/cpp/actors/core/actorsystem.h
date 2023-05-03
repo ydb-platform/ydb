@@ -110,6 +110,8 @@ namespace NActors {
 
         TInterconnectSetup Interconnect;
 
+        bool MonitorStuckActors = false;
+
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
 
@@ -189,6 +191,8 @@ namespace NActors {
         template <ESendingType SendingType = ESendingType::Common>
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,
                           ui64 revolvingCounter = 0, const TActorId& parentId = TActorId());
+
+        bool MonitorStuckActors() const { return SystemSetup->MonitorStuckActors; }
 
     private:
         typedef bool (IExecutorPool::*TEPSendFunction)(TAutoPtr<IEventHandle>& ev);

@@ -56,15 +56,16 @@ public:
             op->SetWaitingForGlobalTxIdFlag();
 
             if (txc.DB.HasChanges()) {
-                txc.Reschedule();
-                return EExecutionStatus::Restart;
+                txc.DB.RollbackChanges();
             }
             return EExecutionStatus::Continue;
         }
 
         if (Pipeline.AddLockDependencies(op, guardLocks)) {
-            txc.Reschedule();
-            return EExecutionStatus::Restart;
+            if (txc.DB.HasChanges()) {
+                txc.DB.RollbackChanges();
+            }
+            return EExecutionStatus::Continue;
         }
 
         op->ChangeRecords() = std::move(tx->GetCollectedChanges());

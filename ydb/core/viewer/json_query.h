@@ -97,7 +97,7 @@ public:
             }
         }
         if (query.empty()) {
-            ReplyAndPassAway(HTTPBADREQUEST);
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
             return;
         }
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
@@ -122,6 +122,7 @@ public:
         }
         if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         }
         if (database) {
             request.SetDatabase(database);
@@ -262,7 +263,7 @@ private:
     }
 
     void HandleTimeout() {
-        ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT());
+        ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
     }
 
     void ReplyAndPassAway(TString data) {
@@ -272,7 +273,7 @@ private:
 
 private:
     void MakeErrorReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
-        out << "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n";
+        out << Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json");
         NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
 
         // find first deepest error

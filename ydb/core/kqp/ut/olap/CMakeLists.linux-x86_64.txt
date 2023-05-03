@@ -18,8 +18,6 @@ target_link_libraries(ydb-core-kqp-ut-olap PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-kqp
@@ -44,7 +42,7 @@ set_property(
   ydb-core-kqp-ut-olap
   PROPERTY
   SPLIT_FACTOR
-  50
+  100
 )
 add_yunittest(
   NAME
@@ -78,5 +76,9 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-kqp-ut-olap
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-kqp-ut-olap)

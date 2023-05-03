@@ -40,7 +40,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPartitionWriter::TEvInitResult, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -49,8 +49,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Init'"
-                << ": reason# " << result.GetError().Reason);
+            LOG_E("Error at 'Init': " << result.GetError().ToString());
             return Leave();
         }
 
@@ -73,8 +72,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     STATEFN(StateWaitingRecords) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvRecords, Handle);
+            sFunc(TEvPartitionWriter::TEvWriteResponse, Lost);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -157,7 +157,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             IgnoreFunc(TEvPartitionWriter::TEvWriteAccepted);
             hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -166,8 +166,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            LOG_E("Error at 'Write'"
-                << ": reason# " << result.GetError().Reason);
+            LOG_E("Error at 'Write': " << result.DumpError());
             return Leave();
         }
 
@@ -228,6 +227,16 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
     }
 
+    void Disconnected() {
+        LOG_D("Disconnected");
+        Leave();
+    }
+
+    void Lost() {
+        LOG_W("Lost");
+        Leave();
+    }
+
     void Leave() {
         Send(Parent, new TEvChangeExchangePrivate::TEvGone(PartitionId));
         PassAway();
@@ -271,7 +280,7 @@ public:
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvPartitionWriter::TEvDisconnected, Leave);
+            sFunc(TEvPartitionWriter::TEvDisconnected, Disconnected);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -479,7 +488,7 @@ class TCdcChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -549,7 +558,7 @@ class TCdcChangeSenderMain
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
         default:
-            return StateBase(ev, TlsActivationContext->AsActorContext());
+            return StateBase(ev);
         }
     }
 
@@ -645,7 +654,7 @@ class TCdcChangeSenderMain
     /// Main
 
     STATEFN(StateMain) {
-        return StateBase(ev, TlsActivationContext->AsActorContext());
+        return StateBase(ev);
     }
 
     void Resolve() override {

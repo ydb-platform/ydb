@@ -6,24 +6,6 @@
 
 namespace NKikimr::NKqp {
 
-bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) {
-    switch (queryType) {
-        case NKikimrKqp::QUERY_TYPE_SQL_DML:
-        case NKikimrKqp::QUERY_TYPE_SQL_DDL:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-        case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-        case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-        case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
-            return true;
-
-        default:
-            break;
-    }
-
-    return false;
-}
-
 TKqpShutdownController::TKqpShutdownController(NActors::TActorId kqpProxyActorId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool enableGraceful)
     : KqpProxyActorId_(kqpProxyActorId)
     , EnableGraceful(enableGraceful)

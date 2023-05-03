@@ -3,6 +3,7 @@
 #include "blob.h"
 #include "header.h"
 #include "key.h"
+#include "partition_init.h"
 #include "partition_types.h"
 #include "quota_tracker.h"
 #include "sourceid.h"
@@ -29,13 +30,6 @@ using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabel
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 
-void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
-                               bool isLocalDC,
-                               NPersQueue::TTopicConverterPtr topicConverter,
-                               ui64 tabletId,
-                               const TActorContext& ctx,
-                               TString& topicWriteQuoterPath,
-                               TString& topicWriteQuotaResourcePath);
 
 class TKeyLevel;
 struct TMirrorerInfo;
@@ -73,6 +67,19 @@ struct TTransaction {
 };
 
 class TPartition : public TActorBootstrapped<TPartition> {
+    friend TInitializer;
+    friend TInitializerStep;
+    friend TInitConfigStep;
+    friend TInitInternalFieldsStep;
+    friend TInitDiskStatusStep;
+    friend TInitMetaStep;
+    friend TInitInfoRangeStep;
+    friend TInitDataRangeStep;
+    friend TInitDataStep;
+
+public:
+    const TString& TopicName() const;
+
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
 
@@ -93,15 +100,13 @@ private:
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void CancelAllWritesOnIdle(const TActorContext& ctx);
-    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode);
+    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
     void ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FailBadClient(const TActorContext& ctx);
-    void FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
     void FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config, const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
-    void FormHeadAndProceed(const TActorContext& ctx);
 
     void Handle(NReadSpeedLimiterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadSpeedLimiterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx);
@@ -134,18 +139,12 @@ private:
     void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
-    void HandleDataRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
-    void HandleDataRead(const NKikimrClient::TResponse& range, const TActorContext& ctx);
-    void HandleGetDiskStatus(const NKikimrClient::TResponse& res, const TActorContext& ctx);
-    void HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
-    void HandleMetaRead(const NKikimrClient::TResponse& response, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleOnInit(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContext& ctx);
     void HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -302,8 +301,6 @@ private:
     void InitPendingUserInfoForImportantClients(const NKikimrPQ::TPQTabletConfig& config,
                                                 const TActorContext& ctx);
 
-    void RequestConfig(const TActorContext& ctx);
-    void HandleConfig(const NKikimrClient::TResponse& res, const TActorContext& ctx);
     void Initialize(const TActorContext& ctx);
 
     template <typename T>
@@ -375,16 +372,17 @@ private:
         return ss.Str();
     }
 
+    TInitializer Initializer;
+
     STFUNC(StateInit)
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            HFuncTraced(TEvKeyValue::TEvResponse, HandleOnInit); //result of reads
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
@@ -401,7 +399,9 @@ private:
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+            if (!Initializer.Handle(ev)) {
+                ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+            }
             break;
         };
     }
@@ -410,7 +410,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -454,7 +454,7 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
         };
     }
@@ -463,7 +463,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
+        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -508,21 +508,12 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
 
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
+            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
             break;
         };
     }
-private:
-    enum EInitState {
-        WaitConfig,
-        WaitDiskStatus,
-        WaitInfoRange,
-        WaitDataRange,
-        WaitDataRead,
-        WaitMetaRead,
-        WaitTxInfo
-    };
 
+private:
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
@@ -549,8 +540,6 @@ private:
     ui64 WriteInflightSize;
     TActorId Tablet;
     TActorId BlobCache;
-
-    EInitState InitState;
 
     std::deque<TMessage> Requests;
     std::deque<TMessage> Responses;
@@ -696,5 +685,6 @@ private:
 
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
 };
+
 
 } // namespace NKikimr::NPQ

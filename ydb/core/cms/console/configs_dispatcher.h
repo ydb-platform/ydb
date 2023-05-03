@@ -32,6 +32,8 @@ struct TEvConfigsDispatcher {
         EvSetConfigSubscriptionResponse,
         EvGetConfigRequest,
         EvGetConfigResponse,
+        EvRemoveConfigSubscriptionRequest,
+        EvRemoveConfigSubscriptionResponse,
 
         EvEnd
     };
@@ -40,24 +42,46 @@ struct TEvConfigsDispatcher {
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_CONFIGS_DISPATCHER)");
 
     struct TEvSetConfigSubscriptionRequest : public TEventLocal<TEvSetConfigSubscriptionRequest, EvSetConfigSubscriptionRequest> {
-        TEvSetConfigSubscriptionRequest()
+        TEvSetConfigSubscriptionRequest(TActorId subscriber = {})
+            : Subscriber(subscriber)
         {
         }
 
-        TEvSetConfigSubscriptionRequest(ui32 kind)
+        TEvSetConfigSubscriptionRequest(ui32 kind, TActorId subscriber = {})
             : ConfigItemKinds({kind})
+            , Subscriber(subscriber)
         {
         }
 
-        TEvSetConfigSubscriptionRequest(std::initializer_list<ui32> kinds)
+        TEvSetConfigSubscriptionRequest(std::initializer_list<ui32> kinds, TActorId subscriber = {})
             : ConfigItemKinds(kinds)
+            , Subscriber(subscriber)
+        {
+        }
+
+        TEvSetConfigSubscriptionRequest(const TVector<ui32> &kinds, TActorId subscriber = {})
+            : ConfigItemKinds(kinds)
+            , Subscriber(subscriber)
         {
         }
 
         TVector<ui32> ConfigItemKinds;
+        const TActorId Subscriber;
     };
 
     struct TEvSetConfigSubscriptionResponse : public TEventLocal<TEvSetConfigSubscriptionResponse, EvSetConfigSubscriptionResponse> {
+    };
+
+    struct TEvRemoveConfigSubscriptionRequest : public TEventLocal<TEvRemoveConfigSubscriptionRequest, EvRemoveConfigSubscriptionRequest> {
+        TEvRemoveConfigSubscriptionRequest(TActorId subscriber = {})
+            : Subscriber(subscriber)
+        {
+        }
+
+        const TActorId Subscriber;
+    };
+
+    struct TEvRemoveConfigSubscriptionResponse : public TEventLocal<TEvRemoveConfigSubscriptionResponse, EvRemoveConfigSubscriptionResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventLocal<TEvGetConfigRequest, EvGetConfigRequest> {
@@ -87,7 +111,11 @@ struct TEvConfigsDispatcher {
  * are compared to the current one and notifications are not sent to local
  * subscribers if there is no config modification detected.
  */
-IActor *CreateConfigsDispatcher(const NKikimrConfig::TAppConfig &config, const TMap<TString, TString> &labels);
+IActor *CreateConfigsDispatcher(
+    const NKikimrConfig::TAppConfig &config,
+    const TMap<TString, TString> &labels,
+    const NKikimrConfig::TAppConfig &initialCmsConfig = {},
+    const NKikimrConfig::TAppConfig &initialCmsYamlConfig = {});
 
 inline TActorId MakeConfigsDispatcherID(ui32 node = 0) {
     char x[12] = { 'c', 'o', 'n', 'f', 'i', 'g', 's', 'd', 'i', 's', 'p' };

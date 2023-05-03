@@ -111,6 +111,7 @@ public:
     TTestConnectionActor(
         const NConfig::TTestConnectionConfig& config,
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
+        const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
         const NFq::TYqSharedResources::TPtr& sharedResources,
@@ -120,7 +121,7 @@ public:
         const NYql::IHTTPGateway::TPtr& httpGateway,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
-        , ControlPlaneStorageConfig(controlPlaneStorageConfig, commonConfig)
+        , ControlPlaneStorageConfig(controlPlaneStorageConfig, s3Config, commonConfig)
         , CommonConfig(commonConfig)
         , SharedResouces(sharedResources)
         , CredentialsFactory(credentialsFactory)
@@ -230,6 +231,7 @@ NActors::TActorId TestConnectionActorId() {
 NActors::IActor* CreateTestConnectionActor(
         const NConfig::TTestConnectionConfig& config,
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
+        const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
         const NFq::TYqSharedResources::TPtr& sharedResources,
@@ -238,10 +240,11 @@ NActors::IActor* CreateTestConnectionActor(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
         const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return new TTestConnectionActor(config, controlPlaneStorageConfig, commonConfig,
-                    tokenAccessorConfig, sharedResources,
-                    credentialsFactory, cmConnections,
-                    functionRegistry, httpGateway, counters);
+    return new TTestConnectionActor(config, controlPlaneStorageConfig,
+                                    s3Config, commonConfig,
+                                    tokenAccessorConfig, sharedResources,
+                                    credentialsFactory, cmConnections,
+                                    functionRegistry, httpGateway, counters);
 }
 
 } // namespace NFq

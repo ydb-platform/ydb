@@ -17,7 +17,6 @@ target_include_directories(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
 target_link_libraries(ydb-library-yql-udfs-common-topfreq-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   common-topfreq-static
@@ -62,5 +61,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-udfs-common-topfreq-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-udfs-common-topfreq-ut)

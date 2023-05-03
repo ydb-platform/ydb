@@ -39,7 +39,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch(ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }

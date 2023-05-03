@@ -14,33 +14,39 @@ namespace NMiniKQL {
 
 namespace NDetails {
 
-inline void PackUInt64(ui64 val, TBuffer& buf) {
-    size_t off = buf.Size();
+template<typename TBuf>
+inline void PackUInt64(ui64 val, TBuf& buf) {
     buf.Advance(MAX_PACKED64_SIZE);
-    buf.EraseBack(MAX_PACKED64_SIZE - Pack64(val, buf.Data() + off));
+    char* dst = buf.Pos() - MAX_PACKED64_SIZE;
+    buf.EraseBack(MAX_PACKED64_SIZE - Pack64(val, dst));
 }
 
-inline void PackInt64(i64 val, TBuffer& buf) {
+template<typename TBuf>
+inline void PackInt64(i64 val, TBuf& buf) {
     PackUInt64(ZigZagEncode(val), buf);
 }
 
-inline void PackUInt32(ui32 val, TBuffer& buf) {
-    size_t off = buf.Size();
+template<typename TBuf>
+inline void PackUInt32(ui32 val, TBuf& buf) {
     buf.Advance(MAX_PACKED32_SIZE);
-    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, buf.Data() + off));
+    char* dst = buf.Pos() - MAX_PACKED32_SIZE;
+    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, dst));
 }
 
-inline void PackInt32(i32 val, TBuffer& buf) {
+template<typename TBuf>
+inline void PackInt32(i32 val, TBuf& buf) {
     PackUInt32(ZigZagEncode(val), buf);
 }
 
-inline void PackUInt16(ui16 val, TBuffer& buf) {
-    size_t off = buf.Size();
+template<typename TBuf>
+inline void PackUInt16(ui16 val, TBuf& buf) {
     buf.Advance(MAX_PACKED32_SIZE);
-    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, buf.Data() + off));
+    char* dst = buf.Pos() - MAX_PACKED32_SIZE;
+    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, dst));
 }
 
-inline void PackInt16(i16 val, TBuffer& buf) {
+template<typename TBuf>
+inline void PackInt16(i16 val, TBuf& buf) {
     PackUInt16(ZigZagEncode(val), buf);
 }
 
@@ -81,8 +87,8 @@ inline i16 UnpackInt16(TStringBuf& buf) {
     return ZigZagDecode(UnpackUInt16(buf));
 }
 
-template <typename T>
-void PutRawData(T val, TBuffer& buf) {
+template <typename T, typename TBuf>
+void PutRawData(T val, TBuf& buf) {
     buf.Advance(sizeof(T));
     std::memcpy(buf.Pos() - sizeof(T), &val, sizeof(T));
 }

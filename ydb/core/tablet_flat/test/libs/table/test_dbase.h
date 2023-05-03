@@ -141,6 +141,14 @@ namespace NTest {
             return *this;
         }
 
+        TDbExec& RollbackChanges() {
+            Y_VERIFY(OnTx != EOnTx::None);
+
+            Base->RollbackChanges();
+
+            return *this;
+        }
+
         TDbExec& Add(ui32 table, const TRow &row, ERowOp rop = ERowOp::Upsert)
         {
             const NTest::TRowTool tool(RowSchemeFor(table));
@@ -439,7 +447,8 @@ namespace NTest {
             if (was != (real ? EOnTx::Real : EOnTx::Auto))
                 Y_FAIL("There is no active dbase tx");
 
-            auto up = Base->Commit({ Gen, Step }, apply, Annex.Get()).Change;
+            auto prod = Base->Commit({ Gen, Step }, apply, Annex.Get());
+            auto up = std::move(prod.Change);
             Env.reset();
 
             Last = Max<ui32>(), Altered = false;
@@ -461,6 +470,10 @@ namespace NTest {
                 }
 
                 RedoLog.emplace_back(std::move(up));
+
+                for (auto& callback : prod.OnPersistent) {
+                    callback();
+                }
             }
 
             ReadVersion = TRowVersion::Max();

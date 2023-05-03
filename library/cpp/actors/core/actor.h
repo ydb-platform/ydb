@@ -129,7 +129,7 @@ namespace NActors {
 
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
-
+        using TEventFlags = IEventHandle::TEventFlags;
         explicit TActorContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
@@ -137,13 +137,13 @@ namespace NActors {
         }
 
         template <ESendingType SendingType = ESendingType::Common>
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         template <ESendingType SendingType = ESendingType::Common>
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send<SendingType>(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
         template <ESendingType SendingType = ESendingType::Common>
-        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send<SendingType>(recipient, ev.release(), flags, cookie, std::move(traceId));
         }
         template <ESendingType SendingType = ESendingType::Common>
@@ -206,6 +206,7 @@ namespace NActors {
     };
 
     struct TActorIdentity: public TActorId {
+        using TEventFlags = IEventHandle::TEventFlags;
         explicit TActorIdentity(TActorId actorId)
             : TActorId(actorId)
         {
@@ -216,8 +217,8 @@ namespace NActors {
         }
 
         template <ESendingType SendingType = ESendingType::Common>
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
-        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        bool SendWithContinuousExecution(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
@@ -228,7 +229,7 @@ namespace NActors {
     class IActorOps : TNonCopyable {
     public:
         virtual void Describe(IOutputStream&) const noexcept = 0;
-        virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
+        virtual bool Send(const TActorId& recipient, IEventBase*, IEventHandle::TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -274,7 +275,7 @@ namespace NActors {
         using TBase = IActor;
         friend class TDecorator;
     public:
-        using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev);
     private:
         TReceiveFunc StateFunc = nullptr;
     public:
@@ -313,9 +314,17 @@ namespace NActors {
         i64 ElapsedTicks;
         friend void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
         friend class TDecorator;
+
+    private: // stuck actor monitoring
+        TMonotonic LastReceiveTimestamp;
+        size_t StuckIndex = Max<size_t>();
+        friend class TExecutorPoolBaseMailboxed;
+        friend class TExecutorThread;
+
     protected:
         TActorCallbackBehaviour CImpl;
     public:
+        using TEventFlags = IEventHandle::TEventFlags;
         using TReceiveFunc = TActorCallbackBehaviour::TReceiveFunc;
         /// @sa services.proto NKikimrServices::TActivity::EType
         enum EActorActivity {
@@ -368,7 +377,7 @@ namespace NActors {
         template <class TEventBase>
         class TEventSenderFromActor: ::TNonCopyable {
         private:
-            ui32 Flags = 0;
+            TEventFlags Flags = 0;
             ui64 Cookie = 0;
             const TActorIdentity SenderId;
             NWilson::TTraceId TraceId = {};
@@ -381,7 +390,7 @@ namespace NActors {
 
             }
 
-            TEventSenderFromActor& SetFlags(const ui32 flags) {
+            TEventSenderFromActor& SetFlags(const TEventFlags flags) {
                 Flags = flags;
                 return *this;
             }
@@ -492,13 +501,18 @@ namespace NActors {
             return SelfActorId;
         }
 
-        void Receive(TAutoPtr<IEventHandle>& ev, const TActorContext& /*ctx*/) {
+        void Receive(TAutoPtr<IEventHandle>& ev) {
             ++HandledEvents;
+            LastReceiveTimestamp = TActivationContext::Monotonic();
             if (CImpl.Initialized()) {
                 CImpl.Receive(this, ev);
             } else {
                 TActorVirtualBehaviour::Receive(this, std::unique_ptr<IEventHandle>(ev.Release()));
             }
+        }
+
+        TActorContext ActorContext() const {
+            return TActivationContext::ActorContextFor(SelfId());
         }
 
     protected:
@@ -509,11 +523,12 @@ namespace NActors {
         }
 
         void Describe(IOutputStream&) const noexcept override;
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
+        bool Send(TAutoPtr<IEventHandle> ev) const noexcept;
+        bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
-        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, ev.release(), flags, cookie, std::move(traceId));
         }
 
@@ -523,13 +538,13 @@ namespace NActors {
         }
 
         template <ESendingType SendingType>
-        bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
+        bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         template <ESendingType SendingType>
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
         template <ESendingType SendingType>
-        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, ev.release(), flags, cookie, std::move(traceId));
         }
 
@@ -630,14 +645,15 @@ namespace NActors {
                 using TActorActivity = decltype(((TDerived*)nullptr)->ActorActivityType());
                 return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex(TDerived::ActorActivityType());
             } else {
-                return TLocalProcessExtKey<TActorActivityTag, TDerived>::GetIndex();
+                // 200 characters is limit for solomon metric tag length
+                return TLocalProcessExtKey<TActorActivityTag, TDerived, 200>::GetIndex();
             }
         }
 
     protected:
         // static constexpr char ActorName[] = "UNNAMED";
 
-        TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext&), ui32 activityType = GetActivityTypeIndex())
+        TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev), ui32 activityType = GetActivityTypeIndex())
             : IActorCallback(static_cast<TReceiveFunc>(func), activityType)
         {
         }
@@ -647,15 +663,14 @@ namespace NActors {
     };
 
 
-#define STFUNC_SIG TAutoPtr< ::NActors::IEventHandle>&ev, const ::NActors::TActorContext &ctx
+#define STFUNC_SIG TAutoPtr<::NActors::IEventHandle>& ev
 #define STATEFN_SIG TAutoPtr<::NActors::IEventHandle>& ev
-#define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx)
-#define STATEFN(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& )
+#define STFUNC(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
+#define STATEFN(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 
 #define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype);
 
 #define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
-    Y_UNUSED(ctx);                                                      \
     switch (const ui32 etype = ev->GetTypeRewrite()) {                  \
         HANDLERS                                                        \
     default:                                                            \
@@ -712,8 +727,9 @@ namespace NActors {
         }
 
         STFUNC(State) {
+            auto ctx(ActorContext());
             if (DoBeforeReceiving(ev, ctx)) {
-                Actor->Receive(ev, ctx);
+                Actor->Receive(ev);
                 DoAfterReceiving(ctx);
             }
         }
@@ -819,7 +835,7 @@ namespace NActors {
     }
 
     template <ESendingType SendingType>
-    bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+    bool TActorContext::Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const {
         return Send<SendingType>(new IEventHandle(recipient, SelfID, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
@@ -849,12 +865,12 @@ namespace NActors {
     }
 
     template <ESendingType SendingType>
-    bool TActorIdentity::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+    bool TActorIdentity::Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const {
         return TActivationContext::Send<SendingType>(new IEventHandle(recipient, *this, ev, flags, cookie, nullptr, std::move(traceId)));
     }
 
     template <ESendingType SendingType>
-    bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const {
+    bool IActor::Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const {
         return SelfActorId.Send<SendingType>(recipient, ev, flags, cookie, std::move(traceId));
     }
 

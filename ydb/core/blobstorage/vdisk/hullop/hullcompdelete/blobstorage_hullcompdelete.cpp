@@ -7,6 +7,7 @@ namespace NKikimr {
         const TActorId HugeKeeperId;
         const TActorId SkeletonId;
         const TPDiskCtxPtr PDiskCtx;
+        const TVDiskContextPtr VCtx;
 
         // pointer to shared deleter state, it is primarily created in TLevelIndex
         const TIntrusivePtr<TDelayedCompactionDeleterInfo> Info;
@@ -17,16 +18,17 @@ namespace NKikimr {
         }
 
         TDelayedCompactionDeleterActor(const TActorId hugeKeeperId, const TActorId skeletonId, TPDiskCtxPtr pdiskCtx,
-                TIntrusivePtr<TDelayedCompactionDeleterInfo> info)
+                TVDiskContextPtr vctx, TIntrusivePtr<TDelayedCompactionDeleterInfo> info)
             : TActor(&TDelayedCompactionDeleterActor::StateFunc)
             , HugeKeeperId(hugeKeeperId)
             , SkeletonId(skeletonId)
             , PDiskCtx(pdiskCtx)
+            , VCtx(std::move(vctx))
             , Info(std::move(info))
         {}
 
         void Handle(TEvHullReleaseSnapshot::TPtr& ev, const TActorContext& ctx) {
-            Info->ReleaseSnapshot(ev->Get()->Cookie, ctx, HugeKeeperId, SkeletonId, PDiskCtx);
+            Info->ReleaseSnapshot(ev->Get()->Cookie, ctx, HugeKeeperId, SkeletonId, PDiskCtx, VCtx);
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -41,8 +43,9 @@ namespace NKikimr {
     };
 
     IActor *CreateDelayedCompactionDeleterActor(const TActorId hugeKeeperId, const TActorId skeletonId,
-            TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TDelayedCompactionDeleterInfo> info) {
-        return new TDelayedCompactionDeleterActor(hugeKeeperId, skeletonId, std::move(pdiskCtx), std::move(info));
+            TPDiskCtxPtr pdiskCtx, TVDiskContextPtr vctx, TIntrusivePtr<TDelayedCompactionDeleterInfo> info) {
+        return new TDelayedCompactionDeleterActor(hugeKeeperId, skeletonId, std::move(pdiskCtx), std::move(vctx),
+            std::move(info));
     }
 
 } // NKikimr

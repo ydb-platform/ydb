@@ -195,7 +195,7 @@ namespace NKikimr {
                 TBase::Die(ctx);
             }
 
-            void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+            void StateWork(TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvPrivate::TEvResponse, Handle);
                     HFunc(TEvPrivate::TEvError, Handle);

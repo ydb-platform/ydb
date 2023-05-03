@@ -401,8 +401,6 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
     }
     CheckQueryOptions();
     CheckQueryFile();
-    ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
-        ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
     ParseParameters(config);
 }
 
@@ -447,6 +445,8 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     NTable::TAsyncDataQueryResult asyncResult;
 
     if (!Parameters.empty() || !IsStdinInteractive()) {
+        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;
         while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
             TParams params = paramBuilder->Build();
@@ -531,6 +531,8 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
     NTable::TAsyncScanQueryPartIterator asyncResult;
     SetInterruptHandlers();
     if (!Parameters.empty() || !IsStdinInteractive()) {
+        ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
+            ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;
         while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](NTable::TTableClient client) {

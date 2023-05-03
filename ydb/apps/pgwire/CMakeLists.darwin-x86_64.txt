@@ -11,10 +11,10 @@ add_executable(pgwire)
 target_link_libraries(pgwire PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   ydb-core-base
   ydb-core-pgproxy
+  ydb-core-protos
   api-grpc
   cpp-client-ydb_driver
   cpp-client-draft
@@ -31,5 +31,8 @@ target_sources(pgwire PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_connection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pgwire.cpp
+)
+target_allocator(pgwire
+  system_allocator
 )
 vcs_info(pgwire)

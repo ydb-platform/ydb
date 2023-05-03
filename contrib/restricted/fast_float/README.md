@@ -66,11 +66,32 @@ The library seeks to follow the C++17 (see [20.19.3](http://eel.is/c++draft/char
 Furthermore, we have the following restrictions:
 * We only support `float` and `double` types at this time.
 * We only support the decimal format: we do not support hexadecimal strings.
-* For values that are either very large or very small (e.g., `1e9999`), we represent it using the infinity or negative infinity value.
+* For values that are either very large or very small (e.g., `1e9999`), we represent it using the infinity or negative infinity value and the returned `ec` is set to `std::errc::result_out_of_range`.
 
 We support Visual Studio, macOS, Linux, freeBSD. We support big and little endian. We support 32-bit and 64-bit systems.
 
 We assume that the rounding mode is set to nearest (`std::fegetround() == FE_TONEAREST`).
+
+## C++20: compile-time evaluation (constexpr)
+
+In C++20, you may use `fast_float::from_chars` to parse strings
+at compile-time, as in the following example:
+
+```C++
+// consteval forces compile-time evaluation of the function in C++20.
+consteval double parse(std::string_view input) {
+  double result;
+  auto answer = fast_float::from_chars(input.data(), input.data()+input.size(), result);
+  if(answer.ec != std::errc()) { return -1.0; }
+  return result;
+}
+
+// This function should compile to a function which
+// merely returns 3.1415.
+constexpr double constexptest() {
+  return parse("3.1415 input");
+}
+```
 
 ## Using commas as decimal separator
 

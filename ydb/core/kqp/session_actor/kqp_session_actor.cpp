@@ -116,12 +116,14 @@ public:
 
    TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
             const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
+            NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
         : Owner(owner)
         , SessionId(sessionId)
         , Counters(counters)
         , Settings(workerSettings)
         , HttpGateway(std::move(httpGateway))
+        , AsyncIoFactory(std::move(asyncIoFactory))
         , ModuleResolverState(std::move(moduleResolverState))
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
@@ -177,11 +179,11 @@ public:
     }
 
     bool ConvertParameters() {
-        auto& event = QueryState->RequestEv->Record;
+        auto& proto = QueryState->RequestEv->Record;
 
-        if (!event.GetRequest().HasParameters() && event.GetRequest().YdbParametersSize()) {
+        if (!proto.GetRequest().HasParameters() && QueryState->RequestEv->GetYdbParameters().size()) {
             try {
-                ConvertYdbParamsToMiniKQLParams(event.GetRequest().GetYdbParameters(), *event.MutableRequest()->MutableParameters());
+                ConvertYdbParamsToMiniKQLParams(QueryState->RequestEv->GetYdbParameters(), *proto.MutableRequest()->MutableParameters());
             } catch (const std::exception& ex) {
                 TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
                 ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);
@@ -409,6 +411,7 @@ public:
     void CompileQuery() {
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileRequest();
+        LOG_D("Sending CompileQuery request");
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
         Become(&TKqpSessionActor::CompileState);
     }
@@ -492,6 +495,7 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
+        LOG_D("acquire persistent snapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -716,10 +720,7 @@ public:
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
-        request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
         YQL_ENSURE(queryState);
-        bool enableLlvm = queryState->PreparedQuery->GetEnableLlvm().value_or(true);
-        request.LlvmEnabled = enableLlvm && IsSqlQuery(queryState->GetType());
         request.Snapshot = queryState->TxCtx->GetSnapshot();
 
         return request;
@@ -790,9 +791,37 @@ public:
         return false;
     }
 
-    void ExecuteOrDefer() {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(const NKqpProto::TKqpPhyQuery& phyQuery) {
         auto& txCtx = *QueryState->TxCtx;
+        auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
 
+        if (Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
+            // Execute every physical tx immediately
+            return tx;
+        }
+
+        // Deffer effects and execute them at the end before commit
+        while (tx && tx->GetHasEffects()) {
+            try {
+                QueryState->QueryData->CreateKqpValueMap(tx);
+            } catch (const yexception& ex) {
+                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+            }
+            bool success = txCtx.AddDeferredEffect(tx, QueryState->QueryData);
+            YQL_ENSURE(success);
+            LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
+            if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
+                ++QueryState->CurrentTx;
+                tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
+            } else {
+                tx = nullptr;
+            }
+        }
+
+        return tx;
+    }
+
+    void ExecuteOrDefer() {
         bool haveWork = QueryState->PreparedQuery &&
                 QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()
                     || QueryState->Commit && !QueryState->Commited;
@@ -803,25 +832,13 @@ public:
         }
 
         const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        auto tx = GetCurrentPhyTx(phyQuery);
 
-        auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
-        if (!Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
-            while (tx && tx->GetHasEffects()) {
-                try {
-                    QueryState->QueryData->CreateKqpValueMap(tx);
-                } catch (const yexception& ex) {
-                    ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-                }
-                bool success = txCtx.AddDeferredEffect(tx, QueryState->QueryData);
-                YQL_ENSURE(success);
-                LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
-                if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-                    ++QueryState->CurrentTx;
-                    tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
-                } else {
-                    tx = nullptr;
-                }
-            }
+        auto& txCtx = *QueryState->TxCtx;
+        if (tx && tx->GetHasEffects() && txCtx.Locks.Broken()) {
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
+            return;
         }
 
         if (!CheckTransacionLocks() || !CheckTopicOperations()) {
@@ -846,14 +863,19 @@ public:
             return false;
         }
 
-        if (Config->FeatureFlags.GetEnableKqpImmediateEffects() && phyQuery.GetHasUncommittedChangesRead()) {
-            // every phy tx should acquire LockTxId, so commit is sent separately at the end
-            return QueryState->CurrentTx >= phyQuery.TransactionsSize();
-        }
-
         if (!tx) {
             // no physical transactions left, perform commit
             return true;
+        } else if (Config->FeatureFlags.GetEnableKqpImmediateEffects() && QueryState->TxCtx->HasUncommittedChangesRead) {
+            YQL_ENSURE(tx);
+            if (tx->GetHasEffects()) {
+                YQL_ENSURE(tx->ResultsSize() == 0);
+                // perform commit with last tx with effects
+                return QueryState->CurrentTx + 1 == phyQuery.TransactionsSize();
+            }
+
+            // last tx contains reads, so commit should be sent separately
+            return false;
         } else {
             // we can merge commit with last tx only for read-only transactions
             return QueryState->TxCtx->DeferredEffects.Empty();
@@ -978,7 +1000,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.Service.GetAggregationConfig(), Settings.Service.GetExecuterRetriesConfig(),
-            HttpGateway);
+            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1550,6 +1572,7 @@ public:
             Counters->ReportTxAborted(Settings.DbCounters, Transactions.ToBeAbortedSize());
         }
 
+        auto workerId = WorkerId;
         if (WorkerId) {
             auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(SessionId);
@@ -1570,7 +1593,8 @@ public:
         }
 
         LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}
-            << " TransactionsToBeAborted.size(): " << (CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0));
+            << " TransactionsToBeAborted.size(): " << (CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0)
+            << " WorkerId: " << (workerId ? *workerId : TActorId()));
         if (CleanupCtx) {
             Become(&TKqpSessionActor::CleanupState);
         } else {
@@ -1902,6 +1926,7 @@ private:
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKqpWorkerSettings Settings;
     NYql::IHTTPGateway::TPtr HttpGateway;
+    NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
@@ -1923,10 +1948,10 @@ private:
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    NYql::IHTTPGateway::TPtr httpGateway, TIntrusivePtr<TModuleResolverState> moduleResolverState,
+    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(moduleResolverState), counters);
+    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(asyncIoFactory), std::move(moduleResolverState), counters);
 }
 
 }

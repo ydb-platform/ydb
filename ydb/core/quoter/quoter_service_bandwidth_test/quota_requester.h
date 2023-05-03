@@ -29,7 +29,6 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQuota::TEvClearance, Handle);
             hFunc(TEvents::TEvWakeup, Handle);

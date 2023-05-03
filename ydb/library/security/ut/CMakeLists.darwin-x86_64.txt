@@ -11,7 +11,6 @@ add_executable(ydb-library-security-ut)
 target_link_libraries(ydb-library-security-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-security
@@ -58,5 +57,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-security-ut
+  system_allocator
 )
 vcs_info(ydb-library-security-ut)

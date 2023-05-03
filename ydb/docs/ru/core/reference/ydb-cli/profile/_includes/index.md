@@ -13,7 +13,7 @@
 
 - Вызов той же команды `scheme ls` с использованием профиля:
   ``` bash
-  {{ ydb-cli }} -p db1 scheme ls
+  {{ ydb-cli }} -p quickstart scheme ls
   ```
 
 ## Команды управления профилями {#commands}

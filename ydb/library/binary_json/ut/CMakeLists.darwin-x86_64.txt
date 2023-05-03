@@ -17,7 +17,6 @@ target_include_directories(ydb-library-binary_json-ut PRIVATE
 target_link_libraries(ydb-library-binary_json-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-binary_json
@@ -80,5 +79,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-library-binary_json-ut
+  system_allocator
 )
 vcs_info(ydb-library-binary_json-ut)

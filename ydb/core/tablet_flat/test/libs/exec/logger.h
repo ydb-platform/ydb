@@ -124,7 +124,7 @@ namespace NFake {
         }
 
     private:
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
+        void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<NActors::NLog::TEvLog>()) {
                 Sink->Put(ev->Stamp, ev->Level.Raw, ev->Component, ev->Line);

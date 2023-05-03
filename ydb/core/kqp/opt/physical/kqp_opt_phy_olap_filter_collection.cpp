@@ -13,6 +13,39 @@ using namespace NYql::NNodes;
 
 namespace {
 
+bool ExprHasUtf8Type(const TExprBase& expr) {
+    auto typeAnn = expr.Ptr()->GetTypeAnn();
+    auto itemType = GetSeqItemType(typeAnn);
+    if (!itemType) {
+        itemType = typeAnn;
+    }
+    if (itemType->GetKind() != ETypeAnnotationKind::Data) {
+        return false;
+    }
+    auto dataTypeInfo = NUdf::GetDataTypeInfo(itemType->Cast<TDataExprType>()->GetSlot());
+    return (std::string(dataTypeInfo.Name.data()) == "Utf8");
+}
+
+bool IsLikeOperator(const TCoCompare& predicate) {
+    if (predicate.Maybe<TCoCmpStringContains>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
+        return true;
+    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
+        return true;
+    }
+    return false;
+}
+
+bool IsSupportedLike(const TExprBase& left, const TExprBase& right) {
+    if ((left.Maybe<TCoMember>() && ExprHasUtf8Type(left))
+        || (right.Maybe<TCoMember>() && ExprHasUtf8Type(right)))
+    {
+        return true;
+    }
+    return false;
+}
+
 bool IsSupportedPredicate(const TCoCompare& predicate) {
     if (predicate.Maybe<TCoCmpEqual>()) {
         return true;
@@ -30,13 +63,7 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
         return true;
     } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
         // We introduced LIKE pushdown in v2 of SSA program
-        if (predicate.Maybe<TCoCmpStringContains>()) {
-            return true;
-        } else if (predicate.Maybe<TCoCmpStartsWith>()) {
-            return true;
-        } else if (predicate.Maybe<TCoCmpEndsWith>()) {
-            return true;
-        }
+        return IsLikeOperator(predicate);
     }
 
     return false;
@@ -271,6 +298,10 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
             return false;
         }
         if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType)) {
+            return false;
+        }
+        if (IsLikeOperator(compare) && !IsSupportedLike(leftList[i], rightList[i])) {
+            // Currently Column Shard doesn't have LIKE kernel for binary strings
             return false;
         }
     }

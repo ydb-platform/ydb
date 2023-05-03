@@ -153,8 +153,10 @@ public:
         NKikimrViewer::EObjectType objectType,
         const TContentHandler& handler) = 0;
 
-    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}   ) = 0;
-    virtual TString GetHTTPGATEWAYTIMEOUT() = 0;
+    virtual TString GetCORS(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}) = 0;
+    virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
@@ -186,7 +188,6 @@ static const char HTTPOKTEXT[] = "HTTP/1.1 200 Ok\r\nAccess-Control-Allow-Origin
 static const char HTTPFORBIDDENJSON[] = "HTTP/1.1 403 Forbidden\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=utf-8\r\nConnection: Close\r\n\r\n";
 static const char HTTPGATEWAYTIMEOUT[] = "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n\r\nGateway Time-out\r\n";
 static const char HTTPBADREQUEST[] = "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\nBad Request\r\n";
-static const char HTTPBADREQUEST_HEADERS[] = "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n";
 
 template <typename ValueType, typename OutputIteratorType>
 void GenericSplitIds(TStringBuf source, char delim, OutputIteratorType it) {

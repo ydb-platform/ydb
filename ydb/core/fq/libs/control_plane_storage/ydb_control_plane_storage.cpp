@@ -619,12 +619,13 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
 
 NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TControlPlaneStorageConfig& config,
+    const NYql::TS3GatewayConfig& s3Config,
     const NConfig::TCommonConfig& common,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TString& tenantName) {
-    return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory, tenantName);
+    return new TYdbControlPlaneStorageActor(config, s3Config, common, counters, yqSharedResources, credentialsProviderFactory, tenantName);
 }
 
 } // NFq

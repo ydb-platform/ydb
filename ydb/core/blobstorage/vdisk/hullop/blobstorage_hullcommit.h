@@ -119,7 +119,8 @@ namespace NKikimr {
             }
 
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
-                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix,"COMMIT: type# %s msg# %s",
+                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "COMMIT: PDiskId# %s Lsn# %s type# %s msg# %s",
+                            Ctx->PDiskCtx->PDiskIdString.data(), LsnSeg.ToString().data(),
                             THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data()));
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
@@ -139,7 +140,8 @@ namespace NKikimr {
             // order of increasing LSN's; this is achieved automatically as all actors reside on the same mailbox
             LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
                 CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
-                PDiskSignatureForHullDbKey<TKey>(), ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx);
+                PDiskSignatureForHullDbKey<TKey>(), ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx,
+                Ctx->HullCtx->VCtx);
 
             NPDisk::TEvLogResult* msg = ev->Get();
 

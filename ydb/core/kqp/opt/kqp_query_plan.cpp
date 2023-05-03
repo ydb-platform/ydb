@@ -1663,6 +1663,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
         SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs());
         SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs());
+        SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());
 
         SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
         SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());
@@ -1701,6 +1702,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         if (auto stageGuid = node.GetMapSafe().FindPtr("StageGuid")) {
             if (auto stat = stages.FindPtr(stageGuid->GetStringSafe())) {
                 auto& stats = node["Stats"];
+                if ((*stat)->HasUseLlvm()) {
+                    stats["UseLlvm"] = (*stat)->GetUseLlvm();
+                } else {
+                    stats["UseLlvm"] = "undefined";
+                }
 
                 stats["TotalTasks"] = (*stat)->GetTotalTasksCount();
                 stats["TotalDurationMs"] = (*stat)->GetFinishTimeMs().GetMax() - (*stat)->GetFirstRowTimeMs().GetMin();
@@ -1709,6 +1715,16 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
+
+                NKqpProto::TKqpStageExtraStats kqpStageStats;
+                if ((*stat)->GetExtra().UnpackTo(&kqpStageStats)) {
+                    auto& nodesStats = stats.InsertValue("NodesScanShards", NJson::JSON_ARRAY);
+                    for (auto&& i : kqpStageStats.GetNodeStats()) {
+                        auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                        nodeInfo.InsertValue("shards_count", i.GetShardsCount());
+                        nodeInfo.InsertValue("node_id", i.GetNodeId());
+                    }
+                }
 
                 for (auto& caStats : (*stat)->GetComputeActors()) {
                     auto& caNode = stats["ComputeNodes"].AppendValue(NJson::TJsonValue());

@@ -98,10 +98,10 @@ public:
     }
 
 protected:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
-            default: TBase::StateFuncBase(ev, ctx);
+            default: TBase::StateFuncBase(ev);
         }
     }
 

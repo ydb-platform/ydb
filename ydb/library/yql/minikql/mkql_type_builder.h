@@ -3,6 +3,7 @@
 #include "mkql_node.h"
 
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <ydb/library/yql/public/udf/arrow/block_type_helper.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>
@@ -11,6 +12,11 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+class TBlockTypeHelper : public NUdf::IBlockTypeHelper {
+public:
+    NUdf::IBlockItemComparator::TPtr MakeComparator(NUdf::TType* type) const final;
+};
 
 constexpr size_t MaxBlockSizeInBytes = 1_MB;
 static_assert(MaxBlockSizeInBytes < (size_t)std::numeric_limits<i32>::max());
@@ -157,6 +163,7 @@ public:
 
     NUdf::IFunctionTypeInfoBuilder15& SupportsBlocks() override;
     NUdf::IFunctionTypeInfoBuilder15& IsStrict() override;
+    const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
 
@@ -171,6 +178,7 @@ private:
     ui32 OptionalArgs_ = 0;
     TString Payload_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
+    TBlockTypeHelper BlockTypeHelper;
     TStringBuf ModuleName_;
     NUdf::ICountersProvider* CountersProvider_;
     NUdf::TSourcePosition Pos_;
@@ -210,6 +218,7 @@ private:
     static void DoBlock(const NMiniKQL::TBlockType* tt, NUdf::ITypeVisitor* v);
 };
 
+bool CanHash(const NMiniKQL::TType* type);
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
 NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
 NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);

@@ -120,11 +120,12 @@ private:
 class TResultStreamChannelProxy : public TResultCommonChannelProxy {
 public:
     TResultStreamChannelProxy(ui64 txId, ui64 channelId, NKikimr::NMiniKQL::TType* itemType,
-        const TVector<ui32>* columnOrder, TActorId target, TQueryExecutionStats* stats,
+        const TVector<ui32>* columnOrder, ui32 queryResultIndex, TActorId target, TQueryExecutionStats* stats,
         TActorId executer)
         : TResultCommonChannelProxy(txId, channelId, stats, executer)
         , ColumnOrder(columnOrder)
         , ItemType(itemType)
+        , QueryResultIndex(queryResultIndex)
         , Target(target) {}
 
 private:
@@ -138,6 +139,7 @@ private:
 
         auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(computeData.GetSeqNo());
+        streamEv->Record.SetQueryResultIndex(QueryResultIndex);
         streamEv->Record.MutableResultSet()->Swap(&resultSet);
 
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
@@ -149,6 +151,7 @@ private:
 private:
     const TVector<ui32>* ColumnOrder;
     NKikimr::NMiniKQL::TType* ItemType;
+    ui32 QueryResultIndex = 0;
     const NActors::TActorId Target;
 };
 
@@ -184,14 +187,16 @@ private:
 } // anonymous namespace end
 
 NActors::IActor* CreateResultStreamChannelProxy(ui64 txId, ui64 channelId, NKikimr::NMiniKQL::TType* itemType,
-    const TVector<ui32>* columnOrder, TActorId target, TQueryExecutionStats* stats, TActorId executer)
+    const TVector<ui32>* columnOrder, ui32 queryResultIndex, TActorId target, TQueryExecutionStats* stats,
+    TActorId executer)
 {
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
         "CreateResultStreamChannelProxy: TxId: " << txId <<
         ", channelId: " << channelId
     );
 
-    return new TResultStreamChannelProxy(txId, channelId, itemType, columnOrder, target, stats, executer);
+    return new TResultStreamChannelProxy(txId, channelId, itemType, columnOrder, queryResultIndex, target,
+        stats, executer);
 }
 
 NActors::IActor* CreateResultDataChannelProxy(ui64 txId, ui64 channelId,

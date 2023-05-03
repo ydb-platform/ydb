@@ -12,7 +12,6 @@ target_link_libraries(ydb-core-ymq-http-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-ymq-http
 )
@@ -61,5 +60,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-ymq-http-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-ymq-http-ut)

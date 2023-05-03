@@ -210,7 +210,7 @@ class TDataShard
     class TTxChangeS3UploadStatus;
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
-    class TTxUnsafeUploadRows;
+    class TTxS3UploadRows;
     class TTxExecuteMvccStateChange;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
@@ -284,6 +284,7 @@ class TDataShard
     friend class TS3UploadsManager;
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
+    template <typename T> friend class TBackupRestoreUnitBase;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
@@ -334,6 +335,7 @@ class TDataShard
             EvCdcStreamScanRegistered,
             EvCdcStreamScanProgress,
             EvCdcStreamScanContinue,
+            EvRestartOperation, // used to restart after an aborted scan (e.g. backup)
             EvEnd
         };
 
@@ -505,6 +507,15 @@ class TDataShard
         };
 
         struct TEvCdcStreamScanContinue : public TEventLocal<TEvCdcStreamScanContinue, EvCdcStreamScanContinue> {};
+
+        struct TEvRestartOperation : public TEventLocal<TEvRestartOperation, EvRestartOperation> {
+            explicit TEvRestartOperation(ui64 txId)
+                : TxId(txId)
+            {
+            }
+
+            const ui64 TxId;
+        };
     };
 
     struct Schema : NIceDb::Schema {
@@ -642,7 +653,7 @@ class TDataShard
             // Specify which tx artifacts have been stored to local DB and can be
             // reused on tx replay. See TActiveTransaction::EArtifactFlags.
             struct Flags :           Column<2, NScheme::NTypeIds::Uint64> {};
-            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TVector<TSysTables::TLocksTable::TLock>; };
+            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TStringBuf; };
 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<TxId, Flags, Locks>;
@@ -1188,12 +1199,13 @@ class TDataShard
     void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
@@ -1404,6 +1416,14 @@ public:
         return State == TShardState::Frozen;
     }
 
+    bool IsReplicated() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsReplicated()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
@@ -2643,22 +2663,22 @@ public:
 
 protected:
     // Redundant init state required by flat executor implementation
-    void StateInit(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateInit(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
     }
 
     void Enqueue(STFUNC_SIG) override {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
+        ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
     }
 
     // In this state we are not handling external pipes to datashard tablet (it's just another init phase)
-    void StateInactive(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateInactive(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -2668,8 +2688,8 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
             }
             break;
@@ -2677,7 +2697,7 @@ protected:
     }
 
     // This is the main state
-    void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
@@ -2694,7 +2714,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvChangeS3UploadStatus, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
-            HFuncTraced(TEvDataShard::TEvUnsafeUploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
@@ -2757,6 +2777,7 @@ protected:
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
+            HFunc(TEvPrivate::TEvRestartOperation, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
@@ -2786,8 +2807,8 @@ protected:
             HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                ALOG_WARN(NKikimrServices::TX_DATASHARD,
                            "TDataShard::StateWork unhandled event type: "<< ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
             }
@@ -2796,7 +2817,7 @@ protected:
     }
 
     // This is the main state
-    void StateWorkAsFollower(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateWorkAsFollower(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
@@ -2811,8 +2832,8 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
             }
             break;
@@ -2820,16 +2841,16 @@ protected:
     }
 
     // State after tablet takes poison pill
-    void StateBroken(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateBroken(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
             HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
         default:
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
+            ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -2910,8 +2931,12 @@ protected:
             const TUserTable &ti = *t.second;
 
             // Don't report stats until they are build for the first time
-            if (!ti.Stats.StatsUpdateTime)
-                break;
+            if (!ti.Stats.StatsUpdateTime) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard " << TabletID()
+                            << ", for tableId " << tableId << ", but no stats yet"
+                );
+                continue;
+            }
 
             if (!DbStatsReportPipe) {
                 NTabletPipe::TClientConfig clientConfig;

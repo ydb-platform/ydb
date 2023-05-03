@@ -12,6 +12,8 @@ namespace NGRpcService {
 
 using namespace NSchemeShard;
 
+using TEvLoginRequest = TGRpcRequestWrapperNoAuth<TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
+
 class TLoginRPC : public TRpcRequestActor<TLoginRPC, TEvLoginRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
@@ -47,18 +49,19 @@ public:
     }
 
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const NSchemeCache::TSchemeCacheNavigate* response = ev->Get()->Request.Get();
-        if (response->ResultSet.size() == 1) {
-            const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = response->ResultSet.front();
-            ui64 schemeShardTabletId = entry.DomainInfo->ExtractSchemeShard();
-            IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
-            PipeClient = RegisterWithSameMailbox(pipe);
-            THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
-            const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
-            request.Get()->Record.SetUser(protoRequest->user());
-            request.Get()->Record.SetPassword(protoRequest->password());
-            NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
-            return;
+        const auto& resultSet = ev->Get()->Request.Get()->ResultSet;
+        if (resultSet.size() == 1 && resultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            const auto domainInfo = resultSet.front().DomainInfo;
+            if (domainInfo != nullptr) {
+                IActor* pipe = NTabletPipe::CreateClient(SelfId(), domainInfo->ExtractSchemeShard(), GetPipeClientConfig());
+                PipeClient = RegisterWithSameMailbox(pipe);
+                THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
+                const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
+                request.Get()->Record.SetUser(protoRequest->user());
+                request.Get()->Record.SetPassword(protoRequest->password());
+                NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
+                return;
+            }
         }
         Status = Ydb::StatusIds::SCHEME_ERROR;
         ReplyAndPassAway();
@@ -120,6 +123,11 @@ public:
 
 void TGRpcRequestProxyHandleMethods::Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Register(new TLoginRPC(ev->Release().Release()));
+}
+
+template<>
+IActor* TEvLoginRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TLoginRPC(msg);
 }
 
 } // namespace NGRpcService

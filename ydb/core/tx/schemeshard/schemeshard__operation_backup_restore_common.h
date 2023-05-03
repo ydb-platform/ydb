@@ -605,6 +605,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .NotUnderOperation()
                 .IsCommonSensePath() //forbid alter impl index tables
                 .NotChildren(); //forbid backup table with indexes

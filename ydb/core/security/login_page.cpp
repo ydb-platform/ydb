@@ -171,11 +171,27 @@ public:
         ReplyErrorAndPassAway("504 Gateway Timeout", "Timeout");
     }
 
+    TString GetCORS() {
+        TStringBuilder res;
+        TString origin = TString(Request.GetHeader("Origin"));
+        if (origin.empty()) {
+            origin = "*";
+        }
+        res << "Access-Control-Allow-Origin: " << origin << "\r\n";
+        res << "Access-Control-Allow-Credentials: true\r\n";
+        res << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+        res << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        return res;
+    }
+
     void ReplyOptionsAndPassAway() {
-        Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(
-            "HTTP/1.1 204 No Content\r\n"
-            "Allow: OPTIONS, POST\r\n"
-            "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        TStringStream response;
+        response << "HTTP/1.1 204 No Content\r\n";
+        response << "Allow: OPTIONS, POST\r\n";
+        response << "Connection: Keep-Alive\r\n";
+        response << GetCORS();
+        response << "\r\n";
+        Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -184,6 +200,7 @@ public:
         TDuration maxAge = (ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now());
         response << "HTTP/1.1 200 OK\r\n";
         response << "Set-Cookie: ydb_session_id=" << cookie << "; Max-Age=" << maxAge.Seconds() << "\r\n";
+        response << GetCORS();
         response << "\r\n";
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
@@ -197,6 +214,7 @@ public:
         response << "HTTP/1.1 " << status << "\r\n";
         response << "Content-Type: application/json\r\n";
         response << "Content-Length: " << responseBody.Size() << "\r\n";
+        response << GetCORS();
         response << "\r\n";
         response << responseBody;
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -318,11 +336,27 @@ public:
         ReplyErrorAndPassAway("504 Gateway Timeout", "Timeout");
     }
 
+    TString GetCORS() {
+        TStringBuilder res;
+        TString origin = TString(Request.GetHeader("Origin"));
+        if (origin.empty()) {
+            origin = "*";
+        }
+        res << "Access-Control-Allow-Origin: " << origin << "\r\n";
+        res << "Access-Control-Allow-Credentials: true\r\n";
+        res << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+        res << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        return res;
+    }
+
     void ReplyOptionsAndPassAway() {
-        Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(
-            "HTTP/1.1 204 No Content\r\n"
-            "Allow: OPTIONS, POST\r\n"
-            "Connection: Keep-Alive\r\n\r\n", 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        TStringStream response;
+        response << "HTTP/1.1 204 No Content\r\n";
+        response << "Allow: OPTIONS, POST\r\n";
+        response << "Connection: Keep-Alive\r\n";
+        response << GetCORS();
+        response << "\r\n";
+        Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 
@@ -330,6 +364,7 @@ public:
         TStringStream response;
         response << "HTTP/1.1 200 OK\r\n";
         response << "Set-Cookie: ydb_session_id=; Max-Age=0\r\n";
+        response << GetCORS();
         response << "\r\n";
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
@@ -343,6 +378,7 @@ public:
         response << "HTTP/1.1 " << status << "\r\n";
         response << "Content-Type: application/json\r\n";
         response << "Content-Length: " << responseBody.Size() << "\r\n";
+        response << GetCORS();
         response << "\r\n";
         response << responseBody;
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

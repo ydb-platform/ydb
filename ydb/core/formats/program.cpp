@@ -608,9 +608,8 @@ arrow::Status TProgramStep::ApplyAggregates(
     return arrow::Status::OK();
 }
 
-arrow::Status TProgramStep::MakeCombinedFilter(TDatumBatch& batch, std::vector<bool>& bits) const {
-    std::vector<std::vector<bool>> filters;
-    filters.reserve(Filters.size());
+arrow::Status TProgramStep::MakeCombinedFilter(TDatumBatch& batch, NArrow::TColumnFilter& result) const {
+    std::vector<bool> filtersMerged;
     for (auto& colName : Filters) {
         auto column = batch.GetColumnByName(colName);
         if (!column.ok()) {
@@ -621,16 +620,15 @@ arrow::Status TProgramStep::MakeCombinedFilter(TDatumBatch& batch, std::vector<b
         }
 
         auto boolColumn = std::static_pointer_cast<arrow::BooleanArray>(column->make_array());
-        filters.push_back(std::vector<bool>(boolColumn->length()));
-        auto& bits = filters.back();
-        for (size_t i = 0; i < bits.size(); ++i) {
-            bits[i] = boolColumn->Value(i);
+        if (filtersMerged.empty()) {
+            filtersMerged.resize(boolColumn->length(), true);
+        }
+        Y_VERIFY(filtersMerged.size() == (size_t)boolColumn->length());
+        for (ui32 i = 0; i < filtersMerged.size(); ++i) {
+            filtersMerged[i] = filtersMerged[i] && boolColumn->Value(i);
         }
     }
-
-    for (auto& f : filters) {
-        bits = NArrow::CombineFilters(std::move(bits), std::move(f));
-    }
+    result = NArrow::TColumnFilter(std::move(filtersMerged));
     return arrow::Status::OK();
 }
 
@@ -639,14 +637,12 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
         return arrow::Status::OK();
     }
 
-    std::vector<bool> bits;
+    NArrow::TColumnFilter bits;
     auto status = MakeCombinedFilter(batch, bits);
     if (!status.ok()) {
         return status;
     }
-    if (bits.size()) {
-        auto filter = NArrow::MakeFilter(bits);
-
+    if (!bits.IsTotalAllowFilter()) {
         std::unordered_set<std::string_view> neededColumns;
         bool allColumns = Projection.empty() && GroupBy.empty();
         if (!allColumns) {
@@ -663,6 +659,7 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
             }
         }
 
+        auto filter = bits.BuildArrowFilter();
         for (int64_t i = 0; i < batch.Schema->num_fields(); ++i) {
             bool needed = (allColumns || neededColumns.contains(batch.Schema->field(i)->name()));
             if (batch.Datums[i].is_array() && needed) {
@@ -756,33 +753,55 @@ arrow::Status TProgramStep::Apply(std::shared_ptr<arrow::RecordBatch>& batch, ar
     return arrow::Status::OK();
 }
 
-std::vector<bool> TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+std::set<std::string> TProgramStep::GetColumnsInUsage() const {
+    std::set<std::string> result;
+    for (auto&& i : Filters) {
+        result.emplace(i);
+    }
+    for (auto&& i : Assignes) {
+        for (auto&& f : i.GetArguments()) {
+            result.emplace(f);
+        }
+    }
+    return result;
+}
+
+NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                             arrow::compute::ExecContext* ctx) const
 {
+    NArrow::TColumnFilter result;
     try {
         if (Steps.empty()) {
-            return {};
+            return result;
         }
         auto& step = Steps[0];
         if (step->Filters.empty()) {
-            return {};
+            return result;
         }
 
         auto batch = srcBatch;
         auto rb = TProgramStep::TDatumBatch::FromRecordBatch(batch);
 
         if (!step->ApplyAssignes(*rb, ctx).ok()) {
-            return {};
+            return result;
         }
-        std::vector<bool> filter;
+        NArrow::TColumnFilter filter;
         if (!step->MakeCombinedFilter(*rb, filter).ok()) {
-            return {};
+            return result;
         }
         return filter;
     } catch (const std::exception& ex) {
-        return {};
+        return result;
     }
-    return {};
+    return result;
+}
+
+std::set<std::string> TProgram::GetEarlyFilterColumns() const {
+    std::set<std::string> result;
+    if (Steps.empty()) {
+        return result;
+    }
+    return Steps[0]->GetColumnsInUsage();
 }
 
 }

@@ -206,7 +206,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
-        AsyncSendTransaction(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner));
+        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner));
     }
 
     void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
@@ -695,7 +695,7 @@ namespace NSchemeShardUT_Private {
         } \
         \
         void Async##name(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& parentPath, const TString& scheme, const TApplyIf& applyIf) { \
-            ForwardToTablet(runtime, schemeShardId, runtime.AllocateEdgeActor(), \
+            AsyncSend(runtime, schemeShardId, \
                 name##Request(schemeShardId, txId, parentPath, scheme, applyIf)); \
         } \
         \
@@ -740,7 +740,7 @@ namespace NSchemeShardUT_Private {
                     pbPool->SetName(pool.GetName()); \
                 } \
             } \
-            ForwardToTablet(runtime, schemeShardId, runtime.AllocateEdgeActor(), req); \
+            AsyncSend(runtime, schemeShardId, req); \
         } \
         \
         void Async##name(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, \
@@ -772,7 +772,7 @@ namespace NSchemeShardUT_Private {
         } \
         \
         void Async##name(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, ui64 pathId, const TApplyIf& applyIf) { \
-            ForwardToTablet(runtime, schemeShardId, runtime.AllocateEdgeActor(), \
+            AsyncSend(runtime, schemeShardId, \
                 name##Request(schemeShardId, txId, pathId, applyIf)); \
         } \
         \
@@ -924,7 +924,6 @@ namespace NSchemeShardUT_Private {
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
             const TString& mountToken, ui64 tokenVersion)
     {
-        TActorId sender = runtime.AllocateEdgeActor();
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
@@ -934,7 +933,7 @@ namespace NSchemeShardUT_Private {
         transaction->MutableAssignBlockStoreVolume()->SetNewMountToken(mountToken);
         transaction->MutableAssignBlockStoreVolume()->SetTokenVersion(tokenVersion);
 
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evTx);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
     }
 
     void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
@@ -991,7 +990,7 @@ namespace NSchemeShardUT_Private {
             ev->Record.SetUserSID(userSID);
         }
 
-        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), ev.Release());
+        AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
     void AsyncExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
@@ -1075,7 +1074,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncForgetExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 txId, const TString& dbName, ui64 exportId) {
-        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), ForgetExportRequest(txId, dbName, exportId));
+        AsyncSend(runtime, schemeshardId, ForgetExportRequest(txId, dbName, exportId));
     }
 
     void AsyncForgetExport(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 exportId) {
@@ -1102,7 +1101,7 @@ namespace NSchemeShardUT_Private {
         NKikimrImport::TCreateImportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
-        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvImport::TEvCreateImportRequest(id, dbName, request));
+        AsyncSend(runtime, schemeshardId, new TEvImport::TEvCreateImportRequest(id, dbName, request));
     }
 
     void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr) {
@@ -1569,9 +1568,8 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
-        TActorId sender = runtime.AllocateEdgeActor();
         auto evTx = UpgradeSubDomainRequest(txId, parentPath, name);
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evTx);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
     }
 
     void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
@@ -1595,9 +1593,8 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        TActorId sender = runtime.AllocateEdgeActor();
         auto evTx = UpgradeSubDomainDecisionRequest(txId, parentPath, name, decision);
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evTx);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
     }
 
     void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
@@ -2148,8 +2145,8 @@ namespace NSchemeShardUT_Private {
         return combination;
     }
 
-    void AsyncSendTransaction(TTestActorRuntime &runtime, ui64 schemeShard, TEvSchemeShard::TEvModifySchemeTransaction *evTx) {
-        ForwardToTablet(runtime, schemeShard, runtime.AllocateEdgeActor(), evTx);
+    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev) {
+        ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(), ev);
     }
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {

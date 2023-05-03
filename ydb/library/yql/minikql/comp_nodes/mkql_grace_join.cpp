@@ -20,6 +20,7 @@
 
 #include <chrono>
 #include <format>
+#include <limits>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -48,6 +49,7 @@ struct TGraceJoinPacker {
     ui64 TuplesPacked = 0; // Total number of packed tuples
     ui64 TuplesBatchPacked = 0; // Number of tuples packed during current join batch
     ui64 TuplesUnpacked = 0; // Total number of unpacked tuples
+    ui64 BatchSize = PartialJoinBatchSize; // Batch size for partial table packing and join 
     std::chrono::time_point<std::chrono::system_clock> StartTime; // Start time of execution
     std::chrono::time_point<std::chrono::system_clock> EndTime; // End time of execution
     std::vector<ui64> TupleIntVals; // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
@@ -55,7 +57,7 @@ struct TGraceJoinPacker {
     std::vector<char*> TupleStrings; // All values of tuple strings
     std::vector<ui32> Offsets; // Offsets of table column values in bytes
     std::vector<TType*>  ColumnTypes; // Types of all columns
-    std::vector<TValuePacker> Packers; // Packers for composite data types
+    std::vector<std::shared_ptr<TValuePacker>> Packers; // Packers for composite data types
     const THolderFactory& HolderFactory; // To use during unpacking
     std::vector<TColumnDataPackInfo> ColumnsPackInfo; // Information about columns packing
     std::unique_ptr<GraceJoin::TTable> TablePtr;  // Table to pack data
@@ -216,7 +218,7 @@ void TGraceJoinPacker::Pack()  {
             if (pi.IsIType ) { // Interface-based type
                 IColumnsHolder[offset] = value;
             } else {
-                TStringBuf strBuf = Packers[pi.ColumnIdx].Pack(value);
+                TStringBuf strBuf = Packers[pi.ColumnIdx]->Pack(value);
                 TupleStringHolder[i] = strBuf;
                 TupleStrings[offset] = TupleStringHolder[i].data();
                 TupleStrSizes[offset] = TupleStringHolder[i].size();
@@ -332,7 +334,7 @@ void TGraceJoinPacker::UnPack()  {
                     continue;
                 }
             }
-            value = Packers[pi.ColumnIdx].Unpack(TStringBuf(TupleStrings[offset], TupleStrSizes[offset]), HolderFactory);
+            value = Packers[pi.ColumnIdx]->Unpack(TStringBuf(TupleStrings[offset], TupleStrSizes[offset]), HolderFactory);
             continue;
         }
 
@@ -428,7 +430,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
         ui32 keyColNums = std::count_if(keyColumns.begin(), keyColumns.end(), [&](ui32 k) {return k == i;});
 
-        Packers.push_back(TValuePacker(true,colType));
+        Packers.push_back(std::make_shared<TValuePacker>(true,colType));
         if (keyColNums > 0) {
             packInfo.IsKeyColumn = true;
             for (ui32 j = 0; j < keyColNums; j++) {
@@ -523,7 +525,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
             p.Offset = currIOffset;
             Offsets[p.ColumnIdx] = currIOffset;
             currIOffset++;
-            GraceJoin::TColTypeInterface cti{ MakeHashImpl(p.MKQLType), MakeEquateImpl(p.MKQLType), TValuePacker(true, p.MKQLType) , HolderFactory  };
+            GraceJoin::TColTypeInterface cti{ MakeHashImpl(p.MKQLType), MakeEquateImpl(p.MKQLType), std::make_shared<TValuePacker>(true, p.MKQLType) , HolderFactory  };
             ColumnInterfaces.push_back(cti);
         }
         currIdx++;
@@ -564,7 +566,13 @@ public:
     ,   LeftKeyColumns(leftKeyColumns)
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
-    ,   RightRenames(rightRenames) {}
+    ,   RightRenames(rightRenames) 
+    {
+        if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
+            LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
+            RightPacker->BatchSize = std::numeric_limits<ui64>::max();
+        }
+    }
 private:
     IComputationWideFlowNode* const FlowLeft;
     IComputationWideFlowNode* const FlowRight;
@@ -820,17 +828,17 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *HaveMoreRightRows = false;
                 }
 
-                if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= PartialJoinBatchSize ) {
+                if (!*HaveMoreRightRows && !*PartialJoinCompleted && LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize ) {
                     *PartialJoinCompleted = true;
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
                                          
                 }
 
 
-                if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= PartialJoinBatchSize ) {
+                if (!*HaveMoreLeftRows && !*PartialJoinCompleted && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize ) {
                     *PartialJoinCompleted = true;
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
                    
                 }
@@ -839,7 +847,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *PartialJoinCompleted = true;
                     LeftPacker->StartTime = std::chrono::system_clock::now();
                     RightPacker->StartTime = std::chrono::system_clock::now();
-                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind);
+                    JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
                     LeftPacker->EndTime = std::chrono::system_clock::now(); 
                     RightPacker->EndTime = std::chrono::system_clock::now();

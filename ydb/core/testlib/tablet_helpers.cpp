@@ -1121,12 +1121,11 @@ namespace NKikimr {
         }
 
         void Enqueue(STFUNC_SIG) override {
-            Y_UNUSED(ctx);
             InitialEventsQueue.push_back(ev);
         }
 
         void StateInit(STFUNC_SIG) {
-            StateInitImpl(ev, ctx);
+            StateInitImpl(ev, SelfId());
         }
 
         void StateWork(STFUNC_SIG) {

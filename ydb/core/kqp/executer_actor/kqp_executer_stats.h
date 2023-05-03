@@ -14,6 +14,10 @@ bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
 struct TQueryExecutionStats {
+private:
+    std::map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
+    std::map<ui32, bool> UseLlvmByStageId;
+public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;
@@ -47,6 +51,12 @@ struct TQueryExecutionStats {
     }
 
     void AddComputeActorStats(ui32 nodeId, NYql::NDqProto::TDqComputeActorStats&& stats);
+    void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
+        Y_VERIFY(ShardsCountByNode[stageId].emplace(nodeId, shardsCount).second);
+    }
+    void SetUseLlvm(const ui32 stageId, const bool value) {
+        Y_VERIFY(UseLlvmByStageId.emplace(stageId, value).second);
+    }
 
     void AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats);
     void AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats, NKikimrQueryStats::TTxStats&& txStats);

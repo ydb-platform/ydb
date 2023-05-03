@@ -75,6 +75,8 @@ message THandshakeRequest {
     optional bool RequestExternalDataChannel = 21;
 
     optional bytes CompatibilityInfo = 22;
+
+    optional bytes HandshakeId = 23;
 }
 
 message THandshakeSuccess {
@@ -116,4 +118,12 @@ message TEvLoadMessage {
     repeated THop Hops = 1; // the route for the message
     optional string Id = 3; // message identifier
     optional bytes Payload = 4; // data payload
+}
+
+message TContinuationParams {
+    optional bytes HandshakeId = 1;
+}
+
+message TExternalDataChannelParams {
+    optional bytes HandshakeId = 1;
 }

@@ -151,7 +151,7 @@ private:
 class TGenericColumnBuilder : public IAggColumnBuilder {
 public:
     TGenericColumnBuilder(ui64 size, TType* columnType, TComputationContext& ctx)
-        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size))
+        : Builder_(MakeArrayBuilder(TTypeInfoHelper(), columnType, ctx.ArrowMemoryPool, size, &ctx.Builder->GetPgBuilder()))
         , Ctx_(ctx)
     {
     }
@@ -207,8 +207,8 @@ public:
         , ArgColumn_(argColumn)
         , ReaderOne_(MakeBlockReader(TTypeInfoHelper(), type))
         , ReaderTwo_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
-        , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
+        , Compare_(TBlockTypeHelper().MakeComparator(type))
     {
     }
 
@@ -280,7 +280,7 @@ private:
     const std::unique_ptr<IBlockReader> ReaderOne_;
     const std::unique_ptr<IBlockReader> ReaderTwo_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
-    const std::unique_ptr<NYql::NUdf::IBlockItemComparator> Compare_;
+    const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
 template<bool IsMin>
@@ -293,8 +293,8 @@ public:
         , ArgColumn_(argColumn)
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
-        , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
+        , Compare_(TBlockTypeHelper().MakeComparator(type))
     {
     }
 
@@ -324,7 +324,7 @@ private:
     TType* const Type_;
     const std::unique_ptr<IBlockReader> Reader_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
-    const std::unique_ptr<NYql::NUdf::IBlockItemComparator> Compare_;
+    const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
 template<bool IsMin>
@@ -337,9 +337,8 @@ public:
         , ArgColumn_(argColumn)
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
-        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type))
-        , Compare_(NYql::NUdf::MakeBlockItemComparator(TTypeInfoHelper(), type))
-
+        , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
+        , Compare_(TBlockTypeHelper().MakeComparator(type))
     {
     }
 
@@ -369,7 +368,7 @@ private:
     TType* const Type_;
     const std::unique_ptr<IBlockReader> Reader_;
     const std::unique_ptr<IBlockItemConverter> Converter_;
-    const std::unique_ptr<NYql::NUdf::IBlockItemComparator> Compare_;
+    const NYql::NUdf::IBlockItemComparator::TPtr Compare_;
 };
 
 template <typename TStringType, bool IsMin>

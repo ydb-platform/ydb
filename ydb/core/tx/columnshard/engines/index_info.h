@@ -48,7 +48,17 @@ public:
 
     /// Matches name of the filed with names of the special columns.
     static bool IsSpecialColumn(const arrow::Field& field);
-
+    static bool IsSpecialColumn(const ui32 field);
+    static bool IsSpecialColumn(const std::string& fieldName);
+    template <class TContainer>
+    static bool IsSpecialColumns(const TContainer& c) {
+        for (auto&& i : c) {
+            if (!IsSpecialColumn(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
 public:
     TIndexInfo(const TString& name, ui32 id);
 
@@ -58,7 +68,8 @@ public:
     }
 
     /// Returns an id of the column located by name. The name should exists in the schema.
-    ui32 GetColumnId(const TString& name) const;
+    ui32 GetColumnId(const std::string& name) const;
+    std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
     TString GetColumnName(ui32 id, bool required = true) const;
@@ -80,7 +91,7 @@ public:
         return KeyColumns[0];
     }
 
-    // Sorting key: colud be less or greater then traditional PK
+    // Sorting key: could be less or greater then traditional PK
     // It could be empty for append-only tables. It could be greater then PK for better columns compression.
     // If sorting key includes uniqueness key as a prefix we are able to use MergeSort for REPLACE.
     const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return SortingKey; }
@@ -88,12 +99,18 @@ public:
     const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
     const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
 
+    const std::shared_ptr<arrow::Schema> GetEffectiveKey() const {
+        // TODO: composite key
+        Y_VERIFY(IndexKey->num_fields() == 1);
+        return std::make_shared<arrow::Schema>(arrow::FieldVector{GetIndexKey()->field(0)});
+    }
+
     /// Initializes sorting, replace, index and extended keys.
     void SetAllKeys();
 
     void CheckTtlColumn(const TString& ttlColumn) const {
         Y_VERIFY(!ttlColumn.empty());
-        Y_VERIFY(MinMaxIdxColumnsIds.count(GetColumnId(ttlColumn)));
+        Y_VERIFY(MinMaxIdxColumnsIds.contains(GetColumnId(ttlColumn)));
     }
 
     std::shared_ptr<arrow::Schema> ArrowSchema() const;

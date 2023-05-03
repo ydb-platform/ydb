@@ -54,6 +54,7 @@ namespace NKikimr {
         app->CompactionConfig = CompactionConfig;
         app->HiveConfig = HiveConfig;
         app->DataShardConfig = DataShardConfig;
+        app->ColumnShardConfig = ColumnShardConfig;
         app->SchemeShardConfig = SchemeShardConfig;
         app->MeteringConfig = MeteringConfig;
         app->FeatureFlags = FeatureFlags;

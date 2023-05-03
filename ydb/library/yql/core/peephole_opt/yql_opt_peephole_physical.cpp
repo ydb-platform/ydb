@@ -641,7 +641,7 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
             .Build()
         .Settings()
             .Add().Build("One", TNodeFlags::Default)
-            .Add().Build("Hashed", TNodeFlags::Default)
+            .Add().Build("Auto", TNodeFlags::Default)
             .Build()
         .Done()
         .Ptr();
@@ -915,7 +915,7 @@ TExprNode::TPtr ExpandCastOverDict(const TExprNode::TPtr& input, TExprContext& c
                 .Seal()
             .Seal()
             .List(3)
-                .Atom(0, "Hashed", TNodeFlags::Default)
+                .Atom(0, "Auto", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
             .Seal()
         .Seal().Build();
@@ -1137,7 +1137,7 @@ TExprNode::TPtr ExpandCastOverOptionalDict(const TExprNode::TPtr& input, TExprCo
                         .Seal()
                     .Seal()
                     .List(3)
-                        .Atom(0, "Hashed", TNodeFlags::Default)
+                        .Atom(0, "Auto", TNodeFlags::Default)
                         .Atom(1, "One", TNodeFlags::Default)
                     .Seal()
                 .Seal()
@@ -1687,7 +1687,7 @@ TExprNode::TPtr BuildDictOverListOfStructs(TPositionHandle pos, const TExprNode:
                 .Seal()
             .Seal()
             .List(3)
-                .Atom(0, "Hashed", TNodeFlags::Default)
+                .Atom(0, "Auto", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
                 .Atom(2, "Compact", TNodeFlags::Default)
             .Seal()
@@ -1712,7 +1712,7 @@ TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& co
                 .Seal()
             .Seal()
             .List(3)
-                .Atom(0, "Hashed", TNodeFlags::Default)
+                .Atom(0, "Auto", TNodeFlags::Default)
                 .Atom(1, "One", TNodeFlags::Default)
                 .Atom(2, "Compact", TNodeFlags::Default)
             .Seal()
@@ -2069,6 +2069,7 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
     }, ctx, settings);
 }
 
+template<bool FinalStage>
 void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransformer* typeAnnotator) {
     auto issueCode = TIssuesIds::CORE_EXEC;
     pipelene.AddServiceTransformers(issueCode);
@@ -2078,7 +2079,7 @@ void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransforme
         pipelene.AddTypeAnnotationTransformer(issueCode);
     }
 
-    pipelene.AddPostTypeAnnotation(true, issueCode);
+    pipelene.AddPostTypeAnnotation(true, FinalStage, issueCode);
     pipelene.Add(TExprLogTransformer::Sync("PeepHoleOpt", NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE),
         "PeepHoleOptTrace", issueCode, "PeepHoleOptTrace");
 }
@@ -2376,8 +2377,8 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
 
     auto settings = ctx.Builder(node->Pos())
         .List()
-            .Atom(0, "Hashed")
-            .Atom(1, "Many")
+            .Atom(0, "Auto", TNodeFlags::Default)
+            .Atom(1, "Many", TNodeFlags::Default)
         .Seal()
         .Build();
 
@@ -2411,22 +2412,22 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Callable("OrderedFlatMap")
                     .Callable(0, "SqueezeToDict")
                         .Add(0, node->HeadPtr())
-                        .Add(1, keyExtractor)
-                        .Add(2, idLambda)
-                        .Add(3, settings)
+                        .Add(1, std::move(keyExtractor))
+                        .Add(2, std::move(idLambda))
+                        .Add(3, std::move(settings))
                     .Seal()
-                    .Add(1, flatten)
+                    .Add(1, std::move(flatten))
                 .Seal()
                 .Build();
         } else {
             sort = ctx.Builder(node->Pos())
-                .Apply(flatten)
+                .Apply(*flatten)
                     .With(0)
                         .Callable("ToDict")
                             .Add(0, node->HeadPtr())
-                            .Add(1, keyExtractor)
-                            .Add(2, idLambda)
-                            .Add(3, settings)
+                            .Add(1, std::move(keyExtractor))
+                            .Add(2, std::move(idLambda))
+                            .Add(3, std::move(settings))
                         .Seal()
                     .Done()
                 .Seal()
@@ -2434,7 +2435,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         }
     }
 
-    return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
+    return KeepConstraints(ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort)), *node, ctx);
 }
 
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -4029,25 +4030,22 @@ TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx
             }
         });
 
-        const auto itemType = node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
         std::unordered_set<size_t> unique;
         std::vector<size_t> sorted;
         if (node->Tail().Tail().IsCallable("Member") && &node->Tail().Tail().Head() == &node->Tail().Head().Head()) {
-            if (const auto it = indexes.find(&node->Tail().Tail().Tail()); indexes.cend() == it)
+            if (const auto it = indexes.find(&node->Tail().Tail().Tail()); indexes.cend() == it) {
                 return node;
-            else if (IsDataOrOptionalOfData(itemType->FindItemType(node->Tail().Tail().Tail().Content())))
+            } else {
                 sorted.emplace_back(it->second);
-            else
-                return node;
+            }
         } else if (node->Tail().Tail().IsList()) {
             for (const auto& field : node->Tail().Tail().Children()) {
                 if (field->IsCallable("Member") && &field->Head() == &node->Tail().Head().Head())
-                    if (const auto it = indexes.find(&field->Tail()); indexes.cend() == it)
+                    if (const auto it = indexes.find(&field->Tail()); indexes.cend() == it) {
                         return node;
-                    else if (IsDataOrOptionalOfData(itemType->FindItemType(field->Tail().Content())))
+                    } else {
                         sorted.emplace_back(it->second);
-                    else
-                        return node;
+                    }
                 else
                     return node;
             }
@@ -6894,6 +6892,11 @@ TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx)
 
 template <bool Equals>
 TExprNode::TPtr ExpandAggrEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (&node->Head() == &node->Tail()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over same arguments.";
+        return MakeBool<Equals>(node->Pos(), ctx);
+    }
+
     const auto type = node->Head().GetTypeAnn();
     YQL_ENSURE(IsSameAnnotation(*type, *node->Tail().GetTypeAnn()), "Expected same type.");
     switch (type->GetKind()) {
@@ -6928,6 +6931,11 @@ TExprNode::TPtr ExpandAggrEqual(const TExprNode::TPtr& node, TExprContext& ctx) 
 
 template<bool Asc, bool Equals>
 TExprNode::TPtr ExpandAggrCompare(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (&node->Head() == &node->Tail()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over same arguments.";
+        return MakeBool<Equals>(node->Pos(), ctx);
+    }
+
     const auto type = node->Head().GetTypeAnn();
     YQL_ENSURE(IsSameAnnotation(*type, *node->Tail().GetTypeAnn()), "Expected same type.");
     switch (type->GetKind()) {
@@ -7119,12 +7127,6 @@ struct TPeepHoleRules {
         {">", &ExpandSqlCompare<false, false>},
         {"<=", &ExpandSqlCompare<true, true>},
         {">=", &ExpandSqlCompare<false, true>},
-        {"AggrEquals", &ExpandAggrEqual<true>},
-        {"AggrNotEquals", &ExpandAggrEqual<false>},
-        {"AggrLess", &ExpandAggrCompare<true, false>},
-        {"AggrGreater", &ExpandAggrCompare<false, false>},
-        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
-        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
@@ -7212,6 +7214,12 @@ struct TPeepHoleRules {
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},
+        {"AggrEquals", &ExpandAggrEqual<true>},
+        {"AggrNotEquals", &ExpandAggrEqual<false>},
+        {"AggrLess", &ExpandAggrCompare<true, false>},
+        {"AggrGreater", &ExpandAggrCompare<false, false>},
+        {"AggrLessOrEqual", &ExpandAggrCompare<true, true>},
+        {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {};
@@ -7274,7 +7282,7 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
         peepholeSettings.CommonConfig->AfterCreate(&pipeline);
     }
 
-    AddStandardTransformers(pipeline, typeAnnotator);
+    AddStandardTransformers<false>(pipeline, typeAnnotator);
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterTypeAnnotation(&pipeline);
     }
@@ -7309,7 +7317,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
         peepholeSettings.FinalConfig->AfterCreate(&pipeline);
     }
 
-    AddStandardTransformers(pipeline, typeAnnotator);
+    AddStandardTransformers<true>(pipeline, typeAnnotator);
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterTypeAnnotation(&pipeline);
     }

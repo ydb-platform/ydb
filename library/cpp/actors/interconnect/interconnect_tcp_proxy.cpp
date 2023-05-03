@@ -294,7 +294,7 @@ namespace NActors {
                 Send(ev->Sender, new TEvHandshakeReplyError("duplicate serial"));
                 return;
             } else if (serial == *LastSerialFromIncomingHandshake) {
-                LOG_NOTICE_IC("ICP15", "Handshake# %s is obsolete, serial# %" PRIu64
+                LOG_NOTICE_IC("ICP00", "Handshake# %s is obsolete, serial# %" PRIu64
                     " LastSerialFromIncomingHandshake# %" PRIu64, ev->Sender.ToString().data(),
                     serial, *LastSerialFromIncomingHandshake);
                 Send(ev->Sender, new TEvents::TEvPoisonPill);
@@ -338,6 +338,9 @@ namespace NActors {
             /* It seems to be an old handshake. */
             return;
         }
+
+        // drop any pending XDC subscriptions
+        ConnectionSubscriptions.clear();
 
         Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor);
         SwitchToState(__LINE__, "StateWork", &TThis::StateWork);
@@ -605,7 +608,7 @@ namespace NActors {
 
         Y_VERIFY(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
-        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev, TActivationContext::ActorContextFor(SessionID));
+        InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -728,11 +731,16 @@ namespace NActors {
             }
         }
 
-        if (Session != nullptr) {
-            Session->GenerateHttpInfo(str);
+        TAutoPtr<IEventHandle> h(new IEventHandle(ev->Sender, ev->Recipient, new NMon::TEvHttpInfoRes(str.Str())));
+        if (Session) {
+            switch (auto& ev = h; ev->GetTypeRewrite()) {
+                hFunc(NMon::TEvHttpInfoRes, Session->GenerateHttpInfo);
+                default:
+                    Y_FAIL();
+            }
+        } else {
+            TActivationContext::Send(h.Release());
         }
-
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
     void TInterconnectProxyTCP::TransitToErrorState(TString explanation, bool updateErrorLog) {
@@ -886,7 +894,7 @@ namespace NActors {
         stats.LastSessionDieTime = LastSessionDieTime;
         stats.TotalOutputQueueSize = Session ? Session->TotalOutputQueueSize : 0;
         stats.Connected = Session ? (bool)Session->Socket : false;
-        stats.ExternalDataChannel = Session && Session->Params.UseExternalDataChannel;
+        stats.ExternalDataChannel = Session && Session->XdcSocket;
         stats.Host = TechnicalPeerHostName;
         stats.Port = 0;
         ui32 rep = 0;

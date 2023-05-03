@@ -14,7 +14,6 @@ target_include_directories(ydb-core-cms-console-yaml_config-ut PRIVATE
 target_link_libraries(ydb-core-cms-console-yaml_config-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cms-console-yaml_config
@@ -27,6 +26,7 @@ target_link_options(ydb-core-cms-console-yaml_config-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-cms-console-yaml_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/console_dumper_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config_ut.cpp
 )
 set_property(
@@ -61,5 +61,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-cms-console-yaml_config-ut
+  system_allocator
 )
 vcs_info(ydb-core-cms-console-yaml_config-ut)

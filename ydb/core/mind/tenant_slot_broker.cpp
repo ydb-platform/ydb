@@ -415,10 +415,7 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
     tabletCounters->RemoveSubgroup("type", "TENANT_SLOT_BROKER");
     Counters = new TCounters(tabletCounters->GetSubgroup("type", "TENANT_SLOT_BROKER"));
 
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {(ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem}, ctx.SelfID);
 
     ProcessTx(CreateTxInitScheme(), ctx);
 }
@@ -440,10 +437,9 @@ void TTenantSlotBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &,
     Die(ctx);
 }
 
-void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
-                                const TActorContext &ctx)
+void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
+    LOG_DEBUG(*TlsActivationContext, NKikimrServices::TENANT_SLOT_BROKER,
               "Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
               TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
     InitQueue.push_back(ev);
@@ -615,6 +611,8 @@ bool TTenantSlotBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 void TTenantSlotBroker::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Cleanup");
+
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 }
 
 void TTenantSlotBroker::Die(const TActorContext &ctx)
@@ -625,6 +623,7 @@ void TTenantSlotBroker::Die(const TActorContext &ctx)
 
 void TTenantSlotBroker::LoadConfigFromProto(const NKikimrTenantSlotBroker::TConfig &config)
 {
+    Config = config;
     PendingTimeout = TDuration::MicroSeconds(config.GetPendingSlotTimeout());
 }
 
@@ -1624,7 +1623,14 @@ void TTenantSlotBroker::ProcessNextTx(const TActorContext &ctx)
 void TTenantSlotBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
-    ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
+        ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    } else {
+        // ignore and immediately ack messages from old persistent console subscriptions
+        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TTenantSlotBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

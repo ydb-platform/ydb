@@ -73,6 +73,7 @@ struct TTaskRunnerStatsBase {
     // basic stats
     TDuration BuildCpuTime;
     TInstant FinishTs;
+    TInstant StartTs;
 
     TDuration ComputeCpuTime;
     TRunStatusTimeMetrics RunStatusTimeMetrics; // ComputeCpuTime + RunStatusTimeMetrics == 100% time
@@ -98,8 +99,6 @@ struct TTaskRunnerStatsBase {
     template<typename T>
     void FromProto(const T& f)
     {
-        //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-        //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
         this->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs());
         this->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs());
         this->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs()));
@@ -260,7 +259,6 @@ struct TDqTaskRunnerSettings {
     bool CollectBasicStats = false;
     bool CollectProfileStats = false;
     bool TerminateOnError = false;
-    bool AllowGeneratorsInUnboxedValues = true;
     bool UseCacheForLLVM = false;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
@@ -339,6 +337,7 @@ template <>
 inline void Out<NYql::NDq::TTaskRunnerStatsBase>(IOutputStream& os, TTypeTraits<NYql::NDq::TTaskRunnerStatsBase>::TFuncParam stats) {
     os << "TTaskRunnerStatsBase:" << Endl
        << "\tBuildCpuTime: " << stats.BuildCpuTime << Endl
+       << "\tStartTs: " << stats.StartTs << Endl
        << "\tFinishTs: " << stats.FinishTs << Endl
        << "\tComputeCpuTime: " << stats.ComputeCpuTime << Endl
        << "\tWaitTime: " << stats.WaitTime << Endl

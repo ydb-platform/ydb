@@ -53,6 +53,21 @@ struct TWriteTableSettings {
         : Other(other) {}
 };
 
+struct TWriteTopicSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TopicSettings;
+    NNodes::TMaybeNode<NNodes::TCoTopicConsumerList> Consumers;
+    NNodes::TMaybeNode<NNodes::TCoTopicConsumerList> AddConsumers;
+    NNodes::TMaybeNode<NNodes::TCoTopicConsumerList> AlterConsumers;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> DropConsumers;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteTopicSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+
+};
+
 struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
@@ -98,6 +113,7 @@ bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option);
 TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
+TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);

@@ -18,7 +18,7 @@ using namespace NActors;
 
 class TFilterActor : public TActorBootstrapped<TFilterActor> {
 public:
-    using TFilterFunc = std::function<bool (IEventHandle&, const TActorContext&)>;
+    using TFilterFunc = std::function<bool (IEventHandle&)>;
 
 private:
     TActorId QueueId;
@@ -52,7 +52,7 @@ public:
     }
 
     STFUNC(StateFunc) {
-        if (FilterFunc(*ev, ctx)) {
+        if (FilterFunc(*ev)) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvBlobStorage::TEvVCheckReadiness, HandleFw);
                 HFunc(TEvBlobStorage::TEvVGet, HandleFw);
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageQueueTest) {
         return; // TODO(alexvru)
 
         TVector<std::pair<ui64, ui64>> sequence;
-        auto filterFunc = [&](IEventHandle& ev, const TActorContext& /*ctx*/) {
+        auto filterFunc = [&](IEventHandle& ev) {
             if (ev.GetTypeRewrite() == TEvBlobStorage::TEvVGet::EventType) {
                 TEventHandle<TEvBlobStorage::TEvVGet>& evv = reinterpret_cast<TEventHandle<TEvBlobStorage::TEvVGet>&>(ev);
                 const auto& record = evv.Get()->Record;

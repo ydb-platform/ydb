@@ -12,7 +12,6 @@ target_link_libraries(table-perf PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   test-libs-table
   library-cpp-charset
   library-cpp-getopt
@@ -33,5 +32,8 @@ target_link_options(table-perf PRIVATE
 target_sources(table-perf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/colons.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/test/tool/perf/main.cpp
+)
+target_allocator(table-perf
+  cpp-malloc-jemalloc
 )
 vcs_info(table-perf)

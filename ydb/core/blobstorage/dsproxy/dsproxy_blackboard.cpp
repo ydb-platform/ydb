@@ -454,7 +454,7 @@ void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber) {
 EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TBlobStates::value_type*> *finished) {
     IStrategy& temp = const_cast<IStrategy&>(s); // better UX
     Y_VERIFY(BlobStates.size());
-    EStrategyOutcome outcome = EStrategyOutcome::IN_PROGRESS;
+    TString errorReason;
     for (auto it = BlobStates.begin(); it != BlobStates.end(); ++it) {
         auto& blob = it->second;
         if (!blob.IsChanged) {
@@ -468,7 +468,6 @@ EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& 
                     DoneCount--;
                     blob.IsDone = false;
                 }
-                outcome = EStrategyOutcome::IN_PROGRESS;
                 break;
 
             case EStrategyOutcome::ERROR:
@@ -479,11 +478,11 @@ EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& 
                     if (finished) {
                         finished->push_back(&*it);
                     }
-                    if (outcome.ErrorReason) {
-                        outcome.ErrorReason += " && ";
-                        outcome.ErrorReason += res.ErrorReason;
+                    if (errorReason) {
+                        errorReason += " && ";
+                        errorReason += res.ErrorReason;
                     } else {
-                        outcome.ErrorReason = res.ErrorReason;
+                        errorReason = res.ErrorReason;
                     }
                 }
                 if (!blob.IsDone) {
@@ -506,9 +505,10 @@ EStrategyOutcome TBlackboard::RunStrategy(TLogContext &logCtx, const IStrategy& 
                 break;
         }
     }
-    if (DoneCount == (BlobStates.size() + DoneBlobStates.size())) {
-        outcome = EStrategyOutcome::DONE;
-    }
+
+    const bool isDone = (DoneCount == (BlobStates.size() + DoneBlobStates.size()));
+    EStrategyOutcome outcome(isDone ? EStrategyOutcome::DONE : EStrategyOutcome::IN_PROGRESS);
+    outcome.ErrorReason = std::move(errorReason);
     return outcome;
 }
 

@@ -749,7 +749,6 @@ TExprNode::TPtr BuildOutputFlattenMembersArg(const TCoEquiJoinInput& input, cons
     }
 
     auto flatMapInputItem = GetSequenceItemType(flatMap.Input(), false);
-    auto flatMapOutputItem = GetSequenceItemType(flatMap, false);
 
     auto myStruct = ctx.Builder(input.Pos())
         .Callable("DivePrefixMembers")
@@ -785,26 +784,26 @@ TExprNode::TPtr BuildOutputFlattenMembersArg(const TCoEquiJoinInput& input, cons
         }
     }
 
-    auto checkedMembersList = ctx.NewList(input.Pos(), std::move(membersForCheck));
-
     return ctx.Builder(input.Pos())
         .List()
             .Atom(0, labelPrefix)
-            .Callable(1, "IfPresent")
-                .Callable(0, "FilterNullMembers")
-                    .Callable(0, "AssumeAllMembersNullableAtOnce")
-                        .Callable(0, "Just")
-                            .Add(0, std::move(myStruct))
+            .Callable(1, "FlattenMembers")
+                .List(0)
+                    .Atom(0, "")
+                    .Callable(1, "FlatMap")
+                        .Callable(0, "FilterNullMembers")
+                            .Callable(0, "AssumeAllMembersNullableAtOnce")
+                                .Callable(0, "Just")
+                                    .Add(0, std::move(myStruct))
+                                .Seal()
+                            .Seal()
+                            .List(1)
+                                .Add(std::move(membersForCheck))
+                            .Seal()
                         .Seal()
-                    .Seal()
-                    .Add(1, std::move(checkedMembersList))
-                .Seal()
-                .Lambda(1)
-                    .Param("canaryInput")
-                    .Callable("FlattenMembers")
-                        .List(0)
-                            .Atom(0, "")
-                            .Callable(1, "Just")
+                        .Lambda(1)
+                            .Param("canaryInput")
+                            .Callable("Just")
                                 .ApplyPartial(0, lambda.Args().Ptr(), std::move(strippedLambdaBody))
                                     .With(0)
                                         .Callable("RemoveMember")
@@ -814,14 +813,6 @@ TExprNode::TPtr BuildOutputFlattenMembersArg(const TCoEquiJoinInput& input, cons
                                     .Done()
                                 .Seal()
                             .Seal()
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Callable(2, "FlattenMembers")
-                    .List(0)
-                        .Atom(0, "")
-                        .Callable(1, "Nothing")
-                            .Add(0, ExpandType(input.Pos(), *ctx.MakeType<TOptionalExprType>(flatMapOutputItem), ctx))
                         .Seal()
                     .Seal()
                 .Seal()
@@ -2183,7 +2174,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable({
             "Collect", "LazyList", "ForwardList","Iterator","FromFlow","ToFlow","AssumeUnique","AssumeDistinct",
             "FilterNullMembers","SkipNullMembers","FilterNullElements","SkipNullElements",
-            "ExpandMap","WideMap","WideFilter","NarrowMap","NarrowFlatMap","NarrowMultiMap"
+            "ExpandMap","WideMap","WideFilter","NarrowMap","NarrowFlatMap","NarrowMultiMap",
+            "MapJoinCore"
         })) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
             return ctx.SwapWithHead(*node);

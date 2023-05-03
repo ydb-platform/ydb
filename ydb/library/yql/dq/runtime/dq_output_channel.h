@@ -46,12 +46,12 @@ public:
     using TPtr = TIntrusivePtr<IDqOutputChannel>;
 
     virtual ui64 GetChannelId() const = 0;
-    virtual ui64 GetValuesCount(bool inMemoryOnly = true) const = 0;
+    virtual ui64 GetValuesCount() const = 0;
 
     // <| consumer methods
     // can throw TDqChannelStorageException
     [[nodiscard]]
-    virtual bool Pop(NDqProto::TData& data, ui64 bytes) = 0;
+    virtual bool Pop(NDqProto::TData& data) = 0;
     // Pop watermark.
     [[nodiscard]]
     virtual bool Pop(NDqProto::TWatermark& watermark) = 0;
@@ -65,7 +65,6 @@ public:
     // can throw TDqChannelStorageException
     [[nodiscard]]
     virtual bool PopAll(NDqProto::TData& data) = 0;
-    virtual bool PopAll(NKikimr::NMiniKQL::TUnboxedValueVector& rows) = 0;
     // |>
 
     virtual ui64 Drop() = 0;
@@ -81,7 +80,6 @@ struct TDqOutputChannelSettings {
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
     IDqChannelStorage::TPtr ChannelStorage;
     bool CollectProfileStats = false;
-    bool AllowGeneratorsInUnboxedValues = true;
 };
 
 IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* outputType,

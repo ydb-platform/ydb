@@ -23,7 +23,7 @@ namespace NBlockIO {
 
     private:
         void Registered(TActorSystem*, const TActorId&) override;
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx);
+        void Inbox(TEventHandlePtr &eh);
         void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>) noexcept;
         void Dispatch() noexcept;
         void Handle(ui32 offset, TArrayRef<TLoaded>) noexcept;

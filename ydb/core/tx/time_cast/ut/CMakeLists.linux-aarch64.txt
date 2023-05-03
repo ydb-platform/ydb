@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-tx-time_cast-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-tx-time_cast
   core-testlib-default
@@ -76,5 +75,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-tx-time_cast-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-time_cast-ut)

@@ -4,14 +4,13 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#define BOOST_LOCALE_SOURCE
 #include "boost/locale/icu/icu_backend.hpp"
 #include <boost/locale/gnu_gettext.hpp>
 #include <boost/locale/localization_backend.hpp>
 #include <boost/locale/util.hpp>
+#include <boost/locale/util/locale_data.hpp>
 #include "boost/locale/icu/all_generator.hpp"
 #include "boost/locale/icu/cdata.hpp"
-#include "boost/locale/util/locale_data.hpp"
 #include <algorithm>
 #include <iterator>
 
@@ -63,11 +62,11 @@ namespace boost { namespace locale { namespace impl_icu {
             d.parse(real_id_);
 
             data_.locale = icu::Locale::createCanonical(real_id_.c_str());
-            data_.encoding = d.encoding;
-            data_.utf8 = d.utf8;
-            language_ = d.language;
-            country_ = d.country;
-            variant_ = d.variant;
+            data_.encoding = d.encoding();
+            data_.utf8 = d.is_utf8();
+            language_ = d.language();
+            country_ = d.country();
+            variant_ = d.variant();
         }
 
         std::locale install(const std::locale& base, category_t category, char_facet_t type) override

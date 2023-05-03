@@ -43,7 +43,7 @@ namespace NFake {
             sys->Send(SelfId(), new TEvents::TEvBootstrap);
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx)
+        void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<TEvTablet::TEvTabletDead>()) {
 
@@ -62,7 +62,7 @@ namespace NFake {
                 } else if (Borns >= Limit) {
                     DoSuicide();
                 } else {
-                    Alive = false, Agent = { }, Start(ctx);
+                    Alive = false, Agent = { }, Start(this->ActorContext());
                 }
 
             } else if (eh->CastAsLocal<TEvTablet::TEvRestored>()) {
@@ -70,7 +70,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvLocal::TEvTabletMetrics>()) {
 
             } else if (eh->CastAsLocal<TEvents::TEvBootstrap>()) {
-                Start(ctx);
+                Start(this->ActorContext());
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 if (auto logl = Logger->Log(ELnLev::Debug))
                     logl << "Got kill req for Tablet " << Info->TabletID;

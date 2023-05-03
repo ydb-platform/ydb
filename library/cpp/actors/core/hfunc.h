@@ -5,10 +5,17 @@
 
 #include <util/system/defaults.h>
 
+#define HFuncCtx(TEvType, HandleFunc, Ctx)                                          \
+    case TEvType::EventType: {                                                      \
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+        HandleFunc(*x, Ctx);                                                        \
+        break;                                                                      \
+    }
+
 #define HFunc(TEvType, HandleFunc)                                                  \
     case TEvType::EventType: {                                                      \
         typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x, ctx);                                                        \
+        HandleFunc(*x, this->ActorContext()); \
         break;                                                                      \
     }
 
@@ -23,7 +30,7 @@
     case TEvType::EventType: {                                    \
         TRACE_EVENT_TYPE(Y_STRINGIZE(TEvType));                      \
         TEvType::TPtr* x = reinterpret_cast<TEvType::TPtr*>(&ev); \
-        HandleFunc(*x, ctx);                                      \
+        HandleFunc(*x, this->ActorContext());             \
         break;                                                    \
     }
 
@@ -38,7 +45,7 @@
 #define HTemplFunc(TEvType, HandleFunc)                                             \
     case TEvType::EventType: {                                                      \
         typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x, ctx);                                                        \
+        HandleFunc(*x, this->ActorContext());              \
         break;                                                                      \
     }
 
@@ -51,7 +58,7 @@
 
 #define SFunc(TEvType, HandleFunc) \
     case TEvType::EventType:       \
-        HandleFunc(ctx);           \
+        HandleFunc(this->ActorContext()); \
         break;
 
 #define sFunc(TEvType, HandleFunc) \
@@ -61,7 +68,12 @@
 
 #define CFunc(TEventType, HandleFunc) \
     case TEventType:                  \
-        HandleFunc(ctx);              \
+        HandleFunc(this->ActorContext()); \
+        break;
+
+#define CFuncCtx(TEventType, HandleFunc, ctx) \
+    case TEventType:                  \
+        HandleFunc(ctx); \
         break;
 
 #define cFunc(TEventType, HandleFunc) \
@@ -71,7 +83,7 @@
 
 #define FFunc(TEventType, HandleFunc) \
     case TEventType:                  \
-        HandleFunc(ev, ctx);          \
+        HandleFunc(ev, this->ActorContext()); \
         break;
 
 #define fFunc(TEventType, HandleFunc) \

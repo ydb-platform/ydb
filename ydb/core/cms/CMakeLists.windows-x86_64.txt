@@ -117,14 +117,15 @@ target_link_libraries(ydb-core-cms.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/5aa7f9361b96d3de658aa5b60e0263fd.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/f13dea7eff082ee71bdf3de5a8cf9130.cpp
 )
 resources(ydb-core-cms.global
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/5aa7f9361b96d3de658aa5b60e0263fd.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/f13dea7eff082ee71bdf3de5a8cf9130.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/index.html
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/config_dispatcher.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms_log.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/console_log.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/common.css
@@ -154,6 +155,7 @@ resources(ydb-core-cms.global
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/require.min.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/jquery.min.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/main.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/configs_dispatcher_main.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/question-circle.svg
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/bootstrap.bundle.min.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/theme.blue.css
@@ -169,6 +171,7 @@ resources(ydb-core-cms.global
   cms/ui/index.html
   cms/ui/cms.css
   cms/ui/cms.js
+  cms/ui/config_dispatcher.css
   cms/ui/cms_log.js
   cms/ui/console_log.js
   cms/ui/common.css
@@ -198,6 +201,7 @@ resources(ydb-core-cms.global
   cms/ui/ext/require.min.js
   cms/ui/ext/jquery.min.js
   cms/ui/main.js
+  cms/ui/configs_dispatcher_main.js
   cms/ui/ext/question-circle.svg
   cms/ui/ext/bootstrap.bundle.min.js
   cms/ui/ext/theme.blue.css

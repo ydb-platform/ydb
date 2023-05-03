@@ -40,6 +40,14 @@ namespace boost { namespace locale { namespace boundary {
     /// \cond INTERNAL
 
     namespace detail {
+        template<typename Char>
+        const boundary_indexing<Char>& get_boundary_indexing(const std::locale& l)
+        {
+            using facet_type = boundary_indexing<Char>;
+            if(!std::has_facet<facet_type>(l))
+                throw std::runtime_error("Locale was generated without segmentation support!");
+            return std::use_facet<facet_type>(l);
+        }
 
         template<typename IteratorType,
                  typename CategoryType = typename std::iterator_traits<IteratorType>::iterator_category>
@@ -48,7 +56,7 @@ namespace boost { namespace locale { namespace boundary {
             static index_type map(boundary_type t, IteratorType b, IteratorType e, const std::locale& l)
             {
                 std::basic_string<char_type> str(b, e);
-                return std::use_facet<boundary_indexing<char_type>>(l).map(t, str.c_str(), str.c_str() + str.size());
+                return get_boundary_indexing<char_type>(l).map(t, str.c_str(), str.c_str() + str.size());
             }
         };
 
@@ -78,12 +86,11 @@ namespace boost { namespace locale { namespace boundary {
                 if(linear_iterator_traits<char_type, IteratorType>::is_linear && b != e) {
                     const char_type* begin = &*b;
                     const char_type* end = begin + (e - b);
-                    index_type tmp = std::use_facet<boundary_indexing<char_type>>(l).map(t, begin, end);
+                    index_type tmp = get_boundary_indexing<char_type>(l).map(t, begin, end);
                     result.swap(tmp);
                 } else {
                     std::basic_string<char_type> str(b, e);
-                    index_type tmp =
-                      std::use_facet<boundary_indexing<char_type>>(l).map(t, str.c_str(), str.c_str() + str.size());
+                    index_type tmp = get_boundary_indexing<char_type>(l).map(t, str.c_str(), str.c_str() + str.size());
                     result.swap(tmp);
                 }
                 return result;

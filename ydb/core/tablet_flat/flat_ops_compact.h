@@ -393,7 +393,7 @@ namespace NTabletFlatExecutor {
             return scan;
         }
 
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
+        void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<TEvPutResult>()) {
                 Handle(*ev);
@@ -504,7 +504,7 @@ namespace NTabletFlatExecutor {
             auto flag = NKikimrBlobStorage::AsyncBlob;
             auto *ev = new TEvPut(id.Logo, std::exchange(glob.Data, TString{ }), TInstant::Max(), flag,
                 TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput);
-            auto ctx = TActivationContext::ActorContextFor(SelfId());
+            auto ctx = ActorContext();
 
             SendToBSProxy(ctx, id.Group, ev);
         }

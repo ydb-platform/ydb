@@ -1,3 +1,4 @@
+#include "datashard_failpoints.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
@@ -752,8 +753,8 @@ private:
             bool needTxObserver = (
                 // We need tx observer when there are waiting volatile transactions
                 baseTxMap ||
-                // We need tx observer when current lock has uncommitted changes
-                State.LockId && Self->SysLocksTable().HasCurrentWriteLock(State.PathId));
+                // We need tx observer when there are active write locks
+                State.LockId && Self->SysLocksTable().HasWriteLocks(State.PathId));
 
             if (needTxObserver) {
                 if (State.LockId) {
@@ -1404,7 +1405,10 @@ public:
             << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
 
         Reader->FillResult(*Result, state);
-        Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
+
+        if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {
+            Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
+        }
     }
 
     void Complete(const TActorContext& ctx) override {

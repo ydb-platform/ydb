@@ -782,16 +782,24 @@ public:
         UpdateConfig(db, "MaxRequestSequenceSize", TSchemeIds::State::MaxRequestSequenceSize);
         UpdateConfig(db, "MetricsWindowSize", TSchemeIds::State::MetricsWindowSize);
         UpdateConfig(db, "ResourceOvercommitment", TSchemeIds::State::ResourceOvercommitment);
-        UpdateConfig(db, "BalancerInflight");
         UpdateConfig(db, "MinPeriodBetweenBalance");
         UpdateConfig(db, "NodeBalanceStrategy");
         UpdateConfig(db, "TabletBalanceStrategy");
+        UpdateConfig(db, "BalancerInflight");
         UpdateConfig(db, "MaxMovementsOnAutoBalancer");
         UpdateConfig(db, "ContinueAutoBalancer");
+        UpdateConfig(db, "EmergencyBalancerInflight");
+        UpdateConfig(db, "MaxMovementsOnEmergencyBalancer");
+        UpdateConfig(db, "ContinueEmergencyBalancer");
         UpdateConfig(db, "MinNodeUsageToBalance");
         UpdateConfig(db, "MinPeriodBetweenReassign");
         UpdateConfig(db, "NodeSelectStrategy");
         UpdateConfig(db, "CheckMoveExpediency");
+        UpdateConfig(db, "SpaceUsagePenaltyThreshold");
+        UpdateConfig(db, "SpaceUsagePenalty");
+        UpdateConfig(db, "WarmUpBootWaitingPeriod");
+        UpdateConfig(db, "MaxWarmUpPeriod");
+        UpdateConfig(db, "WarmUpEnabled");
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             TVector<TString> tabletTypeNames = SplitString(params.Get("BalancerIgnoreTabletTypes"), ";");
@@ -1056,11 +1064,19 @@ public:
         ShowConfig(out, "ResourceOvercommitment");
         ShowConfig(out, "NodeBalanceStrategy");
         ShowConfig(out, "TabletBalanceStrategy");
-        ShowConfig(out, "BalancerInflight");
         ShowConfig(out, "MinPeriodBetweenBalance");
+        ShowConfig(out, "BalancerInflight");
         ShowConfig(out, "MaxMovementsOnAutoBalancer");
         ShowConfig(out, "ContinueAutoBalancer");
+        ShowConfig(out, "EmergencyBalancerInflight");
+        ShowConfig(out, "MaxMovementsOnEmergencyBalancer");
+        ShowConfig(out, "ContinueEmergencyBalancer");
         ShowConfig(out, "CheckMoveExpediency");
+        ShowConfig(out, "SpaceUsagePenaltyThreshold");
+        ShowConfig(out, "SpaceUsagePenalty");
+        ShowConfig(out, "WarmUpBootWaitingPeriod");
+        ShowConfig(out, "MaxWarmUpPeriod");
+        ShowConfig(out, "WarmUpEnabled");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";

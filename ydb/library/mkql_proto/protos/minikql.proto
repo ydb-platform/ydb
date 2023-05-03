@@ -17,8 +17,8 @@ enum ETypeKind {
     Null = 9;
     Pg = 10;
     Tagged = 11;
-    Reserved_12 = 12;
-    Reserved_13 = 13;
+    EmptyList = 12;
+    EmptyDict = 13;
     Reserved_14 = 14;
 }
 

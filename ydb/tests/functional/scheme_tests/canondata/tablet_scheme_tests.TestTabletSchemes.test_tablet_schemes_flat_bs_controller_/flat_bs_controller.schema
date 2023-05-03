@@ -724,6 +724,16 @@
                 "ColumnId": 12,
                 "ColumnName": "LastSeenReady",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "LastGotReplicating",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "ReplicationTime",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -741,7 +751,9 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,

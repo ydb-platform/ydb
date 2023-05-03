@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-tx-tx_proxy-ut_base_tenant PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   core-tx-tx_proxy
   library-cpp-getopt
@@ -81,5 +80,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-tx-tx_proxy-ut_base_tenant
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-tx_proxy-ut_base_tenant)

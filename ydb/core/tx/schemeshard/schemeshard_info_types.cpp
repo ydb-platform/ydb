@@ -1,4 +1,5 @@
 #include "schemeshard_info_types.h"
+#include "schemeshard_tables_storage.h"
 #include "schemeshard_path.h"
 #include "schemeshard_utils.h"
 
@@ -227,6 +228,26 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
+    if (op.HasReplicationConfig()) {
+        const auto& cfg = op.GetReplicationConfig();
+
+        if (source) {
+            errStr = "Cannot alter replication config";
+            return nullptr;
+        }
+
+        switch (cfg.GetMode()) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+            break;
+        default:
+            errStr = "Unknown replication mode";
+            return nullptr;
+        }
+
+        alterData->TableDescriptionFull->MutableReplicationConfig()->CopyFrom(cfg);
+    }
+
     alterData->IsBackup = op.GetIsBackup();
 
     if (source && op.KeyColumnNamesSize() == 0)
@@ -380,6 +401,44 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
 
     return posById;
 }
+
+}
+
+bool TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+    if (!DoLayout(currentLayout, shardsCount, result)) {
+        return false;
+    }
+    Y_VERIFY(result.size() == shardsCount);
+    return true;
+}
+
+bool TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+    for (auto&& i : currentLayout.GetGroups()) {
+        if (i.GetTableIds().Size() == 0 && i.GetShardIds().Size() >= shardsCount) {
+            result = i.GetShardIds().GetIdsVector(shardsCount);
+            return true;
+        }
+        if (i.GetShardIds().Size() != shardsCount) {
+            continue;
+        }
+        result = i.GetShardIds().GetIdsVector();
+        return true;
+    }
+    return false;
+}
+
+bool TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+    std::vector<ui64> resultLocal;
+    for (auto&& i : currentLayout.GetGroups()) {
+        for (auto&& s : i.GetShardIds()) {
+            resultLocal.emplace_back(s);
+            if (resultLocal.size() == shardsCount) {
+                std::swap(result, resultLocal);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData) {
@@ -1219,6 +1278,11 @@ void TTableInfo::FinishAlter() {
         MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings());
     }
 
+    // Apply replication config
+    if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasReplicationConfig()) {
+        MutableReplicationConfig().Swap(AlterData->TableDescriptionFull->MutableReplicationConfig());
+    }
+
     // Force FillDescription to regenerate TableDescription
     ResetDescriptionCache();
 
@@ -2020,6 +2084,18 @@ TOlapStoreInfo::TOlapStoreInfo(
             TOwnerId(shardIdx.GetOwnerId()),
             TLocalShardIdx(shardIdx.GetLocalId())));
     }
+}
+
+TOlapStoreInfo::ILayoutPolicy::TPtr TOlapStoreInfo::GetTablesLayoutPolicy() const {
+    ILayoutPolicy::TPtr result;
+    if (AppData()->ColumnShardConfig.GetTablesStorageLayoutPolicy().HasMinimalTables()) {
+        result = std::make_shared<TMinimalTablesCountLayout>();
+    } else if (AppData()->ColumnShardConfig.GetTablesStorageLayoutPolicy().HasIdentityGroups()) {
+        result = std::make_shared<TIdentityGroupsLayout>();
+    } else {
+        result = std::make_shared<TMinimalTablesCountLayout>();
+    }
+    return result;
 }
 
 TColumnTableInfo::TColumnTableInfo(

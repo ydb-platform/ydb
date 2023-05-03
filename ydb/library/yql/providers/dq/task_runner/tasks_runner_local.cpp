@@ -84,9 +84,9 @@ public:
     { }
 
     [[nodiscard]]
-    NDqProto::TPopResponse Pop(NDqProto::TData& data, ui64 bytes) override {
+    NDqProto::TPopResponse Pop(NDqProto::TData& data) override {
         NDqProto::TPopResponse response;
-        response.SetResult(Channel->Pop(data, bytes));
+        response.SetResult(Channel->Pop(data));
         if (Channel->IsFinished()) {
             UpdateOutputChannelStats();
             QueryStat.FlushCounters(response);
@@ -262,7 +262,6 @@ public:
         settings.TerminateOnError = TerminateOnError;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
-        settings.AllowGeneratorsInUnboxedValues = true;
 
         Yql::DqsProto::TTaskMeta taskMeta;
         task.GetMeta().UnpackTo(&taskMeta);

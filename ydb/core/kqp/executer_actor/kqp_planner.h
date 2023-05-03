@@ -18,53 +18,54 @@ namespace NKikimr::NKqp {
 
 class TKqpPlanner {
 
-    struct RequestData {
-        NKikimrKqp::TEvStartKqpTasksRequest request;
-        ui32 flag;
+    struct TRequestData {
+        TVector<ui64> TaskIds;
+        ui32 Flag;
+        ui64 NodeId;
         ui32 RetryNumber = 0;
         ui32 CurrentDelay = 0;
+        std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializedRequest;
+
+        explicit TRequestData(TVector<ui64>&& taskIds, ui64 flag, ui64 nodeId)
+            : TaskIds(std::move(taskIds))
+            , Flag(flag)
+            , NodeId(nodeId)
+        {}
     };
 
 public:
-    TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
-        THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
+    TKqpPlanner(const TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
+        THashMap<ui64, TVector<ui64>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-        const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages,
-        bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
-        TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
+        const Ydb::Table::QueryStatsCollection::Mode& statsMode,
+        bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
+        TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+        bool isDataQuery);
+
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
-
-    void ProcessTasksForScanExecuter();
-    void ProcessTasksForDataExecuter();
-
-    ui64 GetComputeTasksNumber() const;
-    ui64 GetMainTasksNumber() const;
-
+    std::unique_ptr<IEventHandle> PlanExecution();
+    std::unique_ptr<IEventHandle> AssignTasksToNodes();
+    void Submit();
     ui32 GetCurrentRetryDelay(ui32 requestId);
+
 private:
+
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
-    void RunLocal(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot);
-
-    void PrepareKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& request, THashSet<ui64> taskIds);
-    void AddScansToKqpNodeRequest(NKikimrKqp::TEvStartKqpTasksRequest& request, ui64 nodeId);
-    void AddSnapshotInfoToTaskInputs(NYql::NDqProto::TDqTask& task);
-
+    std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData) const;
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
 private:
     const ui64 TxId;
     const TActorId ExecuterId;
-    TVector<NYql::NDqProto::TDqTask> ComputeTasks;
-    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> MainTasksPerNode;
+    TVector<ui64> ComputeTasks;
+    THashMap<ui64, TVector<ui64>> TasksPerNode;
     const IKqpGateway::TKqpSnapshot Snapshot;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
-    const bool DisableLlvmForUdfStages;
-    const bool EnableLlvm;
     const bool WithSpilling;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
@@ -73,15 +74,17 @@ private:
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst;
     TVector<TTaskResourceEstimation> ResourceEstimations;
-    TVector<RequestData> Requests;
+    TVector<TRequestData> Requests;
+    const TKqpTasksGraph& TasksGraph;
+    const bool IsDataQuery;
 };
 
-std::unique_ptr<TKqpPlanner> CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
-    THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
+std::unique_ptr<TKqpPlanner> CreateKqpPlanner(const TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
+    THashMap<ui64, TVector<ui64>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
-    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig);
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig, bool isDataQuery);
 
 } // namespace NKikimr::NKqp

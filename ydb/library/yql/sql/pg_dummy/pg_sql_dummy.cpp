@@ -1,5 +1,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 
+#include <ydb/library/yql/minikql/mkql_buffer.h>
+
 namespace NSQLTranslationPG {
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
@@ -49,6 +51,14 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
     Y_UNUSED(binary);
     Y_UNUSED(pgTypeId);
     throw yexception() << "PgValueFromNativeBinary: PG types are not supported";
+}
+
+TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 typMod, TMaybe<TString>* error) {
+    Y_UNUSED(value);
+    Y_UNUSED(pgTypeId);
+    Y_UNUSED(typMod);
+    Y_UNUSED(error);
+    throw yexception() << "PgValueCoerce: PG types are not supported";
 }
 
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
@@ -130,6 +140,12 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
+ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
+    Y_UNUSED(typeLen);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
 ui64 PgValueSize(ui32 type, const NUdf::TUnboxedValuePod& value) {
     Y_UNUSED(type);
     Y_UNUSED(value);
@@ -143,6 +159,14 @@ ui64 PgValueSize(const TPgType* type, const NUdf::TUnboxedValuePod& value) {
 }
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+   Y_UNUSED(stable);
+   Y_UNUSED(type);
+   Y_UNUSED(value);
+   Y_UNUSED(buf);
+   throw yexception() << "PG types are not supported";
+}
+
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPagedBuffer& buf) {
    Y_UNUSED(stable);
    Y_UNUSED(type);
    Y_UNUSED(value);
@@ -192,6 +216,11 @@ NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
 
 NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
     Y_UNUSED(type);
+    throw yexception() << "PG types are not supported";
+}
+
+NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
+    Y_UNUSED(typeId);
     throw yexception() << "PG types are not supported";
 }
 
@@ -252,10 +281,38 @@ public:
         Y_UNUSED(data);
         ythrow yexception() << "TPgDummyBuilder::NewString does nothing";
     }
+
+    NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsCStringBuffer does nothing";
+    }
+
+    NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::AsTextBuffer does nothing";
+    }
+
+    NUdf::TUnboxedValue MakeCString(const char* value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::MakeCString does nothing";
+    }
+
+    NUdf::TUnboxedValue MakeText(const char* value) const override {
+        Y_UNUSED(value);
+        ythrow yexception() << "TPgDummyBuilder::MakeText does nothing";
+    }
 };
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
     return std::make_unique<TPgDummyBuilder>();
+}
+
+bool HasPgKernel(ui32 procOid) {
+    Y_UNUSED(procOid);
+    return false;
+}
+
+void RegisterPgKernels() {
 }
 
 std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,
@@ -302,6 +359,11 @@ TString TypeModFromPgTypeName(const TStringBuf name) {
 }
 
 bool TypeDescIsComparable(void* typeDesc) {
+    Y_UNUSED(typeDesc);
+    throw yexception() << "PG types are not supported";
+}
+
+i32 TypeDescGetTypeLen(void* typeDesc) {
     Y_UNUSED(typeDesc);
     throw yexception() << "PG types are not supported";
 }

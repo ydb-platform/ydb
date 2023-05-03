@@ -10,8 +10,8 @@ struct TTypeWrapper
     using T = TType;
 };
 
-template <typename TFunc, bool EnableNull = false>
-bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
+template <class TResult, TResult defaultValue, typename TFunc, bool EnableNull = false>
+TResult SwitchTypeImpl(arrow::Type::type typeId, TFunc&& f) {
     switch (typeId) {
         case arrow::Type::NA: {
             if constexpr (EnableNull) {
@@ -84,7 +84,12 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
             break;
     }
 
-    return false;
+    return defaultValue;
+}
+
+template <typename TFunc, bool EnableNull = false>
+bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
+    return SwitchTypeImpl<bool, false, TFunc, EnableNull>(typeId, std::move(f));
 }
 
 template <typename TFunc>

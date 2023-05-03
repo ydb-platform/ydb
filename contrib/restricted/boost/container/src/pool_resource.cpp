@@ -20,6 +20,7 @@
 #include <boost/container/detail/placement_new.hpp>
 #include <boost/intrusive/linear_slist_algorithms.hpp>
 #include <boost/intrusive/detail/math.hpp>
+#include <boost/static_assert.hpp>
 
 #include <cstddef>
 

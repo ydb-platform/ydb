@@ -15,7 +15,6 @@ target_link_libraries(ydb-core-external_sources-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-core-external_sources
   udf-service-stub
@@ -66,5 +65,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-external_sources-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-external_sources-ut)

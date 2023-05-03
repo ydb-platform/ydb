@@ -18,6 +18,12 @@ namespace NActors {
         // Need to have per pool object to collect stats like actor registrations (because
         // registrations might be done in threads from other pools)
         TExecutorThreadStats Stats;
+
+        // Stuck actor monitoring
+        TMutex StuckObserverMutex;
+        std::vector<IActor*> Actors;
+        friend class TExecutorThread;
+        void RecalculateStuckActors(TExecutorThreadStats& stats) const;
 #endif
         TAtomic RegisterRevolvingCounter = 0;
         ui64 AllocateID();

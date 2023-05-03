@@ -68,8 +68,7 @@ void TNodeBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
     Die(ctx);
 }
 
-void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
-                          const TActorContext &ctx)
+void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
     switch (ev->GetTypeRewrite()) {
     case TEvNodeBroker::EvListNodes:
@@ -78,7 +77,7 @@ void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
         EnqueuedEvents.push_back(ev);
         break;
     default:
-        TTabletExecutedFlat::Enqueue(ev, ctx);
+        TTabletExecutedFlat::Enqueue(ev);
     }
 }
 
@@ -131,6 +130,8 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 void TNodeBroker::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::Cleanup");
+
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
     TxProcessor->Clear();
 }
@@ -284,10 +285,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     }
 }
 
-void TNodeBroker::ProcessEnqueuedEvents(const TActorContext& ctx)
+void TNodeBroker::ProcessEnqueuedEvents(const TActorContext&)
 {
     for (auto &ev : EnqueuedEvents)
-        Receive(ev, ctx);
+        Receive(ev);
     EnqueuedEvents.clear();
 }
 
@@ -300,7 +301,7 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetResolveHost(node.ResolveHost);
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
-    node.Location.Serialize(info.MutableLocation(), true);
+    node.Location.Serialize(info.MutableLocation(), false);
 }
 
 void TNodeBroker::ComputeNextEpochDiff(TStateDiff &diff)
@@ -392,14 +393,8 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
-    if (ConfigSubscriptionId)
-        return;
-
     ui32 item = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {item},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {item}, ctx.SelfID);
 }
 
 void TNodeBroker::ProcessTx(ITransaction *tx,
@@ -468,10 +463,6 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
         .Update<T::Lease>(node.Lease)
         .Update<T::Expire>(node.Expire.GetValue())
         .Update<T::Location>(node.Location.GetSerializedLocation());
-
-    // to be removed
-    const auto& x = node.Location.GetLegacyValue();
-    db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body);
 }
 
 void TNodeBroker::DbApplyStateDiff(const TStateDiff &diff,
@@ -598,47 +589,24 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             toRemove.push_back(id);
         } else {
             auto expire = TInstant::FromValue(nodesRowset.GetValue<T::Expire>());
-            std::optional<TNodeLocation> legacyLocation, modernLocation;
-            if (nodesRowset.HaveValue<T::DataCenter>() && nodesRowset.HaveValue<T::Room>() &&
-                    nodesRowset.HaveValue<T::Rack>() && nodesRowset.HaveValue<T::Body>()) {
-                // priority value for compatibility issues
-                NActorsInterconnect::TNodeLocation proto;
-                proto.SetDataCenterNum(nodesRowset.GetValue<T::DataCenter>());
-                proto.SetRoomNum(nodesRowset.GetValue<T::Room>());
-                proto.SetRackNum(nodesRowset.GetValue<T::Rack>());
-                proto.SetBodyNum(nodesRowset.GetValue<T::Body>());
-                legacyLocation.emplace(proto);
-            }
+            std::optional<TNodeLocation> modernLocation;
             if (nodesRowset.HaveValue<T::Location>()) {
                 modernLocation.emplace(TNodeLocation::FromSerialized, nodesRowset.GetValue<T::Location>());
             }
 
             TNodeLocation location;
 
-            if (!legacyLocation) {
-                // only modern value found in database
-                Y_VERIFY(modernLocation);
-                location = std::move(*modernLocation);
-            } else if (!modernLocation) {
-                // only legacy value found in database
-                Y_VERIFY(legacyLocation);
-                location = std::move(*legacyLocation);
-            } else if (*modernLocation == *legacyLocation) {
-                // both modern and legacy values and they match; use modern one with legacy value filled
-                location = std::move(*modernLocation);
-                location.InheritLegacyValue(*legacyLocation);
-            } else {
-                // both values found, but there is no match -- legacy value was rewritten after modern one was written
-                location = std::move(*legacyLocation);
-            }
+            // only modern value found in database
+            Y_VERIFY(modernLocation);
+            location = std::move(*modernLocation);
 
             TNodeInfo info{id,
                 nodesRowset.GetValue<T::Address>(),
                 nodesRowset.GetValue<T::Host>(),
                 nodesRowset.GetValue<T::ResolveHost>(),
                 (ui16)nodesRowset.GetValue<T::Port>(),
-                location,
-                legacyLocation && !modernLocation}; // format update pending
+                location}; // format update pending
+
             info.Lease = nodesRowset.GetValue<T::Lease>();
             info.Expire = expire;
 
@@ -753,16 +721,19 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
-
-    // to be removed
-    const auto& x = node.Location.GetLegacyValue();
-    db.Table<T>().Key(node.NodeId).Update<T::DataCenter, T::Room, T::Rack, T::Body>(x.DataCenter, x.Room, x.Rack, x.Body);
 }
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
+        ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    } else {
+        // ignore and immediately ack messages from old persistent console subscriptions
+        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

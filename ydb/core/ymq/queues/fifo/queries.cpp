@@ -231,7 +231,11 @@ const char* const PurgeQueueStage2Query = R"__(
                     (Length recordsExisted)
                     (Uint64 '0))
             ))
-
+            (AsList (SetResult 'newMessagesCount
+                (If versionIsSame
+                    count
+                    (Member stateRead 'MessageCount))
+            ))
             (If versionIsSame
                 (AsList (UpdateRow stateTable stateRow stateUpdate))
             (AsList (Void)))
@@ -533,8 +537,11 @@ const char* const InternalGetQueueAttributesQuery = R"__(
             'VisibilityTimeout
             'ShowDetailedCountersDeadline))
 
+        (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
+
         (return (AsList
-            (SetResult 'attrs (SelectRow attrsTable attrsRow attrsSelect))))
+            (SetResult 'queueExists (Exists attrsRead))
+            (SetResult 'attrs attrsRead)))
     )
 )__";
 
@@ -550,7 +557,7 @@ const char* const ListQueuesQuery = R"__(
         (let queuesRange '(
             '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
-        (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards))
+        (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards 'TablesFormat))
         (let queues (Member (SelectRange queuesTable queuesRange queueSelect '()) 'List))
 
         (let filtered (Filter queues (lambda '(item) (block '(

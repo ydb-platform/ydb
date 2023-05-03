@@ -15,7 +15,6 @@ target_link_libraries(benchmark PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   testing-benchmark-main
   library-cpp-json
   library-yql-minikql
@@ -39,5 +38,8 @@ target_link_options(benchmark PRIVATE
 )
 target_sources(benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
+)
+target_allocator(benchmark
+  cpp-malloc-jemalloc
 )
 vcs_info(benchmark)

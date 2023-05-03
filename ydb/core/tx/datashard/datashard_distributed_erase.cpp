@@ -318,7 +318,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
-            return StatePrepareBase(ev, TlsActivationContext->AsActorContext());
+            return StatePrepareBase(ev);
         }
     }
 
@@ -352,7 +352,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
-            return StatePrepareBase(ev, TlsActivationContext->AsActorContext());
+            return StatePrepareBase(ev);
         }
     }
 
@@ -510,7 +510,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
         default:
-            return StatePrepareBase(ev, TlsActivationContext->AsActorContext());
+            return StatePrepareBase(ev);
         }
     }
 
@@ -765,7 +765,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePropose);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePropose);
         default:
-            return StateExecuteBase(ev, TlsActivationContext->AsActorContext());
+            return StateExecuteBase(ev);
         }
     }
 
@@ -925,7 +925,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
         default:
-            return StateExecuteBase(ev, TlsActivationContext->AsActorContext());
+            return StateExecuteBase(ev);
         }
     }
 

@@ -175,6 +175,7 @@ TString THelper::GetTestTableSchema() const {
     }
     sb << R"(
         KeyColumnNames: "timestamp"
+        KeyColumnNames: "uid"
         Engine : COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
     return sb;
@@ -355,7 +356,8 @@ std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>>{
             arrow::field("id", arrow::int32()),
             arrow::field("resource_id", arrow::utf8()),
-            arrow::field("level", arrow::int32())
+            arrow::field("level", arrow::int32()),
+            arrow::field("binary_str", arrow::binary())
     });
 }
 
@@ -370,28 +372,33 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     arrow::Int32Builder b1;
     arrow::StringBuilder b2;
     arrow::Int32Builder b3;
+    arrow::StringBuilder b4;
 
     for (size_t i = 1; i <= rowCount / 2; ++i) {
         Y_VERIFY(b1.Append(i).ok());
         Y_VERIFY(b2.AppendNull().ok());
         Y_VERIFY(b3.Append(i).ok());
+        Y_VERIFY(b4.AppendNull().ok());
     }
 
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
         Y_VERIFY(b1.Append(i).ok());
         Y_VERIFY(b2.Append(std::to_string(i)).ok());
         Y_VERIFY(b3.AppendNull().ok());
+        Y_VERIFY(b4.Append(std::to_string(i)).ok());
     }
 
     std::shared_ptr<arrow::Int32Array> a1;
     std::shared_ptr<arrow::StringArray> a2;
     std::shared_ptr<arrow::Int32Array> a3;
+    std::shared_ptr<arrow::StringArray> a4;
 
     Y_VERIFY(b1.Finish(&a1).ok());
     Y_VERIFY(b2.Finish(&a2).ok());
     Y_VERIFY(b3.Finish(&a3).ok());
+    Y_VERIFY(b4.Finish(&a4).ok());
 
-    return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3 });
+    return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4 });
 }
 
 }

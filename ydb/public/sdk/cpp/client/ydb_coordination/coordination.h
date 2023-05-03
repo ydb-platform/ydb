@@ -107,6 +107,7 @@ public:
 
     const TString& GetOwner() const;
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const;
+    const Ydb::Coordination::DescribeNodeResult& GetProto() const;
 
 private:
     struct TImpl;

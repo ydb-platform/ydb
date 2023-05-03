@@ -19,77 +19,30 @@ class TCountersTable;
 /// - Columns: granule -> blobs
 class TColumnEngineForLogs : public IColumnEngine {
 public:
-    struct TMark {
-        std::shared_ptr<arrow::Scalar> Border;
+    class TMarksGranules {
+    public:
+        using TPair = std::pair<TMark, ui64>;
 
-        explicit TMark(const std::shared_ptr<arrow::Scalar>& s)
-            : Border(s)
-        {
-            Y_VERIFY(Border);
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
+        TMarksGranules() = default;
+        TMarksGranules(std::vector<TPair>&& marks) noexcept;
+        TMarksGranules(std::vector<TMark>&& points);
+        TMarksGranules(const TSelectInfo& selectInfo);
+
+        const std::vector<TPair>& GetOrderedMarks() const noexcept {
+             return Marks;
         }
 
-        explicit TMark(const std::shared_ptr<arrow::DataType>& type)
-            : Border(MinScalar(type))
-        {
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
+        bool Empty() const noexcept {
+            return Marks.empty();
         }
 
-        TMark(const TString& key, const std::shared_ptr<arrow::DataType>& type) {
-            Deserialize(key, type);
-            Y_VERIFY_DEBUG(NArrow::IsGoodScalar(Border));
-        }
+        bool MakePrecedingMark(const TIndexInfo& indexInfo);
 
-        TMark(const TMark& m) = default;
-        TMark& operator = (const TMark& m) = default;
+        THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
+        SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const TIndexInfo& indexInfo);
 
-        bool operator == (const TMark& m) const {
-            return Border->Equals(*m.Border);
-        }
-
-        bool operator < (const TMark& m) const {
-            return NArrow::ScalarLess(*Border, *m.Border);
-        }
-
-        bool operator <= (const TMark& m) const {
-            return Border->Equals(*m.Border) || NArrow::ScalarLess(*Border, *m.Border);
-        }
-
-        bool operator > (const TMark& m) const {
-            return !(*this <= m);
-        }
-
-        bool operator >= (const TMark& m) const {
-            return !(*this < m);
-        }
-
-        ui64 Hash() const {
-            return Border->hash();
-        }
-
-        operator size_t () const {
-            return Hash();
-        }
-
-        operator bool () const {
-            Y_VERIFY(false);
-        }
-
-        TString Serialize() const {
-            return SerializeKeyScalar(Border);
-        }
-
-        void Deserialize(const TString& key, const std::shared_ptr<arrow::DataType>& type) {
-            Border = DeserializeKeyScalar(key, type);
-        }
-
-        static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type) {
-            if (type->id() == arrow::Type::TIMESTAMP) {
-                // TODO: support negative timestamps in index
-                return std::make_shared<arrow::TimestampScalar>(0, type);
-            }
-            return NArrow::MinScalar(type);
-        }
+    private:
+        std::vector<TPair> Marks;
     };
 
     class TChanges : public TColumnEngineChanges {
@@ -107,7 +60,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  TVector<NOlap::TInsertedData>&& blobsToIndex, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::INSERT)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             Limits = limits;
             DataToIndex = std::move(blobsToIndex);
@@ -116,7 +69,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::COMPACTION)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             Limits = limits;
             CompactionInfo = std::move(info);
@@ -125,7 +78,7 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  const TSnapshot& snapshot, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::CLEANUP)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             Limits = limits;
             InitSnapshot = snapshot;
@@ -134,13 +87,13 @@ public:
         TChanges(const TColumnEngineForLogs& engine,
                  TColumnEngineChanges::EType type, const TSnapshot& applySnapshot)
             : TColumnEngineChanges(type)
-            , DefaultMark(engine.GetMarkType())
+            , DefaultMark(engine.GetDefaultMark())
         {
             ApplySnapshot = applySnapshot;
         }
 
         bool AddPathIfNotExists(ui64 pathId) {
-            if (PathToGranule.count(pathId)) {
+            if (PathToGranule.contains(pathId)) {
                 return false;
             }
 
@@ -156,7 +109,7 @@ public:
 
         ui64 SetTmpGranule(ui64 pathId, const TMark& mark) {
             Y_VERIFY(pathId == SrcGranule->PathId);
-            if (!TmpGranuleIds.count(mark)) {
+            if (!TmpGranuleIds.contains(mark)) {
                 TmpGranuleIds[mark] = FirstGranuleId;
                 ++FirstGranuleId;
             }
@@ -194,7 +147,7 @@ public:
         std::optional<TSrcGranule> SrcGranule;
         THashMap<ui64, std::pair<ui64, TMark>> NewGranules; // granule -> {pathId, key}
         THashMap<TMark, ui32> TmpGranuleIds; // mark -> tmp granule id
-        TMap<TMark, ui64> MergeBorders;
+        TMarksGranules MergeBorders;
         ui64 FirstGranuleId{0};
         ui32 ReservedGranuleIds{0};
     };
@@ -222,7 +175,7 @@ public:
     const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
 
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
-        if (PathsGranulesOverloaded.count(pathId)) {
+        if (PathsGranulesOverloaded.contains(pathId)) {
             return &PathsGranulesOverloaded.find(pathId)->second;
         }
         return nullptr;
@@ -230,17 +183,16 @@ public:
 
     bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
 
-    TString SerializeMark(const std::shared_ptr<arrow::Scalar>& scalar) const override {
-        Y_VERIFY_S(scalar->type->Equals(MarkType), scalar->type->ToString() + ", expected " + MarkType->ToString());
-        return TMark(scalar).Serialize();
+    TString SerializeMark(const NArrow::TReplaceKey& key) const override {
+        return TMark::Serialize(key, MarkSchema);
     }
 
-    std::shared_ptr<arrow::Scalar> DeserializeMark(const TString& key) const override {
-        return TMark(key, MarkType).Border;
+    NArrow::TReplaceKey DeserializeMark(const TString& key) const override {
+        return TMark::Deserialize(key, MarkSchema);
     }
 
-    const std::shared_ptr<arrow::DataType>& GetMarkType() const {
-        return MarkType;
+    TMark GetDefaultMark() const {
+        return TMark(MarkSchema);
     }
 
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
@@ -294,7 +246,7 @@ private:
     TIndexInfo IndexInfo;
     TCompactionLimits Limits;
     ui64 TabletId;
-    std::shared_ptr<arrow::DataType> MarkType;
+    std::shared_ptr<arrow::Schema> MarkSchema;
     std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
     std::shared_ptr<TCountersTable> CountersTable;
@@ -347,17 +299,5 @@ private:
 
     TVector<TVector<std::pair<TMark, ui64>>> EmptyGranuleTracks(ui64 pathId) const;
 };
-
-
-std::shared_ptr<arrow::Array> GetFirstPKColumn(const TIndexInfo& indexInfo,
-                                               const std::shared_ptr<arrow::RecordBatch>& batch);
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                  const TMap<TColumnEngineForLogs::TMark, ui64>& tsGranules,
-                  const TIndexInfo& indexInfo);
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                  const std::vector<std::pair<TColumnEngineForLogs::TMark, ui64>>& tsGranules,
-                  const TIndexInfo& indexInfo);
 
 }

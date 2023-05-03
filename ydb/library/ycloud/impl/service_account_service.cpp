@@ -52,7 +52,7 @@ public:
         , TGrpcServiceClient(settings)
     {}
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvServiceAccountService::TEvGetServiceAccountRequest, Handle);
             hFunc(TEvServiceAccountService::TEvIssueTokenRequest, Handle);

@@ -23,7 +23,6 @@ add_executable(example_02_discovery)
 target_link_libraries(example_02_discovery PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-actors-core
   cpp-actors-dnsresolver
@@ -47,6 +46,9 @@ target_sources(example_02_discovery PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/examples/02_discovery/main.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/examples/02_discovery/publish.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/examples/02_discovery/replica.cpp
+)
+target_allocator(example_02_discovery
+  library-cpp-lfalloc
 )
 target_proto_addincls(example_02_discovery
   ./

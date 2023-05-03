@@ -18,7 +18,6 @@ target_link_libraries(mon-test PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-cpp-resource
   library-cpp-getopt
   cpp-monlib-dynamic_counters
@@ -44,5 +43,8 @@ resources(mon-test
   ${CMAKE_SOURCE_DIR}/ydb/library/schlab/mon/static/schviz-test0.json
   KEYS
   schlab/schviz-test0.json
+)
+target_allocator(mon-test
+  cpp-malloc-jemalloc
 )
 vcs_info(mon-test)

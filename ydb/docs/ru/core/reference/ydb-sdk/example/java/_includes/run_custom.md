@@ -22,5 +22,3 @@
 ( cd ydb-java-examples/basic_example/target && \
 YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." java -jar ydb-basic-example.jar grpcs://ydb.example.com:2135?database=/somepath/somelocation)
 ```
-
-{% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}

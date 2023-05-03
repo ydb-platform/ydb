@@ -162,7 +162,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
             default:
-                TPersQueueBaseRequestProcessor::StateFunc(ev, ctx);
+                TPersQueueBaseRequestProcessor::StateFunc(ev);
         }
     }
 

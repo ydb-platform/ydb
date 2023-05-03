@@ -17,6 +17,7 @@ namespace NKikimr::NPQ {
 
 struct TDistributedTransaction {
     TDistributedTransaction() = default;
+    explicit TDistributedTransaction(const NKikimrPQ::TTransaction& tx);
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
                               ui64 minStep);
@@ -47,7 +48,8 @@ struct TDistributedTransaction {
 
     EDecision SelfDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
-    NActors::TActorId Source;      // отправитель TEvProposeTransaction
+    NActors::TActorId SourceActor; // отправитель TEvProposeTransaction
+    ui64 SourceTablet = Max<ui64>();
     THashSet<ui32> Partitions;     // список участвующих партиций
 
     size_t PartitionRepliesCount = 0;
@@ -59,6 +61,7 @@ struct TDistributedTransaction {
 
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
+    NPersQueue::TTopicConverterPtr TopicConverter;
 
     bool WriteInProgress = false;
 
@@ -79,6 +82,32 @@ struct TDistributedTransaction {
 
     void AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx);
     void AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx);
+
+    void InitDataTransaction(const NKikimrPQ::TTransaction& tx);
+    void InitConfigTransaction(const NKikimrPQ::TTransaction& tx);
+
+    void InitPartitions(const google::protobuf::RepeatedPtrField<NKikimrPQ::TPartitionOperation>& tx);
+    void InitPartitions(const NKikimrPQ::TPQTabletConfig& config);
+
+    template<class E>
+    void OnPartitionResult(const E& event, EDecision decision);
+
+    struct TSerializedMessage {
+        ui32 Type;
+        TIntrusivePtr<TEventSerializedData> Data;
+
+        TSerializedMessage(ui32 type, TIntrusivePtr<TEventSerializedData> data) :
+            Type(type),
+            Data(data)
+        {
+        }
+    };
+
+    THashMap<ui64, TVector<TSerializedMessage>> OutputMsgs;
+
+    void BindMsgToPipe(ui64 tabletId, const IEventBase& event);
+    void UnbindMsgsFromPipe(ui64 tabletId);
+    const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
 };
 
 }

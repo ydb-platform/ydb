@@ -12,10 +12,13 @@ using namespace NActors;
 
 class TYqlSingleQueryActor : public TActorBootstrapped<TYqlSingleQueryActor> {
 public:
-    TYqlSingleQueryActor(TActorId parent, TString workingDir, TString query, TDuration timeout)
+    TYqlSingleQueryActor(TActorId parent, TString workingDir, TString query, NKikimrKqp::EQueryType queryType, bool readOnly, TString result, TDuration timeout)
         : Parent(std::move(parent))
         , WorkingDir(std::move(workingDir))
         , Query(std::move(query))
+        , QueryType(queryType)
+        , ReadOnly(readOnly)
+        , Result(std::move(result))
         , Timeout(std::move(timeout))
     {}
 
@@ -36,14 +39,33 @@ public:
 private:
     void HandlePoisonPill(const TActorContext& ctx) {
         LOG_CRIT_S(ctx, NKikimrServices::KQP_LOAD_TEST, "HandlePoisonPill");
-        DeathReport(ctx, "Query timed out");
+        ReportError(ctx, "Query timed out");
     }
 
-    void DeathReport(const TActorContext& ctx, TMaybe<TString> errorMessage) {
+    void ReportResult(const TActorContext& ctx, NKikimrKqp::TQueryResponse response, TMaybe<TString> errorMessage) {
+        CloseSession(ctx);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST,
+            "Creating event for query response " << (errorMessage.Defined() ? "with error" : "with success"));
+        auto* finishEv = new TEvLoad::TEvYqlSingleQueryResponse(
+            Result,
+            std::move(errorMessage),
+            std::move(response)
+        );
+        ctx.Send(Parent, finishEv);
+
+        PassAway();
+    }
+
+    void ReportError(const TActorContext& ctx, TString errorMessage) {
         CloseSession(ctx);
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for table creation finish");
-        auto* finishEv = new TEvLoad::TEvYqlSingleQueryResponse(std::move(errorMessage));
+        auto* finishEv = new TEvLoad::TEvYqlSingleQueryResponse(
+            "",
+            std::move(errorMessage),
+            Nothing()
+        );
         ctx.Send(Parent, finishEv);
 
         PassAway();
@@ -76,11 +98,23 @@ private:
         LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for query execution");
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        ev->Record.MutableRequest()->SetDatabase(WorkingDir);
-        ev->Record.MutableRequest()->SetSessionId(Session);
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
-        ev->Record.MutableRequest()->SetQuery(Query);
+        auto* request = ev->Record.MutableRequest();
+        request->SetDatabase(WorkingDir);
+        request->SetSessionId(Session);
+        request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        request->SetType(QueryType);
+        request->SetQuery(Query);
+
+        if (QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML) {
+            if (ReadOnly) {
+                request->MutableTxControl()->mutable_begin_tx()->mutable_stale_read_only();
+            } else {
+                request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            }
+            request->MutableTxControl()->set_commit_tx(true);
+        } else {
+            Y_ENSURE(!ReadOnly, "Flag ReadOnly is not applicable for this query type");
+        }
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
 
@@ -92,7 +126,10 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query is executed successfully");
-            DeathReport(ctx, /* errorMessage */ {});
+            ReportResult(ctx, response.GetResponse(), Nothing());
+        } else if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SCHEME_ERROR) {
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Abort after query execution failed with scheme error: " + ev->Get()->ToString());
+            ReportResult(ctx, response.GetResponse(), ev->Get()->ToString());
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query execution failed: " + ev->Get()->ToString());
             ExecuteQuery(ctx);
@@ -117,16 +154,30 @@ private:
     const TActorId Parent;
     const TString WorkingDir;
     const TString Query;
+    const NKikimrKqp::EQueryType QueryType;
+    const bool ReadOnly;
+    const TString Result;
     const TDuration Timeout;
 
     TString Session;
 };
 
-IActor *CreateYqlSingleQueryActor(TActorId parent, TString workingDir, TString query, TDuration timeout) {
+IActor *CreateYqlSingleQueryActor(
+    TActorId parent,
+    TString workingDir,
+    TString query,
+    NKikimrKqp::EQueryType queryType,
+    bool readOnly,
+    TString result,
+    TDuration timeout
+) {
     return new TYqlSingleQueryActor(
         std::move(parent),
         std::move(workingDir),
         std::move(query),
+        queryType,
+        readOnly,
+        std::move(result),
         std::move(timeout)
     );
 }

@@ -415,8 +415,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                 Columns { Name: "some" Type: "Uint64" NotNull: true }
-                Columns { Name: "data" Type: "Utf8" }
+                Columns { Name: "data" Type: "Utf8" NotNull: true }
                 KeyColumnNames: "some"
+                KeyColumnNames: "data"
                 Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
             Sharding {

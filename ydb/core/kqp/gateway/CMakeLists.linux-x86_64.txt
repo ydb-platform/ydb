@@ -24,6 +24,7 @@ target_link_libraries(core-kqp-gateway PUBLIC
   providers-result-expr_nodes
 )
 target_sources(core-kqp-gateway PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_gateway.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_ic_gateway.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_metadata_loader.cpp
 )

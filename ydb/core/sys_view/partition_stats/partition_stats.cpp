@@ -500,7 +500,7 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TPartitionStatsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }

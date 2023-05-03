@@ -15,8 +15,6 @@ target_link_libraries(with_offset_ranges_mode_ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-testing-gmock_in_unittest
@@ -81,5 +79,9 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(with_offset_ranges_mode_ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(with_offset_ranges_mode_ut)

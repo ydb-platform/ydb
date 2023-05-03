@@ -259,7 +259,7 @@ namespace {
 
         scope.clear();
 
-        const bool singleSide = joinType.Content().ends_with("Only") ||  joinType.Content().ends_with("Semi");
+        const bool singleSide = joinType.Content().ends_with("Only") || joinType.Content().ends_with("Semi");
         const bool rightSide = joinType.Content().starts_with("Right");
         const bool leftSide = joinType.Content().starts_with("Left");
 
@@ -334,9 +334,11 @@ namespace {
             }
         }
 
-        const bool lOneRow = (lUnique && lUnique->HasEqualColumns(lCheck)) || (leftHints && (leftHints->contains("unique") || leftHints->contains("any")));
-        const bool rOneRow = (rUnique && rUnique->HasEqualColumns(rCheck)) || (rightHints && (rightHints->contains("unique") || rightHints->contains("any")));
-        const bool bothOne = lOneRow && rOneRow;
+        const bool lAny = leftHints && (leftHints->contains("unique") || leftHints->contains("any"));
+        const bool rAny = rightHints && (rightHints->contains("unique") || rightHints->contains("any"));
+
+        const bool lOneRow = lAny || lUnique && lUnique->HasEqualColumns(lCheck);
+        const bool rOneRow = rAny || rUnique && rUnique->HasEqualColumns(rCheck);
 
         if (unique) {
             if (singleSide) {
@@ -344,13 +346,17 @@ namespace {
                     *unique = lUnique;
                 else if (rightSide)
                     *unique = rUnique;
-            } else if (joinType.IsAtom("Exclusion") || (lOneRow && rOneRow && joinType.IsAtom({"Inner", "Full", "Left", "Right"}))) {
-                if (lUnique && rUnique)
-                    *unique = TUniqueConstraintNode::Merge(lUnique, rUnique, ctx);
-                else if (lUnique)
+            } else if (!joinType.IsAtom("Cross")) {
+                const bool exclusion = joinType.IsAtom("Exclusion") ;
+                const bool useLeft = lUnique && (rOneRow || exclusion);
+                const bool useRight = rUnique && (lOneRow || exclusion);
+
+                if (useLeft && !useRight)
                     *unique = lUnique;
-                else if (rUnique)
+                else if (useRight && !useLeft)
                     *unique = rUnique;
+                else if (useLeft && useRight)
+                    *unique = TUniqueConstraintNode::Merge(lUnique, rUnique, ctx);
             }
         }
 
@@ -360,10 +366,10 @@ namespace {
                     *distinct = lDistinct;
                 else if (rightSide)
                     *distinct = rDistinct;
-            } else {
-                const bool useBoth = bothOne && joinType.IsAtom("Inner");
-                const bool useLeft = lDistinct && ((leftSide && rOneRow) || useBoth);
-                const bool useRight = rDistinct && ((rightSide && lOneRow) || useBoth);
+            } else if (!joinType.IsAtom("Cross")) {
+                const bool inner = joinType.IsAtom("Inner");
+                const bool useLeft = lDistinct && rOneRow && (inner || leftSide);
+                const bool useRight = rDistinct && lOneRow && (inner || rightSide);
 
                 if (useLeft && !useRight)
                     *distinct = lDistinct;

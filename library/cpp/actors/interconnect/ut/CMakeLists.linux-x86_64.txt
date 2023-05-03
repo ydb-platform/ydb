@@ -14,8 +14,6 @@ target_link_libraries(library-cpp-actors-interconnect-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-actors-core
@@ -41,6 +39,7 @@ target_sources(library-cpp-actors-interconnect-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/event_holder_pool_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/interconnect_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/large.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/outgoing_stream_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/poller_actor_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/dynamic_proxy_ut.cpp
 )
@@ -83,5 +82,9 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(library-cpp-actors-interconnect-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(library-cpp-actors-interconnect-ut)

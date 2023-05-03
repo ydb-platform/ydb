@@ -31,9 +31,10 @@ struct TTenantInfo {
     THashMap<TString /* tenant */, ui32 /* state */> TenantState;
     TInstant StateTime;
 
-    TString Assign(const TString& cloudId, const TString& /* scope */, const TString& DefaultTenantName = "") {
-
-        auto vTenant = SubjectMapping[SUBJECT_TYPE_CLOUD].Value(cloudId, "");
+    // this method must be thread safe
+    TString Assign(const TString& cloudId, const TString& /* scope */, const TString& DefaultTenantName = "") const {
+        auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
+        auto vTenant = it == SubjectMapping.end() ? "" : it->second.Value(cloudId, "");
         if (!vTenant && CommonVTenants.size()) {
             vTenant = CommonVTenants[MultiHash(cloudId) % CommonVTenants.size()];
         }

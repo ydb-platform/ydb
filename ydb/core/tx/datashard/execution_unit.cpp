@@ -216,6 +216,19 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
+    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
+        TString err = TStringBuilder()
+            << "Can't execute write tx at replicated table:"
+            << " tablet id: " << DataShard.TabletID();
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
+                ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
+
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+
+        op->Abort();
+        return true;
+    }
+
     return false;
 }
 
@@ -245,6 +258,10 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
     }
 
     if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+        return true;
+    }
+
+    if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
         return true;
     }
 

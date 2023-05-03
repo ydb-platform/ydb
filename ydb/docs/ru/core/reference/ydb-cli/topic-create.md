@@ -37,7 +37,7 @@
 Создание топика с 2 партициями, методами сжатия `RAW` и `GZIP`, временем хранения сообщений 2 часа и путем `my-topic`:
 
 ```bash
-{{ ydb-cli }} -p db1 topic create \
+{{ ydb-cli }} -p quickstart topic create \
   --partitions-count 2 \
   --supported-codecs raw,gzip \
   --retention-period-hours 2 \
@@ -47,7 +47,7 @@
 Посмотрите параметры созданного топика:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme describe my-topic
+{{ ydb-cli }} -p quickstart scheme describe my-topic
 ```
 
 Результат:

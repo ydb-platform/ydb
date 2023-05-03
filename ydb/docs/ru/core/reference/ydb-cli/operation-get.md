@@ -31,7 +31,7 @@
 Получите статус фоновой операции с идентификатором `ydb://buildindex/7?id=281489389055514`:
 
 ```bash
-ydb -p db1 operation get \
+ydb -p quickstart operation get \
   'ydb://buildindex/7?id=281489389055514'
 ```
 

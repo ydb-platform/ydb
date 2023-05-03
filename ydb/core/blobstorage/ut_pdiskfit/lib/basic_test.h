@@ -19,10 +19,10 @@ struct TFakeVDiskParams {
 
     // LogRecord size distribution
     ui32 SizeMin = 1000;
-    ui32 SizeMax = 2000;
+    ui32 SizeMax = 100000;
 
     ui32 LsnToKeepCount = 1000;
-    double LogCutProbability = 1.0 / 30000;
+    double LogCutProbability = 1.0 / 500;
 };
 
 
@@ -100,7 +100,6 @@ public:
     }
 
     STFUNC(StateFunc) {
-        Y_UNUSED(ctx);
         switch (const ui32 type = ev->GetTypeRewrite()) {
             default: Y_FAIL("unexpected message 0x%08" PRIx32, type);
         }

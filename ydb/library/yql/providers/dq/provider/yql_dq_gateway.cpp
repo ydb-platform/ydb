@@ -81,12 +81,12 @@ public:
 
             NYql::TIssues issues;
             auto operation = resp.operation();
-            
+
             for (auto& message_ : *operation.Mutableissues()) {
                 TDeque<std::remove_reference_t<decltype(message_)>*> queue;
                 queue.push_front(&message_);
                 while (!queue.empty()) {
-                    auto& message = *queue.front(); 
+                    auto& message = *queue.front();
                     queue.pop_front();
                     message.Setmessage(NBacktrace::Symbolize(message.Getmessage(), modulesMapping));
                     for (auto &subMsg : *message.Mutableissues()) {
@@ -175,10 +175,10 @@ public:
     ) {
         auto backoff = TDuration::MilliSeconds(settings->RetryBackoffMs.Get().GetOrElse(1000));
         auto promise = NewPromise<TResult>();
-        auto fallbackPolicy = settings->FallbackPolicy.Get().GetOrElse("default");
-        auto alwaysFallback = fallbackPolicy == "always";
+        const auto fallbackPolicy = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
+        const auto alwaysFallback = EFallbackPolicy::Always == fallbackPolicy;
         auto self = weak_from_this();
-        auto callback =  [self, promise, sessionId, alwaysFallback, modulesMapping](NGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
+        auto callback = [self, promise, sessionId, alwaysFallback, modulesMapping](NGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
             auto this_ = self.lock();
             if (!this_) {
                 YQL_CLOG(DEBUG, ProviderDq) << "Gateway was closed: " << sessionId;

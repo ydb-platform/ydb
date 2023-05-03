@@ -1,4 +1,4 @@
-/* Copyright 2003-2022 Joaquin M Lopez Munoz.
+/* Copyright 2003-2023 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -127,8 +127,7 @@
 #include <boost/type_traits/is_same.hpp>
 
 #if !defined(BOOST_MULTI_INDEX_DISABLE_SERIALIZATION)
-#include <boost/serialization/split_member.hpp>
-#include <boost/serialization/version.hpp>
+#include <boost/core/serialization.hpp>
 #endif
 
 #if defined(BOOST_HAS_THREADS)
@@ -556,7 +555,11 @@ private:
 
   friend class boost::serialization::access;
 
-  BOOST_SERIALIZATION_SPLIT_MEMBER()
+  template<class Archive>
+  void serialize(Archive& ar,const unsigned int version)
+  {
+    core::split_member(ar,*this,version);
+  }
 
   template<class Archive>
   void save(Archive& ar,const unsigned int version)const

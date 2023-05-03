@@ -14,7 +14,6 @@ target_include_directories(ydb-core-blobstorage-backpressure-ut PRIVATE
 target_link_libraries(ydb-core-blobstorage-backpressure-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-blobstorage-backpressure
@@ -73,5 +72,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-blobstorage-backpressure-ut
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-backpressure-ut)

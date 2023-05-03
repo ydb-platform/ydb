@@ -476,7 +476,7 @@ public:
 
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+            ALOG_ERROR(NKikimrServices::TX_PROXY,
                         "actor# " << SelfId() <<
                             " IGNORING message type# " <<  ev->GetTypeRewrite() <<
                             " from Sender# " << ev->Sender.ToString() <<

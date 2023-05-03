@@ -217,24 +217,6 @@ NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprCo
     return dqQueryNode;
 }
 
-NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
-    const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx)
-{
-    auto stage = node.Cast<TDqStageBase>();
-
-    TExprNode::TPtr newProgram;
-    auto status = LocalUnorderedOptimize(stage.Program().Ptr(), newProgram, stopTraverse, ctx, typeCtx);
-    if (status.Level == IGraphTransformer::TStatus::Error) {
-        return {};
-    }
-
-    if (stage.Program().Ptr() != newProgram) {
-        return NNodes::TExprBase(ctx.ChangeChild(node.Ref(), TDqStageBase::idx_Program, std::move(newProgram)));
-    }
-
-    return node;
-}
-
 NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx)
 {
     auto maybeFlatMap = node.Maybe<TCoFlatMapBase>();

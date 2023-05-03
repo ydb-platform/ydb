@@ -37,13 +37,13 @@ public:
         this->Die(ctx);
     }
 
-    void HandleUnexpectedEvent(const TString& requestType, ui32 eventType, const TActorContext &ctx) {
-        LOG_CRIT_S(ctx, NKikimrServices::KQP_GATEWAY, "TRequestHandlerBase, unexpected event, request type: "
+    void HandleUnexpectedEvent(const TString& requestType, ui32 eventType) {
+        ALOG_CRIT(NKikimrServices::KQP_GATEWAY, "TRequestHandlerBase, unexpected event, request type: "
             << requestType << ", event type: " << eventType);
 
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, TStringBuilder()
             << "Unexpected event in " << requestType << ": " << eventType)));
-        this->Die(ctx);
+        this->PassAway();
     }
 
     void Handle(NKikimr::TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
@@ -103,7 +103,7 @@ public:
             HFunc(TResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Handle);
         default:
-            TBase::HandleUnexpectedEvent("TActorRequestHandler", ev->GetTypeRewrite(), ctx);
+            TBase::HandleUnexpectedEvent("TActorRequestHandler", ev->GetTypeRewrite());
         }
     }
 

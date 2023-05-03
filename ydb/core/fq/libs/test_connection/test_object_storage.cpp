@@ -147,8 +147,8 @@ private:
         }
     }
 
-    static ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
-        return httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
+    static ERetryErrorClass RetryS3SlowDown(CURLcode curlResponseCode, long httpResponseCode) {
+        return curlResponseCode == CURLE_OK && httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
     }
 
     void SendDiscover() {
@@ -164,7 +164,7 @@ private:
         TString requestId = CreateGuidAsString();
         headers.emplace_back(TString{"X-Request-ID:"} + requestId);
 
-        const auto retryPolicy = IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown);
+        const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(RetryS3SlowDown);
 
         NYql::TUrlBuilder urlBuilder(ClusterConfig.GetUrl());
         const auto url = urlBuilder.AddUrlParam("list-type", "2")

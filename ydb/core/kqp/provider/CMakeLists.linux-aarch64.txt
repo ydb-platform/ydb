@@ -34,6 +34,7 @@ target_link_libraries(core-kqp-provider PUBLIC
   library-yql-minikql
   yql-public-decimal
   public-lib-scheme_types
+  cpp-client-ydb_topic
   yql-core-expr_nodes
   parser-pg_wrapper-interface
   providers-common-codec

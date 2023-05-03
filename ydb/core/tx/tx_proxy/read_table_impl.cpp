@@ -2705,7 +2705,7 @@ private:
             HFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleZombieDie);
             default:
                 // For all other events we play dead as if we didn't exist
-                ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+                Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
         }
     }

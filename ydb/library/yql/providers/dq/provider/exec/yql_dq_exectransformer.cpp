@@ -139,7 +139,6 @@ public:
         settings.SecureParams = secureParams;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
-        settings.AllowGeneratorsInUnboxedValues = true;
         auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
 
         {
@@ -154,9 +153,12 @@ public:
 
             NDq::ERunStatus status;
             while ((status = runner->Run()) == NDq::ERunStatus::PendingOutput || status == NDq::ERunStatus::Finished) {
-                NDqProto::TData data;
-                if (runner->GetOutputChannel(0)->PopAll(data) && !fillSettings.Discard) {
-                    rows.push_back(data);
+                if (!fillSettings.Discard) {
+                    NDqProto::TData data;
+                    while (runner->GetOutputChannel(0)->Pop(data)) {
+                        rows.push_back(std::move(data));
+                        data = {};
+                    }
                 }
                 if (status == NDq::ERunStatus::Finished) {
                     break;
@@ -767,7 +769,7 @@ private:
                     enableLocalRun);
 
                 if (lambdaResult.first.Level == TStatus::Error) {
-                    if (State->Settings->FallbackPolicy.Get().GetOrElse("default") == "never"
+                    if (State->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never
                         || State->TypeCtx->ForceDq)
                     {
                         return SyncError();
@@ -844,7 +846,7 @@ private:
                 state->Statistics[state->MetricId++] = res.Statistics;
 
                 if (res.Fallback) {
-                    if (state->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || state->TypeCtx->ForceDq) {
+                    if (state->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never || state->TypeCtx->ForceDq) {
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                         issues.AddIssues(res.Issues());
                         ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
@@ -1061,10 +1063,10 @@ private:
         auto stagesCount = executionPlanner->StagesCount();
 
         if (!executionPlanner->CanFallback()) {
-            settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = "never";
+            settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
         }
 
-        bool canFallback = (settings->FallbackPolicy.Get().GetOrElse("default") != "never" && !State->TypeCtx->ForceDq);
+        bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
         if (stagesCount > maxTasksPerOperation && canFallback) {
             return SyncStatus(FallbackWithMessage(
@@ -1242,7 +1244,7 @@ private:
 
             if (truncated && !state->TypeCtx->ForceDq && !enableFullResultWrite) {
                 auto issue = TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "DQ cannot execute the query. Cause: " << "too big result " <<  trStr).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
-                bool error = settings->FallbackPolicy.Get().GetOrElse("default") == "never";
+                bool error = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never;
                 for (const auto& i : res.Issues()) {
                     TIssuePtr subIssue = new TIssue(i);
                     if (error && subIssue->Severity == TSeverityIds::S_WARNING) {
@@ -1549,10 +1551,10 @@ private:
             auto stagesCount = executionPlanner->StagesCount();
 
             if (!executionPlanner->CanFallback()) {
-                settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = "never";
+                settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
             }
 
-            bool canFallback = (settings->FallbackPolicy.Get().GetOrElse("default") != "never" && !State->TypeCtx->ForceDq);
+            bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
             if (stagesCount > maxTasksPerOperation && canFallback) {
                 return FallbackWithMessage(
@@ -1642,7 +1644,7 @@ private:
 
             executionPlanner.Destroy();
 
-            bool neverFallback = settings->FallbackPolicy.Get().GetOrElse("default") == "never";
+            bool neverFallback = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never;
             future.Subscribe([publicIds, state = State, startTime, execState = ExecState, node = input.Get(), neverFallback, logCtx](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 YQL_ENSURE(!completedFuture.HasException());

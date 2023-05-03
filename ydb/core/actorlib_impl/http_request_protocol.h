@@ -230,11 +230,11 @@ public:
 
 private:
     void ProtocolFunc(
-            TAutoPtr<NActors::IEventHandle>& ev,
-            const TActorContext& ctx) noexcept
+            TAutoPtr<NActors::IEventHandle>& ev) noexcept
     {
+        auto ctx(NActors::TActivationContext::AsActorContext());
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvHTTPProtocolRetry::EventType, Retry);
+            CFuncCtx(TEvHTTPProtocolRetry::EventType, Retry, ctx);
         default:
             Y_FAIL("Unknown message type dispatched");
         }

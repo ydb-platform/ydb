@@ -1,13 +1,14 @@
 #pragma once
 
+#include <ydb/library/yql/core/credentials/yql_credentials.h>
+#include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/credentials/yql_credentials.h>
-#include <ydb/library/yql/providers/config/yql_config_provider.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/core/yql_user_data.h>
+#include <ydb/library/yql/providers/config/yql_config_provider.h>
+#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/sql/sql.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -348,6 +349,8 @@ private:
     void SaveExprRoot();
 
 private:
+    std::optional<bool> CheckFallbackIssues(const TIssues& issues);
+
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
@@ -360,6 +363,7 @@ private:
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;
+    TUserDataTable SavedUserDataTable_;
     const TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
     TString Filename_;
@@ -398,7 +402,7 @@ private:
     TString ExtractedQueryParametersMetadataYson_;
     const bool EnableRangeComputeFor_;
     const IArrowResolver::TPtr ArrowResolver_;
-    i64 FallbackCounter = 0;
+    i64 FallbackCounter_ = 0;
     const EHiddenMode HiddenMode_ = EHiddenMode::Disable;
     THiddenQueryAborter AbortHidden_ = [](){};
 };

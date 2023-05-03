@@ -25,6 +25,6 @@
 Удалите из списка фоновую операцию с идентификатором `ydb://buildindex/7?id=281489389055514`:
 
 ```bash
-ydb -p db1 operation forget \
+ydb -p quickstart operation forget \
   'ydb://buildindex/7?id=281489389055514'
 ```

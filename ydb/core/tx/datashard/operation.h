@@ -16,7 +16,6 @@
 #include <ydb/core/tx/tx_processing.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-#include <library/cpp/containers/flat_hash/flat_hash.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -342,6 +341,11 @@ public:
     void ResetWaitingForSnapshotFlag() { ResetFlag(TTxFlags::WaitingForSnapshot); }
     bool IsWaitingForSnapshot() const { return HasWaitingForSnapshotFlag(); }
 
+    bool HasWaitingForRestartFlag() const { return HasFlag(TTxFlags::WaitingForRestart); }
+    void SetWaitingForRestartFlag(bool val = true) { SetFlag(TTxFlags::WaitingForRestart, val); }
+    void ResetWaitingForRestartFlag() { ResetFlag(TTxFlags::WaitingForRestart); }
+    bool IsWaitingForRestart() const { return HasWaitingForRestartFlag(); }
+
     bool HasResultSentFlag() const { return HasFlag(TTxFlags::ResultSent); }
     void SetResultSentFlag(bool val = true) { SetFlag(TTxFlags::ResultSent, val); }
 
@@ -635,7 +639,7 @@ public:
 
     TVector<TOutputOpData::TChangeRecord> &ChangeRecords() { return OutputDataRef().ChangeRecords; }
 
-    const NFH::TFlatHashSet<ui64> &GetAffectedLocks() const { return AffectedLocks; }
+    const absl::flat_hash_set<ui64> &GetAffectedLocks() const { return AffectedLocks; }
     void AddAffectedLock(ui64 lockTxId) { AffectedLocks.insert(lockTxId); }
 
     ////////////////////////////////////////
@@ -660,12 +664,12 @@ public:
     ////////////////////////////////////////
     //            DEPENDENCIES            //
     ////////////////////////////////////////
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetDependents() const { return Dependents; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetDependencies() const { return Dependencies; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependents() const { return SpecialDependents; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetSpecialDependencies() const { return SpecialDependencies; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetPlannedConflicts() const { return PlannedConflicts; }
-    const NFH::TFlatHashSet<TOperation::TPtr> &GetImmediateConflicts() const { return ImmediateConflicts; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetDependents() const { return Dependents; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetDependencies() const { return Dependencies; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetSpecialDependents() const { return SpecialDependents; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetSpecialDependencies() const { return SpecialDependencies; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetPlannedConflicts() const { return PlannedConflicts; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetImmediateConflicts() const { return ImmediateConflicts; }
     const absl::flat_hash_set<ui64> &GetVolatileDependencies() const { return VolatileDependencies; }
     bool HasVolatileDependencies() const { return !VolatileDependencies.empty(); }
     bool GetVolatileDependenciesAborted() const { return VolatileDependenciesAborted; }
@@ -842,17 +846,17 @@ private:
     THolder<TOutputOpData> OutputData;
     ui64 Cookie;
     // A set of locks affected by this operation
-    NFH::TFlatHashSet<ui64> AffectedLocks;
+    absl::flat_hash_set<ui64> AffectedLocks;
     // Delayed read/write keys for immediate transactions
     TVector<TOperationKey> DelayedKnownReads;
     TVector<TOperationKey> DelayedKnownWrites;
     // Bidirectional links between dependent transactions
-    NFH::TFlatHashSet<TOperation::TPtr> Dependents;
-    NFH::TFlatHashSet<TOperation::TPtr> Dependencies;
-    NFH::TFlatHashSet<TOperation::TPtr> SpecialDependents;
-    NFH::TFlatHashSet<TOperation::TPtr> SpecialDependencies;
-    NFH::TFlatHashSet<TOperation::TPtr> PlannedConflicts;
-    NFH::TFlatHashSet<TOperation::TPtr> ImmediateConflicts;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> Dependents;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> Dependencies;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> SpecialDependents;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> SpecialDependencies;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> PlannedConflicts;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> ImmediateConflicts;
     absl::flat_hash_set<ui64> VolatileDependencies;
     bool VolatileDependenciesAborted = false;
     TVector<EExecutionUnitKind> ExecutionPlan;

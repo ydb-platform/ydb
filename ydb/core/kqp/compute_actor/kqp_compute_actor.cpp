@@ -1,4 +1,6 @@
 #include "kqp_compute_actor.h"
+#include "kqp_scan_compute_actor.h"
+#include "kqp_scan_fetcher_actor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
@@ -63,7 +65,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCou
 
 void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta,
     ui32& maxInFlight, bool& isAggregationRequest) const {
-    const bool isSorted = (meta.HasSorted() ? meta.GetSorted() : true);
+    const bool enableShardsSequentialScan = (meta.HasEnableShardsSequentialScan() ? meta.GetEnableShardsSequentialScan() : true);
 
     isAggregationRequest = false;
     maxInFlight = 1;
@@ -85,7 +87,7 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
         }
     }
     isAggregationRequest = hasGroupByWithFields || hasGroupByWithNoFields;
-    if (isSorted) {
+    if (enableShardsSequentialScan) {
         maxInFlight = 1;
     } else if (hasGroupByWithFields) {
         maxInFlight = ProtoConfig.GetAggregationGroupByLimit();
@@ -97,3 +99,24 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
 }
 }
 } // namespace NKikimr
+
+namespace NKikimr::NKqp {
+
+using namespace NYql::NDq;
+using namespace NYql::NDqProto;
+
+IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
+    TDqTask&& task, IDqAsyncIoFactory::TPtr asyncIoFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId) {
+    return new NScanPrivate::TKqpScanComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
+        functionRegistry, settings, memoryLimits, std::move(traceId));
+}
+
+IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
+    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
+    const ui64 txId, const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId) {
+    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, meta, shardsScanningPolicy, counters, std::move(traceId));
+}
+
+}

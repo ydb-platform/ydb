@@ -154,9 +154,10 @@ struct Schema : NIceDb::Schema {
     struct YamlConfig : Table<103> {
         struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> {};
+        struct Dropped : Column<3, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Version>;
-        using TColumns = TableColumns<Version, Config>;
+        using TColumns = TableColumns<Version, Config, Dropped>;
     };
 
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,

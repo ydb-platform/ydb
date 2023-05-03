@@ -42,13 +42,13 @@ namespace NFake {
         }
 
     private:
-        void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext &ctx)
+        void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
                 Y_VERIFY(State == EState::Work, "Cannot handle TX now");
 
                 for (auto& f : ev->Funcs) {
-                    Execute(f.Release(), ctx);
+                    Execute(f.Release(), this->ActorContext());
                 }
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) {
                 Y_VERIFY(State == EState::Work, "Cannot handle compaction now");
@@ -62,7 +62,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<NFake::TEvReturn>()) {
                 Send(Owner, new TEvents::TEvWakeup);
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvCall>()) {
-                ev->Callback(Executor(), ctx);
+                ev->Callback(Executor(), this->ActorContext());
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 if (std::exchange(State, EState::Stop) != EState::Stop) {
                     /* This hack stops TExecutor before TOwner death. TOwner
@@ -70,21 +70,22 @@ namespace NFake {
                         TEvGone to leader actor on handling its own TEvPoison.
                      */
 
+                    auto ctx(this->ActorContext());
                     Executor()->DetachTablet(ctx), Detach(ctx);
                 }
             } else if (State == EState::Boot) {
-                TTabletExecutedFlat::StateInitImpl(eh, ctx);
+                TTabletExecutedFlat::StateInitImpl(eh, SelfId());
 
             } else if (eh->CastAsLocal<TEvTabletPipe::TEvServerConnected>()) {
 
             } else if (eh->CastAsLocal<TEvTabletPipe::TEvServerDisconnected>()){
 
-            } else if (!TTabletExecutedFlat::HandleDefaultEvents(eh, ctx)) {
+            } else if (!TTabletExecutedFlat::HandleDefaultEvents(eh, SelfId())) {
                 Y_Fail("Unexpected event " << eh->GetTypeName());
             }
         }
 
-        void Enqueue(TEventHandlePtr &eh, const ::NActors::TActorContext&) override
+        void Enqueue(TEventHandlePtr &eh) override
         {
             const auto *name = eh->GetTypeName().c_str();
 

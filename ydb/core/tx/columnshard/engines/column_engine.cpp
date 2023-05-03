@@ -1,6 +1,48 @@
 #include "column_engine.h"
 #include <util/stream/output.h>
 
+namespace NKikimr::NOlap {
+
+TString TMark::Serialize(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema) {
+    Y_VERIFY_DEBUG(key.Size() > 0);
+    if (key.Size() == 1) {
+        Y_VERIFY_S(key.Column(0).type()->Equals(schema->field(0)->type()),
+            key.Column(0).type()->ToString() + ", expected " + schema->ToString());
+        return SerializeKeyScalar(NArrow::TReplaceKey::ToScalar(key));
+    } else {
+        Y_FAIL("not implemented"); // TODO
+    }
+}
+
+NArrow::TReplaceKey TMark::Deserialize(const TString& key, const std::shared_ptr<arrow::Schema>& schema) {
+    Y_VERIFY_DEBUG(schema->num_fields() > 0);
+    if (schema->num_fields() == 1) {
+        return NArrow::TReplaceKey::FromScalar(DeserializeKeyScalar(key, schema->field(0)->type()));
+    } else {
+        Y_FAIL("not implemented"); // TODO
+    }
+}
+
+std::string TMark::ToString() const {
+    Y_VERIFY_DEBUG(Border.Size() == 1);
+    return NArrow::TReplaceKey::ToScalar(Border)->ToString();
+}
+
+std::shared_ptr<arrow::Scalar> TMark::MinScalar(const std::shared_ptr<arrow::DataType>& type) {
+    if (type->id() == arrow::Type::TIMESTAMP) {
+        // TODO: support negative timestamps in index
+        return std::make_shared<arrow::TimestampScalar>(0, type);
+    }
+    return NArrow::MinScalar(type);
+}
+
+NArrow::TReplaceKey TMark::MinBorder(const std::shared_ptr<arrow::Schema>& schema) {
+    Y_VERIFY_DEBUG(schema->num_fields() == 1);
+    return NArrow::TReplaceKey::FromScalar(MinScalar(schema->field(0)->type()));
+}
+
+}
+
 template <>
 void Out<NKikimr::NOlap::TColumnEngineChanges>(IOutputStream& out, TTypeTraits<NKikimr::NOlap::TColumnEngineChanges>::TFuncParam changes) {
     if (ui32 switched = changes.SwitchedPortions.size()) {

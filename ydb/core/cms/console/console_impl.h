@@ -57,7 +57,7 @@ private:
     void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) override;
+    void Enqueue(STFUNC_SIG) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
 
     void Cleanup(const TActorContext &ctx);
@@ -77,7 +77,7 @@ private:
 
     STFUNC(StateInit)
     {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)
@@ -100,6 +100,7 @@ private:
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvGetConfigRequest, Handle);
             FFunc(TEvConsole::EvApplyConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
@@ -123,8 +124,8 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
 
         default:
-            if (!HandleDefaultEvents(ev, ctx)) {
-                LOG_CRIT_S(ctx, NKikimrServices::CMS,
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS,
                            "TConsole::StateWork unexpected event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
             }

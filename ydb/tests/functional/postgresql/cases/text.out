@@ -1,0 +1,42 @@
+--
+-- TEXT
+--
+SELECT text 'this is a text string' = text 'this is a text string' AS true;
+ true 
+------
+ t
+(1 row)
+
+SELECT text 'this is a text string' = text 'this is a text strin' AS false;
+ false 
+-------
+ f
+(1 row)
+
+/*
+ * various string functions
+ */
+select reverse('abcde');
+ reverse 
+---------
+ edcba
+(1 row)
+
+select quote_literal('');
+ quote_literal 
+---------------
+ ''
+(1 row)
+
+select quote_literal('abc''');
+ quote_literal 
+---------------
+ 'abc'''
+(1 row)
+
+select quote_literal(e'\\');
+ quote_literal 
+---------------
+ E'\\'
+(1 row)
+

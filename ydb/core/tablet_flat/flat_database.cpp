@@ -412,6 +412,19 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
     NoMoreReadsFlag = false;
 }
 
+void TDatabase::RollbackChanges()
+{
+    Y_VERIFY(Redo, "Transaction is not in progress");
+    Y_VERIFY(Env);
+
+    TTxStamp stamp = Change->Stamp;
+    IPages& env = *Env;
+
+    Commit(stamp, false, nullptr);
+    env.OnRollbackChanges();
+    Begin(stamp, env);
+}
+
 TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const {
     return Require(tableId)->GetPartView(bundle);
 }
@@ -629,10 +642,13 @@ bool TDatabase::HasChanges() const
 
 TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator)
 {
+    TVector<std::function<void()>> onPersistent;
+
     if (commit) {
         for (auto& callback : OnCommit_) {
             callback();
         }
+        onPersistent = std::move(OnPersistent_);
     } else {
         auto it = OnRollback_.rbegin();
         auto end = OnRollback_.rend();
@@ -644,6 +660,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
     OnCommit_.clear();
     OnRollback_.clear();
+    OnPersistent_.clear();
 
     TempIterators.clear();
 
@@ -747,7 +764,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     Alter_ = nullptr;
     Env = nullptr;
 
-    return { std::move(Change) };
+    return { std::move(Change), std::move(onPersistent) };
 }
 
 TTable* TDatabase::Require(ui32 table) const noexcept

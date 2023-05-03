@@ -10,7 +10,7 @@
 add_library(common-topfreq-static)
 target_compile_options(common-topfreq-static PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=27
+  -DUDF_ABI_VERSION_MINOR=28
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(common-topfreq-static PUBLIC

@@ -2256,6 +2256,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("+", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2344,6 +2348,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus SubWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("-", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2431,6 +2439,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus MulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("*", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2505,6 +2517,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus DivWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("/", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2574,6 +2590,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus ModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("%", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+        
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -2784,6 +2804,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus PlusMinusWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp(input->Content() == "Plus" ? "+" : "-", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2962,6 +2986,10 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus ConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (auto status = TryConvertToPgOp("||", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6644,10 +6672,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        TMaybe<TIssue> error = ParseToDictSettings(*input, ctx.Expr, isMany, isHashed, itemsCount, isCompact);
+        TMaybe<TIssue> error = ParseToDictSettings(*input, ctx.Expr, type, isMany, itemsCount, isCompact);
         if (error) {
             ctx.Expr.AddError(*error);
             return IGraphTransformer::TStatus::Error;
@@ -6664,18 +6692,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (*isHashed) {
+        switch (*type) {
+        case EDictType::Hashed: {
             if (!keyType->IsEquatable() || !keyType->IsHashable()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
                     << "Expected equatable and hashable key type for hashed dict, but got: " << *keyType));
                 return IGraphTransformer::TStatus::Error;
             }
-        } else {
+            break;
+        }
+        case EDictType::Sorted: {
             if (!keyType->IsComparable()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
                     << "Expected comparable key type for sorted dict, but got: " << *keyType));
                 return IGraphTransformer::TStatus::Error;
             }
+            break;
+        }
+        case EDictType::Auto:
+            break;
         }
 
         if (isCompact) {
@@ -6733,10 +6768,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        if (const auto error = ParseToDictSettings(*input, ctx.Expr, isMany, isHashed, itemsCount, isCompact)) {
+        if (const auto error = ParseToDictSettings(*input, ctx.Expr, type, isMany, itemsCount, isCompact)) {
             ctx.Expr.AddError(*error);
             return IGraphTransformer::TStatus::Error;
         }
@@ -6752,10 +6787,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!*isHashed && !keyType->IsComparable()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
-                << "Expected comparable key type for sorted dict, but got: " << *keyType));
-            return IGraphTransformer::TStatus::Error;
+        switch (*type) {
+        case EDictType::Sorted: {
+            if (!keyType->IsComparable()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                    << "Expected comparable key type for sorted dict, but got: " << *keyType));
+                return IGraphTransformer::TStatus::Error;
+            }
+            break;
+        }
+        case EDictType::Hashed: {
+            if (!keyType->IsEquatable() || !keyType->IsHashable()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                    << "Expected hashable and equatable key type for hashed dict, but got: " << *keyType));
+                return IGraphTransformer::TStatus::Error;
+            }
+            break;
+        }
+        case EDictType::Auto:
+            break;
         }
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
@@ -11500,8 +11550,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListZipAll"] = &ListZipAllWrapper;
         Functions["Sort"] = &SortWrapper;
         Functions["AssumeSorted"] = &SortWrapper;
-        Functions["AssumeUnique"] = &AssumeUniqueWrapper;
-        Functions["AssumeDistinct"] = &AssumeUniqueWrapper;
+        Functions["AssumeUnique"] = &AssumeConstraintWrapper;
+        Functions["AssumeDistinct"] = &AssumeConstraintWrapper;
+        Functions["AssumeChopped"] = &AssumeConstraintWrapper;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["Top"] = &TopWrapper;
@@ -11978,6 +12029,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions[RightName] = &OrderFromFirst;
         ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
         ColumnOrderFunctions["EquiJoin"] = &OrderForEquiJoin;
+        ColumnOrderFunctions["CalcOverWindow"] = &OrderForCalcOverWindow;
 
         ColumnOrderFunctions["RemovePrefixMembers"] = &OrderFromFirstAndOutputType;
         ColumnOrderFunctions["Sort"] = ColumnOrderFunctions["Take"] = ColumnOrderFunctions["Skip"] =

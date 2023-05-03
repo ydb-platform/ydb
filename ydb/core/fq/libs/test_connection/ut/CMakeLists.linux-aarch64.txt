@@ -18,7 +18,6 @@ target_link_libraries(ydb-core-fq-libs-test_connection-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   fq-libs-control_plane_proxy
   cpp-testing-unittest
@@ -70,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-fq-libs-test_connection-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-fq-libs-test_connection-ut)

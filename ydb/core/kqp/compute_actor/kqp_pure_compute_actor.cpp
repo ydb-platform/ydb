@@ -76,9 +76,9 @@ public:
         TDqTaskRunnerSettings settings;
         settings.CollectBasicStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
         settings.CollectProfileStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
-        settings.OptLLVM = GetUseLLVM() ? "--compile-options=disable-opt" : "OFF";
+
+        settings.OptLLVM = (GetTask().HasUseLlvm() && GetTask().GetUseLlvm()) ? "--compile-options=disable-opt" : "OFF";
         settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
-        settings.AllowGeneratorsInUnboxedValues = false;
 
         for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
             settings.TaskParams[paramsName] = paramsValue;
@@ -150,7 +150,7 @@ public:
                 hFunc(TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(TEvKqpCompute::TEvScanError, HandleExecute);
                 default:
-                    BaseStateFuncBody(ev, ctx);
+                    BaseStateFuncBody(ev);
             }
         } catch (const TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()

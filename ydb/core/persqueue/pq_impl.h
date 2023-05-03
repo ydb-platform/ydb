@@ -20,6 +20,9 @@ struct TPartitionInfo;
 struct TChangeNotification;
 
 class TResponseBuilder;
+class TPartition;
+
+struct TTransaction;
 
 //USES MAIN chanel for big blobs, INLINE or EXTRA for ZK-like load, EXTRA2 for small blob for logging (VDISK of type LOG is ok with EXTRA2)
 
@@ -98,7 +101,11 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
                         const TActorContext& ctx);
     void HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
 
-    void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
+    void ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult& read,
+                    const TActorContext& ctx);
+    void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
+                    const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                    const TActorContext& ctx);
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
     void InitializeMeteringSink(const TActorContext& ctx);
@@ -112,6 +119,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
 
     void TrySendUpdateConfigResponses(const TActorContext& ctx);
+    static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
+                                     NPersQueue::TConverterFactoryPtr& converterFactory,
+                                     NPersQueue::TTopicConverterPtr& topicConverter,
+                                     const TActorContext& ctx);
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
@@ -226,7 +237,12 @@ private:
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
     bool WriteTxsInProgress = false;
-    TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
+
+    struct TReplyToActor;
+    struct TReplyToPipe;
+
+    TVector<TReplyToActor> RepliesToActor;
+    TVector<TReplyToPipe> RepliesToPipe;
 
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
     THolder<NTabletPipe::IClientCache> PipeClientCache;
@@ -261,7 +277,7 @@ private:
     void SendEvTxRollbackToPartitions(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
     void SendEvProposeTransactionResult(const TActorContext& ctx,
-                                        const TDistributedTransaction& tx);
+                                        TDistributedTransaction& tx);
 
     TDistributedTransaction* GetTransaction(const TActorContext& ctx,
                                             ui64 txId);
@@ -273,6 +289,8 @@ private:
     void DeleteTx(TDistributedTransaction& tx);
 
     void SendReplies(const TActorContext& ctx);
+    void SendRepliesToActors(const TActorContext& ctx);
+    void SendRepliesToPipes(const TActorContext& ctx);
     void CheckChangedTxStates(const TActorContext& ctx);
 
     bool AllTransactionsHaveBeenProcessed() const;
@@ -294,7 +312,13 @@ private:
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
 
+    TPartition* CreatePartitionActor(ui32 partitionId,
+                                     const NPersQueue::TTopicConverterPtr topicConverter,
+                                     const NKikimrPQ::TPQTabletConfig& config,
+                                     bool newPartition,
+                                     const TActorContext& ctx);
     void CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
+                             NPersQueue::TTopicConverterPtr topicConverter,
                              const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
@@ -309,6 +333,24 @@ private:
                            const TActorContext& ctx);
 
     void ClearNewConfig();
+
+    void SendToPipe(ui64 tabletId,
+                    TDistributedTransaction& tx,
+                    std::unique_ptr<IEventBase> event,
+                    const TActorContext& ctx);
+
+    void InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
+                          THashMap<ui32, TVector<TTransaction>>& partitionTxs);
+    void TryStartTransaction(const TActorContext& ctx);
+    void OnInitComplete(const TActorContext& ctx);
+
+    void RestartPipe(ui64 tabletId, const TActorContext& ctx);
+
+    void BindTxToPipe(ui64 tabletId, ui64 txId);
+    void UnbindTxFromPipe(ui64 tabletId, ui64 txId);
+    const THashSet<ui64>& GetBindedTxs(ui64 tabletId);
+
+    THashMap<ui64, THashSet<ui64>> BindedTxs;
 };
 
 

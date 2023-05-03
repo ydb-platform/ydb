@@ -7,7 +7,7 @@ namespace NKikimr::NConveyor {
 class TConfig {
 private:
     YDB_OPT(ui32, WorkersCount);
-    YDB_READONLY(ui32, QueueSizeLimit, 256);
+    YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
     YDB_READONLY_FLAG(Enabled, true);
 public:
     bool DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config);

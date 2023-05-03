@@ -52,23 +52,38 @@ namespace {
             out << " <" << node.Content() << ">";
         }
 
-        if (node.GetTypeAnn()) {
-            out << ", type: " << *node.GetTypeAnn();
+        constexpr bool WithTypes = false;
+        constexpr bool WithConstraints = false;
+        constexpr bool WithScope = false;
+
+        if constexpr (WithTypes) {
+            if (node.GetTypeAnn()) {
+                out << ", " << *node.GetTypeAnn();
+            }
         }
 
-        if (const auto scope = node.GetDependencyScope()) {
-            out << ", outer lambda ";
-            if (const auto outer = scope->first) {
-                out << '#' << outer->UniqueId();
-            } else {
-                out << "null";
+        if constexpr (WithConstraints) {
+            if (node.GetState() >= TExprNode::EState::ConstrComplete) {
+                out << ", " << node.GetConstraintSet();
             }
+        }
 
-            out << ", inner lambda ";
-            if (const auto inner = scope->second) {
-                out << '#' << inner->UniqueId();
-            } else {
-                out << "null";
+        if constexpr (WithScope) {
+            if (const auto scope = node.GetDependencyScope()) {
+                out << ", (";
+                if (const auto outer = scope->first) {
+                    out << '#' << outer->UniqueId();
+                } else {
+                    out << "null";
+                }
+
+                out << ',';
+                if (const auto inner = scope->second) {
+                    out << '#' << inner->UniqueId();
+                } else {
+                    out << "null";
+                }
+                out << ')';
             }
         }
 
@@ -2931,12 +2946,16 @@ ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
 
 
 bool TDictExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (!KeyType->IsHashable() || !KeyType->IsEquatable()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Expected hashable and equatable type as dict key type, but got: " << *KeyType));
-        return false;
+    if (KeyType->IsHashable() && KeyType->IsEquatable()) {
+        return true;
     }
 
-    return true;
+    if (KeyType->IsComparableInternal()) {
+        return true;
+    }
+
+    ctx.AddError(TIssue(position, TStringBuilder() << "Expected hashable and equatable or internally comparable dict key type, but got: " << *KeyType));
+    return false;
 }
 
 bool TDictExprType::Validate(TPositionHandle position, TExprContext& ctx) const {

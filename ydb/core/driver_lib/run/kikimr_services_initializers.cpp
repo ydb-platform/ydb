@@ -69,6 +69,9 @@
 
 #include <ydb/core/load_test/service_actor.h>
 
+#include <ydb/core/pgproxy/pg_proxy.h>
+#include <ydb/core/local_pgwire/local_pgwire.h>
+
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/mind/address_classification/net_classifier.h>
@@ -839,6 +842,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->NodeId = NodeId;
     setup->MaxActivityType = GetActivityTypeCount();
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType, appData);
+    setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
 
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
         const auto &execConfig = systemConfig.GetExecutor(poolId);
@@ -2583,11 +2587,13 @@ void THttpProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetup
 TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig)
    : IKikimrServicesInitializer(runConfig)
    , Labels(runConfig.Labels)
+   , InitialCmsConfig(runConfig.InitialCmsConfig)
+   , InitialCmsYamlConfig(runConfig.InitialCmsYamlConfig)
 {
 }
 
 void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels);
+    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels, InitialCmsConfig, InitialCmsYamlConfig);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
@@ -2787,6 +2793,32 @@ void TReplicationServiceInitializer::InitializeServices(NActors::TActorSystemSet
     setup->LocalServices.emplace_back(
         NReplication::MakeReplicationServiceId(NodeId),
         TActorSetupCmd(NReplication::CreateReplicationService(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+}
+
+TLocalPgWireServiceInitializer::TLocalPgWireServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.emplace_back(
+        NLocalPgWire::CreateLocalPgWireProxyId(),
+        TActorSetupCmd(NLocalPgWire::CreateLocalPgWireProxy(), TMailboxType::HTSwap, appData->UserPoolId)
+    );
+
+    NPG::TListenerSettings settings;
+    if (Config.GetLocalPgWireConfig().HasListeningPort()) {
+        settings.Port = Config.GetLocalPgWireConfig().GetListeningPort();
+    }
+    if (Config.GetLocalPgWireConfig().HasSslCertificate()) {
+        settings.SslCertificatePem = Config.GetLocalPgWireConfig().GetSslCertificate();
+    }
+
+    setup->LocalServices.emplace_back(
+        TActorId(),
+        TActorSetupCmd(NPG::CreatePGListener(MakePollerActorId(), NLocalPgWire::CreateLocalPgWireProxyId(), settings),
+            TMailboxType::HTSwap, appData->UserPoolId)
     );
 }
 

@@ -15,9 +15,9 @@ void TTabletResponsivenessPinger::Bootstrap(const TActorContext &ctx) {
     Become(&TThis::StateWait, ctx, PingInterval, new TEvents::TEvWakeup());
 }
 
-void TTabletResponsivenessPinger::OnAnyEvent(const TActorContext &ctx) {
+void TTabletResponsivenessPinger::OnAnyEvent() {
     if (SelfPingSentTime) {
-        const TInstant now = AppData(ctx)->TimeProvider->Now();
+        const TInstant now = AppData()->TimeProvider->Now();
         const TDuration responseTime = now - SelfPingSentTime;
         LastResponseTime = Max(LastResponseTime, responseTime);
         Counter.Set(LastResponseTime.MicroSeconds());

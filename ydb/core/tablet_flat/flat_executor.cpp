@@ -1615,19 +1615,13 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     } else if (done) {
         Y_VERIFY(!txc.IsRescheduled());
         Y_VERIFY(!seat->RequestedMemory);
-        for (auto it = txc.OnCommit_.begin(); it != txc.OnCommit_.end(); ++it) {
-            (*it)();
-        }
-        seat->OnCommitted = std::move(txc.OnCommitted_);
+        seat->OnPersistent = std::move(prod.OnPersistent);
         CommitTransactionLog(seat, env, prod.Change, cpuTimer, ctx);
     } else {
         Y_VERIFY(!seat->CapturedMemory);
         if (!env.ToLoad && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postoned w/o demands");
-        }
-        for (auto it = txc.OnRollback_.rbegin(); it != txc.OnRollback_.rend(); ++it) {
-            (*it)();
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
     }
@@ -3744,7 +3738,6 @@ void TExecutor::AllowBorrowedGarbageCompaction(ui32 tableId) {
 
 STFUNC(TExecutor::StateInit) {
     Y_UNUSED(ev);
-    Y_UNUSED(ctx);
     Y_FAIL("must be no events before boot processing");
 }
 
@@ -3757,7 +3750,7 @@ STFUNC(TExecutor::StateBoot) {
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
     default:
-        return TranscriptBootOpResult(BootLogic->Receive(*ev), ctx);
+        return TranscriptBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }
 }
 
@@ -3793,7 +3786,6 @@ STFUNC(TExecutor::StateWork) {
 }
 
 STFUNC(TExecutor::StateFollower) {
-    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
@@ -3822,7 +3814,7 @@ STFUNC(TExecutor::StateFollowerBoot) {
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
     default:
-        return TranscriptFollowerBootOpResult(BootLogic->Receive(*ev), ctx);
+        return TranscriptFollowerBootOpResult(BootLogic->Receive(*ev), this->ActorContext());
     }
 }
 

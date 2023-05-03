@@ -15,6 +15,7 @@ struct fy_document;
 struct fy_diag;
 struct fy_document_iterator;
 struct fy_node_pair;
+extern "C" struct fy_node *fy_node_buildf(struct fy_document *fyd, const char *fmt, ...);
 
 namespace NFyaml {
 
@@ -30,6 +31,18 @@ enum class ENodeType {
     Scalar,
     Sequence,
     Mapping,
+};
+
+enum class ENodeStyle {
+    Any = -1,
+    Flow,
+    Block,
+    Plain,
+    SingleQuoted,
+    DoubleQuoted,
+    Literal,
+    Folded,
+    Alias,
 };
 
 namespace NDetail {
@@ -154,6 +167,10 @@ public:
     bool DeepEqual(const TNodeRef& other);
 
     std::unique_ptr<char, void(*)(char*)> EmitToCharArray() const;
+
+    void SetStyle(ENodeStyle style);
+
+    ENodeStyle Style() const;
 
 protected:
     fy_node* Node_ = nullptr;

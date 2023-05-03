@@ -20,9 +20,9 @@ namespace NActors {
             using T = decltype(&TDerived::Bootstrap);
             TDerived& self = static_cast<TDerived&>(*this);
             if constexpr (std::is_invocable_v<T, TDerived, const TActorContext&>) {
-                self.Bootstrap(ctx);
+                self.Bootstrap(TActivationContext::ActorContextFor(TActor<TDerived>::SelfId()));
             } else if constexpr (std::is_invocable_v<T, TDerived, const TActorId&, const TActorContext&>) {
-                self.Bootstrap(ev->Sender, ctx);
+                self.Bootstrap(ev->Sender, TActivationContext::ActorContextFor(TActor<TDerived>::SelfId()));
             } else if constexpr (std::is_invocable_v<T, TDerived>) {
                 self.Bootstrap();
             } else if constexpr (std::is_invocable_v<T, TDerived, const TActorId&>) {

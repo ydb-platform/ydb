@@ -1,5 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/defrag/defrag_rewriter.h>
+#include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 
 static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, TVector<TLogoBlobID> *keep) {
     env.CreateBoxAndPool(1, 1);
@@ -232,5 +234,103 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         };
         env.Sim(TDuration::Minutes(5));
         UNIT_ASSERT_VALUES_EQUAL(putCounter, 1);
+    }
+
+    void TestReadErrorHandlingBase(std::function<NPDisk::TEvChunkReadResult*(const NPDisk::TEvChunkReadResult*)> messChunkReadResult) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+        });
+
+        TVector<TLogoBlobID> keep;
+        TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
+        if (!info) {
+            return;
+        }
+
+        std::optional<TActorId> rewriterActorId;
+        TAutoPtr<NPDisk::TEvChunkReadResult> readMsg;
+        bool caughtRestore = false;
+        bool caughtDone = false;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            Y_UNUSED(nodeId);
+            switch(ev->Type) {
+                case TEvBlobStorage::EvChunkReadResult:
+                    if (!rewriterActorId.has_value() && IsDefragRewriter(env.Runtime->GetActor(ev->Recipient))) {
+                        rewriterActorId = ev->Recipient;
+
+                        readMsg = ev->Release<NPDisk::TEvChunkReadResult>();
+                        env.Runtime->Send(
+                            new IEventHandle(
+                                *rewriterActorId, 
+                                ev->Sender, 
+                                messChunkReadResult(readMsg.Get())),
+                            ev->Sender.NodeId());
+
+                        return false;
+                    }
+                    return true;
+                case TEvBlobStorage::EvDefragRewritten:
+                    if (rewriterActorId == ev->Sender) {
+                        UNIT_ASSERT_VALUES_EQUAL(caughtDone, false);
+                        caughtDone = true;
+
+                        const TEvDefragRewritten* msg = ev->Get<TEvDefragRewritten>();
+                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenRecs, 18);
+                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenBytes, 9961567);
+                    }
+                    return true;
+                case TEvBlobStorage::EvRestoreCorruptedBlob:
+                    if (rewriterActorId == ev->Sender) {
+                        UNIT_ASSERT_VALUES_EQUAL(caughtRestore, false);
+                        caughtRestore = true;
+
+                        const TEvRestoreCorruptedBlob* msg = ev->Get<TEvRestoreCorruptedBlob>();
+                        UNIT_ASSERT_VALUES_EQUAL(msg->WriteRestoredParts, true);
+                        UNIT_ASSERT_VALUES_EQUAL(msg->ReportNonrestoredParts, false);
+                        UNIT_ASSERT_VALUES_EQUAL(msg->Items.size(), 1);
+                        const TEvRecoverBlob::TItem& item = msg->Items[0];
+                        UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.ChunkIdx, readMsg->ChunkIdx);
+                        UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.Offset, readMsg->Offset);
+                        UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.Size, readMsg->Data.Size());
+                    }
+                default:
+                    return true;
+            }
+        };
+        while (!caughtDone || !caughtRestore) {
+            env.Sim(TDuration::Minutes(1));
+        }
+    }
+
+    Y_UNIT_TEST(CorruptedReadHandling) {
+        TestReadErrorHandlingBase([] (const NPDisk::TEvChunkReadResult* msg) {
+            return new NPDisk::TEvChunkReadResult(
+                NKikimrProto::EReplyStatus::CORRUPTED, 
+                msg->ChunkIdx,
+                msg->Offset,
+                msg->Cookie,
+                msg->StatusFlags,
+                msg->ErrorReason
+            );
+        });
+    }
+
+    Y_UNIT_TEST(GappedReadHandling) {
+        TestReadErrorHandlingBase([] (const NPDisk::TEvChunkReadResult* msg) {
+             NPDisk::TEvChunkReadResult* res = new NPDisk::TEvChunkReadResult(
+                NKikimrProto::EReplyStatus::OK, 
+                msg->ChunkIdx,
+                msg->Offset,
+                msg->Cookie,
+                msg->StatusFlags,
+                msg->ErrorReason
+            );
+
+            res->Data.SetData(msg->Data.ToString());
+            res->Data.AddGap(0, res->Data.Size());
+
+            return res;
+        });
     }
 }

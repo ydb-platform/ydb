@@ -202,7 +202,7 @@ public:
     TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, ui32& lockNodeId, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
-                (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
+                (self->State == TShardState::Readonly || self->State == TShardState::Frozen || self->IsReplicated()),
                 self->ByKeyFilterDisabled(),
                 self->GetKeyAccessSampler()))
         , Self(self)
@@ -323,8 +323,11 @@ public:
 
         if (auto lock = Self->SysLocksTable().GetRawLock(lockId, TRowVersion::Min()); lock && !VolatileCommitOrdered) {
             lock->ForAllVolatileDependencies([this](ui64 txId) {
-                if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
-                    VolatileTxId = EngineBay.GetTxId();
+                auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId);
+                if (info && info->State != EVolatileTxState::Aborting) {
+                    if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
+                        VolatileTxId = EngineBay.GetTxId();
+                    }
                 }
             });
         }
@@ -1266,7 +1269,6 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
 
         settings.OptLLVM = "OFF";
         settings.TerminateOnError = false;
-        settings.AllowGeneratorsInUnboxedValues = false;
 
         KqpAlloc->SetLimit(10_MB);
         KqpTasksRunner = NKqp::CreateKqpTasksRunner(tx.GetTasks(), KqpExecCtx, settings, KqpLogFunc);

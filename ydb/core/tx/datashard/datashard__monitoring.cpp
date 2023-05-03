@@ -290,7 +290,7 @@ public:
             tx->FillState(resp);
     }
 
-    void FillDependencies(const NFH::TFlatHashSet<TOperation::TPtr> &deps,
+    void FillDependencies(const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &deps,
                           ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency> &arr)
     {
         for (auto &op : deps) {

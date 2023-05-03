@@ -37,7 +37,11 @@ public:
         AtomicSet(FailCounter, failCounter);
     }
 
-    void Inject(ui64 /*cookie*/) {
+    void Inject(ui64 cookie) {
+        if (cookie == 2 && RandomNumber(10u) == 0) {
+            AtomicSet(FailCounter, 1 + RandomNumber(24u));
+        }
+
         TAtomicBase result = AtomicDecrement(FailCounter);
         if (result < 0) {
             // overshoot, return one position back
@@ -91,10 +95,10 @@ ui32 GenerateFailCounter(bool frequentFails) {
 
     double p = (rng() % (1000 * 1000 * 1000)) / 1e9;
 
-    if (frequentFails) {
+    if (!frequentFails) {
         return p < 0.05 ? rng() % 10 + 1
-            : p < 0.10 ? rng() % 1000 + 1000 :
-            rng() % 5000 + 5000;
+            : p < 0.10 ? rng() % 100 + 100 :
+            rng() % 1000 + 1000;
     } else {
         return p < 0.9 ? rng() % 10 + 1
             : p < 0.99 ? rng() % 100 + 100 :
@@ -183,10 +187,10 @@ struct TPDiskFailureInjectionTest {
         setup->NodeId = 1;
         setup->ExecutorsCount = 4; // system, user, io, batch
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
-        setup->Executors[0] = new TBasicExecutorPool(AppData->SystemPoolId, 8, 10);
-        setup->Executors[1] = new TBasicExecutorPool(AppData->UserPoolId, 8, 10);
+        setup->Executors[0] = new TBasicExecutorPool(AppData->SystemPoolId, 16, 10);
+        setup->Executors[1] = new TBasicExecutorPool(AppData->UserPoolId, 1, 10);
         setup->Executors[2] = new TIOExecutorPool(AppData->IOPoolId, 10);
-        setup->Executors[3] = new TBasicExecutorPool(AppData->BatchPoolId, 8, 10);
+        setup->Executors[3] = new TBasicExecutorPool(AppData->BatchPoolId, 1, 10);
         setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 100));
 
         // initialize logger settings
@@ -214,7 +218,7 @@ struct TPDiskFailureInjectionTest {
         // create/register logger actor
         auto logger = std::make_unique<TLoggerActor>(loggerSettings, CreateStderrBackend(),
                 Counters->GetSubgroup("logger", "counters"));
-        setup->LocalServices.emplace_back(loggerId, TActorSetupCmd(logger.release(), TMailboxType::Simple, 0));
+        setup->LocalServices.emplace_back(loggerId, TActorSetupCmd(logger.release(), TMailboxType::Simple, AppData->IOPoolId));
 
         // create and then initialize actor system
         ActorSystem = std::make_unique<TActorSystem>(setup, AppData.get(), loggerSettings);

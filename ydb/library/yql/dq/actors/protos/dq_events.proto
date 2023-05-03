@@ -119,7 +119,7 @@ message TComputeRuntimeSettings {
 
     reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3;
     optional EDqStatsMode StatsMode = 8;
-    optional bool UseLLVM = 4;
+    optional bool UseLLVM_DeprecatedForCompatibility = 4[default = false];
     optional bool UseSpilling = 6;
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;

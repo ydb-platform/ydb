@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         bool uploadResponseDropped = false;
         runtime.SetObserverFunc([&uploadResponseDropped](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
                 uploadResponseDropped = true;
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         ui32 uploadRowsCount = 0;
         runtime.SetObserverFunc([&uploadRowsCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse);
+            uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
@@ -802,9 +802,9 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         ui32 total = 0;
         ui32 overloads = 0;
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
                 ++total;
-                const auto& record = ev->Get<TEvDataShard::TEvUnsafeUploadRowsResponse>()->Record;
+                const auto& record = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record;
                 overloads += ui32(record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
             }
 
@@ -1052,7 +1052,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
     Y_UNIT_TEST_WITH_COMPRESSION(CancelUponUploadResponseShouldSucceed) {
         const auto data = GenerateTestData(Codec, "a", 1);
-        CancelShouldSucceed<TEvDataShard::TEvUnsafeUploadRowsResponse>(data);
+        CancelShouldSucceed<TEvDataShard::TEvS3UploadRowsResponse>(data);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(CancelHungOperationShouldSucceed) {

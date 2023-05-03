@@ -305,6 +305,34 @@ void TQueryExecutionStats::Finish() {
     Result->SetResultRows(ResultRows);
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
+    if (CollectProfileStats(StatsMode)) {
+        for (auto&& s : UseLlvmByStageId) {
+            for (auto&& pbs : *Result->MutableStages()) {
+                if (pbs.GetStageId() == s.first) {
+                    pbs.SetUseLlvm(s.second);
+                    break;
+                }
+            }
+        }
+
+        for (auto&& s : ShardsCountByNode) {
+            for (auto&& pbs : *Result->MutableStages()) {
+                if (pbs.GetStageId() == s.first) {
+                    NKqpProto::TKqpStageExtraStats pbStats;
+                    if (pbs.HasExtra() && !pbs.GetExtra().UnpackTo(&pbStats)) {
+                        break;
+                    }
+                    for (auto&& i : s.second) {
+                        auto& nodeStat = *pbStats.AddNodeStats();
+                        nodeStat.SetNodeId(i.first);
+                        nodeStat.SetShardsCount(i.second);
+                    }
+                    pbs.MutableExtra()->PackFrom(pbStats);
+                    break;
+                }
+            }
+        }
+    }
     Result->MutableExtra()->PackFrom(ExtraStats);
 
     if (CollectFullStats(StatsMode)) {

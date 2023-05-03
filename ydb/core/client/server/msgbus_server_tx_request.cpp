@@ -56,7 +56,7 @@ public:
         return request.Release();
     }
 
-    void StateFunc(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+    void StateFunc(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvUndelivered, HandleUndelivered);
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);

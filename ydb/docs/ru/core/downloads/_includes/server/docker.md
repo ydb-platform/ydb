@@ -1,9 +1,9 @@
-Версия |  Дата выпуска | Скачать
-:--- | :--- | :---
+Версия |  Дата выпуска | Скачать | Список изменений
+:--- | :--- | :--- | :---
 **v22.5**
-v.22.5.10 | 09.02.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.5.10`
+v.22.5.10 | 09.02.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.5.10` | [См. список](../../../changelog-server.md#22-5)
 **v22.4**
-v.22.4.44 | 28.11.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44`
+v.22.4.44 | 28.11.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44` | [См. список](../../../changelog-server.md#22-4)
 v.22.4.31 | 23.10.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.31`
 v.22.4.30 | 09.10.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.30`
 v.22.4.21 | 03.10.22 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.21`

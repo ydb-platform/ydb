@@ -119,7 +119,50 @@ struct TSkipRepliesFailPoint {
     }
 };
 
+// Allows to skip specified number of replies from datashard by TabletID and TxId
+struct TSkipReadIteratorResultFailPoint {
+    TAtomic Enabled;
+    TSpinLock Lock;
+    ui64 TabletId;
+
+    TSkipReadIteratorResultFailPoint() {
+        Disable();
+    }
+
+    void Enable(ui64 tabletId) {
+        Disable();
+
+        TGuard<TSpinLock> g(Lock);
+        TabletId = tabletId;
+
+        AtomicSet(Enabled, 1);
+    }
+
+    void Disable() {
+        TGuard<TSpinLock> g(Lock);
+        TabletId = 0;
+
+        AtomicSet(Enabled, 0);
+    }
+
+    bool Check(ui64 tabletId) {
+        if (!AtomicGet(Enabled)) {
+            return false;
+        }
+
+        TGuard<TSpinLock> g(Lock);
+
+        if (tabletId != TabletId && TabletId != (ui64)-1) {
+            return false;
+        }
+
+        return true;
+    }
+};
+
+
 extern TCancelTxFailPoint gCancelTxFailPoint;
 extern TSkipRepliesFailPoint gSkipRepliesFailPoint;
+extern TSkipReadIteratorResultFailPoint gSkipReadIteratorResultFailPoint;
 
 }}

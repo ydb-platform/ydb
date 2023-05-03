@@ -76,10 +76,10 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
             << " StateCounter# " << StateCounter
             << " current# " << current;
         switch (PrevState) {
-        case  NKikimrBlobStorage::TPDiskState::Unknown:
-            return current;
-        default:
-            return EPDiskStatus::INACTIVE;
+            case  NKikimrBlobStorage::TPDiskState::Unknown:
+                return current;
+            default:
+                return EPDiskStatus::INACTIVE;
         }
     }
 
@@ -92,11 +92,23 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     PrevState = State;
 
     switch (State) {
-    case NKikimrBlobStorage::TPDiskState::Normal:
-        return EPDiskStatus::ACTIVE;
-    default:
-        return EPDiskStatus::FAULTY;
+        case NKikimrBlobStorage::TPDiskState::Normal:
+            return EPDiskStatus::ACTIVE;
+        default:
+            return EPDiskStatus::FAULTY;
     }
+}
+
+EPDiskState TPDiskStatusComputer::GetState() const {
+    return State;
+}
+
+EPDiskState TPDiskStatusComputer::GetPrevState() const {
+    return PrevState;
+}
+
+ui64 TPDiskStatusComputer::GetStateCounter() const {
+    return StateCounter;
 }
 
 void TPDiskStatusComputer::Reset() {
@@ -144,7 +156,6 @@ bool TPDiskStatus::IsNewStatusGood() const {
         case EPDiskStatus::INACTIVE:
         case EPDiskStatus::ACTIVE:
             return true;
-
         case EPDiskStatus::UNKNOWN:
         case EPDiskStatus::FAULTY:
         case EPDiskStatus::BROKEN:
@@ -212,7 +223,8 @@ TGuardian::TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio, ui32 room
 }
 
 TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TString& issues,
-        TPDiskIgnoredMap& disallowed) const {
+        TPDiskIgnoredMap& disallowed) const
+{
     TPDiskIDSet result;
     TStringBuilder issuesBuilder;
 
@@ -386,27 +398,32 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
 
         if (!record.HasStatus() || !record.GetStatus().HasCode() || record.GetStatus().GetCode() != NKikimrCms::TStatus::OK) {
             TString error = "<no description>";
-            if (record.HasStatus() && record.GetStatus().HasCode() && record.GetStatus().HasReason()) {
-                error = NKikimrCms::TStatus::ECode_Name(record.GetStatus().GetCode()) + " " + record.GetStatus().GetReason();
+            if (record.HasStatus()) {
+                if (record.GetStatus().HasCode()) {
+                    error = ToString(record.GetStatus().GetCode()) + " ";
+                }
+                if (record.GetStatus().HasReason()) {
+                    error = record.GetStatus().GetReason();
+                }
             }
 
             LOG_E("Unsuccesful response from CMS"
-                << ", error# " << error);
-
-            RetryCMS();
-
-            return;
+                << ": error# " << error);
+            return RetryCMS();
         }
 
         if (record.HasState()) {
             SentinelState->Nodes.clear();
-            for (ui32 i = 0; i < record.GetState().HostsSize(); ++i) {
-                const auto& host = record.GetState().GetHosts(i);
+            for (const auto& host : record.GetState().GetHosts()) {
                 if (host.HasNodeId() && host.HasLocation() && host.HasName()) {
-                    SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{host.GetName(), NActors::TNodeLocation(host.GetLocation())});
+                    SentinelState->Nodes.emplace(host.GetNodeId(), TNodeInfo{
+                        .Host = host.GetName(),
+                        .Location = NActors::TNodeLocation(host.GetLocation()),
+                    });
                 }
             }
         }
+
         SentinelState->ConfigUpdaterState.GotCMSResponse = true;
         MaybeReply();
     }
@@ -424,7 +441,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             }
 
             LOG_E("Unsuccesful response from BSC"
-                << ", size# " << response.StatusSize()
+                << ": size# " << response.StatusSize()
                 << ", error# " << error);
             RetryBSC();
         } else {
@@ -442,7 +459,6 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             }
 
             SentinelState->ConfigUpdaterState.GotBSCResponse = true;
-
             MaybeReply();
         }
     }
@@ -472,21 +488,21 @@ public:
     void PassAway() override {
         SentinelState->PrevConfigUpdaterState = SentinelState->ConfigUpdaterState;
         SentinelState->ConfigUpdaterState.Clear();
-        TActor::PassAway();
+        TBase::PassAway();
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvWakeup, OnRetry);
             sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
 
             hFunc(TEvCms::TEvClusterStateResponse, Handle);
-
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
 
+            hFunc(TEvents::TEvWakeup, OnRetry);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
+
 }; // TConfigUpdater
 
 class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpdater> {
@@ -494,24 +510,24 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
 
     static EPDiskState SafePDiskState(EPDiskState state) {
         switch (state) {
-        case NKikimrBlobStorage::TPDiskState::Initial:
-        case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
-        case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
-        case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
-        case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-        case NKikimrBlobStorage::TPDiskState::Normal:
-        case NKikimrBlobStorage::TPDiskState::OpenFileError:
-        case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
-        case NKikimrBlobStorage::TPDiskState::DeviceIoError:
-            return state;
-        default:
-            LOG_C("Unknown pdisk state: " << (ui32)state);
-            return NKikimrBlobStorage::TPDiskState::Unknown;
+            case NKikimrBlobStorage::TPDiskState::Initial:
+            case NKikimrBlobStorage::TPDiskState::InitialFormatRead:
+            case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
+            case NKikimrBlobStorage::TPDiskState::InitialSysLogRead:
+            case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
+            case NKikimrBlobStorage::TPDiskState::InitialSysLogParseError:
+            case NKikimrBlobStorage::TPDiskState::InitialCommonLogRead:
+            case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
+            case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
+            case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
+            case NKikimrBlobStorage::TPDiskState::Normal:
+            case NKikimrBlobStorage::TPDiskState::OpenFileError:
+            case NKikimrBlobStorage::TPDiskState::ChunkQuotaError:
+            case NKikimrBlobStorage::TPDiskState::DeviceIoError:
+                return state;
+            default:
+                LOG_C("Unknown pdisk state: " << (ui32)state);
+                return NKikimrBlobStorage::TPDiskState::Unknown;
         }
     }
 
@@ -619,13 +635,13 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             << ", reason# " << reason);
 
         switch (reason) {
-        case EReason::Disconnected:
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::NodeDisconnected);
-            break;
+            case EReason::Disconnected:
+                MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::NodeDisconnected);
+                break;
 
-        default:
-            MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Unknown);
-            break;
+            default:
+                MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Unknown);
+                break;
         }
 
         MaybeReply();
@@ -668,7 +684,7 @@ public:
 
     void PassAway() override {
         SentinelState->StateUpdaterWaitNodes.clear();
-        TActor::PassAway();
+        TBase::PassAway();
     }
 
     STATEFN(StateWork) {
@@ -685,7 +701,6 @@ public:
 }; // TStateUpdater
 
 class TSentinel: public TActorBootstrapped<TSentinel> {
-
     struct TCounters {
         using TDynamicCounters = ::NMonitoring::TDynamicCounters;
         using TDynamicCounterPtr = ::NMonitoring::TDynamicCounterPtr;
@@ -933,55 +948,52 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         if (!CmsState->BSControllerPipe) {
-            CmsState->BSControllerPipe = this->Register(CreateBSCClientActor(CmsState));
+            CmsState->BSControllerPipe = Register(CreateBSCClientActor(CmsState));
         }
 
         LOG_D("Change pdisk status"
-              << ": requestsSize# " << SentinelState->ChangeRequests.size());
+            << ": requestsSize# " << SentinelState->ChangeRequests.size());
 
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-        for (auto& [id, info] : SentinelState->ChangeRequests) {
+        for (const auto& [id, info] : SentinelState->ChangeRequests) {
             auto& command = *request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
             command.MutableHostKey()->SetNodeId(id.NodeId);
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
         }
+
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release(), ++SentinelState->ChangeRequestId);
     }
 
     void Handle(TEvCms::TEvGetSentinelStateRequest::TPtr& ev) {
         const auto& reqRecord = ev->Get()->Record;
 
-        auto show = NKikimrCms::TGetSentinelStateRequest::UNHEALTHY;
-
-        if (reqRecord.HasShow()) {
-            show = reqRecord.GetShow();
-        }
+        const auto show = reqRecord.HasShow()
+            ? reqRecord.GetShow()
+            : NKikimrCms::TGetSentinelStateRequest::UNHEALTHY;
 
         TMap<ui32, ui32> ranges = {{1, 20}};
-
         if (reqRecord.RangesSize() > 0) {
             ranges.clear();
-            for (size_t i = 0; i < reqRecord.RangesSize(); i++) {
-                auto range = reqRecord.GetRanges(i);
+            for (const auto& range : reqRecord.GetRanges()) {
                 if (range.HasBegin() && range.HasEnd()) {
                     ranges.emplace(range.GetBegin(), range.GetEnd());
                 }
             }
         }
 
-        auto checkRanges = [&](ui32 NodeId) {
-            auto next = ranges.upper_bound(NodeId);
+        auto checkRanges = [&ranges](ui32 nodeId) {
+            auto next = ranges.upper_bound(nodeId);
             if (next != ranges.begin()) {
                 --next;
-                return next->second >= NodeId;
+                return next->second >= nodeId;
             }
 
             return false;
         };
 
         auto filterByStatus = [](const TPDiskInfo& info, NKikimrCms::TGetSentinelStateRequest::EShow filter) {
-            switch(filter) {
+            switch (filter) {
                 case NKikimrCms::TGetSentinelStateRequest::UNHEALTHY:
                     return info.GetState() != NKikimrBlobStorage::TPDiskState::Normal
                         || info.GetStatus() != EPDiskStatus::ACTIVE;
@@ -1076,26 +1088,19 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             (*Counters->PDisksChanged)++;
         };
 
-
         if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
             Y_VERIFY(SentinelState->ChangeRequests.size() == response.StatusSize());
             auto it = SentinelState->ChangeRequests.begin();
-            for (ui32 i = 0; i < response.StatusSize(); ++i) {
-                if (!response.GetStatus(i).GetSuccess()) {
-                    TString error = "<no description>";
-                    if (response.StatusSize()) {
-                        error = response.GetStatus(i).GetErrorDescription();
-                    }
-
+            for (const auto& status : response.GetStatus()) {
+                if (!status.GetSuccess()) {
                     LOG_E("Unsuccesful response from BSC"
-                        << ", error# " << error);
+                        << ": error# " << status.GetErrorDescription());
+
                     it->second->StatusChangeFailed = true;
                     it->second->StatusChangeAttempt = SentinelState->StatusChangeAttempt;
-
                     ++it;
                 } else {
                     onPDiskStatusChanged(it->first, *(it->second));
-
                     it = SentinelState->ChangeRequests.erase(it);
                 }
             }
@@ -1113,7 +1118,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
     void OnRetry() {
         LOG_D("Retrying"
-              << ", attempt# " << SentinelState->StatusChangeAttempt);
+            << ": attempt# " << SentinelState->StatusChangeAttempt);
         SendBSCRequests();
     }
 
@@ -1123,7 +1128,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         } else {
             SentinelState->StatusChangeAttempt = 0;
 
-            for (auto& kv : SentinelState->ChangeRequests) {
+            for (auto& kv : std::exchange(SentinelState->ChangeRequests, {})) {
                 kv.second->StatusChangeFailed = true;
 
                 LOG_C("PDisk status has NOT been changed"
@@ -1131,13 +1136,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
                 (*Counters->PDisksNotChanged)++;
             }
-
-            SentinelState->ChangeRequests.clear();
         }
     }
 
     void OnPipeDisconnected() {
-        if (const TActorId& actor = ConfigUpdater.Id) {
+        if (const TActorId& actor = std::exchange(ConfigUpdater.Id, {})) {
             Send(actor, new TEvSentinel::TEvBSCPipeDisconnected());
         }
 
@@ -1145,11 +1148,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void PassAway() override {
-        if (const TActorId& actor = ConfigUpdater.Id) {
+        if (const TActorId& actor = std::exchange(ConfigUpdater.Id, {})) {
             Send(actor, new TEvents::TEvPoisonPill());
         }
 
-        if (const TActorId& actor = StateUpdater.Id) {
+        if (const TActorId& actor = std::exchange(StateUpdater.Id, {})) {
             Send(actor, new TEvents::TEvPoisonPill());
         }
 
@@ -1188,11 +1191,12 @@ public:
             sFunc(TEvSentinel::TEvConfigUpdated, OnConfigUpdated);
             sFunc(TEvSentinel::TEvUpdateState, UpdateState);
             sFunc(TEvSentinel::TEvStateUpdated, OnStateUpdated);
+            sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
+
             hFunc(TEvCms::TEvGetSentinelStateRequest, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
-            sFunc(TEvSentinel::TEvBSCPipeDisconnected, OnPipeDisconnected);
-            sFunc(TEvents::TEvWakeup, OnRetry);
 
+            sFunc(TEvents::TEvWakeup, OnRetry);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }

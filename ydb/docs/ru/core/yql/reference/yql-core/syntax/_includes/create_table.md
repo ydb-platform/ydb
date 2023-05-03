@@ -1,12 +1,22 @@
 # CREATE TABLE
 
 {% if feature_olap_tables %}
-{{ ydb-short-name }} поддерживает несколько видов таблиц: [строковые](../../../../concepts/datamodel/table.md) и в режиме превью [колоночные](../../../../concepts/datamodel/column_table.md). Тип таблицы определяется параметром `STORE`, где `ROW` означает [строковую таблицу](#row), а `COLUMN` означает [колоночную](#olap-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
+{{ ydb-short-name }} поддерживает два типа таблиц:
+
+* [строковые](../../../../concepts/datamodel/table.md);
+* [колоночные](../../../../concepts/column-table.md).
+
+Тип таблицы при создании задается параметром `STORE`, где `ROW` означает [строковую таблицу](#row), а `COLUMN` — [колоночную](#olap-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
 {%endif%}
 
-{% if feature_olap_tables %}## Строковые таблицы {#row}{%endif%}
+{% if feature_olap_tables %}
+
+## Строковые таблицы {#row}
+
+{%endif%}
+
 {% if feature_bulk_tables %}
 
 Таблица создается автоматически при первом [INSERT INTO](insert_into.md){% if feature_mapreduce %}, в заданной оператором [USE](../use.md) базе данных{% endif %}. Схема при этом определяется автоматически.
@@ -35,7 +45,7 @@
     WITH ( key = value, ... )
 {% endif %}
 
-{% if feature_olap_tables %}#{%endif%}## Колонки {#columns}
+{% if feature_olap_tables %}#{%endif%}## Колонки {#row-columns}
 
 {% if feature_column_container_type == true %}
 Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
@@ -105,9 +115,9 @@ CREATE TABLE my_table (
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
-{% if feature_olap_tables %}#{%endif%}## Дополнительные параметры {#additional}
+{% if feature_olap_tables %}#{%endif%}## Дополнительные параметры {#row-additional}
 
-Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы, используя YQL, такие параметры перечисляются в блоке ```WITH```:
+Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
 
 ```sql
 CREATE TABLE table_name (...)
@@ -178,6 +188,7 @@ CREATE TABLE series_with_families (
 {% endif %}
 
 {% if feature_olap_tables %}
+
 ## Колоночные таблицы {#olap-tables}
 
 {% note warning %}
@@ -186,7 +197,7 @@ CREATE TABLE series_with_families (
 
 {% endnote %}
 
-Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/datamodel/column_table.md) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`). 
+Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/column-table.md) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`).
 
 ```sql
 CREATE TABLE table_name (
@@ -204,16 +215,15 @@ WITH (
     key = value, 
     ... 
 )
-```        
+```
 
-### Колонки {#columns}
+### Колонки {#olap-columns}
 
-Поддерживаемые типы данных в колоночных таблицах и ограничение на использование типов в первичных ключах или колонках данных описаны в разделе [поддерживаемые типы данных](../../../../concepts/datamodel/column_table.md#olap-data-types) колоночных таблиц.
+Поддерживаемые типы данных в колоночных таблицах и ограничение на использование типов в первичных ключах или колонках данных описаны в разделе [поддерживаемые типы данных](../../../../concepts/column-table.md#olap-data-types) колоночных таблиц.
 
-Обязательно указание `PRIMARY KEY` и `PARTITION BY` с непустым списком колонок. 
+Обязательно указание `PRIMARY KEY` и `PARTITION BY` с непустым списком колонок.
 
-Без дополнительных модификаторов колонка приобретает [опциональный тип](../../types/optional.md) тип, и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
-
+Без дополнительных модификаторов колонка приобретает [опциональный](../../types/optional.md) тип и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 
 **Пример**
 
@@ -230,10 +240,9 @@ STORE = COLUMN
 )
 ```
 
+### Дополнительные параметры {#olap-additional}
 
-### Дополнительные параметры {#additional}
-
-Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы, используя YQL, такие параметры перечисляются в блоке ```WITH```:
+Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
 
 ```sql
 CREATE TABLE table_name (...)
@@ -244,14 +253,14 @@ WITH (
 )
 ```
 
-Здесь key — это название параметра, а value — его значение.
+Здесь `key` — это название параметра, а `value` — его значение.
 
 Поддерживаемые параметры колоночных таблиц:
-- [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](../../../../concepts/datamodel/column_table.md#auto_partitioning_min_partitions_count)
+
+* `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` — определяет минимальное физическое количество партиций для хранения данных (см. [{#T}](../../../../concepts/column-table.md#olap-tables-partitioning)).
 
 Например, следующий код создает колоночную таблицу с 10-ю партициями:
 
-<small>Листинг 5</small>
 ```sql
 CREATE TABLE my_table (
     id Uint64,
@@ -263,4 +272,5 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
 );
 ```
+
 {%endif%}

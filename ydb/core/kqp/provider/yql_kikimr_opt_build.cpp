@@ -326,11 +326,19 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         if (auto* dqIntegration = dataSource->GetDqIntegration(); dqIntegration && dqIntegration->CanRead(TDqSettings::TDefault::DataSizePerJob, TDqSettings::TDefault::MaxTasksPerStage, *node.Ptr(), ctx)) {
             txRes.Ops.insert(node.Raw());
             for (size_t i = 0, childrenSize = node.Raw()->ChildrenSize(); i < childrenSize; ++i) {
-                TExprNode* child = node.Raw()->Child(i);
-                if (child && child->IsWorld()) {
-                    return ExploreTx(TExprBase(child), ctx, dataSink, txRes, tablesData, types);
+                if (TExprNode::TPtr child = node.Raw()->ChildPtr(i)) {
+                    bool isWorldChild = false;
+                    if (child->IsWorld()) {
+                        isWorldChild = true;
+                    } else if (auto* typeAnn = child->GetTypeAnn(); typeAnn && typeAnn->GetKind() == ETypeAnnotationKind::World) {
+                        isWorldChild = true;
+                    }
+                    if (isWorldChild) {
+                        return ExploreTx(TExprBase(child), ctx, dataSink, txRes, tablesData, types);
+                    }
                 }
             }
+            return true;
         }
     }
 

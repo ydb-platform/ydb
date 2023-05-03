@@ -20,9 +20,14 @@ using namespace NActors;
 using TEvExecuteQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::ExecuteQueryRequest,
     Ydb::Query::ExecuteQueryResponsePart>;
 
-class RpcFlowControlState {
+struct TProducerState {
+    TMaybe<ui64> LastSeqNo;
+    ui64 AckedFreeSpaceBytes = 0;
+};
+
+class TRpcFlowControlState {
 public:
-    RpcFlowControlState(ui64 inflightLimitBytes)
+    TRpcFlowControlState(ui64 inflightLimitBytes)
         : InflightLimitBytes_(inflightLimitBytes) {}
 
     void PushResponse(ui64 responseSizeBytes) {
@@ -89,18 +94,18 @@ public:
     }
 
 private:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-                HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 default:
-                    UnexpectedEvent(__func__, ev, ctx);
+                    UnexpectedEvent(__func__, ev);
             }
         } catch (const yexception& ex) {
-            InternalError(ex.what(), ctx);
+            InternalError(ex.what());
         }
     }
 
@@ -121,13 +126,13 @@ private:
 
         auto [fillStatus, fillIssues] = FillKqpRequest(*req, ev->Record);
         if (fillStatus != Ydb::StatusIds::SUCCESS) {
-            return ReplyFinishStream(fillStatus, fillIssues, ctx);
+            return ReplyFinishStream(fillStatus, fillIssues);
         }
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
-            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues);
         }
     }
 
@@ -150,41 +155,46 @@ private:
         }
 
         ui64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
-        if (ResumeWithSeqNo_ && freeSpaceBytes > 0) {
-            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
-                << ", seqNo: " << *ResumeWithSeqNo_
-                << ", freeSpace: " << freeSpaceBytes
-                << ", executer: " << ExecuterActorId_);
 
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-            resp->Record.SetSeqNo(*ResumeWithSeqNo_);
-            resp->Record.SetFreeSpace(freeSpaceBytes);
+        for (auto& pair : StreamProducers_) {
+            const auto& producerId = pair.first;
+            auto& producer = pair.second;
 
-            ctx.Send(ExecuterActorId_, resp.Release());
+            if (freeSpaceBytes > 0 && producer.LastSeqNo && producer.AckedFreeSpaceBytes == 0) {
+                LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
+                    << ", producer: " << producerId
+                    << ", seqNo: " << producer.LastSeqNo
+                    << ", freeSpace: " << freeSpaceBytes);
 
-            ResumeWithSeqNo_.Clear();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                resp->Record.SetSeqNo(*producer.LastSeqNo);
+                resp->Record.SetFreeSpace(freeSpaceBytes);
+
+                ctx.Send(producerId, resp.Release());
+
+                producer.AckedFreeSpaceBytes = freeSpaceBytes;
+            }
         }
+
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
-        if (!ExecuterActorId_) {
-            ExecuterActorId_ = ev->Sender;
-        }
-
         Ydb::Query::ExecuteQueryResponsePart response;
         response.set_status(Ydb::StatusIds::SUCCESS);
-        response.set_result_set_index(0);
+        response.set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
         response.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
+        FlowControl_.PushResponse(out.size());
+        auto freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+
         Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
 
-        auto freeSpaceBytes = FlowControl_.FreeSpaceBytes();
-        if (freeSpaceBytes == 0) {
-            ResumeWithSeqNo_ = ev->Get()->Record.GetSeqNo();
-        }
+        auto& producer = StreamProducers_[ev->Sender];
+        producer.LastSeqNo = ev->Get()->Record.GetSeqNo();
+        producer.AckedFreeSpaceBytes = freeSpaceBytes;
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
@@ -199,14 +209,14 @@ private:
         ctx.Send(ev->Sender, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, issues);
 
-        ReplyFinishStream(record.GetYdbStatus(), issues, ctx);
+        ReplyFinishStream(record.GetYdbStatus(), issues);
     }
 
 private:
@@ -215,27 +225,27 @@ private:
         Y_UNUSED(ctx);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         NYql::IssueToMessage(issue, issuesMessage.Add());
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         for (auto& issue : issues) {
             auto item = issuesMessage.Add();
             NYql::IssueToMessage(issue, item);
         }
 
-        ReplyFinishStream(status, issuesMessage, ctx);
+        ReplyFinishStream(status, issuesMessage);
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        LOG_INFO_S(ctx, NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
+        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
             << Ydb::StatusIds::StatusCode_Name(status));
 
         // Skip sending empty result in case of success status - simplify client logic
@@ -252,16 +262,16 @@ private:
         this->PassAway();
     }
 
-    void InternalError(const TString& message, const TActorContext& ctx) {
-        LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+    void InternalError(const TString& message) {
+        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
 
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
-        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue, ctx);
+        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }
 
-    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
+    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
         InternalError(TStringBuilder() << "TExecuteQueryRPC in state " << state << " received unexpected event " <<
-            ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()), ctx);
+            ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));
     }
 
 private:
@@ -272,10 +282,8 @@ private:
 private:
     std::unique_ptr<TEvExecuteQueryRequest> Request_;
 
-    RpcFlowControlState FlowControl_;
-    TMaybe<ui64> ResumeWithSeqNo_;
-
-    TActorId ExecuterActorId_;
+    TRpcFlowControlState FlowControl_;
+    TMap<TActorId, TProducerState> StreamProducers_;
 };
 
 } // namespace

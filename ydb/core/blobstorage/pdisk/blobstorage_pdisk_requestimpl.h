@@ -141,6 +141,16 @@ public:
         v.GroupGeneration = -1;
         return v;
     }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TYardInit {";
+        str << "VDisk# " << VDisk.ToString();
+        str << " PDiskGuid# " << PDiskGuid;
+        str << " SlotId# " << SlotId;
+        str << "}";
+        return str.Str();
+    }
 };
 
 //
@@ -311,6 +321,18 @@ public:
     void SetOnDestroy(std::function<void()> onDestroy) {
         OnDestroy = std::move(onDestroy);
     }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TLogWrite {";
+        str << "EstimatedChunkIdx# " << EstimatedChunkIdx;
+        str << " LsnSegmentStart# " << LsnSegmentStart;
+        str << " Lsn# " << Lsn;
+        str << " Result# " << (!Result ? "is empty" : Result->ToString());
+        str << " OnDestroy is " << (!OnDestroy ? "not " : "") << "set";
+        str << "}";
+        return str.Str();
+    }
 };
 
 class TCompletionChunkRead;
@@ -343,6 +365,8 @@ public:
     TIntrusivePtr<TChunkRead> SelfPointer;
 
     const ui64 DoubleFreeCanary;
+
+    std::function<TString()> DebugInfoGenerator;
 
     TChunkRead(const NPDisk::TEvChunkRead &ev, const TActorId &sender, TReqId reqId, NWilson::TTraceId traceId)
         : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(traceId))
@@ -910,6 +934,18 @@ public:
 
     ERequestType GetType() const override {
         return ERequestType::RequestLogCommitDone;
+    }
+
+    TString ToString() const {
+        TStringStream str;
+        str << "TLogCommitDone {";
+        str << "OwnerId# " << (ui32)OwnerId;
+        str << " OwnerRound# " << OwnerRound;
+        str << " Lsn# " << Lsn;
+        str << " CommitedChunks.size()# " << CommitedChunks.size();
+        str << " DeletedChunks.size()# " << DeletedChunks.size();
+        str << "}";
+        return str.Str();
     }
 };
 

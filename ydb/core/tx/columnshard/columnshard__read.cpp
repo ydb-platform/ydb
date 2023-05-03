@@ -38,13 +38,13 @@ private:
 
 bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
-    Y_VERIFY(Self->PrimaryIndex);
+    Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
     Y_UNUSED(txc);
     LOG_S_DEBUG("TTxRead.Execute at tablet " << Self->TabletID());
 
     txc.DB.NoMoreReadsForTx();
 
-    const NOlap::TIndexInfo& indexInfo = Self->PrimaryIndex->GetIndexInfo();
+    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo();
     auto& record = Proto(Ev->Get());
 
     ui64 metaShard = record.GetTxInitiator();
@@ -53,7 +53,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     read.PlanStep = record.GetPlanStep();
     read.TxId = record.GetTxId();
     read.PathId = record.GetTableId();
-    read.ReadNothing = Self->PathsToDrop.count(read.PathId);
+    read.ReadNothing = !(Self->TablesManager.HasTable(read.PathId));
     read.ColumnIds = ProtoToVector<ui32>(record.GetColumnIds());
     read.ColumnNames = ProtoToVector<TString>(record.GetColumnNames());
     if (read.ColumnIds.empty() && read.ColumnNames.empty()) {
@@ -75,11 +75,11 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     }
 
     bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
-        TIndexColumnResolver(Self->PrimaryIndex->GetIndexInfo()));
+        TIndexColumnResolver(Self->TablesManager.GetIndexInfo()));
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, Self->BatchCache,
+        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
                                        ErrorDescription);
     }
 
@@ -130,7 +130,7 @@ void TTxRead::Complete(const TActorContext& ctx) {
 
         TInstant deadline = TInstant::Max(); // TODO
         ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(),
-            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie));
+            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
     }
 }
 

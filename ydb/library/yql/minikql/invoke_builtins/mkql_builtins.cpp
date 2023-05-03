@@ -14,6 +14,8 @@
 #include <arrow/compute/registry.h>
 #include <arrow/compute/registry_internal.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -239,6 +241,7 @@ private:
 TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
 {
     RegisterDefaultOperations(*this, KernelFamilyMap);
+    NYql::RegisterPgKernels();
     CalculateMetadataEtag();
 }
 

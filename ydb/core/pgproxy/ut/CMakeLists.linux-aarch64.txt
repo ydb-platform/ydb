@@ -15,10 +15,10 @@ target_link_libraries(ydb-core-pgproxy-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-core-pgproxy
   cpp-actors-testlib
+  ydb-core-protos
 )
 target_link_options(ydb-core-pgproxy-ut PRIVATE
   -ldl
@@ -65,5 +65,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-pgproxy-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-pgproxy-ut)

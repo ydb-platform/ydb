@@ -12,7 +12,6 @@ target_link_libraries(ydb-core-blobstorage-base-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-gtest
   cpp-testing-gtest_main
   core-blobstorage-base
@@ -55,5 +54,8 @@ set_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-blobstorage-base-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-blobstorage-base-ut)

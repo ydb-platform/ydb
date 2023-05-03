@@ -17,13 +17,13 @@ public:
                NOlap::TReadMetadata::TConstPtr readMetadata,
                const TInstant& deadline,
                const TActorId& columnShardActorId,
-               ui64 requestCookie)
+               ui64 requestCookie, const TScanCounters& counters)
         : TabletId(tabletId)
         , DstActor(dstActor)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata)
+        , IndexedData(ReadMetadata, IndexedBlobsForFetch, true, counters, TDataTasksProcessorContainer())
         , Deadline(deadline)
         , ColumnShardActorId(columnShardActorId)
         , RequestCookie(requestCookie)
@@ -46,13 +46,13 @@ public:
 
         Y_VERIFY(event.Data.size() == event.BlobRange.Size, "%zu, %d", event.Data.size(), event.BlobRange.Size);
 
-        if (IndexedBlobs.count(event.BlobRange)) {
-            if (!WaitIndexed.count(event.BlobRange)) {
+        if (IndexedBlobs.contains(event.BlobRange)) {
+            if (!WaitIndexed.contains(event.BlobRange)) {
                 return; // ignore duplicate parts
             }
             WaitIndexed.erase(event.BlobRange);
-            IndexedData.AddIndexed(event.BlobRange, event.Data, nullptr);
-        } else if (CommittedBlobs.count(blobId)) {
+            IndexedData.AddIndexed(event.BlobRange, event.Data);
+        } else if (CommittedBlobs.contains(blobId)) {
             auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
             if (cmt.empty()) {
                 return; // ignore duplicates
@@ -128,8 +128,13 @@ public:
             protoStats->SetIndexPortions(stats->IndexPortions);
             protoStats->SetIndexBatches(stats->IndexBatches);
             protoStats->SetNotIndexedBatches(stats->CommittedBatches);
-            protoStats->SetUsedColumns(stats->UsedColumns);
-            protoStats->SetDataBytes(stats->DataBytes);
+            protoStats->SetSchemaColumns(stats->SchemaColumns);
+            protoStats->SetFilterColumns(stats->FilterColumns);
+            protoStats->SetAdditionalColumns(stats->AdditionalColumns);
+            protoStats->SetDataFilterBytes(stats->DataFilterBytes);
+            protoStats->SetDataAdditionalBytes(stats->DataAdditionalBytes);
+            protoStats->SetPortionsBytes(stats->PortionsBytes);
+            protoStats->SetSelectedRows(stats->SelectedRows);
         }
 
         if (Deadline != TInstant::Max()) {
@@ -163,9 +168,11 @@ public:
             WaitCommitted.emplace(cmtBlob, notIndexed);
         }
 
-        IndexedBlobs = IndexedData.InitRead(notIndexed);
-        for (auto& [blobRange, granule] : IndexedBlobs) {
+        IndexedData.InitRead(notIndexed);
+        while (IndexedBlobsForFetch.size()) {
+            const auto blobRange = IndexedBlobsForFetch.pop_front();
             WaitIndexed.insert(blobRange);
+            IndexedBlobs.emplace(blobRange);
         }
 
         // Add cached batches without read
@@ -202,7 +209,7 @@ public:
                 auto& blobId = cmtBlob.BlobId;
                 SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
             }
-            for (auto& [blobRange, granule] : IndexedBlobs) {
+            for (auto&& blobRange : IndexedBlobs) {
                 SendReadRequest(ctx, blobRange);
             }
         }
@@ -219,7 +226,7 @@ public:
         Y_VERIFY(blobRange.Size);
 
         auto& externBlobs = ReadMetadata->ExternBlobs;
-        bool fallback = externBlobs && externBlobs->count(blobRange.BlobId);
+        bool fallback = externBlobs && externBlobs->contains(blobRange.BlobId);
 
         NBlobCache::TReadBlobRangeOptions readOpts {
             .CacheAfterRead = true,
@@ -244,11 +251,12 @@ private:
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
+    NOlap::TFetchBlobsQueue IndexedBlobsForFetch;
     NOlap::TIndexedReadData IndexedData;
     TInstant Deadline;
     TActorId ColumnShardActorId;
     const ui64 RequestCookie;
-    THashMap<NBlobCache::TBlobRange, ui64> IndexedBlobs;
+    THashSet<NBlobCache::TBlobRange> IndexedBlobs;
     THashSet<TUnifiedBlobId> CommittedBlobs;
     THashSet<NBlobCache::TBlobRange> WaitIndexed;
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
@@ -277,10 +285,10 @@ IActor* CreateReadActor(ui64 tabletId,
                         NOlap::TReadMetadata::TConstPtr readMetadata,
                         const TInstant& deadline,
                         const TActorId& columnShardActorId,
-                        ui64 requestCookie)
+                        ui64 requestCookie, const TScanCounters& counters)
 {
     return new TReadActor(tabletId, dstActor, std::move(event), readMetadata,
-                          deadline, columnShardActorId, requestCookie);
+                          deadline, columnShardActorId, requestCookie, counters);
 }
 
 }

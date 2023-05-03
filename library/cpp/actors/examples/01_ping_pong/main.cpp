@@ -51,20 +51,18 @@ public:
     {}
 
     STFUNC(StateWait) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPing, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, PrintStats);
+            sFunc(TEvents::TEvWakeup, PrintStats);
         }
 
         ++HandledEvents;
     }
 
     STFUNC(StatePing) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPong, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, PrintStats);
+            sFunc(TEvents::TEvWakeup, PrintStats);
         }
 
         ++HandledEvents;

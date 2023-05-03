@@ -57,7 +57,7 @@ public:
     }
 
     //STFUNC(StateWork)
-    void StateWork(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateWork(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TMiniKQLCompileServiceEvents::TEvCompileStatus, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);

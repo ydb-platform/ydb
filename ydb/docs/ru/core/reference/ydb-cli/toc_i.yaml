@@ -1,12 +1,12 @@
 items:
   - name: Установка
     href: install.md
+  - name: Соединение с БД и аутентификация
+    href: connect.md
   - name: Все команды по алфавиту
     href: commands.md
   - name: Сервисные команды
     href: commands/service.md
-  - name: Соединение с БД и аутентификация
-    href: connect.md
   - name: Глобальные параметры
     href: commands/global-options.md
   - name: Команды YDB CLI
@@ -59,6 +59,8 @@ items:
       href: topic-consumer-add.md
     - name: Удаление читателя топика
       href: topic-consumer-drop.md
+    - name: Сохранение позиции чтения
+      href: topic-consumer-offset-commit.md
     - name: Чтение из топика
       href: topic-read.md
     - name: Запись в топик
@@ -75,6 +77,8 @@ items:
       href: scripting-yql.md
     - name: Выполнение запроса
       href: table-query-execute.md
+    - name: Выполнение параметризованных запросов
+      href: parameterized-queries-cli.md
 #  - name: Утилиты
 #    items:
     # - name: Снятие бэкапа
@@ -111,4 +115,5 @@ items:
       href: workload-click-bench.md
     - name: Key-Value нагрузка
       href: workload-kv.md
-
+    - name: Topic нагрузка
+      href: workload-topic.md

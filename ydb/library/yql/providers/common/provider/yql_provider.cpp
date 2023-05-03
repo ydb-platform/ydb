@@ -347,6 +347,95 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TMaybeNode<TCoAtom> mode;
+    TVector<TCoTopicConsumer> consumers;
+    TVector<TCoTopicConsumer> addConsumers;
+    TVector<TCoTopicConsumer> alterConsumers;
+    TVector<TCoAtom> dropConsumers;
+    TVector<TCoNameValueTuple> topicSettings;
+
+    auto parseNewConsumer = [&](const auto& node, const auto& tuple, auto& consumersList) {
+        YQL_ENSURE(tuple.Value().template Maybe<TCoNameValueTupleList>());
+        auto consumer = Build<TCoTopicConsumer>(ctx, node.Pos());
+        for (const auto& item : tuple.Value().template Cast<TCoNameValueTupleList>()) {
+            const auto& itemName = item.Name().Value();
+            if (itemName == "name") {
+                consumer.Name(item.Value().template Cast<TCoAtom>());
+            } else if (itemName == "settings") {
+                YQL_ENSURE(item.Value().template Maybe<TCoNameValueTupleList>());
+                consumer.Settings(item.Value().template Cast<TCoNameValueTupleList>());
+            } else {
+                YQL_ENSURE(false, "unknown consumer item");
+            }
+        }
+        consumersList.push_back(consumer.Done());
+    };
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            }  else if (name == "consumer") {
+                parseNewConsumer(node, tuple, consumers);
+            } else if (name == "addConsumer") {
+                parseNewConsumer(node, tuple, addConsumers);
+            } else if (name == "alterConsumer") {
+                parseNewConsumer(node, tuple, alterConsumers);
+            } else if (name == "dropConsumer") {
+                auto name = tuple.Value().Cast<TCoAtom>();
+                dropConsumers.push_back(name);
+            } else if (name == "topicSettings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    topicSettings.push_back(item);
+                }
+            }
+        }
+    }
+
+    const auto& builtCons = Build<TCoTopicConsumerList>(ctx, node.Pos())
+            .Add(consumers)
+            .Done();
+
+    const auto& builtAddCons = Build<TCoTopicConsumerList>(ctx, node.Pos())
+            .Add(addConsumers)
+            .Done();
+
+    const auto& builtAlterCons = Build<TCoTopicConsumerList>(ctx, node.Pos())
+            .Add(alterConsumers)
+            .Done();
+
+    const auto& builtDropCons = Build<TCoAtomList>(ctx, node.Pos())
+            .Add(dropConsumers)
+            .Done();
+
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+            .Add(topicSettings)
+            .Done();
+
+    TVector<TCoNameValueTuple> other;
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+            .Add(other)
+            .Done();
+
+    TWriteTopicSettings ret(otherSettings);
+    ret.Mode = mode;
+    ret.Consumers = builtCons;
+    ret.AddConsumers = builtAddCons;
+    ret.TopicSettings = builtSettings;
+    ret.AlterConsumers = builtAlterCons;
+    ret.DropConsumers = builtDropCons;
+
+    return ret;
+}
+
 TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtomList> roles;
@@ -974,10 +1063,10 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
         // TODO: check MapJoinCore input unique using constraints
         if (const auto& lambda = node->Tail(); node->Head().IsCallable("SqueezeToDict") && lambda.Tail().IsCallable("MapJoinCore") && lambda.Tail().Child(1U) == &lambda.Head().Head()) {
             TMaybe<bool> isMany;
-            TMaybe<bool> isHashed;
+            TMaybe<EDictType> type;
             bool isCompact = false;
             TMaybe<ui64> itemsCount;
-            ParseToDictSettings(node->Head(), ctx, isMany, isHashed, itemsCount, isCompact);
+            ParseToDictSettings(node->Head(), ctx, type, isMany, itemsCount, isCompact);
             if (isMany.GetOrElse(true)) {
                 factor *= 5.0;
             }
@@ -1002,10 +1091,10 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
         // TODO: check MapJoinCore input unique using constraints
         if (node->Child(1)->IsCallable("ToDict")) {
             TMaybe<bool> isMany;
-            TMaybe<bool> isHashed;
+            TMaybe<EDictType> type;
             bool isCompact = false;
             TMaybe<ui64> itemsCount;
-            ParseToDictSettings(*node->Child(1), ctx, isMany, isHashed, itemsCount, isCompact);
+            ParseToDictSettings(*node->Child(1), ctx, type, isMany, itemsCount, isCompact);
             if (isMany.GetOrElse(true)) {
                 factor *= 5.0;
             }

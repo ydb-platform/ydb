@@ -52,6 +52,7 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
             <NPDisk::TEvChunkReadResult>(NKikimrProto::ERROR,
                     ChunkIdx, Offset, Cookie,
                     NKikimrBlobStorage::StatusIsValid, error.Str());
+        result->Data.SetDebugInfoGenerator(std::move(DebugInfoGenerator));
         actorSystem->Send(Sender, result.Release());
         IsReplied = true;
     }

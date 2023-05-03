@@ -9,7 +9,85 @@
 
 add_executable(ydb-library-yql-parser-pg_wrapper-ut)
 target_compile_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
+  -DDLSUFFIX=".so"
+  -Wno-ignored-attributes
+  -Wno-unused-parameter
+  -Wno-sign-compare
+  -Wno-missing-field-initializers
+  -Wno-incompatible-pointer-types-discards-qualifiers
+  -Wno-implicit-function-declaration
+  -Wno-duplicate-decl-specifier
+  -Wno-unused-function
+  -Wno-unused-variable
+  -Wno-unused-private-field
+  -Wno-register
+  -Wno-unguarded-availability-new
+  -Wno-int-conversion
+  -Wno-deprecated-declarations
+  -Darray_length=yql_array_length
+  -Dpg_encoding_max_length=yql_pg_encoding_max_length
+  -Dpg_encoding_mblen=yql_pg_encoding_mblen
+  -Dpg_mule_mblen=yql_pg_mule_mblen
+  -Dpg_utf8_islegal=yql_pg_utf8_islegal
+  -Dpg_utf_mblen=yql_pg_utf_mblen
+  -Dpg_wchar_table=yql_pg_wchar_table
+  -Dunicode_to_utf8=yql_unicode_to_utf8
+  -Dutf8_to_unicode=yql_utf8_to_unicode
+  -Dpg_enc2name_tbl=yql_pg_enc2name_tbl
+  -Dstrtoint=yql_strtoint
+  -Dpalloc=yql_palloc
+  -Dpalloc0=yql_palloc0
+  -Dpfree=yql_pfree
+  -Dpstrdup=yql_pstrdup
+  -Drepalloc=yql_repalloc
+  -Dpalloc_extended=yql_palloc_extended
+  -Dpg_clean_ascii=yql_pg_clean_ascii
+  -Dpg_str_endswith=yql_pg_str_endswith
+  -Dpg_strip_crlf=yql_pg_strip_crlf
+  -Dpg_encoding_dsplen=yql_pg_encoding_dsplen
+  -Dpg_encoding_mblen_bounded=yql_pg_encoding_mblen_bounded
+  -Dpg_encoding_verifymb=yql_pg_encoding_verifymb
+  -Dpg_encoding_verifymbchar=yql_pg_encoding_verifymbchar
+  -Dpg_encoding_verifymbstr=yql_pg_encoding_verifymbstr
+  -Dunicode_normalize=yql_unicode_normalize
+  -Ddurable_rename=yql_durable_rename
+  -Dfsync_fname=yql_fsync_fname
+  -Dget_encoding_name_for_icu=yql_get_encoding_name_for_icu
+  -Dis_encoding_supported_by_icu=yql_is_encoding_supported_by_icu
+  -Dpg_char_to_encoding=yql_pg_char_to_encoding
+  -Dpg_enc2gettext_tbl=yql_pg_enc2gettext_tbl
+  -Dpg_encoding_to_char=yql_pg_encoding_to_char
+  -Dpg_valid_client_encoding=yql_pg_valid_client_encoding
+  -Dpg_valid_server_encoding=yql_pg_valid_server_encoding
+  -Dpg_valid_server_encoding_id=yql_pg_valid_server_encoding_id
+  -Dpnstrdup=yql_pnstrdup
+  -Dget_ps_display=yql_get_ps_display
+  -Dinit_ps_display=yql_init_ps_display
+  -Dsave_ps_display_args=yql_save_ps_display_args
+  -Dset_ps_display=yql_set_ps_display
+  -Dupdate_process_title=yql_update_process_title
+  -Dlo_read=yql_lo_read
+  -Dlo_write=yql_lo_write
+  -Drtrim=yql_rtrim
+  -Dstr_tolower=yql_str_tolower
+  -Dstr_toupper=yql_str_toupper
+  -Dpg_file_create_mode=yql_pg_file_create_mode
+  -Dpg_dir_create_mode=yql_pg_dir_create_mode
+  -Descape_json=yql_escape_json
+  -DSetDataDirectoryCreatePerm=yql_SetDataDirectoryCreatePerm
+  -Dpg_mode_mask=yql_pg_mode_mask
+  -Dpg_strong_random=yql_pg_strong_random
+  -Dpg_strong_random_init=yql_pg_strong_random_init
+  -DScanKeywordCategories=yql_ScanKeywordCategories
+  -DScanKeywords=yql_ScanKeywords
+  -Dscram_ClientKey=yql_scram_ClientKey
+  -Dscram_H=yql_scram_H
+  -Dscram_SaltedPassword=yql_scram_SaltedPassword
+  -Dscram_ServerKey=yql_scram_ServerKey
+  -Dscram_build_secret=yql_scram_build_secret
+  -Dpg_is_ascii=yql_pg_is_ascii
   -DUSE_CURRENT_UDF_ABI_VERSION
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
@@ -19,14 +97,16 @@ target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   yql-parser-pg_wrapper
+  yql-minikql-arrow
   yql-minikql-computation
   yql-public-udf
   udf-service-exception_policy
   yql-minikql-comp_nodes
   yql-parser-pg_catalog
+  yql-minikql-codegen
+  library-cpp-resource
 )
 target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -ldl
@@ -39,6 +119,7 @@ target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/codegen_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp
@@ -83,5 +164,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-library-yql-parser-pg_wrapper-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-parser-pg_wrapper-ut)

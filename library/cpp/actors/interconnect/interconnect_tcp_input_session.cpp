@@ -6,12 +6,101 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
+    void TReceiveContext::TPerChannelContext::PrepareCatchBuffer() {
+        size_t bytesToCatch = FetchOffset;
+        for (auto it = XdcBuffers.begin(), end = it + FetchIndex; it != end; ++it) {
+            bytesToCatch += it->size();
+        }
+
+        XdcCatchBuffer = TRcBuf::Uninitialized(bytesToCatch);
+        XdcCatchBytesRead = 0;
+    }
+
+    void TReceiveContext::TPerChannelContext::ApplyCatchBuffer() {
+        if (auto buffer = std::exchange(XdcCatchBuffer, {})) {
+            Y_VERIFY(XdcCatchBytesRead >= buffer.size());
+
+            const size_t offset = XdcCatchBytesRead % buffer.size();
+            const char *begin = buffer.data();
+            const char *mid = begin + offset;
+            const char *end = begin + buffer.size();
+            Y_VERIFY_DEBUG(begin <= mid && mid < end);
+
+            TRope rope;
+            rope.Insert(rope.End(), TRcBuf(TRcBuf::Piece, mid, end, buffer));
+            if (begin != mid) {
+                rope.Insert(rope.End(), TRcBuf(TRcBuf::Piece, begin, mid, buffer));
+            }
+
+            DropFront(&rope, buffer.size());
+        } else {
+            Y_VERIFY_DEBUG(!XdcCatchBytesRead);
+        }
+    }
+
+    void TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
+            std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ) {
+        Y_VERIFY_DEBUG(numBytes);
+        auto it = XdcBuffers.begin() + FetchIndex;
+        for (;;) {
+            Y_VERIFY_DEBUG(it != XdcBuffers.end());
+            const TMutableContiguousSpan span = it->SubSpan(FetchOffset, numBytes);
+            outQ.emplace_back(channel, span);
+            numBytes -= span.size();
+            FetchOffset += span.size();
+            if (FetchOffset == it->size()) {
+                ++FetchIndex;
+                ++it;
+                FetchOffset = 0;
+            }
+            if (!numBytes) {
+                break;
+            }
+        }
+    }
+
+    void TReceiveContext::TPerChannelContext::DropFront(TRope *from, size_t numBytes) {
+        Y_VERIFY_DEBUG(from || !XdcCatchBuffer);
+
+        size_t n = numBytes;
+        for (auto& pendingEvent : PendingEvents) {
+            const size_t numBytesInEvent = Min(n, pendingEvent.XdcSizeLeft);
+            pendingEvent.XdcSizeLeft -= numBytesInEvent;
+            n -= numBytesInEvent;
+            if (!n) {
+                break;
+            }
+        }
+
+        while (numBytes) {
+            Y_VERIFY_DEBUG(!XdcBuffers.empty());
+            auto& front = XdcBuffers.front();
+            if (from) {
+                from->ExtractFrontPlain(front.data(), Min(numBytes, front.size()));
+            }
+            if (numBytes < front.size()) {
+                front = front.SubSpan(numBytes, Max<size_t>());
+                if (!FetchIndex) { // we are sending this very buffer, adjust sending offset
+                    Y_VERIFY_DEBUG(numBytes <= FetchOffset);
+                    FetchOffset -= numBytes;
+                }
+                break;
+            } else {
+                numBytes -= front.size();
+                Y_VERIFY_DEBUG(FetchIndex);
+                --FetchIndex;
+                XdcBuffers.pop_front();
+            }
+        }
+    }
+
     TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
-                                       TIntrusivePtr<TReceiveContext> context, TInterconnectProxyCommon::TPtr common,
-                                       std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
-                                       TDuration deadPeerTimeout, TSessionParams params)
+            TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
+            TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
+            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params)
         : SessionId(sessionId)
         , Socket(std::move(socket))
+        , XdcSocket(std::move(xdcSocket))
         , Context(std::move(context))
         , Common(std::move(common))
         , NodeId(nodeId)
@@ -23,8 +112,7 @@ namespace NActors {
         Y_VERIFY(Context);
         Y_VERIFY(Socket);
         Y_VERIFY(SessionId);
-
-        AtomicSet(Context->PacketsReadFromSocket, 0);
+        Y_VERIFY(!Params.UseExternalDataChannel == !XdcSocket);
 
         Metrics->SetClockSkewMicrosec(0);
 
@@ -33,6 +121,16 @@ namespace NActors {
         // ensure that we do not spawn new session while the previous one is still alive
         TAtomicBase sessions = AtomicIncrement(Context->NumInputSessions);
         Y_VERIFY(sessions == 1, "sessions# %" PRIu64, ui64(sessions));
+
+        // calculate number of bytes to catch
+        for (auto& context : Context->ChannelArray) {
+            context.PrepareCatchBuffer();
+        }
+        for (auto& [channel, context] : Context->ChannelMap) {
+            context.PrepareCatchBuffer();
+        }
+
+        UsageHisto.fill(0);
     }
 
     void TInputSessionTCP::Bootstrap() {
@@ -40,7 +138,28 @@ namespace NActors {
         Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
         LastReceiveTimestamp = TActivationContext::Monotonic();
-        ReceiveData();
+        TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    STATEFN(TInputSessionTCP::WorkingState) {
+        std::unique_ptr<IEventBase> termEv;
+
+        try {
+            WorkingStateImpl(ev);
+        } catch (const TExReestablishConnection& ex) {
+            LOG_DEBUG_IC_SESSION("ICIS09", "ReestablishConnection, reason# %s", ex.Reason.ToString().data());
+            termEv = std::make_unique<TEvSocketDisconnect>(std::move(ex.Reason));
+        } catch (const TExDestroySession& ex) {
+            LOG_DEBUG_IC_SESSION("ICIS13", "DestroySession, reason# %s", ex.Reason.ToString().data());
+            termEv.reset(TInterconnectSessionTCP::NewEvTerminate(std::move(ex.Reason)));
+        }
+
+        if (termEv) {
+            AtomicDecrement(Context->NumInputSessions);
+            Send(SessionId, termEv.release());
+            PassAway();
+            Socket.Reset();
+        }
     }
 
     void TInputSessionTCP::CloseInputSession() {
@@ -49,64 +168,89 @@ namespace NActors {
     }
 
     void TInputSessionTCP::Handle(TEvPollerReady::TPtr ev) {
-        if (Context->ReadPending) {
+        auto *msg = ev->Get();
+
+        bool useful = false;
+        bool writeBlocked = false;
+
+        if (msg->Socket == Socket) {
+            useful = std::exchange(Context->MainReadPending, false);
+            writeBlocked = Context->MainWriteBlocked;
+        } else if (msg->Socket == XdcSocket) {
+            useful = std::exchange(Context->XdcReadPending, false);
+            writeBlocked = Context->XdcWriteBlocked;
+        }
+
+        if (useful) {
             Metrics->IncUsefulReadWakeups();
         } else if (!ev->Cookie) {
             Metrics->IncSpuriousReadWakeups();
         }
-        Context->ReadPending = false;
+
         ReceiveData();
-        if (Params.Encryption && Context->WriteBlockedByFullSendBuffer && !ev->Cookie) {
-            Send(SessionId, ev->Release().Release(), 0, 1);
+
+        if (Params.Encryption && writeBlocked && ev->Sender != SessionId) {
+            Send(SessionId, ev->Release().Release());
         }
     }
 
     void TInputSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
-        PollerToken = std::move(ev->Get()->PollerToken);
-        ReceiveData();
-    }
-
-    void TInputSessionTCP::HandleResumeReceiveData() {
+        auto *msg = ev->Get();
+        if (msg->Socket == Socket) {
+            PollerToken = std::move(msg->PollerToken);
+        } else if (msg->Socket == XdcSocket) {
+            XdcPollerToken = std::move(msg->PollerToken);
+        }
         ReceiveData();
     }
 
     void TInputSessionTCP::ReceiveData() {
         TTimeLimit limit(GetMaxCyclesPerEvent());
         ui64 numDataBytes = 0;
-        const size_t headerLen = Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1);
 
         LOG_DEBUG_IC_SESSION("ICIS02", "ReceiveData called");
 
         bool enoughCpu = true;
-        for (int iteration = 0; Socket; ++iteration) {
-            if (iteration && limit.CheckExceeded()) {
+        bool progress = false;
+
+        for (;;) {
+            if (progress && limit.CheckExceeded()) {
                 // we have hit processing time limit for this message, send notification to resume processing a bit later
-                Send(SelfId(), new TEvResumeReceiveData);
+                TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
                 enoughCpu = false;
                 break;
             }
 
+            // clear iteration progress
+            progress = false;
+
+            // try to process already fetched part from IncomingData
             switch (State) {
                 case EState::HEADER:
-                    if (IncomingData.GetSize() < headerLen) {
+                    if (IncomingData.GetSize() < sizeof(TTcpPacketHeader_v2)) {
                         break;
                     } else {
-                        ProcessHeader(headerLen);
+                        ProcessHeader();
+                        progress = true;
+                        continue;
                     }
-                    continue;
 
                 case EState::PAYLOAD:
+                    Y_VERIFY_DEBUG(PayloadSize);
                     if (!IncomingData) {
                         break;
                     } else {
-                        ProcessPayload(numDataBytes);
+                        ProcessPayload(&numDataBytes);
+                        progress = true;
+                        continue;
                     }
-                    continue;
             }
 
-            // if we have reached this point, it means that we do not have enough data in read buffer; try to obtain some
-            if (!ReadMore()) {
-                // we have no data from socket, so we have some free time to spend -- preallocate buffers using this time
+            // try to read more data into buffers
+            progress |= ReadMore();
+            progress |= ReadXdc(&numDataBytes);
+
+            if (!progress) { // no progress was made during this iteration
                 PreallocateBuffers();
                 break;
             }
@@ -166,38 +310,28 @@ namespace NActors {
         }
     }
 
-    void TInputSessionTCP::ProcessHeader(size_t headerLen) {
-        const bool success = IncomingData.ExtractFrontPlain(Header.Data, headerLen);
+    void TInputSessionTCP::ProcessHeader() {
+        TTcpPacketHeader_v2 header;
+        const bool success = IncomingData.ExtractFrontPlain(&header, sizeof(header));
         Y_VERIFY(success);
-        if (Params.UseModernFrame) {
-            PayloadSize = Header.v2.PayloadLength;
-            HeaderSerial = Header.v2.Serial;
-            HeaderConfirm = Header.v2.Confirm;
-            if (!Params.Encryption) {
-                ChecksumExpected = std::exchange(Header.v2.Checksum, 0);
-                Checksum = Crc32cExtendMSanCompatible(0, &Header.v2, sizeof(Header.v2)); // start calculating checksum now
-                if (!PayloadSize && Checksum != ChecksumExpected) {
-                    LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
-                    return ReestablishConnection(TDisconnectReason::ChecksumError());
-                }
+        PayloadSize = header.PayloadLength;
+        const ui64 serial = header.Serial;
+        const ui64 confirm = header.Confirm;
+        if (!Params.Encryption) {
+            ChecksumExpected = std::exchange(header.Checksum, 0);
+            Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
+            if (!PayloadSize && Checksum != ChecksumExpected) {
+                LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
+                throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
-        } else if (!Header.v1.Check()) {
-            LOG_ERROR_IC_SESSION("ICIS03", "header checksum error");
-            return ReestablishConnection(TDisconnectReason::ChecksumError());
-        } else {
-            PayloadSize = Header.v1.DataSize;
-            HeaderSerial = Header.v1.Serial;
-            HeaderConfirm = Header.v1.Confirm;
-            ChecksumExpected = Header.v1.PayloadCRC32;
-            Checksum = 0;
         }
         if (PayloadSize >= 65536) {
             LOG_CRIT_IC_SESSION("ICIS07", "payload is way too big");
-            return DestroySession(TDisconnectReason::FormatError());
+            throw TExDestroySession{TDisconnectReason::FormatError()};
         }
-        if (ConfirmedByInput < HeaderConfirm) {
-            ConfirmedByInput = HeaderConfirm;
-            if (AtomicGet(Context->ControlPacketId) <= HeaderConfirm && !NewPingProtocol) {
+        if (ConfirmedByInput < confirm) {
+            ConfirmedByInput = confirm;
+            if (AtomicGet(Context->ControlPacketId) <= confirm && !NewPingProtocol) {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
                 const auto durationUs = duration.MicroSeconds();
@@ -210,146 +344,272 @@ namespace NActors {
             }
         }
         if (PayloadSize) {
-            const ui64 expected = Context->GetLastProcessedPacketSerial() + 1;
-            if (HeaderSerial == 0 || HeaderSerial > expected) {
-                LOG_CRIT_IC_SESSION("ICIS06", "packet serial %" PRIu64 ", but %" PRIu64 " expected", HeaderSerial, expected);
-                return DestroySession(TDisconnectReason::FormatError());
+            const ui64 expectedMin = Context->GetLastPacketSerialToConfirm() + 1;
+            const ui64 expectedMax = Context->LastProcessedSerial + 1;
+            Y_VERIFY_DEBUG(expectedMin <= expectedMax);
+            if (CurrentSerial ? serial != CurrentSerial + 1 : (serial == 0 || serial > expectedMin)) {
+                LOG_CRIT_IC_SESSION("ICIS06", "%s", TString(TStringBuilder()
+                        << "packet serial number mismatch"
+                        << " Serial# " << serial
+                        << " ExpectedMin# " << expectedMin
+                        << " ExpectedMax# " << expectedMax
+                        << " CurrentSerial# " << CurrentSerial
+                    ).data());
+                throw TExDestroySession{TDisconnectReason::FormatError()};
             }
-            IgnorePayload = HeaderSerial != expected;
+            IgnorePayload = serial != expectedMax;
+            CurrentSerial = serial;
             State = EState::PAYLOAD;
-        } else if (HeaderSerial & TTcpPacketBuf::PingRequestMask) {
-            Send(SessionId, new TEvProcessPingRequest(HeaderSerial & ~TTcpPacketBuf::PingRequestMask));
-        } else if (HeaderSerial & TTcpPacketBuf::PingResponseMask) {
-            const ui64 sent = HeaderSerial & ~TTcpPacketBuf::PingResponseMask;
+            Y_VERIFY_DEBUG(!Payload);
+        } else if (serial & TTcpPacketBuf::PingRequestMask) {
+            Send(SessionId, new TEvProcessPingRequest(serial & ~TTcpPacketBuf::PingRequestMask));
+        } else if (serial & TTcpPacketBuf::PingResponseMask) {
+            const ui64 sent = serial & ~TTcpPacketBuf::PingResponseMask;
             const ui64 received = GetCycleCountFast();
             HandlePingResponse(CyclesToDuration(received - sent));
-        } else if (HeaderSerial & TTcpPacketBuf::ClockMask) {
-            HandleClock(TInstant::MicroSeconds(HeaderSerial & ~TTcpPacketBuf::ClockMask));
+        } else if (serial & TTcpPacketBuf::ClockMask) {
+            HandleClock(TInstant::MicroSeconds(serial & ~TTcpPacketBuf::ClockMask));
+        }
+        if (!PayloadSize) {
+            ++PacketsReadFromSocket;
         }
     }
 
-    void TInputSessionTCP::ProcessPayload(ui64& numDataBytes) {
+    void TInputSessionTCP::ProcessPayload(ui64 *numDataBytes) {
         const size_t numBytes = Min(PayloadSize, IncomingData.GetSize());
         IncomingData.ExtractFront(numBytes, &Payload);
-        numDataBytes += numBytes;
+        *numDataBytes += numBytes;
         PayloadSize -= numBytes;
         if (PayloadSize) {
             return; // there is still some data to receive in the Payload rope
         }
-        State = EState::HEADER; // we'll continue with header next time
-        if (!Params.UseModernFrame || !Params.Encryption) { // see if we are checksumming packet body
+        InboundPacketQ.push_back(TInboundPacket{CurrentSerial, 0});
+        State = EState::HEADER;
+        if (!Params.Encryption) { // see if we are checksumming packet body
             for (const auto&& [data, size] : Payload) {
                 Checksum = Crc32cExtendMSanCompatible(Checksum, data, size);
             }
             if (Checksum != ChecksumExpected) { // validate payload checksum
                 LOG_ERROR_IC_SESSION("ICIS04", "payload checksum error");
-                return ReestablishConnection(TDisconnectReason::ChecksumError());
+                throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
         }
-        if (Y_UNLIKELY(IgnorePayload)) {
-            return;
-        }
-        if (!Context->AdvanceLastProcessedPacketSerial()) {
-            return DestroySession(TDisconnectReason::NewSession());
-        }
-
-        while (Payload && Socket) {
+        while (Payload) {
             // extract channel part header from the payload stream
             TChannelPart part;
             if (!Payload.ExtractFrontPlain(&part, sizeof(part))) {
                 LOG_CRIT_IC_SESSION("ICIS14", "missing TChannelPart header in payload");
-                return DestroySession(TDisconnectReason::FormatError());
-            }
-            if (!part.Size) { // bogus frame
-                continue;
+                throw TExDestroySession{TDisconnectReason::FormatError()};
             } else if (Payload.GetSize() < part.Size) {
                 LOG_CRIT_IC_SESSION("ICIS08", "payload format error ChannelPart# %s", part.ToString().data());
-                return DestroySession(TDisconnectReason::FormatError());
+                throw TExDestroySession{TDisconnectReason::FormatError()};
             }
 
-            const ui16 channel = part.Channel & ~TChannelPart::LastPartFlag;
-            TRope *eventData = channel < Context->ChannelArray.size()
-                ? &Context->ChannelArray[channel]
-                : &Context->ChannelMap[channel];
+            const ui16 channel = part.GetChannel();
+            auto& context = GetPerChannelContext(channel);
+            auto& pendingEvent = context.PendingEvents.empty() || context.PendingEvents.back().EventData
+                ? context.PendingEvents.emplace_back()
+                : context.PendingEvents.back();
 
-            Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
+            if (part.IsXdc()) { // external data channel command packet
+                XdcCommands.resize(part.Size);
+                const bool success = Payload.ExtractFrontPlain(XdcCommands.data(), XdcCommands.size());
+                Y_VERIFY(success);
+                ProcessXdcCommand(channel, context);
+            } else if (IgnorePayload) { // throw payload out
+                Payload.EraseFront(part.Size);
+            } else if (!part.IsLastPart()) { // just ordinary inline event data
+                Payload.ExtractFront(part.Size, &pendingEvent.Payload);
+            } else { // event final block
+                TEventDescr2 v2;
 
-            char buffer[Max(sizeof(TEventDescr1), sizeof(TEventDescr2))];
-            auto& v1 = reinterpret_cast<TEventDescr1&>(buffer);
-            auto& v2 = reinterpret_cast<TEventDescr2&>(buffer);
-            if (~part.Channel & TChannelPart::LastPartFlag) {
-                Payload.ExtractFront(part.Size, eventData);
-            } else if (part.Size != sizeof(v1) && part.Size != sizeof(v2)) {
-                LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
-                return DestroySession(TDisconnectReason::FormatError());
-            } else if (Payload.ExtractFrontPlain(buffer, part.Size)) {
-                TEventData descr;
-
-                switch (part.Size) {
-                    case sizeof(TEventDescr1):
-                        descr = {
-                            v1.Type,
-                            v1.Flags,
-                            v1.Recipient,
-                            v1.Sender,
-                            v1.Cookie,
-                            NWilson::TTraceId(), // do not accept traces with old format
-                            v1.Checksum
-                        };
-                        break;
-
-                    case sizeof(TEventDescr2):
-                        descr = {
-                            v2.Type,
-                            v2.Flags,
-                            v2.Recipient,
-                            v2.Sender,
-                            v2.Cookie,
-                            NWilson::TTraceId(v2.TraceId),
-                            v2.Checksum
-                        };
-                        break;
+                if (part.Size != sizeof(v2)) {
+                    LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
+                    throw TExDestroySession{TDisconnectReason::FormatError()};
                 }
 
+                const bool success = Payload.ExtractFrontPlain(&v2, sizeof(v2));
+                Y_VERIFY(success);
+
+                pendingEvent.EventData = TEventData{
+                    v2.Type,
+                    v2.Flags,
+                    v2.Recipient,
+                    v2.Sender,
+                    v2.Cookie,
+                    NWilson::TTraceId(v2.TraceId),
+                    v2.Checksum,
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+                    v2.Len
+#endif
+                };
+
                 Metrics->IncInputChannelsIncomingEvents(channel);
-                ProcessEvent(*eventData, descr);
-                *eventData = TRope();
-            } else {
-                Y_FAIL();
+                ProcessEvents(context);
+            }
+
+            Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
+        }
+
+        // mark packet as processed
+        if (IgnorePayload) {
+            Y_VERIFY_DEBUG(CurrentSerial <= Context->LastProcessedSerial);
+        } else {
+            ++Context->LastProcessedSerial;
+            Y_VERIFY_DEBUG(CurrentSerial == Context->LastProcessedSerial);
+        }
+        XdcCatchStream.Ready = Context->LastProcessedSerial == CurrentSerial;
+        ApplyXdcCatchStream();
+        ProcessInboundPacketQ(0);
+
+        ++PacketsReadFromSocket;
+        ++DataPacketsReadFromSocket;
+        IgnoredDataPacketsFromSocket += IgnorePayload;
+    }
+
+    void TInputSessionTCP::ProcessInboundPacketQ(ui64 numXdcBytesRead) {
+        for (; !InboundPacketQ.empty(); InboundPacketQ.pop_front()) {
+            auto& front = InboundPacketQ.front();
+
+            const size_t n = Min(numXdcBytesRead, front.XdcUnreadBytes);
+            front.XdcUnreadBytes -= n;
+            numXdcBytesRead -= n;
+
+            if (front.XdcUnreadBytes) { // we haven't finished this packet yet
+                Y_VERIFY(!numXdcBytesRead);
+                break;
+            }
+
+            Y_VERIFY_DEBUG(front.Serial + InboundPacketQ.size() - 1 <= Context->LastProcessedSerial,
+                "front.Serial# %" PRIu64 " LastProcessedSerial# %" PRIu64 " InboundPacketQ.size# %zu",
+                front.Serial, Context->LastProcessedSerial, InboundPacketQ.size());
+
+            if (Context->GetLastPacketSerialToConfirm() < front.Serial && !Context->AdvanceLastPacketSerialToConfirm(front.Serial)) {
+                throw TExReestablishConnection{TDisconnectReason::NewSession()};
             }
         }
     }
 
-    void TInputSessionTCP::ProcessEvent(TRope& data, TEventData& descr) {
-        if (!Params.UseModernFrame || descr.Checksum) {
-            ui32 checksum = 0;
-            for (const auto&& [data, size] : data) {
-                checksum = Crc32cExtendMSanCompatible(checksum, data, size);
+    void TInputSessionTCP::ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context) {
+        const char *ptr = XdcCommands.data();
+        const char *end = ptr + XdcCommands.size();
+        while (ptr != end) {
+            switch (static_cast<EXdcCommand>(*ptr++)) {
+                case EXdcCommand::DECLARE_SECTION: {
+                    // extract and validate command parameters
+                    const ui64 headroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
+                    const ui64 size = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
+                    const ui64 tailroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
+                    const ui64 alignment = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
+                    if (headroom == Max<ui64>() || size == Max<ui64>() || tailroom == Max<ui64>() || alignment == Max<ui64>()) {
+                        LOG_CRIT_IC_SESSION("ICIS00", "XDC command format error");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+
+                    if (!IgnorePayload) { // process command if packet is being applied
+                        // allocate buffer and push it into the payload
+                        auto& pendingEvent = context.PendingEvents.back();
+                        pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom, alignment});
+                        auto buffer = TRcBuf::Uninitialized(size, headroom, tailroom);
+                        if (size) {
+                            context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
+                        }
+                        pendingEvent.Payload.Insert(pendingEvent.Payload.End(), TRope(std::move(buffer)));
+                        pendingEvent.XdcSizeLeft += size;
+
+                        ++XdcSections;
+                    }
+                    continue;
+                }
+
+                case EXdcCommand::PUSH_DATA: {
+                    const size_t cmdLen = sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
+                    if (static_cast<size_t>(end - ptr) < cmdLen) {
+                        LOG_CRIT_IC_SESSION("ICIS18", "XDC command format error");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+
+                    auto size = *reinterpret_cast<const ui16*>(ptr);
+                    if (!size) {
+                        LOG_CRIT_IC_SESSION("ICIS03", "XDC empty payload");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+
+                    if (!Params.Encryption) {
+                        const ui32 checksumExpected = *reinterpret_cast<const ui32*>(ptr + sizeof(ui16));
+                        XdcChecksumQ.emplace_back(size, checksumExpected);
+                    }
+
+                    // account channel and number of bytes in XDC for this packet
+                    auto& packet = InboundPacketQ.back();
+                    packet.XdcUnreadBytes += size;
+
+                    if (IgnorePayload) {
+                        // this packet was already marked as 'processed', all commands had been executed, but we must
+                        // parse XDC stream from this packet correctly
+                        const bool apply = Context->GetLastPacketSerialToConfirm() < CurrentSerial &&
+                            GetPerChannelContext(channel).XdcCatchBuffer;
+                        XdcCatchStream.BytesPending += size;
+                        XdcCatchStream.Markup.emplace_back(channel, apply, size);
+                    } else {
+                        // find buffers and acquire data buffer pointers
+                        context.FetchBuffers(channel, size, XdcInputQ);
+                    }
+
+                    ptr += cmdLen;
+                    ++XdcRefs;
+                    continue;
+                }
             }
-            if (checksum != descr.Checksum) {
-                LOG_CRIT_IC_SESSION("ICIS05", "event checksum error");
-                return ReestablishConnection(TDisconnectReason::ChecksumError());
+
+            LOG_CRIT_IC_SESSION("ICIS15", "unexpected XDC command");
+            throw TExDestroySession{TDisconnectReason::FormatError()};
+        }
+    }
+
+    void TInputSessionTCP::ProcessEvents(TReceiveContext::TPerChannelContext& context) {
+        for (; !context.PendingEvents.empty(); context.PendingEvents.pop_front()) {
+            auto& pendingEvent = context.PendingEvents.front();
+            if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft) {
+                break; // event is not ready yet
             }
-        }
-        TEventSerializationInfo serializationInfo{
-            .IsExtendedFormat = bool(descr.Flags & IEventHandle::FlagExtendedFormat),
-        };
-        auto ev = std::make_unique<IEventHandle>(SessionId,
-            descr.Type,
-            descr.Flags & ~IEventHandle::FlagExtendedFormat,
-            descr.Recipient,
-            descr.Sender,
-            MakeIntrusive<TEventSerializedData>(std::move(data), std::move(serializationInfo)),
-            descr.Cookie,
-            Params.PeerScopeId,
-            std::move(descr.TraceId));
-        if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
-            LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
-                ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
-            ev.reset();
-        }
-        if (ev) {
-            TActivationContext::Send(ev.release());
+
+            auto& descr = *pendingEvent.EventData;
+#if IC_FORCE_HARDENED_PACKET_CHECKS
+            if (descr.Len != pendingEvent.Payload.GetSize()) {
+                LOG_CRIT_IC_SESSION("ICIS17", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
+                    descr.Type, pendingEvent.Payload.GetSize(), descr.Len);
+                throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+            }
+#endif
+            if (descr.Checksum) {
+                ui32 checksum = 0;
+                for (const auto&& [data, size] : pendingEvent.Payload) {
+                    checksum = Crc32cExtendMSanCompatible(checksum, data, size);
+                }
+                if (checksum != descr.Checksum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                }
+            }
+            pendingEvent.SerializationInfo.IsExtendedFormat = descr.Flags & IEventHandle::FlagExtendedFormat;
+            auto ev = std::make_unique<IEventHandle>(SessionId,
+                descr.Type,
+                descr.Flags & ~IEventHandle::FlagExtendedFormat,
+                descr.Recipient,
+                descr.Sender,
+                MakeIntrusive<TEventSerializedData>(std::move(pendingEvent.Payload), std::move(pendingEvent.SerializationInfo)),
+                descr.Cookie,
+                Params.PeerScopeId,
+                std::move(descr.TraceId));
+            if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
+                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                    ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
+                ev.reset();
+            }
+            if (ev) {
+                TActivationContext::Send(ev.release());
+            }
         }
     }
 
@@ -372,6 +632,47 @@ namespace NActors {
         }
     }
 
+    ssize_t TInputSessionTCP::Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token,
+            bool *readPending, const TIoVec *iov, size_t num) {
+        ssize_t recvres = 0;
+        TString err;
+        LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
+            do {
+                const ui64 begin = GetCycleCountFast();
+#ifndef _win_
+                if (num == 1) {
+                    recvres = socket.Recv(iov->Data, iov->Size, &err);
+                } else {
+                    recvres = socket.ReadV(reinterpret_cast<const iovec*>(iov), num);
+                }
+#else
+                recvres = socket.Recv(iov->Data, iov->Size, &err);
+#endif
+                const ui64 end = GetCycleCountFast();
+                Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
+            } while (recvres == -EINTR);
+        }
+
+        LOG_DEBUG_IC_SESSION("ICIS12", "Read recvres# %zd num# %zu err# %s", recvres, num, err.data());
+
+        if (recvres <= 0 || CloseInputSessionRequested) {
+            if ((-recvres != EAGAIN && -recvres != EWOULDBLOCK) || CloseInputSessionRequested) {
+                TString message = CloseInputSessionRequested ? "connection closed by debug command"
+                    : recvres == 0 ? "connection closed by peer"
+                    : err ? err
+                    : Sprintf("socket: %s", strerror(-recvres));
+                LOG_NOTICE_NET(NodeId, "%s", message.data());
+                throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
+                    recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
+            } else if (token && !std::exchange(*readPending, true)) {
+                socket.Request(*token, true, false);
+            }
+            return -1;
+        }
+
+        return recvres;
+    }
+
     bool TInputSessionTCP::ReadMore() {
         PreallocateBuffers();
 
@@ -386,50 +687,16 @@ namespace NActors {
             offset = 0;
         }
 
-        const struct iovec* iovec = reinterpret_cast<const struct iovec*>(buffs.data());
-        int iovcnt = buffs.size();
-
-        ssize_t recvres = 0;
-        TString err;
-        LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
-            do {
-                const ui64 begin = GetCycleCountFast();
-#ifndef _win_
-                recvres = iovcnt == 1 ? Socket->Recv(iovec->iov_base, iovec->iov_len, &err) : Socket->ReadV(iovec, iovcnt);
-#else
-                recvres = Socket->Recv(iovec[0].iov_base, iovec[0].iov_len, &err);
-#endif
-                const ui64 end = GetCycleCountFast();
-                Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
-            } while (recvres == -EINTR);
-        }
-
-        LOG_DEBUG_IC_SESSION("ICIS12", "ReadMore recvres# %zd iovcnt# %d err# %s", recvres, iovcnt, err.data());
-
-        if (recvres <= 0 || CloseInputSessionRequested) {
-            if ((-recvres != EAGAIN && -recvres != EWOULDBLOCK) || CloseInputSessionRequested) {
-                TString message = CloseInputSessionRequested ? "connection closed by debug command"
-                    : recvres == 0 ? "connection closed by peer"
-                    : err ? err
-                    : Sprintf("socket: %s", strerror(-recvres));
-                LOG_NOTICE_NET(NodeId, "%s", message.data());
-                ReestablishConnection(CloseInputSessionRequested ? TDisconnectReason::Debug() :
-                    recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres));
-            } else if (PollerToken && !std::exchange(Context->ReadPending, true)) {
-                if (Params.Encryption) {
-                    auto *secure = static_cast<NInterconnect::TSecureSocket*>(Socket.Get());
-                    const bool wantRead = secure->WantRead(), wantWrite = secure->WantWrite();
-                    Y_VERIFY_DEBUG(wantRead || wantWrite);
-                    PollerToken->Request(wantRead, wantWrite);
-                } else {
-                    PollerToken->Request(true, false);
-                }
-            }
+        ssize_t recvres = Read(*Socket, PollerToken, &Context->MainReadPending, buffs.data(), buffs.size());
+        if (recvres == -1) {
             return false;
         }
 
         Y_VERIFY(recvres > 0);
         Metrics->AddTotalBytesRead(recvres);
+        BytesReadFromSocket += recvres;
+
+        size_t numBuffersCovered = 0;
 
         while (recvres) {
             Y_VERIFY(!Buffers.empty());
@@ -442,6 +709,19 @@ namespace NActors {
                 Buffers.pop_front();
                 FirstBufferOffset = 0;
             }
+            ++numBuffersCovered;
+        }
+
+        if (Buffers.empty()) { // we have read all the data, increase number of buffers
+            CurrentBuffers = Min(CurrentBuffers * 2, MaxBuffers);
+        } else if (++UsageHisto[numBuffersCovered - 1] == 64) { // time to shift
+            for (auto& value : UsageHisto) {
+                value /= 2;
+            }
+            while (CurrentBuffers > 1 && !UsageHisto[CurrentBuffers - 1]) {
+                --CurrentBuffers;
+            }
+            Y_VERIFY_DEBUG(UsageHisto[CurrentBuffers - 1]);
         }
 
         LastReceiveTimestamp = TActivationContext::Monotonic();
@@ -449,29 +729,184 @@ namespace NActors {
         return true;
     }
 
-    void TInputSessionTCP::PreallocateBuffers() {
-        // ensure that we have exactly "numBuffers" in queue
-        LWPROBE_IF_TOO_LONG(SlowICReadLoopAdjustSize, ms) {
-            while (Buffers.size() < Common->Settings.NumPreallocatedBuffers) {
-                Buffers.emplace_back(TRopeAlignedBuffer::Allocate(Common->Settings.PreallocatedBufferSize));
+    bool TInputSessionTCP::ReadXdcCatchStream(ui64 *numDataBytes) {
+        bool progress = false;
+
+        while (XdcCatchStream.BytesPending) {
+            if (!XdcCatchStream.Buffer) {
+                XdcCatchStream.Buffer = TRcBuf::Uninitialized(64 * 1024);
+            }
+
+            const size_t numBytesToRead = Min<size_t>(XdcCatchStream.BytesPending, XdcCatchStream.Buffer.size());
+
+            TIoVec iov{XdcCatchStream.Buffer.GetDataMut(), numBytesToRead};
+            ssize_t recvres = Read(*XdcSocket, XdcPollerToken, &Context->XdcReadPending, &iov, 1);
+            if (recvres == -1) {
+                return progress;
+            }
+
+            HandleXdcChecksum({XdcCatchStream.Buffer.data(), static_cast<size_t>(recvres)});
+
+            XdcCatchStream.BytesPending -= recvres;
+            XdcCatchStream.BytesProcessed += recvres;
+            *numDataBytes += recvres;
+            BytesReadFromXdcSocket += recvres;
+
+            // scatter read data
+            const char *in = XdcCatchStream.Buffer.data();
+            while (recvres) {
+                Y_VERIFY_DEBUG(!XdcCatchStream.Markup.empty());
+                auto& [channel, apply, bytes] = XdcCatchStream.Markup.front();
+                size_t bytesInChannel = Min<size_t>(recvres, bytes);
+                bytes -= bytesInChannel;
+                recvres -= bytesInChannel;
+
+                if (apply) {
+                    auto& context = GetPerChannelContext(channel);
+                    while (bytesInChannel) {
+                        const size_t offset = context.XdcCatchBytesRead % context.XdcCatchBuffer.size();
+                        TMutableContiguousSpan out = context.XdcCatchBuffer.GetContiguousSpanMut().SubSpan(offset, bytesInChannel);
+                        memcpy(out.data(), in, out.size());
+                        context.XdcCatchBytesRead += out.size();
+                        in += out.size();
+                        bytesInChannel -= out.size();
+                    }
+                } else {
+                    in += bytesInChannel;
+                }
+
+                if (!bytes) {
+                    XdcCatchStream.Markup.pop_front();
+                }
+            }
+
+            progress = true;
+        }
+
+        ApplyXdcCatchStream();
+
+        return progress;
+    }
+
+    void TInputSessionTCP::ApplyXdcCatchStream() {
+        if (!XdcCatchStream.Applied && XdcCatchStream.Ready && !XdcCatchStream.BytesPending) {
+            Y_VERIFY_DEBUG(XdcCatchStream.Markup.empty());
+
+            auto process = [&](auto& context) {
+                context.ApplyCatchBuffer();
+                ProcessEvents(context);
+            };
+            for (auto& context : Context->ChannelArray) {
+                process(context);
+            }
+            for (auto& [channel, context] : Context->ChannelMap) {
+                process(context);
+            }
+
+            ProcessInboundPacketQ(XdcCatchStream.BytesProcessed);
+
+            XdcCatchStream.Buffer = {};
+            XdcCatchStream.Applied = true;
+        }
+    }
+
+    bool TInputSessionTCP::ReadXdc(ui64 *numDataBytes) {
+        bool progress = ReadXdcCatchStream(numDataBytes);
+
+        // exit if we have no work to do
+        if (XdcInputQ.empty() || !XdcCatchStream.Applied) {
+            return progress;
+        }
+
+        TStackVec<TIoVec, 64> buffs;
+        size_t size = 0;
+        for (auto& [channel, span] : XdcInputQ) {
+            buffs.push_back(TIoVec{span.data(), span.size()});
+            size += span.size();
+            if (buffs.size() == 64 || size >= 1024 * 1024 || Params.Encryption) {
+                break;
+            }
+        }
+
+        ssize_t recvres = Read(*XdcSocket, XdcPollerToken, &Context->XdcReadPending, buffs.data(), buffs.size());
+        if (recvres == -1) {
+            return progress;
+        }
+
+        // calculate stream checksums
+        {
+            size_t bytesToChecksum = recvres;
+            for (const auto& iov : buffs) {
+                const size_t n = Min(bytesToChecksum, iov.Size);
+                HandleXdcChecksum({static_cast<const char*>(iov.Data), n});
+                bytesToChecksum -= n;
+                if (!bytesToChecksum) {
+                    break;
+                }
+            }
+        }
+
+        Y_VERIFY(recvres > 0);
+        Metrics->AddTotalBytesRead(recvres);
+        *numDataBytes += recvres;
+        BytesReadFromXdcSocket += recvres;
+
+        // cut the XdcInputQ deque
+        for (size_t bytesToCut = recvres; bytesToCut; ) {
+            Y_VERIFY(!XdcInputQ.empty());
+            auto& [channel, span] = XdcInputQ.front();
+            size_t n = Min(bytesToCut, span.size());
+            bytesToCut -= n;
+            if (n == span.size()) {
+                XdcInputQ.pop_front();
+            } else {
+                span = span.SubSpan(n, Max<size_t>());
+                Y_VERIFY(!bytesToCut);
+            }
+
+            Y_VERIFY_DEBUG(n);
+            auto& context = GetPerChannelContext(channel);
+            context.DropFront(nullptr, n);
+            ProcessEvents(context);
+        }
+
+        // drop fully processed inbound packets
+        ProcessInboundPacketQ(recvres);
+
+        LastReceiveTimestamp = TActivationContext::Monotonic();
+
+        return true;
+    }
+
+    void TInputSessionTCP::HandleXdcChecksum(TContiguousSpan span) {
+        if (Params.Encryption) {
+            return;
+        }
+        while (span.size()) {
+            Y_VERIFY_DEBUG(!XdcChecksumQ.empty());
+            auto& [size, expected] = XdcChecksumQ.front();
+            const size_t n = Min<size_t>(size, span.size());
+            XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            span = span.SubSpan(n, Max<size_t>());
+            size -= n;
+            if (!size) {
+                if (XdcCurrentChecksum != expected) {
+                    LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
+                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                }
+                XdcChecksumQ.pop_front();
+                XdcCurrentChecksum = 0;
             }
         }
     }
 
-    void TInputSessionTCP::ReestablishConnection(TDisconnectReason reason) {
-        LOG_DEBUG_IC_SESSION("ICIS09", "ReestablishConnection, reason# %s", reason.ToString().data());
-        AtomicDecrement(Context->NumInputSessions);
-        Send(SessionId, new TEvSocketDisconnect(std::move(reason)));
-        PassAway();
-        Socket.Reset();
-    }
-
-    void TInputSessionTCP::DestroySession(TDisconnectReason reason) {
-        LOG_DEBUG_IC_SESSION("ICIS13", "DestroySession, reason# %s", reason.ToString().data());
-        AtomicDecrement(Context->NumInputSessions);
-        Send(SessionId, TInterconnectSessionTCP::NewEvTerminate(std::move(reason)));
-        PassAway();
-        Socket.Reset();
+    void TInputSessionTCP::PreallocateBuffers() {
+        // ensure that we have exactly "numBuffers" in queue
+        LWPROBE_IF_TOO_LONG(SlowICReadLoopAdjustSize, ms) {
+            while (Buffers.size() < CurrentBuffers) {
+                Buffers.emplace_back(TRopeAlignedBuffer::Allocate(Common->Settings.PreallocatedBufferSize));
+            }
+        }
     }
 
     void TInputSessionTCP::PassAway() {
@@ -485,7 +920,7 @@ namespace NActors {
             ReceiveData();
             if (Socket && now >= LastReceiveTimestamp + DeadPeerTimeout) {
                 // nothing has changed, terminate session
-                DestroySession(TDisconnectReason::DeadPeer());
+                throw TExDestroySession{TDisconnectReason::DeadPeer()};
             }
         }
         Schedule(LastReceiveTimestamp + DeadPeerTimeout, new TEvCheckDeadPeer);
@@ -521,5 +956,66 @@ namespace NActors {
         Metrics->SetClockSkewMicrosec(clockSkew);
     }
 
+    TReceiveContext::TPerChannelContext& TInputSessionTCP::GetPerChannelContext(ui16 channel) const {
+        return channel < std::size(Context->ChannelArray)
+            ? Context->ChannelArray[channel]
+            : Context->ChannelMap[channel];
+    }
+
+    void TInputSessionTCP::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr ev) {
+        TStringStream str;
+        ev->Get()->Output(str);
+
+        HTML(str) {
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    str << "Input Session";
+                }
+                DIV_CLASS("panel-body") {
+                    TABLE_CLASS("table") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() {
+                                    str << "Sensor";
+                                }
+                                TABLEH() {
+                                    str << "Value";
+                                }
+                            }
+                        }
+#define MON_VAR(KEY) \
+    TABLER() { \
+        TABLED() { str << #KEY; } \
+        TABLED() { str << (KEY); } \
+    }
+
+                        TABLEBODY() {
+                            MON_VAR(BytesReadFromSocket)
+                            MON_VAR(PacketsReadFromSocket)
+                            MON_VAR(DataPacketsReadFromSocket)
+                            MON_VAR(IgnoredDataPacketsFromSocket)
+
+                            MON_VAR(BytesReadFromXdcSocket)
+                            MON_VAR(XdcSections)
+                            MON_VAR(XdcRefs)
+
+                            MON_VAR(PayloadSize)
+                            MON_VAR(InboundPacketQ.size())
+                            MON_VAR(XdcInputQ.size())
+                            MON_VAR(Buffers.size())
+                            MON_VAR(IncomingData.GetSize())
+                            MON_VAR(Payload.GetSize())
+                            MON_VAR(CurrentBuffers)
+
+                            MON_VAR(Context->LastProcessedSerial)
+                            MON_VAR(ConfirmedByInput)
+                        }
+                    }
+                }
+            }
+        }
+
+        TActivationContext::Send(new IEventHandle(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str())));
+    }
 
 }

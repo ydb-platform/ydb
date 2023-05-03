@@ -30,7 +30,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRefresh, Handle);
             default:
-                TBase::StateMain(ev, ctx);
+                TBase::StateMain(ev);
         }
     }
     TDSAccessorRefresher(const TConfig& config, NFetcher::ISnapshotsFetcher::TPtr snapshotConstructor)

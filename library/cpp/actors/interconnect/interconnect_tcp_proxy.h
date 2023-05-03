@@ -66,7 +66,7 @@ namespace NActors {
         STFUNC(StateInit) {
             Bootstrap();
             if (ev->Type != TEvents::TSystem::Bootstrap) { // for dynamic nodes we do not receive Bootstrap event
-                Receive(ev, ctx);
+                Receive(ev);
             }
         }
 
@@ -126,6 +126,8 @@ namespace NActors {
                 hFunc(TEvQueryStats, Handle)                                                    \
                 cFunc(TEvInterconnect::EvTerminate, HandleTerminate)                            \
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
+                hFunc(TEvSubscribeForConnection, Handle);                                       \
+                hFunc(TEvReportConnection, Handle);                                             \
                 default:                                                                        \
                     Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);                        \
             }                                                                                   \
@@ -454,7 +456,7 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
-                LOG_DEBUG_IC("ICP112", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
+                LOG_DEBUG_IC("ICP052", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
                              poison ? "true" : "false");
                 if (poison) {
                     Send(actorId, new TEvents::TEvPoisonPill);
@@ -488,6 +490,28 @@ namespace NActors {
 
         void IssueIncomingHandshakeReply(const TActorId& handshakeId, ui64 peerLocalId,
                                          THolder<IEventBase> event);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        std::unordered_map<TString, TActorId> ConnectionSubscriptions;
+
+        void Handle(TEvSubscribeForConnection::TPtr ev) {
+            auto& msg = *ev->Get();
+            if (msg.Subscribe) {
+                if (const auto [it, inserted] = ConnectionSubscriptions.emplace(msg.HandshakeId, ev->Sender); !inserted) {
+                    Y_VERIFY_DEBUG(false);
+                    ConnectionSubscriptions.erase(it); // collision happened somehow?
+                }
+            } else {
+                ConnectionSubscriptions.erase(msg.HandshakeId);
+            }
+        }
+
+        void Handle(TEvReportConnection::TPtr ev) {
+            if (auto nh = ConnectionSubscriptions.extract(ev->Get()->HandshakeId)) {
+                TActivationContext::Send(IEventHandle::Forward(ev, nh.mapped()));
+            }
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

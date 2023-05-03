@@ -24,6 +24,7 @@
 #include "watchdog_timer.h"
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"
+#include "outgoing_stream.h"
 
 #include <unordered_set>
 #include <unordered_map>
@@ -98,13 +99,9 @@ namespace NActors {
         ui64 ControlPacketSendTimer = 0;
         ui64 ControlPacketId = 0;
 
-        // number of packets received by input session
-        TAtomic PacketsReadFromSocket = 0;
-        TAtomic DataPacketsReadFromSocket = 0;
-
         // last processed packet by input session
-        std::atomic_uint64_t LastProcessedPacketSerial = 0;
-        static constexpr uint64_t LastProcessedPacketSerialLockBit = uint64_t(1) << 63;
+        std::atomic_uint64_t LastPacketSerialToConfirm = 0;
+        static constexpr uint64_t LastPacketSerialToConfirmLockBit = uint64_t(1) << 63;
 
         // for hardened checks
         TAtomic NumInputSessions = 0;
@@ -117,47 +114,75 @@ namespace NActors {
         std::atomic<EUpdateState> UpdateState;
         static_assert(std::atomic<EUpdateState>::is_always_lock_free);
 
-        bool WriteBlockedByFullSendBuffer = false;
-        bool ReadPending = false;
+        bool MainWriteBlocked = false;
+        bool XdcWriteBlocked = false;
+        bool MainReadPending = false;
+        bool XdcReadPending = false;
 
-        std::array<TRope, 16> ChannelArray;
-        std::unordered_map<ui16, TRope> ChannelMap;
+        struct TPerChannelContext {
+            struct TPendingEvent {
+                TEventSerializationInfo SerializationInfo;
+                TRope Payload;
+                std::optional<TEventData> EventData;
+
+                // number of bytes remaining through XDC channel
+                size_t XdcSizeLeft = 0;
+            };
+
+            std::deque<TPendingEvent> PendingEvents;
+            std::deque<TMutableContiguousSpan> XdcBuffers; // receive queue for current channel
+            size_t FetchIndex = 0;
+            size_t FetchOffset = 0;
+
+            ui64 XdcCatchBytesRead = 0; // number of bytes actually read into cyclic buffer
+            TRcBuf XdcCatchBuffer;
+
+            void PrepareCatchBuffer();
+            void ApplyCatchBuffer();
+            void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
+            void DropFront(TRope *from, size_t numBytes);
+        };
+
+        std::array<TPerChannelContext, 16> ChannelArray;
+        std::unordered_map<ui16, TPerChannelContext> ChannelMap;
+        ui64 LastProcessedSerial = 0;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);
         }
 
-        // returns false if sessions needs to be terminated and packet not to be processed
-        bool AdvanceLastProcessedPacketSerial() {
+        // returns false if sessions needs to be terminated
+        bool AdvanceLastPacketSerialToConfirm(ui64 nextValue) {
             for (;;) {
-                uint64_t value = LastProcessedPacketSerial.load();
-                if (value & LastProcessedPacketSerialLockBit) {
+                uint64_t value = LastPacketSerialToConfirm.load();
+                if (value & LastPacketSerialToConfirmLockBit) {
                     return false;
                 }
-                if (LastProcessedPacketSerial.compare_exchange_weak(value, value + 1)) {
+                Y_VERIFY_DEBUG(value + 1 == nextValue);
+                if (LastPacketSerialToConfirm.compare_exchange_weak(value, nextValue)) {
                     return true;
                 }
             }
         }
 
-        ui64 LockLastProcessedPacketSerial() {
+        ui64 LockLastPacketSerialToConfirm() {
             for (;;) {
-                uint64_t value = LastProcessedPacketSerial.load();
-                if (value & LastProcessedPacketSerialLockBit) {
-                    return value & ~LastProcessedPacketSerialLockBit;
+                uint64_t value = LastPacketSerialToConfirm.load();
+                if (value & LastPacketSerialToConfirmLockBit) {
+                    return value & ~LastPacketSerialToConfirmLockBit;
                 }
-                if (LastProcessedPacketSerial.compare_exchange_strong(value, value | LastProcessedPacketSerialLockBit)) {
+                if (LastPacketSerialToConfirm.compare_exchange_strong(value, value | LastPacketSerialToConfirmLockBit)) {
                     return value;
                 }
             }
         }
 
-        void UnlockLastProcessedPacketSerial() {
-            LastProcessedPacketSerial = LastProcessedPacketSerial.load() & ~LastProcessedPacketSerialLockBit;
+        void UnlockLastPacketSerialToConfirm() {
+            LastPacketSerialToConfirm &= ~LastPacketSerialToConfirmLockBit;
         }
 
-        ui64 GetLastProcessedPacketSerial() {
-            return LastProcessedPacketSerial.load() & ~LastProcessedPacketSerialLockBit;
+        ui64 GetLastPacketSerialToConfirm() {
+            return LastPacketSerialToConfirm.load() & ~LastPacketSerialToConfirmLockBit;
         }
     };
 
@@ -171,7 +196,6 @@ namespace NActors {
         };
 
         struct TEvCheckDeadPeer : TEventLocal<TEvCheckDeadPeer, EvCheckDeadPeer> {};
-        struct TEvResumeReceiveData : TEventLocal<TEvResumeReceiveData, EvResumeReceiveData> {};
 
     public:
         static constexpr EActivityType ActorActivityType() {
@@ -180,6 +204,7 @@ namespace NActors {
 
         TInputSessionTCP(const TActorId& sessionId,
                          TIntrusivePtr<NInterconnect::TStreamSocket> socket,
+                         TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
                          TIntrusivePtr<TReceiveContext> context,
                          TInterconnectProxyCommon::TPtr common,
                          std::shared_ptr<IInterconnectMetrics> metrics,
@@ -193,14 +218,25 @@ namespace NActors {
 
         void Bootstrap();
 
-        STRICT_STFUNC(WorkingState,
+        struct TExReestablishConnection {
+            TDisconnectReason Reason;
+        };
+
+        struct TExDestroySession {
+            TDisconnectReason Reason;
+        };
+
+        STATEFN(WorkingState);
+
+        STRICT_STFUNC(WorkingStateImpl,
             cFunc(TEvents::TSystem::PoisonPill, PassAway)
             hFunc(TEvPollerReady, Handle)
             hFunc(TEvPollerRegisterResult, Handle)
-            cFunc(EvResumeReceiveData, HandleResumeReceiveData)
+            cFunc(EvResumeReceiveData, ReceiveData)
             cFunc(TEvInterconnect::TEvCloseInputSession::EventType, CloseInputSession)
             cFunc(EvCheckDeadPeer, HandleCheckDeadPeer)
             cFunc(TEvConfirmUpdate::EventType, HandleConfirmUpdate)
+            hFunc(NMon::TEvHttpInfoRes, GenerateHttpInfo)
         )
 
     private:
@@ -208,19 +244,13 @@ namespace NActors {
 
         const TActorId SessionId;
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         TPollerToken::TPtr PollerToken;
+        TPollerToken::TPtr XdcPollerToken;
         TIntrusivePtr<TReceiveContext> Context;
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
-
-        // header we are currently processing (parsed from the stream)
-        union {
-            TTcpPacketHeader_v1 v1;
-            TTcpPacketHeader_v2 v2;
-            char Data[1];
-        } Header;
-        ui64 HeaderConfirm, HeaderSerial;
 
         size_t PayloadSize;
         ui32 ChecksumExpected, Checksum;
@@ -231,6 +261,29 @@ namespace NActors {
             PAYLOAD,
         };
         EState State = EState::HEADER;
+        ui64 CurrentSerial = 0;
+
+        std::vector<char> XdcCommands;
+
+        struct TInboundPacket {
+            ui64 Serial;
+            size_t XdcUnreadBytes; // number of unread bytes from XDC stream for this exact unprocessed packet
+        };
+        std::deque<TInboundPacket> InboundPacketQ;
+        std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference
+        std::deque<std::tuple<ui16, ui32>> XdcChecksumQ; // (size, expectedChecksum)
+        ui32 XdcCurrentChecksum = 0;
+
+        // catch stream -- used after TCP reconnect to match XDC stream with main packet stream
+        struct TXdcCatchStream {
+            TRcBuf Buffer;
+            ui64 BytesPending = 0;
+            ui64 BytesProcessed = 0;
+            std::deque<std::tuple<ui16, bool, size_t>> Markup; // a queue of tuples (channel, apply, bytes)
+            bool Ready = false;
+            bool Applied = false;
+        };
+        TXdcCatchStream XdcCatchStream;
 
         THolder<TEvUpdateFromInputSession> UpdateFromInputSession;
 
@@ -244,20 +297,31 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
-        void HandleResumeReceiveData();
         void HandleConfirmUpdate();
         void ReceiveData();
-        void ProcessHeader(size_t headerLen);
-        void ProcessPayload(ui64& numDataBytes);
-        void ProcessEvent(TRope& data, TEventData& descr);
+        void ProcessHeader();
+        void ProcessPayload(ui64 *numDataBytes);
+        void ProcessInboundPacketQ(ui64 numXdcBytesRead);
+        void ProcessXdcCommand(ui16 channel, TReceiveContext::TPerChannelContext& context);
+        void ProcessEvents(TReceiveContext::TPerChannelContext& context);
+        ssize_t Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token, bool *readPending,
+            const TIoVec *iov, size_t num);
         bool ReadMore();
+        bool ReadXdcCatchStream(ui64 *numDataBytes);
+        void ApplyXdcCatchStream();
+        bool ReadXdc(ui64 *numDataBytes);
+        void HandleXdcChecksum(TContiguousSpan span);
 
-        void ReestablishConnection(TDisconnectReason reason);
-        void DestroySession(TDisconnectReason reason);
+        TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
+
         void PassAway() override;
 
         TDeque<TIntrusivePtr<TRopeAlignedBuffer>> Buffers;
         size_t FirstBufferOffset = 0;
+
+        size_t CurrentBuffers = 1; // number of buffers currently required to allocate
+        static constexpr size_t MaxBuffers = 64; // maximum buffers possible
+        std::array<ui8, MaxBuffers> UsageHisto; // read count histogram
 
         void PreallocateBuffers();
 
@@ -278,6 +342,20 @@ namespace NActors {
 
         void HandlePingResponse(TDuration passed);
         void HandleClock(TInstant clock);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Stats
+
+        ui64 BytesReadFromSocket = 0;
+        ui64 PacketsReadFromSocket = 0;
+        ui64 DataPacketsReadFromSocket = 0;
+        ui64 IgnoredDataPacketsFromSocket = 0;
+
+        ui64 BytesReadFromXdcSocket = 0;
+        ui64 XdcSections = 0;
+        ui64 XdcRefs = 0;
+
+        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr ev);
     };
 
     class TInterconnectSessionTCP
@@ -313,7 +391,7 @@ namespace NActors {
         ui64 MessagesGot = 0;
         ui64 MessagesWrittenToBuffer = 0;
         ui64 PacketsGenerated = 0;
-        ui64 PacketsWrittenToSocket = 0;
+        ui64 BytesWrittenToSocket = 0;
         ui64 PacketsConfirmed = 0;
 
     public:
@@ -388,6 +466,7 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void WriteData();
+        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket);
 
         ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
@@ -448,32 +527,39 @@ namespace NActors {
         void SetOutputStuckFlag(bool state);
         void SwitchStuckPeriod();
 
-        using TSendQueue = TList<TTcpPacketOutTask>;
-        TSendQueue SendQueue;
-        TSendQueue SendQueueCache;
-        TSendQueue::iterator SendQueuePos;
+        NInterconnect::TOutgoingStream OutgoingStream;
+        NInterconnect::TOutgoingStream XdcStream;
+
+        struct TOutgoingPacket {
+            ui32 PacketSize; // including header
+            ui32 ExternalSize;
+            ui64 Serial;
+            bool Data;
+        };
+        std::deque<TOutgoingPacket> SendQueue; // packet boundaries
+        size_t OutgoingOffset = 0;
+        size_t XdcOffset = 0;
+
+        ui64 XdcBytesSent = 0;
+
         ui64 WriteBlockedCycles = 0; // start of current block period
         TDuration WriteBlockedTotal; // total incremental duration that session has been blocked
-        ui64 BytesUnwritten = 0;
-
-        void TrimSendQueueCache();
+        bool WriteBlockedByFullSendBuffer = false;
 
         TDuration GetWriteBlockedTotal() const {
-            if (ReceiveContext->WriteBlockedByFullSendBuffer) {
-                double blockedUs = NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles) * 1000000.0;
-                return WriteBlockedTotal + TDuration::MicroSeconds(blockedUs); // append current blocking period if any
-            } else {
-                return WriteBlockedTotal;
-            }
+            return WriteBlockedTotal + (WriteBlockedByFullSendBuffer
+                ? TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - WriteBlockedCycles))
+                : TDuration::Zero());
         }
 
         ui64 OutputCounter;
-        ui64 LastSentSerial = 0;
 
         TInstant LastHandshakeDone;
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
         TPollerToken::TPtr PollerToken;
+        TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
         ui64 InflightDataAmount = 0;
 
@@ -492,7 +578,7 @@ namespace NActors {
         void HandleFlush();
         void ResetFlushLogic();
 
-        void GenerateHttpInfo(TStringStream& str);
+        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev);
 
         TIntrusivePtr<TReceiveContext> ReceiveContext;
         TActorId ReceiverId;

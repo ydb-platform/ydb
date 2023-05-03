@@ -146,8 +146,7 @@ namespace NActors {
             wrapper.Wait();
         }
 
-        bool DrainReadEnd() {
-            size_t totalRead = 0;
+        void DrainReadEnd() {
             char buffer[4096];
             for (;;) {
                 ssize_t n = ReadEnd.Read(buffer, sizeof(buffer));
@@ -162,37 +161,38 @@ namespace NActors {
                     }
                 } else {
                     Y_VERIFY(n);
-                    totalRead += n;
                 }
             }
-            return totalRead;
         }
 
         bool ProcessSyncOpQueue() {
-            if (DrainReadEnd()) {
-                Y_VERIFY(!SyncOperationsQ.IsEmpty());
-                do {
-                    TPollerSyncOperationWrapper *op = SyncOperationsQ.Top();
-                    if (auto *unregister = std::get_if<TPollerUnregisterSocket>(&op->Operation)) {
-                        static_cast<TDerived&>(*this).UnregisterSocketInLoop(unregister->Socket);
-                        op->SignalDone();
-                    } else if (std::get_if<TPollerExitThread>(&op->Operation)) {
-                        op->SignalDone();
-                        return false; // terminate the thread
-                    } else if (std::get_if<TPollerWakeup>(&op->Operation)) {
-                        op->SignalDone();
-                    } else {
-                        Y_FAIL();
-                    }
-                } while (SyncOperationsQ.Pop());
-            }
+            Y_VERIFY(!SyncOperationsQ.IsEmpty());
+            do {
+                TPollerSyncOperationWrapper *op = SyncOperationsQ.Top();
+                if (auto *unregister = std::get_if<TPollerUnregisterSocket>(&op->Operation)) {
+                    static_cast<TDerived&>(*this).UnregisterSocketInLoop(unregister->Socket);
+                    op->SignalDone();
+                } else if (std::get_if<TPollerExitThread>(&op->Operation)) {
+                    op->SignalDone();
+                    return false; // terminate the thread
+                } else if (std::get_if<TPollerWakeup>(&op->Operation)) {
+                    op->SignalDone();
+                } else {
+                    Y_FAIL();
+                }
+            } while (SyncOperationsQ.Pop());
             return true;
         }
 
         void *ThreadProc() override {
             SetCurrentThreadName("network poller");
-            while (ProcessSyncOpQueue()) {
-                static_cast<TDerived&>(*this).ProcessEventsInLoop();
+            for (;;) {
+                if (static_cast<TDerived&>(*this).ProcessEventsInLoop()) { // need to process the queue
+                    DrainReadEnd();
+                    if (!ProcessSyncOpQueue()) {
+                        break;
+                    }
+                }
             }
             return nullptr;
         }

@@ -14,7 +14,6 @@ target_include_directories(ydb-core-erasure-ut_perf PRIVATE
 target_link_libraries(ydb-core-erasure-ut_perf PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-erasure
@@ -59,5 +58,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-erasure-ut_perf
+  system_allocator
 )
 vcs_info(ydb-core-erasure-ut_perf)

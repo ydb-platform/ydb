@@ -32,3 +32,4 @@ typedef enum {
 } s2n_ktls_mode;
 
 int s2n_config_set_ktls_mode(struct s2n_config *config, s2n_ktls_mode ktls_mode);
+bool s2n_ktls_is_supported_on_platform();

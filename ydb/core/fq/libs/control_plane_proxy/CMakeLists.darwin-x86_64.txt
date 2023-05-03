@@ -27,6 +27,8 @@ target_link_libraries(fq-libs-control_plane_proxy PUBLIC
   ydb-core-mon
   ydb-library-folder_service
   ydb-library-security
+  library-ycloud-api
+  library-ycloud-impl
 )
 target_sources(fq-libs-control_plane_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/config.cpp

@@ -255,8 +255,9 @@ namespace NKikimr {
             IFaceMonGroup->PatchStartMsgs()++;
             UpdateVPatchCtx();
             std::unique_ptr<IActor> actor{CreateSkeletonVPatchActor(SelfId(), GInfo->Type, ev, now, SkeletonFrontIDPtr,
-                    IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(), VPatchCtx,
-                    VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())};
+                    IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(),
+                    VCtx->Histograms.GetHistogram(NKikimrBlobStorage::FastRead), VCtx->Histograms.GetHistogram(NKikimrBlobStorage::AsyncBlob),
+                    VPatchCtx, VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())};
             TActorId vPatchActor = Register(actor.release());
             VPatchActors.emplace(patchedBlobId, vPatchActor);
         }
@@ -738,8 +739,14 @@ namespace NKikimr {
             }
 
             // no more errors (at least for for log writes)
-            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result = CreateResult(VCtx, NKikimrProto::OK, TString(), ev, now,
-                    SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result;
+            if (ev->Get()->IsInternal) {
+                result = CreateInternalResult(VCtx, NKikimrProto::OK, TString(), ev, now,
+                        SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            } else {
+                result = CreateResult(VCtx, NKikimrProto::OK, TString(), ev, now,
+                        SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            }
             if (info.WrittenBeyondBarrier) {
                 result->Record.SetWrittenBeyondBarrier(true);
             }
@@ -940,10 +947,19 @@ namespace NKikimr {
                 if (record.HasCookie())
                     cookie = record.GetCookie();
                 auto handleClass = ev->Get()->Record.GetHandleClass();
-                auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(NKikimrProto::OK, SelfVDiskId, now,
-                    ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
-                    IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), cookie, ev->GetChannel(),
-                    Db->GetVDiskIncarnationGuid());
+                
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result;
+                if (ev->Get()->IsInternal) {
+                    result.reset(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, SelfVDiskId, now,
+                            ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, cookie, ev->GetChannel(),
+                            Db->GetVDiskIncarnationGuid()));
+                } else {
+                    result.reset(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, SelfVDiskId, now,
+                            ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
+                            IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), cookie, ev->GetChannel(),
+                            Db->GetVDiskIncarnationGuid()));
+                }
+
                 if (record.GetAcquireBlockedGeneration()) {
                     ui64 tabletId = record.GetTabletId();
                     if (tabletId) {
@@ -960,6 +976,7 @@ namespace NKikimr {
                 // create a query actor and pass read-only snapshot to it
                 IActor *actor = CreateLevelIndexQueryActor(QueryCtx, std::move(keepChecker), ctx,
                     std::move(*fullSnap), ctx.SelfID, ev, std::move(result), Db->ReplID);
+
                 if (actor) {
                     auto aid = ctx.Register(actor);
                     ActiveActors.Insert(aid);
@@ -2340,11 +2357,11 @@ namespace NKikimr {
         }
 
         void ForwardToScrubActor(STFUNC_SIG) {
-            ctx.Forward(ev, ScrubId);
+            Forward(ev, ScrubId);
         }
 
         void ForwardToDefragActor(STFUNC_SIG) {
-            ctx.Forward(ev, DefragId);
+            Forward(ev, DefragId);
         }
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
@@ -2367,7 +2384,7 @@ namespace NKikimr {
         }
 
         void ForwardToLogoBlobsLevelIndexActor(STFUNC_SIG) {
-            ctx.Forward(ev, Hull->GetHullDs()->LogoBlobs->LIActor);
+            Forward(ev, Hull->GetHullDs()->LogoBlobs->LIActor);
         }
 
         void Handle(NPDisk::TEvChunkForgetResult::TPtr ev) {
@@ -2490,9 +2507,9 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
@@ -2519,7 +2536,7 @@ namespace NKikimr {
             // TEvBlobStorage::TEvVStatus
             // TEvBlobStorage::TEvVDbStat
             HFunc(TEvBlobStorage::TEvVCompact, Handle)
-            FFunc(TEvBlobStorage::EvVDefrag, ForwardToDefragActor)
+            fFunc(TEvBlobStorage::EvVDefrag, ForwardToDefragActor)
             HFunc(TEvCompactVDisk, Handle)
             HFunc(TEvHullCompactResult, Handle)
             HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
@@ -2538,10 +2555,10 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
@@ -2586,7 +2603,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvMonStreamQuery, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamActorDeathNote, Handle)
             HFunc(TEvBlobStorage::TEvVCompact, Handle)
-            FFunc(TEvBlobStorage::EvVDefrag, ForwardToDefragActor)
+            fFunc(TEvBlobStorage::EvVDefrag, ForwardToDefragActor)
             HFunc(TEvCompactVDisk, Handle)
             HFunc(TEvHullCompactResult, Handle)
             HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
@@ -2604,10 +2621,10 @@ namespace NKikimr {
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvReplDone, HandleReplDone)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
@@ -2628,10 +2645,10 @@ namespace NKikimr {
             HFunc(TEvVGenerationChange, Handle)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
-            FFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
+            fFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
             IgnoreFunc(TEvBlobStorage::TEvVDefrag);
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(TEvRestoreCorruptedBlob, Handle)

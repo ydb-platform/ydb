@@ -42,7 +42,3 @@ Table structure:
 | `SumDeleteRows` | Total number of rows deleted.<br>Type: `Uint64`. |
 | `MinDeleteRows` | Minimum number of rows deleted.<br>Type: `Uint64`. |
 | `MaxDeleteRows` | Maximum number of rows deleted.<br>Type: `Uint64`. |
-| `SumRequestUnits` | Total number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used.<br>Type: `Uint64`. |
-| `MinRequestUnits` | Minimum number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used.<br>Type: `Uint64`. |
-| `MaxRequestUnits` | Maximum number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used.<br>Type: `Uint64`. |
-

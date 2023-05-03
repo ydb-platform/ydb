@@ -14,7 +14,6 @@ target_include_directories(ydb-library-yql-providers-s3-provider-ut PRIVATE
 target_link_libraries(ydb-library-yql-providers-s3-provider-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-s3-provider
@@ -54,5 +53,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-s3-provider-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-providers-s3-provider-ut)

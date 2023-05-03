@@ -188,6 +188,15 @@ bool TUserTable::NeedSchemaSnapshots() const {
     return JsonCdcStreamCount > 0;
 }
 
+bool TUserTable::IsReplicated() const {
+    switch (ReplicationConfig.Mode) {
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            return false;
+        default:
+            return true;
+    }
+}
+
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
     // We expect schemeshard to send us full list of storage rooms
@@ -267,6 +276,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
+    ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
 
     CheckSpecialColumns();
 

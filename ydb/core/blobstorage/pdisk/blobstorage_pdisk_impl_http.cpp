@@ -202,6 +202,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                     TABLEH() { str << "FirstNonceToKeep"; }
                     TABLEH() { str << "AskedToCutLogAt"; }
                     TABLEH() { str << "CutLogAt"; }
+                    TABLEH() { str << "OperationLog"; }
                 }
             }
             TABLEBODY() {
@@ -225,6 +226,20 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                                 } else {
                                     str << data.CutLogAt;
                                 }
+                            }
+                            TABLED() {
+                                ui32 logSize = OwnerData[owner].OperationLog.Size();
+                                str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
+                                    data-target='#operationLogCollapse" << owner << 
+                                    "'>Show last " << logSize << " operations</button>";
+
+                                str << "<div id='operationLogCollapse" << owner << "' class='collapse'>";
+                                for (ui32 i = 0; i < logSize; ++i) {
+                                    auto record = OwnerData[owner].OperationLog.BorrowByIdx(i);
+                                    str << *record << "<br>";
+                                    OwnerData[owner].OperationLog.ReturnBorrowedRecord(record);
+                                }
+                                str << "</div>";
                             }
                         }
                     }

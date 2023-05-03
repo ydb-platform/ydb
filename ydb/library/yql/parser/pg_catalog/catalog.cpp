@@ -430,6 +430,7 @@ public:
 
     void OnFinish() override {
         Y_ENSURE(!LastType.Name.empty());
+        Y_ENSURE(LastType.TypeLen != 0);
         if (LastType.TypeLen < 0 || LastType.TypeLen > 8) {
             Y_ENSURE(!LastType.PassByValue);
         }
@@ -441,6 +442,7 @@ public:
             arrayType.ElementTypeId = arrayType.TypeId;
             arrayType.TypeId = LastType.ArrayTypeId;
             arrayType.PassByValue = false;
+            arrayType.TypeLen = -1;
             Types[LastType.ArrayTypeId] = arrayType;
         }
 
@@ -1340,6 +1342,13 @@ const TProcDesc& LookupProc(ui32 procId) {
     }
 
     return *procPtr;
+}
+
+void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& x : catalog.Procs) {
+        f(x.first, x.second);
+    }
 }
 
 bool HasReturnSetProc(const TStringBuf& name) {

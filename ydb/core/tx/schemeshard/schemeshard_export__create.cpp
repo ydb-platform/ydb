@@ -761,6 +761,28 @@ private:
                         return;
                     }
 
+                    if (exportInfo->State == EState::CopyTables && isMultipleMods) {
+                        for (const auto& item : exportInfo->Items) {
+                            if (!Self->PathsById.contains(item.SourcePathId)) {
+                                exportInfo->DependencyTxIds.clear();
+                                break;
+                            }
+
+                            auto path = Self->PathsById.at(item.SourcePathId);
+                            if (path->PathState != NKikimrSchemeOp::EPathStateNoChanges) {
+                                exportInfo->DependencyTxIds.insert(path->LastTxId);
+                                SubscribeTx(path->LastTxId);
+
+                                Y_VERIFY_DEBUG(itemIdx == Max<ui32>());
+                                Self->TxIdToExport[path->LastTxId] = {exportInfo->Id, itemIdx};
+                            }
+                        }
+
+                        if (!exportInfo->DependencyTxIds.empty()) {
+                            return;
+                        }
+                    }
+
                     exportInfo->Issue = record.GetReason();
                     exportInfo->State = EState::Cancelled;
                 }
@@ -859,6 +881,14 @@ private:
             break;
 
         case EState::CopyTables:
+            if (exportInfo->DependencyTxIds.contains(txId)) {
+                exportInfo->DependencyTxIds.erase(txId);
+                if (exportInfo->DependencyTxIds.empty()) {
+                    AllocateTxId(exportInfo);
+                }
+                return;
+            }
+
             exportInfo->State = EState::Transferring;
             exportInfo->WaitTxId = InvalidTxId;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {

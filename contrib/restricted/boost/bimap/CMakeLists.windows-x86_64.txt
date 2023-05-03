@@ -22,7 +22,6 @@ target_link_libraries(restricted-boost-bimap INTERFACE
   restricted-boost-mpl
   restricted-boost-multi_index
   restricted-boost-preprocessor
-  restricted-boost-serialization
   restricted-boost-static_assert
   restricted-boost-throw_exception
   restricted-boost-type_traits

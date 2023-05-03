@@ -2729,7 +2729,8 @@ public:
     TDictNode(TComputationMutables& mutables,
             std::vector<std::pair<IComputationNode*, IComputationNode*>>&& itemNodes,
             const TKeyTypes& types, bool isTuple, TType* encodedType,
-            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate)
+            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate,
+            NUdf::ICompare::TPtr compare, bool isSorted)
         : TBaseComputation(mutables)
         , ItemNodes(std::move(itemNodes))
         , Types(types)
@@ -2737,6 +2738,8 @@ public:
         , EncodedType(encodedType)
         , Hash(hash)
         , Equate(equate)
+        , Compare(compare)
+        , IsSorted(isSorted)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -2751,20 +2754,29 @@ public:
             packer.emplace(true, EncodedType);
         }
 
-        THashedDictFiller filler =
-                [&items, &packer](TValuesDictHashMap& map) {
-                    for (auto& value : items) {
-                        auto key = std::move(value.first);
-                        if (packer) {
-                            key = MakeString(packer->Pack(key));
+        if (IsSorted) {
+            const TSortedDictFiller filler = [&](TKeyPayloadPairVector& values) {
+                values = std::move(items);
+            };
+
+            return ctx.HolderFactory.CreateDirectSortedDictHolder(filler, Types, IsTuple, EDictSortMode::RequiresSorting,
+                true, EncodedType, Compare, Equate);
+        } else {
+            THashedDictFiller filler =
+                    [&items, &packer](TValuesDictHashMap& map) {
+                        for (auto& value : items) {
+                            auto key = std::move(value.first);
+                            if (packer) {
+                                key = MakeString(packer->Pack(key));
+                            }
+
+                            map.emplace(std::move(key), std::move(value.second));
                         }
+                    };
 
-                        map.emplace(std::move(key), std::move(value.second));
-                    }
-                };
-
-        return ctx.HolderFactory.CreateDirectHashedDictHolder(
-                filler, Types, IsTuple, true, EncodedType, Hash, Equate);
+            return ctx.HolderFactory.CreateDirectHashedDictHolder(
+                    filler, Types, IsTuple, true, EncodedType, Hash, Equate);
+        }
     }
 
 private:
@@ -2781,6 +2793,8 @@ private:
     TType* EncodedType;
     NUdf::IHash::TPtr Hash;
     NUdf::IEquate::TPtr Equate;
+    NUdf::ICompare::TPtr Compare;
+    const bool IsSorted;
 };
 
 class TVariantNode : public TMutableCodegeneratorNode<TVariantNode> {
@@ -3904,13 +3918,13 @@ IComputationNode* TNodeFactory::CreateArrayNode(TComputationNodePtrVector&& valu
 IComputationNode* TNodeFactory::CreateDictNode(
         std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
         const TKeyTypes& types, bool isTuple, TType* encodedType,
-        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate) const
+        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, NUdf::ICompare::TPtr compare, bool isSorted) const
 {
     if (items.empty()) {
         return new TEmptyNode(Mutables);
     }
 
-    return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType, hash, equate);
+    return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType, hash, equate, compare, isSorted);
 }
 
 IComputationNode* TNodeFactory::CreateVariantNode(IComputationNode* item, ui32 index) const {
@@ -3925,7 +3939,7 @@ IComputationNode* TNodeFactory::CreateImmutableNode(NUdf::TUnboxedValue&& value)
     return new TUnboxedImmutableCodegeneratorNode(&MemInfo, std::move(value));
 }
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash) {
+void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple) {
     isTuple = false;
     encoded = false;
     useIHash = false;
@@ -3940,7 +3954,7 @@ void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool
         keyType = AS_TYPE(TOptionalType, keyType)->GetItemType();
     }
 
-    if (keyType->IsTuple()) {
+    if (expandTuple && keyType->IsTuple()) {
         auto tuple = AS_TYPE(TTupleType, keyType);
         for (ui32 i = 0; i < tuple->GetElementsCount(); ++i) {
             bool isOptional;

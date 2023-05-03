@@ -30,7 +30,7 @@ public:
         , TGrpcServiceClient(settings)
     {}
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvUserAccountService::TEvGetUserAccountRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);

@@ -8,7 +8,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/draft/ydb_console.pb.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 namespace NKikimr::NConsole {
 
@@ -51,6 +51,7 @@ struct TEvConsole {
         EvGetAllConfigsRequest,
         EvResolveConfigRequest,
         EvResolveAllConfigRequest,
+        EvDropConfigRequest,
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -88,6 +89,7 @@ struct TEvConsole {
         EvGetAllConfigsResponse,
         EvResolveConfigResponse,
         EvResolveAllConfigResponse,
+        EvDropConfigResponse,
 
         EvEnd
     };
@@ -153,6 +155,12 @@ struct TEvConsole {
 
     struct TEvApplyConfigRequest : public TEventShortDebugPB<TEvApplyConfigRequest, NKikimrConsole::TApplyConfigRequest, EvApplyConfigRequest> {
         using TResponse = TEvApplyConfigResponse;
+    };
+
+    struct TEvDropConfigResponse : public TEventShortDebugPB<TEvDropConfigResponse, NKikimrConsole::TDropConfigResponse, EvDropConfigResponse> {};
+
+    struct TEvDropConfigRequest : public TEventShortDebugPB<TEvDropConfigRequest, NKikimrConsole::TDropConfigRequest, EvDropConfigRequest> {
+        using TResponse = TEvDropConfigResponse;
     };
 
     struct TEvAddVolatileConfigResponse : public TEventShortDebugPB<TEvAddVolatileConfigResponse, NKikimrConsole::TAddVolatileConfigResponse, EvAddVolatileConfigResponse> {};

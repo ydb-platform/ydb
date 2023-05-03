@@ -367,24 +367,8 @@ public:
                 request.Load(&input);
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-                auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-                switch (request.GetData().GetTransportVersion()) {
-                    case 10000: {
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_YSON_1_0;
-                        break;
-                    }
-                    case 20000: {
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-                        break;
-                    }
-                    case 30000: {
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
-                        break;
-                    }
-                    default:
-                        transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
-                }
-                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(), transportVersion);
+                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
+                    NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED);
                 NKikimr::NMiniKQL::TUnboxedValueVector buffer;
                 buffer.reserve(request.GetData().GetRows());
                 if (request.GetString().empty() && request.GetChunks() == 0) {
@@ -488,7 +472,7 @@ public:
 
                 NDqProto::TPopResponse response;
 
-                response.SetResult(channel->Pop(*response.MutableData(), 5 << 20));
+                response.SetResult(channel->Pop(*response.MutableData()));
                 UpdateOutputChannelStats(channelId);
                 QueryStat.FlushCounters(response);
                 response.MutableStats()->PackFrom(GetStats(taskId));
@@ -664,7 +648,7 @@ public:
                         NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
 
                     *response.MutableData() = dataSerializer.Serialize(
-                        batch,
+                        batch.begin(), batch.end(),
                         static_cast<NKikimr::NMiniKQL::TType*>(outputType));
                 }
                 response.SetBytes(bytes);
@@ -768,7 +752,6 @@ public:
             settings.CollectBasicStats = true;
             settings.CollectProfileStats = true;
             settings.TerminateOnError = TerminateOnError;
-            settings.AllowGeneratorsInUnboxedValues = true;
             for (const auto& x: taskMeta.GetSecureParams()) {
                 settings.SecureParams[x.first] = x.second;
                 YQL_CLOG(DEBUG, ProviderDq) << "SecureParam " << x.first << ":XXX";

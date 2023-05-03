@@ -47,7 +47,7 @@ class TFolderServiceRequestHandler : public NActors::TActor<TFolderServiceReques
         Y_FAIL("Can't deliver local message");
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest, Handle);
             hFunc(NCloud::TEvFolderService::TEvListFolderResponse, Handle);
@@ -79,7 +79,7 @@ class TFolderServiceAdapter : public NActors::TActorBootstrapped<TFolderServiceA
         Send(actor, ev->Release().Release());
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(::NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest, Handle)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)

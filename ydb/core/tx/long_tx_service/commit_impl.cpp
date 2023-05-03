@@ -69,7 +69,6 @@ namespace NLongTxService {
         }
 
         STFUNC(StateAllocateTxId) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
             }
@@ -134,7 +133,6 @@ namespace NLongTxService {
         }
 
         STFUNC(StatePrepare) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
@@ -269,7 +267,6 @@ namespace NLongTxService {
         }
 
         STFUNC(StatePlan) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
                 hFunc(TEvColumnShard::TEvProposeTransactionResult, HandlePlan);

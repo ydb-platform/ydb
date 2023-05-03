@@ -52,7 +52,7 @@
 #include "sequencer.h"
 #include "boot_queue.h"
 
-#define DEPRECATED_CTX (TlsActivationContext->ActorContextFor(SelfId()))
+#define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
 
 template <typename T>
@@ -221,7 +221,7 @@ protected:
 
     friend struct TStoragePoolInfo;
 
-    void StartHiveBalancer(int maxMovements = 0, bool recheckOnFinish = false, const std::vector<TNodeId>& filterNodeIds = {});
+    void StartHiveBalancer(int maxMovements = 0, bool recheckOnFinish = false, ui64 maxInFlight = 1, const std::vector<TNodeId>& filterNodeIds = {});
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -343,6 +343,8 @@ protected:
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
+    TInstant LastConnect;
+    bool WarmUp;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -663,6 +665,10 @@ public:
         return CurrentConfig.GetBalancerInflight();
     }
 
+    ui64 GetEmergencyBalancerInflight() const {
+        return CurrentConfig.GetEmergencyBalancerInflight();
+    }
+
     ui64 GetMaxBootBatchSize() const {
         return CurrentConfig.GetMaxBootBatchSize();
     }
@@ -762,6 +768,26 @@ public:
         const auto& ignoreList = BalancerIgnoreTabletTypes;
         auto found = std::find(ignoreList.begin(), ignoreList.end(), type);
         return (found != ignoreList.end());
+    }
+
+    double GetSpaceUsagePenaltyThreshold() {
+        return CurrentConfig.GetSpaceUsagePenaltyThreshold();
+    }
+
+    double GetSpaceUsagePenalty() {
+        return CurrentConfig.GetSpaceUsagePenalty();
+    }
+
+    TDuration GetWarmUpBootWaitingPeriod() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetWarmUpBootWaitingPeriod());
+    }
+
+    TDuration GetMaxWarmUpPeriod() const {
+        return TDuration::Seconds(CurrentConfig.GetMaxWarmUpPeriod());
+    }
+
+    ui64 GetNodeRestartsToIgnoreInWarmup() const {
+        return CurrentConfig.GetNodeRestartsToIgnoreInWarmup();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

@@ -1,7 +1,7 @@
-#include "export_iface.h"
 #include "backup_restore_common.h"
 #include "backup_restore_traits.h"
 #include "execution_unit_ctors.h"
+#include "export_iface.h"
 #include "export_scan.h"
 #include "export_s3.h"
 
@@ -17,7 +17,7 @@ protected:
     }
 
     bool IsWaiting(TOperation::TPtr op) const override {
-        return op->IsWaitingForScan();
+        return op->IsWaitingForScan() || op->IsWaitingForRestart();
     }
 
     void SetWaiting(TOperation::TPtr op) override {
@@ -26,6 +26,7 @@ protected:
 
     void ResetWaiting(TOperation::TPtr op) override {
         op->ResetWaitingForScanFlag();
+        op->ResetWaitingForRestartFlag();
     }
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
@@ -110,20 +111,34 @@ protected:
         return op->HasScanResult();
     }
 
-    void ProcessResult(TOperation::TPtr op, const TActorContext&) override {
+    bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
-        auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
+        bool done = true;
 
-        schemeOp->Success = result->Success;
-        schemeOp->Error = std::move(result->Error);
-        schemeOp->BytesProcessed = result->BytesRead;
-        schemeOp->RowsProcessed = result->RowsRead;
+        switch (result->Outcome) {
+        case EExportOutcome::Success:
+        case EExportOutcome::Error:
+            if (auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId())) {
+                schemeOp->Success = result->Outcome == EExportOutcome::Success;
+                schemeOp->Error = std::move(result->Error);
+                schemeOp->BytesProcessed = result->BytesRead;
+                schemeOp->RowsProcessed = result->RowsRead;
+            } else {
+                Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
+            }
+            break;
+        case EExportOutcome::Aborted:
+            done = false;
+            break;
+        }
 
         op->SetScanResult(nullptr);
         tx->SetScanTask(0);
+
+        return done;
     }
 
     void Cancel(TActiveTransaction* tx, const TActorContext&) override {

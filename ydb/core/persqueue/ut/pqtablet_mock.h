@@ -52,7 +52,7 @@ private:
     };
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
@@ -64,7 +64,7 @@ private:
             HFunc(TEvPQTablet::TEvSendReadSet, Handle);
             HFunc(TEvPQTablet::TEvSendReadSetAck, Handle);
         default:
-            HandleDefaultEvents(ev, ctx);
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 

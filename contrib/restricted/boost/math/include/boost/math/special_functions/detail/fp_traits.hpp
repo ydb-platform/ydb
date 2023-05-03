@@ -493,7 +493,7 @@ private:
 // size_to_precision is a type switch for converting a C++ floating point type
 // to the corresponding precision type.
 
-template<int n, bool fp> struct size_to_precision
+template<size_t n, bool fp> struct size_to_precision
 {
    typedef unknown_precision type;
 };

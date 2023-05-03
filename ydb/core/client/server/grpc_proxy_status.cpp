@@ -301,7 +301,6 @@ TGRpcProxyStatusActor::HandleWakeup(const TActorContext &ctx) {
 /// public state functions
 ////////////////////////////////////////////
 STFUNC(TGRpcProxyStatusActor::StateFunc) {
-    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvGRpcProxyStatus::TEvSetup, Handle);
         HFunc(TEvGRpcProxyStatus::TEvGetStatusRequest, Handle);

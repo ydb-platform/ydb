@@ -98,7 +98,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         return result;
     }
     LOG_LAZY(DbDriverState->Log,
-        TLOG_INFO,
+        TLOG_ERR,
         LogPrefix() << "Got error. Status: " << status.Status
             << ". Description: " << NPersQueue::IssuesSingleLineString(status.Issues)
     );
@@ -119,7 +119,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
         ResetForRetryImpl();
 
     } else {
-        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will not restart after a fatal error");
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
     }
@@ -422,7 +422,11 @@ void TWriteSessionImpl::InitImpl() {
     auto* init = req.mutable_init_request();
     init->set_path(Settings.Path_);
     init->set_producer_id(Settings.ProducerId_);
-    init->set_message_group_id(Settings.MessageGroupId_);
+    
+    if (Settings.PartitionId_.Defined())
+        init->set_partition_id(*Settings.PartitionId_);
+    else
+        init->set_message_group_id(Settings.MessageGroupId_);
 
     for (const auto& attr : Settings.Meta_.Fields) {
         (*init->mutable_write_session_meta())[attr.first] = attr.second;

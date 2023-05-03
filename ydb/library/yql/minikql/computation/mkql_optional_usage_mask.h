@@ -57,16 +57,17 @@ public:
         return GetPack64Length(usedBytes) + usedBytes;
     }
 
-    void Serialize(TBuffer& buf) const {
+    template<typename TBuf>
+    void Serialize(TBuf& buf) const {
         if (!CountOfOptional || Mask.Empty()) {
             return buf.Append(0);
         }
 
         const size_t usedBits = Mask.ValueBitCount();
         const size_t usedBytes = (usedBits + 7ULL) >> 3ULL;
-        const auto off = buf.Size();
         buf.Advance(MAX_PACKED64_SIZE);
-        buf.EraseBack(MAX_PACKED64_SIZE - Pack64(usedBytes, buf.Data() + off));
+        // Note: usage of Pack64() is safe here - it won't overwrite useful data for small values of usedBytes
+        buf.EraseBack(MAX_PACKED64_SIZE - Pack64(usedBytes, buf.Pos() - MAX_PACKED64_SIZE));
         buf.Append(reinterpret_cast<const char*>(Mask.GetChunks()), usedBytes);
     }
 

@@ -3,6 +3,7 @@
 #include "yql_kikimr_gateway.h"
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
@@ -96,6 +97,8 @@ struct TKikimrQueryContext : TThrRefBase {
     // Operations on document API tables are performed in restricted mode by default,
     // full mode can be enabled explicitly.
     bool DocumentApiRestricted = true;
+
+    bool IsInternalCall = false;
 
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
@@ -206,7 +209,10 @@ enum class TYdbOperation : ui32 {
     DropUser             = 1 << 15,
     CreateGroup           = 1 << 16,
     AlterGroup            = 1 << 17,
-    DropGroup             = 1 << 18
+    DropGroup             = 1 << 18,
+    CreateTopic           = 1 << 19,
+    AlterTopic            = 1 << 20,
+    DropTopic             = 1 << 21
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation)
@@ -223,6 +229,7 @@ bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
     THashMap<TString, TYdbOperations> TableOperations;
+    bool HasUncommittedChangesRead = false;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
     bool Readonly = false;
@@ -344,19 +351,29 @@ public:
 
             auto& currentOps = TableOperations[table];
             bool currentModify = currentOps & KikimrModifyOps();
-            if (currentModify && !enableImmediateEffects) {
+            if (currentModify) {
                 if (KikimrReadOps() & newOp) {
-                    TString message = TStringBuilder() << "Data modifications previously made to table '" << table
-                        << "' in current transaction won't be seen by operation: '" << newOp << "'";
-                    auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
-                    issues.AddIssue(newIssue);
-                    return {false, issues};
+                    if (!enableImmediateEffects) {
+                        TString message = TStringBuilder() << "Data modifications previously made to table '" << table
+                            << "' in current transaction won't be seen by operation: '"
+                            << newOp << "'";
+                        auto newIssue = AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message));
+                        issues.AddIssue(newIssue);
+                        return {false, issues};
+                    }
+
+                    HasUncommittedChangesRead = true;
                 }
 
                 if (info->GetHasIndexTables()) {
-                    TString message = TStringBuilder() << "Multiple modification of table with secondary indexes is not supported yet";
-                    issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                    return {false, issues};
+                    if (!enableImmediateEffects) {
+                        TString message = TStringBuilder()
+                            << "Multiple modification of table with secondary indexes is not supported yet";
+                        issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                        return {false, issues};
+                    }
+
+                    HasUncommittedChangesRead = true;
                 }
             }
 
@@ -438,7 +455,9 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
+    bool isInternalCall);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

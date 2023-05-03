@@ -20,7 +20,3 @@
 
 {% include notitle [yql.md](../yql.md) %}
 
-## Serverless {#serverless}
-
-{% include notitle [serverless.md](../serverless.md) %}
-

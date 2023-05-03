@@ -44,6 +44,7 @@ public:
     bool Initialize(TExprContext& ctx) override;
     IGraphTransformer& GetConfigurationTransformer() override;
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override;
     const THashMap<TString, TString>* GetClusterTokens() override;
     IGraphTransformer& GetIODiscoveryTransformer() override;
     IGraphTransformer& GetEpochsTransformer() override;

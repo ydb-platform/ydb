@@ -91,7 +91,6 @@ public:
     }
 
     STFUNC(StateResolveDC) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -99,7 +98,6 @@ public:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }

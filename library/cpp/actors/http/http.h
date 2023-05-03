@@ -751,13 +751,13 @@ public:
             TStringBuf body = TStringBuf(),
             TInstant lastModified = TInstant());
 
-    THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message);
-    THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers);
+    THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers = {});
     THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
 
     THttpIncomingRequestPtr Duplicate();
 
 private:
+    THttpOutgoingResponsePtr ConstructResponse(TStringBuf status, TStringBuf message);
     void FinishResponse(THttpOutgoingResponsePtr& response, TStringBuf body = TStringBuf());
 };
 

@@ -45,10 +45,11 @@ TString GetSourceIdSelectQueryFromPath(const TString& path, ESourceIdTableGenera
 TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            return GetSourceIdSelectQueryFromPath(root + "/SourceIdMeta2");
+            return GetSourceIdSelectQueryFromPath(root + "/SourceIdMeta2", generation);
         case ESourceIdTableGeneration::PartitionMapping:
             return GetUpdateIdSelectQueryFromPath(
-                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
+                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
+                    generation
             );
         default:
             Y_FAIL();

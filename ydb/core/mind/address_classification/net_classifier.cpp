@@ -99,6 +99,21 @@ private:
             hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, HandleWhileIniting);
             hFunc(TEvents::TEvWakeup, HandleWhileIniting);
             hFunc(TEvNetClassifier::TEvUpdateTimedCounters, UpdateTimedCounters);
+        default:
+            EnqueueEvent(ev);
+            break;
+        }
+    }
+
+    void EnqueueEvent(TAutoPtr<IEventHandle> &ev) {
+        EventsQueue.push_back(ev);
+    }
+
+    void ProcessEnqueuedEvents() {
+        while (!EventsQueue.empty()) {
+            TAutoPtr<IEventHandle> &ev = EventsQueue.front();
+            TlsActivationContext->Send(ev.Release());
+            EventsQueue.pop_front();
         }
     }
 
@@ -223,6 +238,8 @@ private:
             NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(page, "netclassifier", "NetClassifier", false, Ctx().ExecutorThread.ActorSystem, Ctx().SelfID);
         }
+
+        ProcessEnqueuedEvents();
 
         BroadcastClassifierUpdate();
     }
@@ -395,6 +412,7 @@ private:
 private:
     TMaybe<TString> MaybeNetDataFilePath;
     TMaybe<TInstant> MaybeNetDataFileModTs;
+    TDeque<TAutoPtr<IEventHandle>> EventsQueue;
 
     TLabeledAddressClassifier::TConstPtr LabeledAddressClassifier;
     TMaybe<TInstant> NetDataUpdateTimestamp;

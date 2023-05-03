@@ -3,6 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
 
 namespace NKikimr {
@@ -558,6 +559,8 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
+    bool HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override;
+
     bool HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -671,27 +674,38 @@ public:
                                 << ", Partitions size: " << pqShard->Partitions.size()
                                 << ", at schemeshard: " << ssId);
 
-                TAutoPtr<TEvPersQueue::TEvUpdateConfig> event(new TEvPersQueue::TEvUpdateConfig());
-                event->Record.SetTxId(ui64(OperationId.GetTxId()));
-
-                MakePQTabletConfig(*event->Record.MutableTabletConfig(),
-                                   *pqGroup,
-                                   *pqShard,
-                                   topicName,
-                                   topicPath,
-                                   cloudId,
-                                   folderId,
-                                   databaseId,
-                                   databasePath);
-                MakeBootstrapConfig(*event->Record.MutableBootstrapConfig(),
-                                    *pqGroup,
-                                    txState->TxType);
+                THolder<NActors::IEventBase> event;
+                if (context.SS->EnablePQConfigTransactionsAtSchemeShard) {
+                    event = MakeEvProposeTransaction(OperationId.GetTxId(),
+                                                     *pqGroup,
+                                                     *pqShard,
+                                                     topicName,
+                                                     topicPath,
+                                                     cloudId,
+                                                     folderId,
+                                                     databaseId,
+                                                     databasePath,
+                                                     txState->TxType,
+                                                     ssId,
+                                                     context);
+                } else {
+                    event = MakeEvUpdateConfig(OperationId.GetTxId(),
+                                               *pqGroup,
+                                               *pqShard,
+                                               topicName,
+                                               topicPath,
+                                               cloudId,
+                                               folderId,
+                                               databaseId,
+                                               databasePath,
+                                               txState->TxType,
+                                               context);
+                }
 
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Propose configure PersQueue"
                                 << ", opId: " << OperationId
                                 << ", tabletId: " << tabletId
-                                << ", message: " << event->Record.ShortUtf8DebugString()
                                 << ", at schemeshard: " << ssId);
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, event.Release());
@@ -825,6 +839,32 @@ private:
             Y_VERIFY(ParseFromStringNoSizeLimit(config, *source));
         }
     }
+
+    static THolder<TEvPersQueue::TEvProposeTransaction>
+        MakeEvProposeTransaction(TTxId txId,
+                                 const TTopicInfo& pqGroup,
+                                 const TTopicTabletInfo& pqShard,
+                                 const TString& topicName,
+                                 const TString& topicPath,
+                                 const TString& cloudId,
+                                 const TString& folderId,
+                                 const TString& databaseId,
+                                 const TString& databasePath,
+                                 TTxState::ETxType txType,
+                                 TTabletId ssId,
+                                 const TOperationContext& context);
+    static THolder<TEvPersQueue::TEvUpdateConfig>
+        MakeEvUpdateConfig(TTxId txId,
+                           const TTopicInfo& pqGroup,
+                           const TTopicTabletInfo& pqShard,
+                           const TString& topicName,
+                           const TString& topicPath,
+                           const TString& cloudId,
+                           const TString& folderId,
+                           const TString& databaseId,
+                           const TString& databasePath,
+                           TTxState::ETxType txType,
+                           const TOperationContext& context);
 };
 
 class TPropose: public TSubOperationState {
@@ -844,6 +884,9 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvPersQueue::TEvUpdateConfigResponse::EventType});
     }
 
+    bool HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvTxProcessing::TEvReadSet::TPtr& ev, TOperationContext& context) override;
+
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
@@ -855,11 +898,9 @@ public:
                        << ", at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        if(!txState) {
-            return false;
-        }
+        Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
-
+ 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
@@ -870,24 +911,7 @@ public:
             context.SS->PersistCreateStep(db, pathId, step);
         }
 
-        if (txState->TxType == TTxState::TxCreatePQGroup  || txState->TxType == TTxState::TxAllocatePQ) {
-            auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-           ++parentDir->DirAlterVersion;
-           context.SS->PersistPathDirAlterVersion(db, parentDir);
-           context.SS->ClearDescribePathCaches(parentDir);
-           context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-        }
-
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
-        TTopicInfo::TPtr pqGroup = context.SS->Topics[pathId];
-        pqGroup->FinishAlter();
-        context.SS->PersistPersQueueGroup(db, pathId, pqGroup);
-        context.SS->PersistRemovePersQueueGroupAlter(db, pathId);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-        return true;
+        return TryPersistState(context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -902,9 +926,37 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup || txState->TxType == TTxState::TxAllocatePQ);
 
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        //
+        // If the program works according to the new scheme, then we must add PQ tablets to the list for
+        // the Coordinator. At this stage, we cannot rely on the value of
+        // the EnablePQConfigTransactionsAtSchemeShard flag. Because the operation could have started on one tablet
+        // and moved to another by that time.
+        //
+        // Therefore, here we check the value of the minStep field, which is filled in in
+        // the TEvProposeTransactionResult handler
+        //
+        TSet<TTabletId> shardSet;
+        if (ui64(txState->MinStep) > 0) {
+            PrepareShards(*txState, shardSet, context);
+        }
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
+
         return false;
     }
+
+private:
+    bool TryPersistState(TOperationContext& context);
+    void SendEvReadSetAck(TOperationContext& context);
+
+    void PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context);
+
+    struct TReadSetAck {
+        THolder<TEvTxProcessing::TEvReadSetAck> Event;
+        TActorId Receiver;
+    };
+
+    THashMap<ui64, TReadSetAck> ReadSetAcks;
+    size_t ReadSetCount = 0;
 };
 
 } // NPQState

@@ -11,7 +11,6 @@ add_executable(simple_persqueue_reader)
 target_link_libraries(simple_persqueue_reader PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-client-ydb_topic
   library-cpp-getopt
@@ -25,5 +24,8 @@ target_link_options(simple_persqueue_reader PRIVATE
 )
 target_sources(simple_persqueue_reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/topic_reader/simple/main.cpp
+)
+target_allocator(simple_persqueue_reader
+  system_allocator
 )
 vcs_info(simple_persqueue_reader)

@@ -1,6 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
+#include <ydb/core/kqp/counters/kqp_counters.h>
+
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
+
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 
 #include <library/cpp/json/json_prettifier.h>
@@ -89,6 +93,26 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TResultSetParser rs0(result.GetResultSets()[0]);
         UNIT_ASSERT(rs0.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(rs0.ColumnParser(0).GetUint64(), 8u);
+    }
+
+    Y_UNIT_TEST(StreamScanQuery) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto params = client.GetParamsBuilder()
+            .AddParam("$text").String("Value1").Build()
+            .Build();
+
+        auto it = client.StreamExecuteYqlScript(R"(
+            PRAGMA db.ScanQuery = "true";
+            DECLARE $text AS String;
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = $text;
+        )", params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[8u]]
+        ])", StreamResultToYson(it));
     }
 
     Y_UNIT_TEST(ScanQueryInvalid) {
@@ -522,6 +546,88 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[[8u]]])", StreamResultToYson(it));
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanCancelation) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+
+        {
+            auto it = client.StreamExecuteYqlScript(R"(
+                PRAGMA kikimr.ScanQuery = "true";
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1";
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            // We must wait execution to be started
+            int count = 60;
+            while (counters.GetActiveSessionActors()->Val() != 2 && count) {
+                count--;
+                Sleep(TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_C(count, "Unable to wait second session actor (executing compiled program) start");
+        }
+
+        NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        int count = 60;
+        while (counters.GetActiveSessionActors()->Val() != 1 && count) {
+            count--;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanTimeoutBruteForce) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        TScriptingClient client(kikimr.GetDriver());
+
+        int maxTimeoutMs = 1000;
+
+        for (int i = 1; i < maxTimeoutMs; i++) {
+            auto it = client.StreamExecuteYqlScript(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+            )",
+            TExecuteYqlRequestSettings()
+                .ClientTimeout(TDuration::MilliSeconds(i))
+            ).GetValueSync();
+
+            if (it.IsSuccess()) {
+                try {
+                    auto yson = StreamResultToYson(it, true);
+                    CompareYson(R"([[[[1];[101u];["Value1"]];[[2];[201u];["Value1"]];[[3];[301u];["Value1"]];[[1];[401u];["Value1"]];[[2];[501u];["Value1"]];[[3];[601u];["Value1"]];[[1];[701u];["Value1"]];[[2];[801u];["Value1"]]]])", yson);
+                } catch (const TStreamReadError& ex) {
+                    if (ex.Status != NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED && ex.Status != NYdb::EStatus::TIMEOUT) {
+                        TStringStream msg;
+                        msg << "unexpected status: " << ex.Status;
+                        UNIT_ASSERT_C(false, msg.Str().data());
+                    }
+                } catch (const std::exception& ex) {
+                    auto msg = TString("unknown exception during the test: ") + ex.what();
+                    UNIT_ASSERT_C(false, msg.data());
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+            }
+        }
+// We unable to close worker actor on timeout right now
+#if 0
+        int count = 60;
+        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
+            Cerr << "SESSIONS: " << counters.GetActiveSessionActors()->Val() << Endl;
+            count--;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+#endif
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanScalar) {

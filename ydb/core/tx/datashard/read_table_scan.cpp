@@ -340,7 +340,7 @@ public:
             HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
         default:
-            LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
+            LOG_ERROR(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                       "TReadTableScan: StateWork unexpected event type: %" PRIx32 " event: %s",
                       ev->GetTypeRewrite(), ev->ToString().data());
         }
@@ -591,7 +591,7 @@ private:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
     {
-        auto ctx = TActivationContext::ActorContextFor(SelfId());
+        auto ctx = ActorContext();
 
         if (!SchemaChanged) {
             if (abort != EAbort::None)

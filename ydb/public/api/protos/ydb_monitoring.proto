@@ -173,6 +173,8 @@ message Location {
     LocationStorage storage = 1;
     LocationCompute compute = 2;
     LocationDatabase database = 3;
+    LocationNode node = 4;
+    LocationNode peer = 5;
 }
 
 message IssueLog {

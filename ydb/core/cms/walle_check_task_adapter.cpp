@@ -74,7 +74,7 @@ private:
             HFunc(TEvCms::TEvPermissionResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            LOG_DEBUG(ctx, NKikimrServices::CMS,
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS,
                       "TWalleRemoveTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
                       ev->GetTypeRewrite(), ev->ToString().data());
         }

@@ -18,14 +18,14 @@ public:
         : TBase(request) {}
 
 protected:
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-            default: TBase::StateFuncBase(ev, ctx);
+            default: TBase::StateFuncBase(ev);
         }
     }
 

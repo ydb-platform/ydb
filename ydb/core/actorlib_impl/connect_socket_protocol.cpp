@@ -5,24 +5,23 @@
 namespace NActors {
 
 void TConnectSocketProtocol::ProtocolFunc(
-        TAutoPtr<NActors::IEventHandle>& ev,
-        const TActorContext& ctx) noexcept
+        TAutoPtr<NActors::IEventHandle>& ev) noexcept
 {
     switch (ev->GetTypeRewrite()) {
 
     case TEvConnectWakeup::EventType:
-        TryAgain(ctx);
+        TryAgain(TlsActivationContext->AsActorContext());
         break;
 
     case TEvSocketConnect::EventType:
-        CatchConnectedSocket(ctx, std::move(Socket));
+        CatchConnectedSocket(TlsActivationContext->AsActorContext(), std::move(Socket));
         break;
 
     case TEvSocketError::EventType:
         {
             auto errorMsg = ev->Get<TEvSocketError>();
             if (Socket.Get() == errorMsg->Socket.Get())
-                CheckConnectResult(ctx, errorMsg->Error);
+                CheckConnectResult(TlsActivationContext->AsActorContext(), errorMsg->Error);
         }
         break;
 

@@ -189,7 +189,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             format, actorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
         ui64 lastNonce = Min((ui64)0, chunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
-                UseT1ha0Hasher);
+                UseT1ha0Hasher, Read->Owner);
 
         const ui32 sectorCount = 1;
         if (restorator.GoodSectorCount != sectorCount) {
@@ -202,8 +202,9 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
                 LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
                         << " ReqId# " << Read->ReqId
                         << " Can't read chunk chunkIdx# " << Read->ChunkIdx
+                        << " for owner# " << Read->Owner
                         << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
-                        << " due to multiple sectors with incorrect hashes.");
+                        << " due to multiple sectors with incorrect hashes. Marker# BPC001");
                 commonBuffer->AddGap(beginBadUserOffset, endBadUserOffset);
                 beginBadUserOffset = 0xffffffff;
                 endBadUserOffset = 0xffffffff;
@@ -222,8 +223,11 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
                 LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
                         << " ReqId# " << Read->ReqId
                         << " Can't read chunk chunkIdx# " << Read->ChunkIdx
+                        << " for owner# " << Read->Owner
                         << " nonce mismatch: expected# " << (ui64)(chunkNonce + sectorIdx)
-                        << ", on-disk# " << (ui64)footer->Nonce << " for userOffset# " << userOffset << " !");
+                        << ", on-disk# " << (ui64)footer->Nonce
+                        << " for userOffset# " << userOffset
+                        << " ! Marker# BPC002");
                 if (beginBadUserOffset == 0xffffffff) {
                     beginBadUserOffset = userOffset;
                 }
@@ -260,8 +264,9 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
         LOG_INFO_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDisk->PDiskId
             << " ReqId# " << Read->ReqId
             << " Can't read chunk chunkIdx# " << Read->ChunkIdx
+            << " for owner# " << Read->Owner
             << " beginBadUserOffet# " << beginBadUserOffset << " endBadUserOffset# " << endBadUserOffset
-            << " due to multiple sectors with incorrect hashes/nonces.");
+            << " due to multiple sectors with incorrect hashes/nonces. Marker# BPC003");
         commonBuffer->AddGap(beginBadUserOffset, endBadUserOffset);
         beginBadUserOffset = 0xffffffff;
         endBadUserOffset = 0xffffffff;
@@ -327,6 +332,9 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
     auto result = MakeHolder<TEvChunkReadResult>(NKikimrProto::CORRUPTED,
             Read->ChunkIdx, Read->Offset, Read->Cookie,
             PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), error.Str());
+
+    result->Data.SetDebugInfoGenerator(PDisk->DebugInfoGenerator);
+
     LOG_WARN_S(*actorSystem, NKikimrServices::BS_PDISK, error.Str());
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;

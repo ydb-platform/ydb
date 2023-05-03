@@ -1081,6 +1081,64 @@ private:
         VisitAllFields(TRule_drop_object_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateTopic(const TRule_create_topic_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitKeyword(msg.GetToken1());
+        VisitKeyword(msg.GetToken2());
+        Visit(msg.GetRule_topic_ref3());
+        if (msg.HasBlock4()) {
+            PushCurrentIndent();
+            auto& b = msg.GetBlock4().GetRule_create_topic_entries1();
+            Visit(b.GetToken1());
+            NewLine();
+            Visit(b.GetRule_create_topic_entry2());
+            for (auto& subEntry : b.GetBlock3()) {
+                Visit(subEntry.GetToken1());
+                NewLine();
+                Visit(subEntry.GetRule_create_topic_entry2());
+            }
+            NewLine();
+            PopCurrentIndent();
+            Visit(b.GetToken4());
+        }
+        if (msg.HasBlock5()) {
+            auto& b = msg.GetBlock5().GetRule_with_topic_settings1();
+            VisitKeyword(b.GetToken1());
+            VisitKeyword(b.GetToken2());
+            PushCurrentIndent();
+            NewLine();
+            Visit(b.GetRule_topic_settings3());
+            PopCurrentIndent();
+            NewLine();
+            VisitKeyword(b.GetToken4());
+        }
+    }
+
+    void VisitAlterTopic(const TRule_alter_topic_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitKeyword(msg.GetToken1());
+        VisitKeyword(msg.GetToken2());
+        Visit(msg.GetRule_topic_ref3());
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_topic_action4());
+        for (auto& b : msg.GetBlock5()) {
+            Visit(b.GetToken1());
+            NewLine();
+            Visit(b.GetRule_alter_topic_action2());
+        }
+
+        PopCurrentIndent();
+    }
+
+    void VisitDropTopic(const TRule_drop_topic_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_topic_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateExternalDataSource(const TRule_create_external_data_source_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -2022,6 +2080,9 @@ TStaticData::TStaticData()
         {TRule_drop_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropExternalDataSource)},
         {TRule_create_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateAsyncReplication)},
         {TRule_drop_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropAsyncReplication)},
+        {TRule_create_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateTopic)},
+        {TRule_alter_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTopic)},
+        {TRule_drop_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTopic)}
         })
 {
     // ensure that all statements has a visitor

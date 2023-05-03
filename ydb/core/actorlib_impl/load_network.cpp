@@ -49,7 +49,7 @@ private:
             if (i == SelfNodeId)
                 continue;
             for (ui32 j = 0; j < PER_NODE_INFLIGHT_COUNT; j++) {
-                ctx.Send(GetLoadNetworkActorID(i),
+                Send(GetLoadNetworkActorID(i),
                          new TEvents::TEvBlob(DataToSend),
                          IEventHandle::MakeFlags(2,
                              IEventHandle::FlagTrackDelivery));

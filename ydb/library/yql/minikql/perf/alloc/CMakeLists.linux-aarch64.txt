@@ -15,7 +15,6 @@ target_link_libraries(alloc PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   library-yql-minikql
   yql-public-udf
   udf-service-exception_policy
@@ -33,5 +32,8 @@ target_link_options(alloc PRIVATE
 )
 target_sources(alloc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/perf/alloc/alloc.cpp
+)
+target_allocator(alloc
+  cpp-malloc-jemalloc
 )
 vcs_info(alloc)

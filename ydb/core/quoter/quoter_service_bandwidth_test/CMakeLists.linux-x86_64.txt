@@ -15,8 +15,6 @@ target_link_libraries(quoter_service_bandwidth_test PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-colorizer
   library-cpp-getopt
@@ -39,5 +37,9 @@ target_sources(quoter_service_bandwidth_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/quota_requester.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/server.cpp
+)
+target_allocator(quoter_service_bandwidth_test
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(quoter_service_bandwidth_test)

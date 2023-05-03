@@ -2,6 +2,7 @@
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
+#include "pg_proxy_config.h"
 #include "pg_proxy_types.h"
 
 namespace NPG {
@@ -41,9 +42,11 @@ struct TEvPGEvents {
 
     struct TEvConnectionOpened : NActors::TEventLocal<TEvConnectionOpened, EvConnectionOpened> {
         std::shared_ptr<TPGInitial> Message;
+        TNetworkConfig::TSocketAddressType Address;
 
-        TEvConnectionOpened(std::shared_ptr<TPGInitial> message)
+        TEvConnectionOpened(std::shared_ptr<TPGInitial> message, TNetworkConfig::TSocketAddressType address)
             : Message(std::move(message))
+            , Address(address)
         {}
     };
 
@@ -52,14 +55,17 @@ struct TEvPGEvents {
 
     struct TEvAuth : NActors::TEventLocal<TEvAuth, EvAuth> {
         std::shared_ptr<TPGInitial> InitialMessage;
+        TNetworkConfig::TSocketAddressType Address;
         std::unique_ptr<TPGPasswordMessage> PasswordMessage;
 
-        TEvAuth(std::shared_ptr<TPGInitial> initialMessage)
+        TEvAuth(std::shared_ptr<TPGInitial> initialMessage, TNetworkConfig::TSocketAddressType address)
             : InitialMessage(std::move(initialMessage))
+            , Address(address)
         {}
 
-        TEvAuth(std::shared_ptr<TPGInitial> initialMessage, std::unique_ptr<TPGPasswordMessage> message)
+        TEvAuth(std::shared_ptr<TPGInitial> initialMessage, TNetworkConfig::TSocketAddressType address, std::unique_ptr<TPGPasswordMessage> message)
             : InitialMessage(std::move(initialMessage))
+            , Address(address)
             , PasswordMessage(std::move(message))
         {}
     };

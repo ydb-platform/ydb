@@ -40,18 +40,18 @@ public:
     }
 
 private:
-    void StateGetConfig(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateGetConfig(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
-            default: TBase::StateFuncBase(ev, ctx);
+            default: TBase::StateFuncBase(ev);
         }
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 

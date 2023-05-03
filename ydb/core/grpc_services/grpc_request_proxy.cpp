@@ -63,7 +63,7 @@ public:
     { }
 
     void Bootstrap(const TActorContext& ctx);
-    void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+    void StateFunc(TAutoPtr<IEventHandle>& ev);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_PROXY;
@@ -339,14 +339,14 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 }
 
-void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TActorContext& ctx) {
+void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TActorContext&) {
     auto itDeferredEvents = DeferredEvents.find(databaseName);
     if (itDeferredEvents != DeferredEvents.end()) {
         std::deque<TEventReqHolder>& queue = itDeferredEvents->second;
         std::deque<TEventReqHolder> deferredEvents;
         std::swap(deferredEvents, queue); // we can put back event to DeferredEvents queue in StateFunc KIKIMR-12851
         while (!deferredEvents.empty()) {
-            StateFunc(deferredEvents.front().Ev, ctx);
+            StateFunc(deferredEvents.front().Ev);
             deferredEvents.pop_front();
         }
         if (queue.empty()) {
@@ -525,7 +525,7 @@ void LogRequest(const TEvent& event) {
     }
 }
 
-void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     bool handled = true;
     // handle internal events
     switch (ev->GetTypeRewrite()) {

@@ -12,7 +12,6 @@ target_link_libraries(ydb-library-testlib-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-gtest
   cpp-testing-gtest_main
 )
@@ -48,5 +47,8 @@ set_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-testlib-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-testlib-ut)

@@ -1,4 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -948,6 +950,63 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
         for (const auto& column : columns) {
             UNIT_ASSERT_VALUES_EQUAL(column.Type.ToString(), columnTypes.at(column.Name));
+        }
+    }
+
+    Y_UNIT_TEST(AlterAddIndex) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto server = &kikimr.GetTestServer();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key1 Int64 NOT NULL,
+                    Key2 Utf8 NOT NULL,
+                    Value1 Utf8,
+                    Value2 Bool,
+                    PRIMARY KEY (Key1, Key2));
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX Index GLOBAL SYNC ON (Key2, Value1, Value2);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto describeTable = [&server](const TString& path) {
+            auto& runtime = *server->GetRuntime();
+            auto sender = runtime.AllocateEdgeActor();
+            TAutoPtr<IEventHandle> handle;
+
+            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->SetPath(path);
+            request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+            return *reply->MutableRecord();
+        };
+
+        auto extractNotNullColumns = [](const auto& desc) {
+            THashSet<TString> notNullColumns;
+            for (const auto& column : desc.GetPathDescription().GetTable().GetColumns()) {
+                if (column.GetNotNull()) {
+                    notNullColumns.insert(column.GetName());
+                }
+            }
+
+            return notNullColumns;
+        };
+
+        {
+            auto mainTableNotNullColumns = extractNotNullColumns(describeTable("/Root/TestTable"));
+            auto indexTableNotNullColumns = extractNotNullColumns(describeTable("/Root/TestTable/Index/indexImplTable"));
+            UNIT_ASSERT_VALUES_EQUAL_C(mainTableNotNullColumns, indexTableNotNullColumns, "Not null columns mismatch");
         }
     }
 }

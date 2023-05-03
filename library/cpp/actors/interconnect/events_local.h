@@ -56,6 +56,10 @@ namespace NActors {
         HandshakeBrokerFree,
         HandshakeBrokerPermit,
 
+        // external data channel messages
+        EvSubscribeForConnection,
+        EvReportConnection,
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -197,13 +201,15 @@ namespace NActors {
                 const TActorId& self,
                 ui64 nextPacket,
                 TAutoPtr<TProgramInfo>&& programInfo,
-                TSessionParams params)
+                TSessionParams params,
+                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
             : Socket(std::move(socket))
             , Peer(peer)
             , Self(self)
             , NextPacket(nextPacket)
             , ProgramInfo(std::move(programInfo))
             , Params(std::move(params))
+            , XdcSocket(std::move(xdcSocket))
         {
         }
 
@@ -213,6 +219,7 @@ namespace NActors {
         const ui64 NextPacket;
         TAutoPtr<TProgramInfo> ProgramInfo;
         const TSessionParams Params;
+        TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
     };
 
     struct TEvHandshakeFail: public TEventLocal<TEvHandshakeFail, ui32(ENetwork::HandshakeFail)> {
@@ -409,4 +416,23 @@ namespace NActors {
         {}
     };
 
+    struct TEvSubscribeForConnection : TEventLocal<TEvSubscribeForConnection, (ui32)ENetwork::EvSubscribeForConnection> {
+        TString HandshakeId;
+        bool Subscribe;
+
+        TEvSubscribeForConnection(TString handshakeId, bool subscribe)
+            : HandshakeId(std::move(handshakeId))
+            , Subscribe(subscribe)
+        {}
+    };
+
+    struct TEvReportConnection : TEventLocal<TEvReportConnection, (ui32)ENetwork::EvReportConnection> {
+        TString HandshakeId;
+        TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+
+        TEvReportConnection(TString handshakeId, TIntrusivePtr<NInterconnect::TStreamSocket> socket)
+            : HandshakeId(std::move(handshakeId))
+            , Socket(std::move(socket))
+        {}
+    };
 }

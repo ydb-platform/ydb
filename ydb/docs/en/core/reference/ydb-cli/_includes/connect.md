@@ -62,8 +62,6 @@ When using gRPCs (with encryption), you may need to [select a root certificate](
 
 - `--ca-file <filepath>`: Root certificate PEM file for a TLS connection.
 
-Currently, root certificates are not stored in profiles and can only be defined by command line options.
-
 ## Authentication {#whoami}
 
 The {{ ydb-short-name }} CLI [`discovery whoami`](../commands/discovery-whoami.md) auxiliary command lets you check the account that you actually used to authenticate with the server.

@@ -217,6 +217,7 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
         id.GroupGeneration = -1;  // Clear GroupGeneration in sys log record (for compatibility)
         OwnerData[i].VDiskId = id;
         OwnerData[i].Status = TOwnerData::VDISK_STATUS_HASNT_COME;
+        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[i].OperationLog, "Processing Chunk0, OwnerId# " << i);
         if (id != TVDiskID::InvalidId) {
             VDiskOwners[id] = TOwner(i);
             AtomicIncrement(TotalOwners);
@@ -417,7 +418,7 @@ TRcBuf TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,
 }
 
 void TPDisk::ReadAndParseMainLog(const TActorId &pDiskActor) {
-    TVector<TChunkIdx> chunksToRead;
+    TVector<TLogChunkItem> chunksToRead;
     TIntrusivePtr<TLogReaderBase> logReader(new TLogReader(true, this, ActorSystem, pDiskActor, 0, TLogPosition{0, 0},
                 EOwnerGroupType::Static, TLogPosition{0, 0}, (ui64)-1, SysLogRecord.LogHeadChunkPreviousNonce, 0, 0,
                 TReqId(TReqId::ReadAndParseMainLog, 0), std::move(chunksToRead), 0, 0, TVDiskID::InvalidId));
@@ -433,15 +434,21 @@ void TPDisk::ProcessLogReadQueue() {
         {
             TLogRead &logRead = *static_cast<TLogRead*>(req);
             auto& ownerData = OwnerData[logRead.Owner];
+
             ownerData.Status = TOwnerData::VDISK_STATUS_READING_LOG;
             TLogPosition logStartPosition{0, 0};
             if (logRead.Owner < OwnerData.size() && ownerData.VDiskId != TVDiskID::InvalidId) {
                 logStartPosition = ownerData.LogStartPosition;
             }
-            TVector<TChunkIdx> chunksToRead;
+            TVector<TLogChunkItem> chunksToRead;
+            bool isPrevDropped = false;
             for (auto it = LogChunks.begin(); it != LogChunks.end(); ++it) {
                 if (it->OwnerLsnRange.size() > logRead.Owner && it->OwnerLsnRange[logRead.Owner].IsPresent) {
-                    chunksToRead.push_back(it->ChunkIdx);
+                    bool isPrevCut = (it->IsEndOfSplice && it != LogChunks.begin());
+                    chunksToRead.emplace_back(it->ChunkIdx, isPrevDropped, isPrevCut);
+                    isPrevDropped = false;
+                } else {
+                    isPrevDropped = true;
                 }
             }
             ui64 firstLsnToKeep = 0;
@@ -1142,10 +1149,11 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
                 dataChunkSizeSectors, Format.MagicLogChunk, req.GapStart->ChunkIdx, nullptr, desiredSectorIdx,
                 nullptr, ActorSystem, PDiskId, &DriveModel, Cfg->UseT1ha0HashInFooter, Cfg->EnableSectorEncryption);
 
-        Y_VERIFY_S(req.GapEnd->PrevChunkLastNonce, "PDiskId# " << PDiskId
-            << "Zero GapEnd->PrevChunkLastNonce, chunkInfo# " << *req.GapEnd);
+        Y_VERIFY_S(req.GapEnd->DesiredPrevChunkLastNonce, "PDiskId# " << PDiskId
+            << "Zero GapEnd->DesiredPrevChunkLastNonce, chunkInfo# " << *req.GapEnd);
         // +1 stands for -1 in logreader in old versions of pdisk
-        ui64 expectedNonce = req.GapEnd->PrevChunkLastNonce + 1;
+        ui64 expectedNonce = req.GapEnd->DesiredPrevChunkLastNonce + 1;
+
         req.GapEnd->IsEndOfSplice = true;
         writer.WriteNextChunkReference(req.GapEnd->ChunkIdx, expectedNonce, flushAction.Release(), {}, {});
         LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId

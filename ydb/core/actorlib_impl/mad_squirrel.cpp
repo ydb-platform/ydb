@@ -20,7 +20,7 @@ public:
 
     STFUNC(StateFunc) {
         Y_UNUSED(ev);
-        ctx.Send(ctx.SelfID, new TEvents::TEvWakeup());
+        Send(SelfId(), new TEvents::TEvWakeup());
     }
 };
 

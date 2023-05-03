@@ -29,8 +29,8 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
     CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID));
     EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
-    for (auto&& i : Tables) {
-        ActivateTiering(i.first, i.second.TieringUsage);
+    for (auto&& i : TablesManager.GetTables()) {
+        ActivateTiering(i.first, i.second.GetTieringUsage());
     }
     SignalTabletActive(ctx);
 }
@@ -115,7 +115,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, *BlobManager);
 
     ui64 txId = ev->Get()->TxId;
-    if (ScanTxInFlight.count(txId)) {
+    if (ScanTxInFlight.contains(txId)) {
         TDuration duration = TAppData::TimeProvider->Now() - ScanTxInFlight[txId];
         IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
@@ -193,11 +193,11 @@ void TColumnShard::UpdateInsertTableCounters() {
 }
 
 void TColumnShard::UpdateIndexCounters() {
-    if (!PrimaryIndex) {
+    if (!TablesManager.HasPrimaryIndex()) {
         return;
     }
 
-    auto& stats = PrimaryIndex->GetTotalStats();
+    auto& stats = TablesManager.MutablePrimaryIndex().GetTotalStats();
     SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
     SetCounter(COUNTER_INDEX_GRANULES, stats.Granules);
     SetCounter(COUNTER_INDEX_EMPTY_GRANULES, stats.EmptyGranules);
@@ -243,10 +243,6 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory =
-        Tables.size() * sizeof(TTableInfo) +
-        PathsToDrop.size() * sizeof(ui64) +
-        Ttl.PathsCount() * sizeof(TTtl::TDescription) +
-        SchemaPresets.size() * sizeof(TSchemaPreset) +
         BasicTxInfo.size() * sizeof(TBasicTxInfo) +
         DeadlineQueue.size() * sizeof(TDeadlineQueueItem) +
         (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem) +
@@ -258,9 +254,7 @@ ui64 TColumnShard::MemoryUsage() const {
         (WaitingReads.size() + WaitingScans.size()) * (sizeof(TRowVersion) + sizeof(void*)) +
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
-    if (PrimaryIndex) {
-        memory += PrimaryIndex->MemoryUsage();
-    }
+    memory += TablesManager.GetMemoryUsage();
     memory += BatchCache.Bytes();
     return memory;
 }
@@ -299,7 +293,7 @@ void TColumnShard::SendPeriodicStats() {
         return;
     }
 
-    const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
+    const TActorContext& ctx = ActorContext();
     TInstant now = TAppData::TimeProvider->Now();
     if (LastStatsReport + StatsReportInterval > now) {
         return;
@@ -329,9 +323,9 @@ void TColumnShard::SendPeriodicStats() {
         tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
         tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
 
-        if (PrimaryIndex) {
-            const auto& indexStats = PrimaryIndex->GetTotalStats();
-            NOlap::TSnapshot lastIndexUpdate = PrimaryIndex->LastUpdate();
+        if (TablesManager.HasPrimaryIndex()) {
+            const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
+            NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
             auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
 
             tabletStats->SetRowCount(activeIndexStats.Rows);

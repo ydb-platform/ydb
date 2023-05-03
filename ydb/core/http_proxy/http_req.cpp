@@ -236,7 +236,7 @@ namespace NKikimr::NHttpProxy {
                     HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
                     default:
-                        HandleUnexpectedEvent(ev, ctx);
+                        HandleUnexpectedEvent(ev);
                         break;
                 }
             }
@@ -341,8 +341,8 @@ namespace NKikimr::NHttpProxy {
                     });
             }
 
-            void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
-                Y_UNUSED(ev, ctx);
+            void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev) {
+                Y_UNUSED(ev);
             }
 
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
@@ -888,7 +888,7 @@ namespace NKikimr::NHttpProxy {
                 HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParser);
                 HFunc(TEvents::TEvPoisonPill, HandlePoison);
                 default:
-                    HandleUnexpectedEvent(ev, ctx);
+                    HandleUnexpectedEvent(ev);
                     break;
                 }
         }
@@ -1028,8 +1028,8 @@ namespace NKikimr::NHttpProxy {
             ctx.Send(MakeAccessServiceID(), std::move(request));
         }
 
-        void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev, ctx);
+        void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev) {
+            Y_UNUSED(ev);
         }
 
         void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,

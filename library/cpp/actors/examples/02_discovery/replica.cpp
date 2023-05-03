@@ -156,7 +156,6 @@ public:
     {}
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExample::TEvReplicaLookup, Handle);
             hFunc(TEvExample::TEvReplicaPublish, Handle);

@@ -145,7 +145,6 @@ private:
     }
 
     STFUNC(StateWaitStart) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(IContext::TEvReadFinished, HandleStart);
             cFunc(IContext::TEvNotifiedWhenDone::EventType, PassAway);
@@ -210,7 +209,6 @@ private:
     }
 
     STFUNC(StateResolve) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             cFunc(IContext::TEvNotifiedWhenDone::EventType, PassAway);
             hFunc(TEvKesusProxy::TEvProxyError, Handle);
@@ -244,7 +242,6 @@ private:
     }
 
     STFUNC(StateAttach) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             cFunc(IContext::TEvNotifiedWhenDone::EventType, PassAway);
             hFunc(TEvKesusProxy::TEvProxyError, Handle);
@@ -559,7 +556,6 @@ private:
     }
 
     STFUNC(StateWork) {
-        Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
             hFunc(IContext::TEvReadFinished, Handle);
             hFunc(IContext::TEvWriteFinished, Handle);

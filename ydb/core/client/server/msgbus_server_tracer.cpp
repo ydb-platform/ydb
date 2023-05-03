@@ -93,7 +93,7 @@ TMessageBusTracerService::TMessageBusTracerService()
     : TActor(&TMessageBusTracerService::StateFunc)
 {}
 
-void TMessageBusTracerService::StateFunc(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
+void TMessageBusTracerService::StateFunc(TAutoPtr<IEventHandle> &ev) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvMessageBusTracer::TEvTraceEvent, HandleTraceEvent);
         HFunc(TEvMessageBusTracer::TEvStartTrace, HandleStartTrace);
@@ -189,7 +189,7 @@ public:
         this->SendReplyAndDie(response.Release(), ctx);
     }
 
-    void StateFunc(TAutoPtr<NActors::IEventHandle> &ev, const NActors::TActorContext &ctx) {
+    void StateFunc(TAutoPtr<NActors::IEventHandle> &ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvMessageBusTracer::TEvTraceStatus,  Handle);
             HFunc(TEvents::TEvUndelivered, HandleUndelivered);

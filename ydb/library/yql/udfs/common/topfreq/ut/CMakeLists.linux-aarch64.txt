@@ -18,7 +18,6 @@ target_link_libraries(ydb-library-yql-udfs-common-topfreq-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   common-topfreq-static
   library-yql-minikql
@@ -72,5 +71,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-udfs-common-topfreq-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-udfs-common-topfreq-ut)

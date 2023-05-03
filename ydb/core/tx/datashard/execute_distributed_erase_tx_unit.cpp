@@ -63,13 +63,17 @@ public:
                     Y_VERIFY_S(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
                 }
 
-                txc.Reschedule();
-                return EExecutionStatus::Restart;
+                if (txc.DB.HasChanges()) {
+                    txc.DB.RollbackChanges();
+                }
+                return EExecutionStatus::Continue;
             }
 
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
-                txc.Reschedule();
-                return EExecutionStatus::Restart;
+                if (txc.DB.HasChanges()) {
+                    txc.DB.RollbackChanges();
+                }
+                return EExecutionStatus::Continue;
             }
 
             if (changeCollector) {
@@ -95,8 +99,10 @@ public:
             }
 
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
-                txc.Reschedule();
-                return EExecutionStatus::Restart;
+                if (txc.DB.HasChanges()) {
+                    txc.DB.RollbackChanges();
+                }
+                return EExecutionStatus::Continue;
             }
         } else {
             Y_FAIL_S("Invalid distributed erase tx: " << eraseTx->GetBody().ShortDebugString());

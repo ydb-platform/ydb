@@ -47,33 +47,55 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             .Col(0, 0,  NScheme::NTypeIds::Uint64)
             .Col(0, 1,  NScheme::NTypeIds::Uint32)
             .Col(0, 2,  NScheme::NTypeIds::Uint32)
-            .Key({ 0, 1});
+            .Key({ 0, 1 });
 
         TPartCook cook(lay, { true, 4096 });
+        TPartCook vcook(lay, { true, 4096 });
 
         const ui64 X1 = 0, X2 = 3000;
 
         for (ui64 key1 = X1; key1 <= X2; key1++) {
-            for (ui32 key2 = 0; key2 < 1 + key1/1000; key2++)
+            for (ui32 key2 = 0; key2 < 1 + key1/1000; key2++) {
                 cook.AddN(key1, key2, key2);
+                for (int i = 0; i < 10; ++i) {
+                    vcook.Ver(TRowVersion(1000, 1000 - i)).AddN(key1, key2, key2 + i);
+                }
+            }
         }
 
         TPartEggs eggs = cook.Finish();
         UNIT_ASSERT_C(eggs.Parts.size() == 1,
             "Unexpected " << eggs.Parts.size() << " results");
+        TPartEggs veggs = vcook.Finish();
+        UNIT_ASSERT_C(veggs.Parts.size() == 1,
+            "Unexpected " << veggs.Parts.size() << " results");
 
-        auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
+        auto fnIterate = [&dbgOut, &typeRegistry] (
+                TIntrusiveConstPtr<TPartStore> part,
+                TIntrusiveConstPtr<TRowScheme> scheme,
+                std::vector<ui64>& sizes)
+        {
             TPartIndexIterator idxIter(part, scheme->Keys);
+            sizes.clear();
 
             while (idxIter.IsValid()) {
                 TDbTupleRef key = idxIter.GetCurrentKey();
                 dbgOut << DbgPrintTuple(key, typeRegistry) << " " << idxIter.GetCurrentRowId() << " " << idxIter.GetCurrentDataSize() << Endl;
+                sizes.push_back(idxIter.GetCurrentDataSize());
                 idxIter.Next();
             }
         };
 
         dbgOut << "Iterate with the matching row scheme" << Endl;
-        fnIterate(eggs.At(0), eggs.Scheme);
+        std::vector<ui64> sizes;
+        fnIterate(eggs.At(0), eggs.Scheme, sizes);
+
+        dbgOut << "Iterate same data with versions" << Endl;
+        std::vector<ui64> vsizes;
+        fnIterate(veggs.At(0), veggs.Scheme, vsizes);
+
+        UNIT_ASSERT_C(vsizes.back() / sizes.back() >= 5,
+            "Expected to have 5-15x more bytes in versioned " << vsizes.back() << " vs unversioned " << sizes.back() << " part");
 
         // Add a column with default value to the key
         ui32 def10 = 121212;
@@ -86,7 +108,8 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             .Key({ 0, 1, 10});
 
         dbgOut << "Iterate with added key column with default value" << Endl;
-        fnIterate(eggs.At(0), newLay.RowScheme());
+        std::vector<ui64> sizesWithDefaults;
+        fnIterate(eggs.At(0), newLay.RowScheme(), sizesWithDefaults);
     }
 
     Y_UNIT_TEST(ScreenedIndexIter) {

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(reader)
 add_subdirectory(ut)
 
 add_library(tx-columnshard-engines)
@@ -23,6 +24,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   ydb-core-scheme
   ydb-core-tablet
   ydb-core-tablet_flat
+  columnshard-engines-reader
   udf-service-exception_policy
 )
 target_sources(tx-columnshard-engines PRIVATE
@@ -34,5 +36,6 @@ target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/indexed_read_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/predicate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scalars.cpp
 )

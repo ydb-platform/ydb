@@ -18,8 +18,8 @@ add_executable(ydb)
 target_link_libraries(ydb PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
+  contrib-libs-asmlib
   commands
   library-cpp-resource
 )
@@ -40,5 +40,8 @@ resources(ydb
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/version.txt
   KEYS
   version.txt
+)
+target_allocator(ydb
+  system_allocator
 )
 vcs_info(ydb)

@@ -243,6 +243,9 @@ message TEvLoadTestRequest {
         TMemoryLoad MemoryLoad = 10;
         NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
     }
+    optional uint64 Tag = 12;
+    optional string Uuid = 13;
+    optional uint64 Timestamp = 14;
 }
 
 message TEvLoadTestResponse {
@@ -250,4 +253,22 @@ message TEvLoadTestResponse {
     optional string ErrorReason = 2;
     optional uint64 Cookie = 3;
     optional uint64 Tag = 4;
+}
+
+message TEvNodeFinishResponse {
+    message TNodeStats {
+        optional uint64 Transactions = 1;
+        optional float TransactionsPerSecond = 2;
+        optional float ErrorsPerSecond = 3;
+        repeated float Percentiles = 4;
+    }
+
+    optional string Uuid = 1;
+    optional uint32 NodeId = 2;
+    optional bool Success = 3;
+    optional uint64 FinishTimestamp = 4;
+    optional string ErrorReason = 5;
+    optional TNodeStats Stats = 6;
+    optional string LastHtmlPage = 7;
+    optional string JsonResult = 8;
 }

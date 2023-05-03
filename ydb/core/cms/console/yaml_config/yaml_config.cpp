@@ -1,8 +1,10 @@
 #include "yaml_config.h"
 #include "yaml_config_impl.h"
 
-#include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+
+#include <library/cpp/protobuf/json/json2proto.h>
 
 template <>
 struct THash<NYamlConfig::TLabel> {
@@ -36,6 +38,7 @@ inline const TStringBuf inheritMapTag{"!inherit"};
 inline const TStringBuf inheritSeqTag{"!inherit:"};
 inline const TStringBuf inheritMapInSeqTag{"!inherit"};
 inline const TStringBuf removeTag{"!remove"};
+inline const TStringBuf appendTag{"!append"};
 
 TString GetKey(const NFyaml::TNodeRef& node, TString key) {
     auto map = node.Map();
@@ -219,6 +222,22 @@ bool IsSeqInherit(const NFyaml::TNodeRef& node) {
     return false;
 }
 
+void Append(NFyaml::TNodeRef& to, const NFyaml::TNodeRef& from);
+
+bool IsSeqAppend(const NFyaml::TNodeRef& node) {
+    if (auto tag = node.Tag(); tag) {
+        switch (node.Type()) {
+            case NFyaml::ENodeType::Mapping:
+                return false;
+            case NFyaml::ENodeType::Sequence:
+                return *tag == appendTag;
+            case NFyaml::ENodeType::Scalar:
+                return false;
+        }
+    }
+    return false;
+}
+
 bool IsRemove(const NFyaml::TNodeRef& node) {
     if (auto tag = node.Tag(); tag) {
         return *tag == removeTag;
@@ -234,6 +253,8 @@ void Inherit(NFyaml::TMapping& toMap, const NFyaml::TMapping& fromMap) {
 
             if (IsMapInherit(fromNode)) {
                 Apply(toNode, fromNode);
+            } else if (IsSeqAppend(fromNode)) {
+                Append(toNode, fromNode);
             } else {
                 toMap.Remove(toEntry.Key());
                 toMap.Append(it->Key().Copy().Ref(), it->Value().Copy().Ref());
@@ -257,6 +278,8 @@ void Inherit(NFyaml::TSequence& toSeq, const NFyaml::TSequence& fromSeq, const T
         if (nodes.contains(fromKey)) {
             if (IsSeqInherit(*it)) {
                 Apply(nodes[fromKey], *it);
+            } else if (IsSeqAppend(*it)) {
+                Append(nodes[fromKey], *it);
             } else if (IsRemove(*it)) {
                 toSeq.Remove(nodes[fromKey]);
                 nodes.erase(fromKey);
@@ -271,6 +294,21 @@ void Inherit(NFyaml::TSequence& toSeq, const NFyaml::TSequence& fromSeq, const T
             toSeq.Append(newNode.Ref());
             nodes[fromKey] = newNode.Ref();
         }
+    }
+}
+
+void Append(NFyaml::TNodeRef& to, const NFyaml::TNodeRef& from) {
+    Y_ENSURE_EX(to, TYamlConfigEx() << "Appending to empty value: "
+                << to.Path() << " <- " << from.Path());
+    Y_ENSURE_EX(to.Type() == NFyaml::ENodeType::Sequence && from.Type() == NFyaml::ENodeType::Sequence, TYamlConfigEx() << "Appending to wrong type"
+                << to.Path() << " <- " << from.Path());
+
+    auto fromSeq = from.Sequence();
+    auto toSeq = to.Sequence();
+
+    for (auto it = fromSeq.begin(); it != fromSeq.end(); ++it) {
+        auto newNode = it->Copy();
+        toSeq.Append(newNode.Ref());
     }
 }
 
@@ -400,6 +438,8 @@ NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUn
     NJson::TJsonValue json;
 
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
+
+    NKikimr::NYaml::TransformConfig(json, true);
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
 
@@ -591,10 +631,83 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
 ui64 GetVersion(const TString& config) {
     auto parser = NFyaml::TParser::Create(config);
     auto header = parser.NextDocument();
-    auto str = header->Root().Map().at("version").Scalar();
+    auto str = header ? header->Root().Map().at("version").Scalar() : "";
     ui64 version = 0;
     TryFromString<ui64>(str, version);
     return version;
+}
+
+/**
+ * Config used to convert protobuf from/to json
+ * changes how names are translated e.g. PDiskInfo -> pdisk_info instead of p_disk_info
+ */
+NProtobufJson::TJson2ProtoConfig GetJsonToProtoConfig() {
+    NProtobufJson::TJson2ProtoConfig config;
+    config.SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCaseDense);
+    config.SetEnumValueMode(NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive);
+    config.CastRobust = true;
+    config.MapAsObject = true;
+    config.AllowUnknownFields = false;
+    return config;
+}
+
+void ResolveAndParseYamlConfig(
+    const TString& yamlConfig,
+    const TMap<ui64, TString>& volatileYamlConfigs,
+    const TMap<TString, TString>& labels,
+    NKikimrConfig::TAppConfig& appConfig,
+    TString* resolvedYamlConfig,
+    TString* resolvedJsonConfig) {
+
+    auto parser = NFyaml::TParser::Create(yamlConfig);
+    parser.NextDocument();
+    auto tree = parser.NextDocument();
+
+    for (auto& [_, config] : volatileYamlConfigs) {
+        auto d = NFyaml::TDocument::Parse(config);
+        NYamlConfig::AppendVolatileConfigs(tree.value(), d);
+    }
+
+    TSet<NYamlConfig::TNamedLabel> namedLabels;
+    for (auto& [name, label] : labels) {
+        namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+    }
+
+    auto config = NYamlConfig::Resolve(tree.value(), namedLabels);
+
+    if (resolvedYamlConfig) {
+        TStringStream resolvedYamlConfigStream;
+        resolvedYamlConfigStream << config.second;
+        *resolvedYamlConfig = resolvedYamlConfigStream.Str();
+    }
+
+    TStringStream resolvedJsonConfigStream;
+    resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+
+    if (resolvedJsonConfig) {
+        *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+    }
+
+    NJson::TJsonValue json;
+    Y_VERIFY(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
+
+    NKikimr::NYaml::TransformConfig(json, true);
+
+    NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig());
+}
+
+void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
+    if (from.HasNameserviceConfig()) {
+        to.MutableNameserviceConfig()->CopyFrom(from.GetNameserviceConfig());
+    }
+
+    if (from.HasNetClassifierDistributableConfig()) {
+        to.MutableNetClassifierDistributableConfig()->CopyFrom(from.GetNetClassifierDistributableConfig());
+    }
+
+    if (from.NamedConfigsSize()) {
+        to.MutableNamedConfigs()->CopyFrom(from.GetNamedConfigs());
+    }
 }
 
 } // namespace NYamlConfig

@@ -366,6 +366,23 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Base()->IsTable()) {
+        return *this;
+    }
+
+    if (!Path.IsAsyncReplicaTable()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is an async replica table"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsBlockStoreVolume(EStatus status) const {
     if (Failed) {
         return *this;
@@ -1414,6 +1431,18 @@ bool TPath::IsBackupTable() const {
     TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
 
     return tableInfo->IsBackup;
+}
+
+bool TPath::IsAsyncReplicaTable() const {
+    Y_VERIFY(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
+
+    return tableInfo->IsAsyncReplica();
 }
 
 bool TPath::IsCdcStream() const {

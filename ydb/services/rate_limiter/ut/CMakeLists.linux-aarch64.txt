@@ -18,7 +18,6 @@ target_link_libraries(ydb-services-rate_limiter-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-jemalloc
   cpp-testing-unittest_main
   ydb-services-rate_limiter
   core-testlib-default
@@ -70,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-services-rate_limiter-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-services-rate_limiter-ut)

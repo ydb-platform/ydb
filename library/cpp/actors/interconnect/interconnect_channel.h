@@ -17,19 +17,36 @@
 
 namespace NActors {
 #pragma pack(push, 1)
+
     struct TChannelPart {
-        ui16 Channel;
+        ui16 ChannelFlags;
         ui16 Size;
 
-        static constexpr ui16 LastPartFlag = ui16(1) << 15;
+        static constexpr ui16 LastPartFlag = 0x8000;
+        static constexpr ui16 XdcFlag = 0x4000;
+        static constexpr ui16 ChannelMask = (1 << IEventHandle::ChannelBits) - 1;
+
+        static_assert((LastPartFlag & ChannelMask) == 0);
+        static_assert((XdcFlag & ChannelMask) == 0);
+
+        ui16 GetChannel() const { return ChannelFlags & ChannelMask; }
+        bool IsLastPart() const { return ChannelFlags & LastPartFlag; }
+        bool IsXdc() const { return ChannelFlags & XdcFlag; }
 
         TString ToString() const {
-            return TStringBuilder() << "{Channel# " << (Channel & ~LastPartFlag)
-                << " LastPartFlag# " << ((Channel & LastPartFlag) ? "true" : "false")
+            return TStringBuilder() << "{Channel# " << GetChannel()
+                << " IsLastPart# " << IsLastPart()
+                << " IsXdc# " << IsXdc()
                 << " Size# " << Size << "}";
         }
     };
+
 #pragma pack(pop)
+
+    enum class EXdcCommand : ui8 {
+        DECLARE_SECTION = 1,
+        PUSH_DATA,
+    };
 
     struct TExSerializedEventTooLarge : std::exception {
         const ui32 Type;
@@ -57,7 +74,7 @@ namespace NActors {
 
         std::pair<ui32, TEventHolder*> Push(IEventHandle& ev) {
             TEventHolder& event = Pool.Allocate(Queue);
-            const ui32 bytes = event.Fill(ev) + (Params.UseExtendedTraceFmt ? sizeof(TEventDescr2) : sizeof(TEventDescr1));
+            const ui32 bytes = event.Fill(ev) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
             if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
                 event.Span
@@ -101,9 +118,9 @@ namespace NActors {
 
         enum class EState {
             INITIAL,
-            CHUNKER,
-            BUFFER,
+            BODY,
             DESCRIPTOR,
+            SECTIONS,
         };
         EState State = EState::INITIAL;
 
@@ -116,6 +133,15 @@ namespace NActors {
         TCoroutineChunkSerializer Chunker;
         TEventSerializationInfo SerializationInfoContainer;
         const TEventSerializationInfo *SerializationInfo = nullptr;
+        bool EventInExternalDataChannel;
+        size_t SectionIndex = 0;
+        std::vector<char> XdcData;
+
+        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool external, size_t *bytesSerialized);
+
+        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        bool FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        bool FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
 

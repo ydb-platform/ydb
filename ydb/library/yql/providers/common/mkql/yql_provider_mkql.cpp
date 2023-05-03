@@ -1781,14 +1781,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
+        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, type, isMany, itemsCount, isCompact)) {
             ythrow TNodeException(node) << error->GetMessage();
         }
 
-        const auto factory = *isHashed ? &TProgramBuilder::ToHashedDict : &TProgramBuilder::ToSortedDict;
+        *type = SelectDictType(*type, node.Child(1)->GetTypeAnn());
+        const auto factory = *type == EDictType::Hashed ? &TProgramBuilder::ToHashedDict : &TProgramBuilder::ToSortedDict;
         return (ctx.ProgramBuilder.*factory)(list, *isMany, [&](TRuntimeNode item) {
             return MkqlBuildLambda(*node.Child(1), ctx, {item});
         }, [&](TRuntimeNode item) {
@@ -1799,14 +1800,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("SqueezeToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto stream = MkqlBuildExpr(node.Head(), ctx);
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
+        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, type, isMany, itemsCount, isCompact)) {
             ythrow TNodeException(node) << error->GetMessage();
         }
 
-        const auto factory = *isHashed ? &TProgramBuilder::SqueezeToHashedDict : &TProgramBuilder::SqueezeToSortedDict;
+        *type = SelectDictType(*type, node.Child(1)->GetTypeAnn());
+        const auto factory = *type == EDictType::Hashed ? &TProgramBuilder::SqueezeToHashedDict : &TProgramBuilder::SqueezeToSortedDict;
         return (ctx.ProgramBuilder.*factory)(stream, *isMany, [&](TRuntimeNode item) {
             return MkqlBuildLambda(*node.Child(1), ctx, {item});
         }, [&](TRuntimeNode item) {
@@ -1817,14 +1819,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("NarrowSqueezeToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto stream = MkqlBuildExpr(node.Head(), ctx);
         TMaybe<bool> isMany;
-        TMaybe<bool> isHashed;
+        TMaybe<EDictType> type;
         TMaybe<ui64> itemsCount;
         bool isCompact;
-        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
+        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, type, isMany, itemsCount, isCompact)) {
             ythrow TNodeException(node) << error->GetMessage();
         }
 
-        const auto factory = *isHashed ? &TProgramBuilder::NarrowSqueezeToHashedDict : &TProgramBuilder::NarrowSqueezeToSortedDict;
+        *type = SelectDictType(*type, node.Child(1)->GetTypeAnn());
+        const auto factory = *type == EDictType::Hashed ? &TProgramBuilder::NarrowSqueezeToHashedDict : &TProgramBuilder::NarrowSqueezeToSortedDict;
         return (ctx.ProgramBuilder.*factory)(stream, *isMany, [&](TRuntimeNode::TList items) {
             return MkqlBuildLambda(*node.Child(1), ctx, items);
         }, [&](TRuntimeNode::TList items) {

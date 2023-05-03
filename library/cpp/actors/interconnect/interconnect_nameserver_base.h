@@ -13,10 +13,10 @@ namespace NActors {
     protected:
         const TMap<ui32, TTableNameserverSetup::TNodeInfo>& NodeTable;
 
-        TInterconnectNameserverBase(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx)
+        TInterconnectNameserverBase(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev)
             , const TMap<ui32, TTableNameserverSetup::TNodeInfo>& nodeTable)
             : TActor<TDerived>(func)
-            , NodeTable(nodeTable) 
+            , NodeTable(nodeTable)
         {
         }
     public:

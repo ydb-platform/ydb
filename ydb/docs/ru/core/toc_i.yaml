@@ -3,8 +3,10 @@ items:
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
-  include: { mode: link, path: getting_started/toc_p.yaml }
-
+  href: administration/quickstart.md
+# - name: Начало работы
+#   hidden: true
+#   include: { mode: link, path: getting_started/toc_p.yaml }
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
@@ -53,9 +55,11 @@ items:
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Публичные материалы
   href: public-talks.md
-- name: Что нового
+- name: Список изменений
   items:
-  - name: Список изменений
-    href: changelog.md
+  - name: "{{ ydb-short-name }} Server"
+    href: changelog-server.md
+  - name: "{{ ydb-short-name }} CLI"
+    href: changelog-cli.md
   - name: Список изменений безопасности
     href: security-changelog.md

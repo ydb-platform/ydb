@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/pack.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -18,6 +19,14 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         return { sizeof(NUdf::TUnboxedValue), 8 }; // Special value for NULL elements
     }
     switch (type.GetTypeId()) {
+        case NTypeIds::Pg:
+        {
+            return {
+                sizeof(NUdf::TUnboxedValue),
+                PgValueSize(value, NPg::TypeDescGetTypeLen(type.GetTypeDesc()))
+            };
+        }
+
         case NTypeIds::Bool:
         case NTypeIds::Int8:
         case NTypeIds::Uint8:
@@ -63,16 +72,6 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
             }
         }
 
-        case NTypeIds::Pg:
-        {
-            return {
-                sizeof(NUdf::TUnboxedValue),
-                NKikimr::NMiniKQL::PgValueSize(
-                    NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()), //extra typeDesc resolve
-                    value
-                )
-            };
-        }
 
         default:
             Y_VERIFY_DEBUG_S(false, "Unsupported type " << NScheme::TypeName(type.GetTypeId()));
@@ -458,19 +457,15 @@ ui32 TKqpScanComputeContext::TScanData::TBlockBatchReader::FillDataValues(NUdf::
 
 TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range,
     const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<TColumn>& resultColumns)
-    : TableId(tableId)
+    : TBase(tableId, "")
     , Range(range)
     , BatchReader(new TRowBatchReader(columns, systemColumns, resultColumns))
 {}
 
 TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
     NYql::NDqProto::EDqStatsMode statsMode)
+    : TBase(meta)
 {
-    const auto& tableMeta = meta.GetTable();
-    TableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(),
-                       tableMeta.GetSysViewInfo(), tableMeta.GetSchemaVersion());
-    TablePath = meta.GetTable().GetTablePath();
-
     switch(ReadTypeFromProto(meta.GetReadType())) {
         case TKqpScanComputeContext::TScanData::EReadType::Rows:
             BatchReader.reset(new TRowBatchReader(meta));
@@ -624,53 +619,6 @@ ui64 TKqpScanComputeContext::TScanData::AddData(const arrow::RecordBatch& batch,
     }
 
     return stats.AllocatedBytes;
-}
-
-TKqpScanComputeContext::TScanData::IDataBatchReader::IDataBatchReader(const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns,
-    const TSmallVec<TColumn>& resultColumns)
-    : Columns(columns)
-    , SystemColumns(systemColumns)
-    , ResultColumns(resultColumns)
-    , TotalColumnsCount(resultColumns.size() + systemColumns.size())
-{}
-
-TKqpScanComputeContext::TScanData::IDataBatchReader::IDataBatchReader(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta) {
-    Columns.reserve(meta.GetColumns().size());
-    for (const auto& column : meta.GetColumns()) {
-        NMiniKQL::TKqpScanComputeContext::TColumn c;
-        c.Tag = column.GetId();
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetType(),
-            column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-        c.Type = typeInfoMod.TypeInfo;
-        c.TypeMod = typeInfoMod.TypeMod;
-
-        if (!IsSystemColumn(c.Tag)) {
-            Columns.emplace_back(std::move(c));
-        } else {
-            SystemColumns.emplace_back(std::move(c));
-        }
-    }
-
-    if (meta.GetResultColumns().empty() && !meta.HasOlapProgram()) {
-        // Currently we define ResultColumns just for Olap tables in TKqpQueryCompiler
-        ResultColumns = Columns;
-    } else {
-        ResultColumns.reserve(meta.GetResultColumns().size());
-        for (const auto& resColumn : meta.GetResultColumns()) {
-            NMiniKQL::TKqpScanComputeContext::TColumn c;
-            c.Tag = resColumn.GetId();
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(resColumn.GetType(),
-                resColumn.HasTypeInfo() ? &resColumn.GetTypeInfo() : nullptr);
-            c.Type = typeInfoMod.TypeInfo;
-            c.TypeMod = typeInfoMod.TypeMod;
-
-            if (!IsSystemColumn(c.Tag)) {
-                ResultColumns.emplace_back(std::move(c));
-            }
-        }
-    }
-
-    TotalColumnsCount = ResultColumns.size() + SystemColumns.size();
 }
 
 void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,

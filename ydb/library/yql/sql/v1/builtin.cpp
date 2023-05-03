@@ -2467,7 +2467,7 @@ private:
     TNodePtr Node;
 };
 
-template <bool Sorted>
+template <bool Sorted, bool Hashed>
 class TYqlToDict final: public TCallNode {
 public:
     TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
@@ -2477,7 +2477,7 @@ public:
 
 private:
     TCallNode::TPtr DoClone() const override {
-       return new TYqlToDict<Sorted>(GetPos(), Mode, CloneContainer(Args));
+       return new TYqlToDict<Sorted, Hashed>(GetPos(), Mode, CloneContainer(Args));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -2487,7 +2487,7 @@ private:
         }
         Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("0"))));
         Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("1"))));
-        Args.push_back(Q(Y(Q(Sorted ? "Sorted" : "Hashed"), Q(Mode))));
+        Args.push_back(Q(Y(Q(Sorted ? "Sorted" : Hashed ? "Hashed" : "Auto"), Q(Mode))));
         return TCallNode::DoInit(ctx, src);
     }
 private:
@@ -2846,10 +2846,12 @@ struct TBuiltinFuncData {
             {"asdictstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictStrict", 0, -1)},
             {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSet", 0, -1)},
             {"assetstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetStrict", 0, -1)},
-            {"todict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("One")},
-            {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("Many")},
-            {"tosorteddict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("One")},
-            {"tosortedmultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("Many")},
+            {"todict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, false>>("One")},
+            {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, false>>("Many")},
+            {"tosorteddict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true, false>>("One")},
+            {"tosortedmultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true, false>>("Many")},
+            {"tohasheddict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, true>>("One")},
+            {"tohashedmultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false, true>>("Many")},
             {"dictkeys", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictKeys", 1, 1) },
             {"dictpayloads", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloads", 1, 1) },
             {"dictitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictItems", 1, 1) },

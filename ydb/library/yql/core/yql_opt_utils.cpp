@@ -17,6 +17,34 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
+template<class TConstraint>
+TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TConstraint>()) {
+        const auto pos = node->Pos();
+        TExprNode::TListType children(1U, std::move(node));
+        for (const auto& set : constraint->GetAllSets()) {
+            TExprNode::TListType columns;
+            columns.reserve(set.size());
+            for (const auto& path : set) {
+                if (1U == path.size())
+                    columns.emplace_back(ctx.NewAtom(pos, path.front()));
+                else {
+                    TExprNode::TListType atoms(path.size());
+                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(pos, name); });
+                    columns.emplace_back(ctx.NewList(pos, std::move(atoms)));
+                }
+            }
+            children.emplace_back(ctx.NewList(pos, std::move(columns)));
+        }
+        return ctx.NewCallable(pos, TString("Assume") += TConstraint::Name(), std::move(children));
+    }
+    return node;
+}
+
+}
+
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
     return ctx.NewCallable(position, "Nothing", {
         ctx.NewCallable(position, "OptionalType", {
@@ -445,7 +473,7 @@ TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& setti
     return ret;
 }
 
-TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<bool>& isMany, TMaybe<bool>& isHashed, TMaybe<ui64>& itemsCount, bool& isCompact) {
+TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TMaybe<EDictType>& type, TMaybe<bool>& isMany, TMaybe<ui64>& itemsCount, bool& isCompact) {
     isCompact = false;
     auto settings = input.Child(3);
     if (settings->Type() != TExprNode::List) {
@@ -461,10 +489,13 @@ TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TM
                 isMany = true;
             }
             else if (child->Content() == "Sorted") {
-                isHashed = false;
+                type = EDictType::Sorted;
             }
             else if (child->Content() == "Hashed") {
-                isHashed = true;
+                type = EDictType::Hashed;
+            }
+            else if (child->Content() == "Auto") {
+                type = EDictType::Auto;
             }
             else if (child->Content() == "Compact") {
                 isCompact = true;
@@ -493,11 +524,24 @@ TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TM
 
     }
 
-    if (!isHashed || !isMany) {
-        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed and Many/One");
+    if (!type || !isMany) {
+        return TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both options must be specified: Sorted/Hashed/Auto and Many/One");
     }
 
     return TMaybe<TIssue>();
+}
+
+EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType) {
+    if (type != EDictType::Auto) {
+        return type;
+    }
+
+    if (keyType->IsHashable() && keyType->IsEquatable()) {
+        return EDictType::Hashed;
+    }
+
+    YQL_ENSURE(keyType->IsComparableInternal());
+    return EDictType::Sorted;
 }
 
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {
@@ -1110,7 +1154,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
 
     TExprNode::TPtr tuple;
     if (tupleItems.size() == 0) {
-        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, "0").Seal().Build();
+        tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, 0U).Seal().Build();
     } else if (tupleItems.size() == 1) {
         tuple = tupleItems[0];
     } else {
@@ -1332,76 +1376,6 @@ bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ct
     return ctx.AddWarning(issue);
 }
 
-IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNode::TPtr& output, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx) {
-    output = input;
-    TProcessedNodesSet processedNodes;
-    bool hasUnordered = false;
-    VisitExpr(input, [&stopTraverse, &processedNodes, &hasUnordered](const TExprNode::TPtr& node) {
-        if (stopTraverse(node.Get())) {
-            processedNodes.insert(node->UniqueId());
-            return false;
-        }
-        else if (TCoUnorderedBase::Match(node.Get())) {
-            hasUnordered = true;
-        }
-        return true;
-    });
-    if (!hasUnordered) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    TOptimizeExprSettings settings(typeCtx);
-    settings.ProcessedNodes = &processedNodes; // Prevent optimizer to go deeper
-
-    static THashSet<TStringBuf> CALLABLE = {
-        "AssumeUnique", "AssumeDistinct",
-        "Map", "OrderedMap",
-        "Filter", "OrderedFilter",
-        "FlatMap", "OrderedFlatMap",
-        "FoldMap", "Fold1Map", "Chain1Map",
-        "Take", "Skip",
-        "TakeWhile", "SkipWhile",
-        "TakeWhileInclusive", "SkipWhileInclusive",
-        "SkipNullMembers", "FilterNullMembers",
-        "SkipNullElements", "FilterNullElements",
-        "Condense", "Condense1",
-        "MapJoinCore", "CommonJoinCore",
-        "CombineCore", "ExtractMembers",
-        "PartitionByKey", "PartitionsByKeys",
-        "FromFlow", "ToFlow", "Collect", "Iterator"};
-    static THashSet<TStringBuf> SORTED = {"AssumeSorted", "Sort"};
-
-    auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoUnorderedBase::Match(node.Get())) {
-            if (node->Head().IsCallable(CALLABLE)) {
-                auto res = ctx.SwapWithHead(*node);
-                auto name = res->Content();
-                if (name.SkipPrefix("Ordered")) {
-                    res = ctx.RenameNode(*res, name);
-                }
-                return res;
-            }
-            if (node->Head().IsCallable(SORTED)) {
-                return node->Head().HeadPtr();
-            }
-        }
-
-        return node;
-    }, ctx, settings);
-
-    if (status.Level == IGraphTransformer::TStatus::Error) {
-        return status;
-    }
-
-    if (input != output && input->IsLambda()) {
-        output = ctx.DeepCopyLambda(*output);
-        status = status.Combine(IGraphTransformer::TStatus::Repeat);
-    }
-
-    return status;
-
-}
-
 std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lambda, TExprContext& ctx, TTypeAnnotationContext* typeCtx) {
     auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
 
@@ -1475,7 +1449,7 @@ ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
             return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
         case ETypeAnnotationKind::Pg: {
             const auto& typeDesc = NPg::LookupType(type.Cast<TPgExprType>()->GetId());
-            if (typeDesc.TypeLen > 0 && typeDesc.PassByValue) {
+            if (typeDesc.PassByValue) {
                 return typeDesc.TypeLen;
             }
             return UnknownWeight;
@@ -1744,6 +1718,61 @@ bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
     });
 
     return withDependsOn;
+}
+
+TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, TExprContext& ctx) {
+    if (!sorted) {
+        return node;
+    }
+    const auto& constent = sorted->GetContent();
+    return ctx.Builder(node->Pos())
+        .Callable("AssumeSorted")
+            .Add(0, std::move(node))
+            .List(1)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    size_t index = 0;
+                    for (auto c : constent) {
+                        parent.Callable(index++, "Bool")
+                            .Atom(0, ToString(c.second), TNodeFlags::Default)
+                        .Seal();
+                        if (1U < c.first.front().size())
+                            break;
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .List()
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        size_t index = 0;
+                        for (auto c : constent) {
+                            if (c.first.front().empty())
+                                parent.Arg(index++, "item");
+                            else if (1U == c.first.front().size()) {
+                                parent.Callable(index++, "Member")
+                                    .Arg(0, "item")
+                                    .Atom(1, c.first.front().front())
+                                .Seal();
+                            } else {
+                                parent.Callable(index++, "Null").Seal();
+                                break;
+                            }
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
+    res = KeepConstraint<TChoppedConstraintNode>(std::move(res), src, ctx);
+    res = KeepConstraint<TDistinctConstraintNode>(std::move(res), src, ctx);
+    res = KeepConstraint<TUniqueConstraintNode>(std::move(res), src, ctx);
+    return res;
 }
 
 }

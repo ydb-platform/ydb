@@ -383,7 +383,7 @@ public:
 
 private:
     STFUNC(StateWork) {
-        Callback(ev, ctx);
+        Callback(ev, this->ActorContext());
     }
 
 private:
@@ -393,6 +393,11 @@ private:
 enum class EShadowDataMode {
     Default,
     Enabled,
+};
+
+enum class EReplicationConsistency: int {
+    Strong = 1,
+    Weak = 2,
 };
 
 struct TShardedTableOptions {
@@ -451,6 +456,8 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
+    TABLE_OPTION(bool, Replicated, false);
+    TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL

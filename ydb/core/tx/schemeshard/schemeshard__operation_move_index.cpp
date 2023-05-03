@@ -380,6 +380,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .NotUnderOperation()
                 .IsCommonSensePath();
 
@@ -489,6 +490,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
             .IsResolved()
             .NotDeleted()
             .IsTable()
+            .NotAsyncReplicaTable()
             .NotUnderDeleting()
             .NotUnderOperation()
             .IsCommonSensePath();

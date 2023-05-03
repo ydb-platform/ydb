@@ -19,4 +19,5 @@ message TSource {
     bool ThreadPool = 8;
     uint64 ParallelRowGroupCount = 9;
     bool RowGroupReordering = 10;
+    uint64 ParallelDownloadCount = 11;
 }

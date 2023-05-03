@@ -1730,11 +1730,11 @@ namespace NKikimr {
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
-            FFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
 
         // while recovering sync guid we use this state function to handle requests
@@ -1777,13 +1777,13 @@ namespace NKikimr {
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
-            FFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
 
         STRICT_STFUNC(StateDatabaseError,
@@ -1821,14 +1821,14 @@ namespace NKikimr {
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
             IgnoreFunc(TEvVDiskRequestCompleted)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
-            FFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1902,12 +1902,12 @@ namespace NKikimr {
         };
 
         void ForwardToSkeleton(STFUNC_SIG) {
-            ctx.Forward(ev, SkeletonId);
+            Forward(ev, SkeletonId);
         }
 
         void HandleForwardToSkeleton(STFUNC_SIG) {
             ev->Rewrite(ev->Type, SkeletonId);
-            ctx.Send(ev);
+            Send(ev);
         }
 
         STRICT_STFUNC(StateFunc,
@@ -1947,13 +1947,13 @@ namespace NKikimr {
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
             HFunc(TEvents::TEvActorDied, Handle)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
-            FFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
-            FFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvScrubAwait, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
-            FFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
+            fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
 
 #define HFuncStatus(TEvType, status, errorReason, now, wstatus) \

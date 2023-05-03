@@ -52,22 +52,22 @@ ydb
 
 Чтобы не писать параметры соединения каждый раз при вызове YDB CLI, воспользуйтесь [профилем](../../reference/ydb-cli/profile/index.md). Создание предложенного ниже профиля позволит вам также копировать дальнейшие команды через буфер обмена без их редактирования, вне зависимости от того, на какой базе данных вы проходите сценарий начала работы.
 
-[Создайте профиль](../../reference/ydb-cli/profile/create.md) `db1` следующей командой:
+[Создайте профиль](../../reference/ydb-cli/profile/create.md) `quickstart` следующей командой:
 
 ```bash
-{{ ydb-cli }} config profile create db1 -e <endpoint> -d <database>
+{{ ydb-cli }} config profile create quickstart -e <endpoint> -d <database>
 ```
 
 В качестве параметров используйте проверенные на [предыдущем шаге](#ping) значения. Например, для создания профиля соединения с локальной базой данных YDB, созданной по сценарию самостоятельного развертывания [в Docker](../self_hosted/ydb_docker.md), выполните следующую команду:
 
 ```bash
-{{ ydb-cli }} config profile create db1 -e grpc://localhost:2136 -d /local
+{{ ydb-cli }} config profile create quickstart -e grpc://localhost:2136 -d /local
 ```
 
 Проверьте работоспособность профиля командой `scheme ls`:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme ls
+{{ ydb-cli }} -p quickstart scheme ls
 ```
 
 ## Исполнение YQL скрипта {#yql}
@@ -83,22 +83,22 @@ ydb
 * Создание таблицы:
 
   ```bash
-  {{ ydb-cli }} -p db1 yql -s "create table t1( id uint64, primary key(id))"
+  {{ ydb-cli }} -p quickstart yql -s "create table t1( id uint64, primary key(id))"
   ```
 
 * Добавление записи:
 
   ```bash
-  {{ ydb-cli }} -p db1 yql -s "insert into t1(id) values (1)"
+  {{ ydb-cli }} -p quickstart yql -s "insert into t1(id) values (1)"
   ```
 
 * Выборка данных:
 
   ```bash
-  {{ ydb-cli }} -p db1 yql -s "select * from t1"
+  {{ ydb-cli }} -p quickstart yql -s "select * from t1"
   ```
 
-Если вы получаете ошибку `Profile db1 does not exist`, значит вы не создали его на [предыдущем шаге](#profile).
+Если вы получаете ошибку `Profile quickstart does not exist`, значит вы не создали его на [предыдущем шаге](#profile).
 
 ## Специализированные команды CLI {#ydb-api}
 

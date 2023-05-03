@@ -12,8 +12,6 @@ target_link_libraries(pdiskfit PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   library-cpp-getopt
   cpp-string_utils-parse_size
@@ -33,5 +31,9 @@ target_link_options(pdiskfit PRIVATE
 )
 target_sources(pdiskfit PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp
+)
+target_allocator(pdiskfit
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(pdiskfit)

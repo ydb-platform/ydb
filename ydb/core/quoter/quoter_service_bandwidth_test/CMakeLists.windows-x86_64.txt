@@ -14,7 +14,6 @@ target_compile_options(quoter_service_bandwidth_test PRIVATE
 target_link_libraries(quoter_service_bandwidth_test PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   library-cpp-colorizer
   library-cpp-getopt
@@ -27,5 +26,8 @@ target_sources(quoter_service_bandwidth_test PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/quota_requester.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_bandwidth_test/server.cpp
+)
+target_allocator(quoter_service_bandwidth_test
+  system_allocator
 )
 vcs_info(quoter_service_bandwidth_test)

@@ -11,8 +11,8 @@ meta:
   title: YDB
 links:
   - title: Начало работы
-    description: Создание базы данных, подключение, настройка доступа, простейшие операции
-    href: getting_started/
+    description: Разверните кластер и выполните простейшие операции с данными
+    href: administration/quickstart
   - title: Концепции
     description: Как устроена YDB, возможности и доступные режимы использования
     href: concepts/
@@ -34,6 +34,3 @@ links:
   - title: Управление кластером
     description: Конфигурация, обслуживание, мониторинг и диагностика кластеров YDB
     href: cluster/
-  - title: Полезные ссылки
-    description: Ссылки на различные ресурсы, имеющие отношение к YDB
-    href: getting_started/useful_links

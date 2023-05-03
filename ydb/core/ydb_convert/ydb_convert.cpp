@@ -93,6 +93,10 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             ConvertMiniKQLTypeToYdbType(protoListType.GetItem(), *output.mutable_list_type()->mutable_item());
             break;
         }
+        case NKikimrMiniKQL::ETypeKind::EmptyList: {
+            output.set_empty_list_type(::google::protobuf::NULL_VALUE);
+            break;
+        }
         case NKikimrMiniKQL::ETypeKind::Tuple: {
             const NKikimrMiniKQL::TTupleType& protoTupleType = input.GetTuple();
             ConvertMiniKQLTupleTypeToYdbType(protoTupleType, *output.mutable_tuple_type());
@@ -107,6 +111,10 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             const NKikimrMiniKQL::TDictType& protoDictType = input.GetDict();
             ConvertMiniKQLTypeToYdbType(protoDictType.GetKey(), *output.mutable_dict_type()->mutable_key());
             ConvertMiniKQLTypeToYdbType(protoDictType.GetPayload(), *output.mutable_dict_type()->mutable_payload());
+            break;
+        }
+        case NKikimrMiniKQL::ETypeKind::EmptyDict: {
+            output.set_empty_dict_type(::google::protobuf::NULL_VALUE);
             break;
         }
         case NKikimrMiniKQL::ETypeKind::Variant: {
@@ -143,16 +151,19 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
 
 void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& output) {
     switch (input.type_case()) {
-        case Ydb::Type::kVoidType:
+        case Ydb::Type::kVoidType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Void);
             break;
-        case Ydb::Type::kNullType:
+        }
+        case Ydb::Type::kNullType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Null);
             break;
-        case Ydb::Type::kTypeId:
+        }
+        case Ydb::Type::kTypeId: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             output.MutableData()->SetScheme(input.type_id());
             break;
+        }
         case Ydb::Type::kDecimalType: {
             // TODO: Decimal parameters
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
@@ -162,14 +173,20 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             data->MutableDecimalParams()->SetScale(input.decimal_type().scale());
             break;
         }
-        case Ydb::Type::kOptionalType:
+        case Ydb::Type::kOptionalType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Optional);
             ConvertYdbTypeToMiniKQLType(input.optional_type().item(), *output.MutableOptional()->MutableItem());
             break;
-        case Ydb::Type::kListType:
+        }
+        case Ydb::Type::kListType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::List);
             ConvertYdbTypeToMiniKQLType(input.list_type().item(), *output.MutableList()->MutableItem());
             break;
+        }
+        case Ydb::Type::kEmptyListType: {
+            output.SetKind(NKikimrMiniKQL::ETypeKind::EmptyList);
+            break;
+        }
         case Ydb::Type::kTupleType: {
             output.SetKind(NKikimrMiniKQL::ETypeKind::Tuple);
             const Ydb::TupleType& protoTupleType = input.tuple_type();
@@ -187,6 +204,10 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             const Ydb::DictType& protoDictType = input.dict_type();
             ConvertYdbTypeToMiniKQLType(protoDictType.key(), *output.MutableDict()->MutableKey());
             ConvertYdbTypeToMiniKQLType(protoDictType.payload(), *output.MutableDict()->MutablePayload());
+            break;
+        }
+        case Ydb::Type::kEmptyDictType: {
+            output.SetKind(NKikimrMiniKQL::ETypeKind::EmptyDict);
             break;
         }
         case Ydb::Type::kVariantType: {
@@ -470,6 +491,12 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
         case NKikimrMiniKQL::ETypeKind::Void: {
             break;
         }
+        case NKikimrMiniKQL::ETypeKind::EmptyList: {
+            break;
+        }
+        case NKikimrMiniKQL::ETypeKind::EmptyDict: {
+            break;
+        }
         case NKikimrMiniKQL::ETypeKind::Null: {
             output.set_null_flag_value(::google::protobuf::NULL_VALUE);
             break;
@@ -602,6 +629,10 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
 
     switch (inputType.type_case()) {
         case Ydb::Type::kVoidType:
+            break;
+        case Ydb::Type::kEmptyListType:
+            break;
+        case Ydb::Type::kEmptyDictType:
             break;
         case Ydb::Type::kTypeId:
             ConvertData(inputType.type_id(), inputValue, output);

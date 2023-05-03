@@ -412,7 +412,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckLocks(srcPath.Base()->PathId, Transaction, errStr)) {
+        if (!isBackup && !context.SS->CheckLocks(srcPath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
@@ -445,6 +445,9 @@ public:
         if (isBackup) {
             schema.ClearTTLSettings();
         }
+
+        // replication config is not copied
+        schema.ClearReplicationConfig();
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)

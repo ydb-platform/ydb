@@ -17,7 +17,6 @@ namespace NKikimr::NFlatTxCoordinator {
 
     private:
         STFUNC(StateWork) {
-            Y_UNUSED(ctx);
             switch (ev->GetTypeRewrite()) {
                 sFunc(TEvents::TEvPoison, PassAway);
                 hFunc(TEvPrivate::TEvReadStepSubscribed, Handle);

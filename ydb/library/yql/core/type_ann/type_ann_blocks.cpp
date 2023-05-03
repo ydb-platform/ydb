@@ -100,6 +100,7 @@ IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& inpu
 }
 
 IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -114,29 +115,24 @@ IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TE
 
     bool firstIsScalar;
     auto firstItemType = GetBlockItemType(*first->GetTypeAnn(), firstIsScalar);
-    bool firstIsOptional = firstItemType->GetKind() == ETypeAnnotationKind::Optional;
-    firstItemType = RemoveOptionalType(firstItemType);
-
-    bool secondIsScalar;
-    auto secondItemType = GetBlockItemType(*second->GetTypeAnn(), secondIsScalar);
-    bool secondIsOptional = secondItemType->GetKind() == ETypeAnnotationKind::Optional;
-    secondItemType = RemoveOptionalType(secondItemType);
-
-    if (!IsSameAnnotation(*firstItemType, *secondItemType)) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
-            "Mismatch item types: first is " << *firstItemType << ", second is " << *secondItemType));
+    if (firstItemType->GetKind() != ETypeAnnotationKind::Optional && firstItemType->GetKind() != ETypeAnnotationKind::Pg) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(first->Pos()), TStringBuilder() <<
+            "Expecting Optional or Pg type as first argument, but got: " << *firstItemType));
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!firstIsOptional) {
-        output = input->HeadPtr();
-        return IGraphTransformer::TStatus::Repeat;
+    bool secondIsScalar;
+    auto secondItemType = GetBlockItemType(*second->GetTypeAnn(), secondIsScalar);
+
+    if (!IsSameAnnotation(*firstItemType, *secondItemType) &&
+        !IsSameAnnotation(*RemoveOptionalType(firstItemType), *secondItemType))
+    {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
+            "Uncompatible coalesce types: first is " << *firstItemType << ", second is " << *secondItemType));
+        return IGraphTransformer::TStatus::Error;
     }
 
     auto outputItemType = secondItemType;
-    if (secondIsOptional) {
-        outputItemType = ctx.Expr.MakeType<TOptionalExprType>(outputItemType);
-    }
     if (firstIsScalar && secondIsScalar) {
         input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(outputItemType));
     } else {

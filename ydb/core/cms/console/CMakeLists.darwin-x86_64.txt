@@ -7,6 +7,7 @@
 
 
 add_subdirectory(ut)
+add_subdirectory(util)
 add_subdirectory(validators)
 add_subdirectory(yaml_config)
 
@@ -37,7 +38,6 @@ target_link_libraries(core-cms-console PUBLIC
 )
 target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/config_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/config_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher.cpp
@@ -52,6 +52,7 @@ target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__cleanup_subscriptions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__configure.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__create_tenant.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__drop_yaml_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__init_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__load_state.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__get_log_tail.cpp

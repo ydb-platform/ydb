@@ -14,7 +14,6 @@ target_include_directories(ydb-core-tablet_flat-ut_util PRIVATE
 target_link_libraries(ydb-core-tablet_flat-ut_util PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-tablet_flat
@@ -68,5 +67,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-tablet_flat-ut_util
+  system_allocator
 )
 vcs_info(ydb-core-tablet_flat-ut_util)

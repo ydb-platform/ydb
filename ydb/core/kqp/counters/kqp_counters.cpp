@@ -1167,6 +1167,10 @@ const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::RecompileReques
     return TKqpCountersBase::CompileRequestsRecompile;
 }
 
+const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetActiveSessionActors() const {
+    return TKqpCountersBase::ActiveSessionActors;
+}
+
 ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetQueryTypeCounter(
     NKikimrKqp::EQueryType queryType)
 {

@@ -1375,7 +1375,7 @@ public:
         TBase::Become(&TDerived::StateWork);
     }
 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext&) {
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
             hFunc(TEvTicketParser::TEvRefreshTicket, Handle);

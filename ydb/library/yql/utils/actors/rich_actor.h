@@ -10,7 +10,7 @@ namespace NYql {
 template<typename TDerived>
 class TRichActor: public NActors::TActor<TDerived> {
 public:
-    TRichActor(void (TDerived::*func)(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx))
+    TRichActor(void (TDerived::*func)(TAutoPtr<NActors::IEventHandle>& ev))
         : NActors::TActor<TDerived>(func)
     { }
 

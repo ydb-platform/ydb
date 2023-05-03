@@ -238,16 +238,43 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
             case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_SPACE: {
                 NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy balanceStrategy = Hive.CurrentConfig.GetStorageBalanceStrategy();
                 Hive.CurrentConfig.SetStorageBalanceStrategy(NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_SIZE);
-                auto result = storagePool->FindFreeAllocationUnit([params = *params, currentGroup](const TStorageGroupInfo& newGroup) -> bool {
+                double maxUsage = 0;
+                auto filterBySpace = [params = *params, currentGroup, &maxUsage](const TStorageGroupInfo& newGroup) -> bool {
                     if (newGroup.IsMatchesParameters(params)) {
                         if (currentGroup) {
-                            return newGroup.Id != currentGroup->Id
-                                    && newGroup.GroupParameters.GetAvailableSize() > currentGroup->GroupParameters.GetAvailableSize();
+                            double currentMaximumSize = 1.0;
+                            double newMaximumSize = 1.0;
+                            if (newGroup.MaximumSize != 0 && currentGroup->MaximumSize != 0) {
+                                currentMaximumSize = currentGroup->MaximumSize;
+                                newMaximumSize = newGroup.MaximumSize;
+                            }
+                            bool result = newGroup.Id != currentGroup->Id
+                                          && newGroup.GroupParameters.GetAvailableSize() * currentMaximumSize
+                                          > currentGroup->GroupParameters.GetAvailableSize() * newMaximumSize;
+                            if (result) {
+                                maxUsage = std::max(maxUsage, newGroup.GetUsage());
+                            }
+                            return result;
                         }
+                        maxUsage = std::max(maxUsage, newGroup.GetUsage());
                         return true;
                     }
                     return false;
-                });
+                };
+                double spacePenaltyThreshold = Hive.GetSpaceUsagePenaltyThreshold();
+                double spacePenalty = Hive.GetSpaceUsagePenalty();
+                auto calculateUsageWithSpacePenalty = [currentGroup, &maxUsage, spacePenaltyThreshold, spacePenalty](const TStorageGroupInfo* newGroup) -> double {
+                    double usage = newGroup->GetUsage();
+                    if (currentGroup && currentGroup->MaximumSize) {
+                        if (newGroup->GroupParameters.GetAvailableSize() * currentGroup->MaximumSize
+                            < spacePenaltyThreshold * currentGroup->GroupParameters.GetAvailableSize() * newGroup->MaximumSize) {
+                            double avail = maxUsage - usage;
+                            usage = maxUsage - avail * spacePenalty;
+                        }
+                    }
+                    return usage;
+                };
+                auto result = storagePool->FindFreeAllocationUnit(filterBySpace, calculateUsageWithSpacePenalty);
                 Hive.CurrentConfig.SetStorageBalanceStrategy(balanceStrategy);
                 return result;
                 break;

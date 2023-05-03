@@ -74,7 +74,7 @@ STFUNC(TMeteringWriteActor::StateWork)
         HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
         HFunc(TEvMetering::TEvWriteMeteringJson, HandleWriteMeteringJson);
     default:
-        HandleUnexpectedEvent(ev, ctx);
+        HandleUnexpectedEvent(ev);
         break;
     }
 }
@@ -100,8 +100,6 @@ void TMeteringWriteActor::HandleWriteMeteringJson(
 
 void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 {
-    Y_UNUSED(ctx);
-
     LOG_W("TMeteringWriteActor:"
           << " unhandled event type: " << ev->GetTypeRewrite()
           << " event: " << ev->ToString());

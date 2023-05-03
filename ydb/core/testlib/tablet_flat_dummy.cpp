@@ -120,14 +120,14 @@ public:
     {}
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, ctx);
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, Handle);
             default:
-                HandleDefaultEvents(ev, ctx);
+                HandleDefaultEvents(ev, SelfId());
                 break;
         }
     }

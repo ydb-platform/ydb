@@ -17,7 +17,6 @@ target_include_directories(ydb-core-tx-schemeshard-ut_ttl PRIVATE
 target_link_libraries(ydb-core-tx-schemeshard-ut_ttl PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
@@ -74,5 +73,8 @@ set_yunittest_property(
   PROPERTY
   TIMEOUT
   600
+)
+target_allocator(ydb-core-tx-schemeshard-ut_ttl
+  system_allocator
 )
 vcs_info(ydb-core-tx-schemeshard-ut_ttl)

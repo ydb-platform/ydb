@@ -2306,6 +2306,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
             "<main>:1:17: Error: Column `subkey` must either be a key column in GROUP BY or it should be used in aggregation function\n");
     }
 
+    Y_UNIT_TEST(SelectDistinctWithBadAggregation) {
+        ExpectFailWithError("select distinct count(*), 1 + key from plato.Input",
+            "<main>:1:31: Error: Column `key` must either be a key column in GROUP BY or it should be used in aggregation function\n");
+        ExpectFailWithError("select distinct key, 2 * subkey from plato.Input group by key",
+            "<main>:1:26: Error: Column `subkey` must either be a key column in GROUP BY or it should be used in aggregation function\n");
+    }
+
     Y_UNIT_TEST(SelectWithBadAggregationInHaving) {
         ExpectFailWithError("select key from plato.Input group by key\n"
                             "having \"f\" || value == \"foo\"",
@@ -3796,6 +3803,14 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: Named subquery can not be used as a top level statement in libraries\n");
     }
+
+    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
+        NSQLTranslation::TTranslationSettings settings;
+        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
@@ -4782,12 +4797,31 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
     }
 
-    Y_UNIT_TEST(NoDeclareOverrides) {
+    Y_UNIT_TEST(DeclareOverrides) {
         NSQLTranslation::TTranslationSettings settings;
         settings.DeclaredNamedExprs["foo"] = "String";
         auto res = SqlToYqlWithSettings("declare $foo as Int32; select $foo;", settings);
         UNIT_ASSERT(res.IsOk());
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:9: Warning: Duplicate declaration of '$foo' will be ignored, code: 4536\n");
+        UNIT_ASSERT(res.Issues.Size() == 0);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "declare") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'Int32)))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("declare"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
+    }
+
+    Y_UNIT_TEST(UnusedDeclareDoesNotProduceWarning) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.DeclaredNamedExprs["foo"] = "String";
+        auto res = SqlToYqlWithSettings("select 1;", settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
@@ -4809,14 +4843,6 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
             "<main>:0:5: Error: Unknown type: 'BadType'\n"
             "<main>: Error: Failed to parse type for externally declared name 'foo'\n");
-    }
-
-    Y_UNIT_TEST(SelectingFromMonitoringIsNotAllowed) {
-        NSQLTranslation::TTranslationSettings settings;
-        auto res = SqlToYqlWithSettings("select * from mon.zzz;", settings);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:15: Error: Selecting data from monitoring source is not supported\n");
     }
 }
 
@@ -5192,5 +5218,117 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TopicsDDL) {
+    void TestQuery(const TString& query, bool expectOk = true) {
+        TStringBuilder finalQuery;
+
+        finalQuery << "use plato;" << Endl << query;
+        auto res = SqlToYql(finalQuery, 10, "kikimr");
+        if (expectOk) {
+            UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+        } else {
+            UNIT_ASSERT(!res.IsOk());
+        }
+    }
+
+    Y_UNIT_TEST(CreateTopicSimple) {
+        TestQuery(R"(
+            CREATE TOPIC topic1;
+        )");
+        TestQuery(R"(
+            CREATE TOPIC `cluster1.topic1`;
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
+        )");
+    }
+
+    Y_UNIT_TEST(CreateTopicConsumer) {
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1);
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false));
+        )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false)) WITH (supported_codecs = "1,2,3");
+        )");
+    }
+
+    Y_UNIT_TEST(AlterTopicSimple) {
+        TestQuery(R"(
+            ALTER TOPIC topic1 SET (retention_period = Interval('PT1H'));
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 SET (retention_storage_mb = 3, partition_count_limit = 50);
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
+        )");
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET (partition_write_speed_bytes_per_second),
+                 SET (partition_write_burst_bytes = 11111, min_active_partitions = 1);
+        )");
+    }
+    Y_UNIT_TEST(AlterTopicConsumer) {
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER consumer1,
+                ADD CONSUMER consumer2 WITH (important = false, supported_codecs = "RAW"),
+                ALTER CONSUMER consumer3 SET (important = false, read_from = 1),
+                ALTER CONSUMER consumer3 RESET (supported_codecs),
+                DROP CONSUMER consumer4,
+                SET (partition_count_limit = 11, retention_period = Interval('PT1H')),
+                RESET(metering_mode)
+        )");
+    }
+    Y_UNIT_TEST(DropTopic) {
+        TestQuery(R"(
+            DROP TOPIC topic1;
+        )");
+    }
+
+    Y_UNIT_TEST(TopicBadRequests) {
+        TestQuery(R"(
+            CREATE TOPIC topic1();
+        )", false);
+        TestQuery(R"(
+            CREATE TOPIC topic1 SET setting1 = value1;
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 SET setting1 value1;
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 RESET setting1;
+        )", false);
+
+        TestQuery(R"(
+            ALTER TOPIC topic1 DROP CONSUMER consumer4 WITH (k1 = v1);
+        )", false);
+
+        TestQuery(R"(
+            CREATE TOPIC topic1 WITH (retention_period = 123);
+        )", false);
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
+        )", false);
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER consumer1,
+                ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
+                ALTER CONSUMER consumer3 RESET (supported_codecs);
+        )", false);
+        TestQuery(R"(
+            ALTER TOPIC topic1 ADD CONSUMER consumer1,
+                ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
+                ALTER CONSUMER consumer3 SET (read_from = 2);
+        )", false);
     }
 }

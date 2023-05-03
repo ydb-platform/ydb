@@ -303,6 +303,7 @@ namespace {
                             }
                         }
                     }
+                    builder.IsStrict();
                 }
 
                 if (name == AddValueName) {
@@ -317,6 +318,7 @@ namespace {
                             }
                         }
                     }
+                    builder.IsStrict();
                 }
 
                 if (name == MergeName) {
@@ -331,6 +333,7 @@ namespace {
                             }
                         }
                     }
+                    builder.IsStrict();
                 }
 
                 if (name == SerializeName) {
@@ -345,6 +348,7 @@ namespace {
                             }
                         }
                     }
+                    builder.IsStrict();
                 }
 
                 if (name == DeserializeName) {
@@ -377,6 +381,7 @@ namespace {
                             }
                         }
                     }
+                    builder.IsStrict();
                 }
 
             } catch (const std::exception& e) {

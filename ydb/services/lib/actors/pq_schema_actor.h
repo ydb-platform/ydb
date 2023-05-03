@@ -120,6 +120,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             , TopicPath(topicPath)
         {
         }
+        TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx* request)
+            : TBase(request)
+            , TopicPath(TBase::GetProtoRequest()->path())
+        {
+            //auto path = TBase::GetProtoRequest()->path();
+        }
 
         TString GetTopicPath(const NActors::TActorContext& ctx) {
             auto path = NPersQueue::GetFullTopicPath(ctx, this->Request_->GetDatabaseName(), TopicPath);
@@ -201,12 +207,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (ev->Get()->Request.Get()->ResultSet.size() != 1 ||
                 ev->Get()->Request.Get()->ResultSet.begin()->Kind !=
                 NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                this->Request_->RaiseIssue(
-                    FillIssue(
-                              TStringBuilder() << "path '" << path << "' is not a stream",
-                              Ydb::PersQueue::ErrorCode::VALIDATION_ERROR
-                              )
-                    );
+                this->Request_->RaiseIssue(FillIssue(TStringBuilder() << "path '" << path << "' is not a topic",
+                                                     Ydb::PersQueue::ErrorCode::VALIDATION_ERROR));
                 TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                 return true;
             }
@@ -331,10 +333,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             IsDead = true;
         }
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
             }
         }
 
@@ -354,6 +356,9 @@ namespace NKikimr::NGRpcProxy::V1 {
     public:
         TUpdateSchemeActor(NGRpcService::IRequestOpCtx* request, const TString& topicPath)
             : TBase(request, topicPath)
+        {}
+        TUpdateSchemeActor(NGRpcService::IRequestOpCtx* request)
+            : TBase(request)
         {}
         ~TUpdateSchemeActor() = default;
 
@@ -409,7 +414,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (status ==  TEvTxUserProxy::TResultStatus::ExecError && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPreconditionFailed)
             {
                 return TBase::ReplyWithError(Ydb::StatusIds::OVERLOADED,
-                                                         Ydb::PersQueue::ErrorCode::ERROR,
+                                                         Ydb::PersQueue::ErrorCode::OVERLOAD,
                                                          TStringBuilder() << "Topic with name " << TBase::GetTopicPath(ctx) << " has another alter in progress",
                                                          ctx);
             }
@@ -417,10 +422,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             return TBase::TBase::Handle(ev, ctx);
         }
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-                default: TBase::StateWork(ev, ctx);
+                default: TBase::StateWork(ev);
             }
         }
 

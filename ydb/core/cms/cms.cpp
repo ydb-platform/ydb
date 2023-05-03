@@ -67,9 +67,8 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
     Die(ctx);
 }
 
-void TCms::Enqueue(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
+void TCms::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    Y_UNUSED(ctx);
     InitQueue.push(ev);
 }
 
@@ -84,10 +83,7 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem}, ctx.SelfID);
 }
 
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
@@ -377,7 +373,7 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
     }
 
     if (!AppData(ctx)->DisableCheckingSysNodesCms &&
-        !CheckSysTabletsNode(action, opts, node, error)) {
+        !CheckSysTabletsNode(opts, node, error)) {
         return false;
     }
 
@@ -537,8 +533,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     return true;
 }
 
-bool TCms::CheckSysTabletsNode(const TAction &action,
-                               const TActionOptions &opts,
+bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
                                const TNodeInfo &node,
                                TErrorInfo &error) const
 {
@@ -547,55 +542,12 @@ bool TCms::CheckSysTabletsNode(const TAction &action,
     }
 
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
-            ui32 disabledNodesCnt = 1; // сounting including this node
-            TErrorInfo err;
-            TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
-            TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-
-            for (auto &nodeId : ClusterInfo->TabletTypeToNodes[tabletType]) {
-                if (nodeId == node.NodeId) {
-                    continue;
-                }
-                if (ClusterInfo->Node(nodeId).IsLocked(err, State->Config.DefaultRetryTime,
-                                                       TActivationContext::Now(), duration) ||
-                    ClusterInfo->Node(nodeId).IsDown(err, defaultDeadline))
-                {
-                    ++disabledNodesCnt;
-                }
-            }
-
-            ui32 tabletNodes = ClusterInfo->TabletTypeToNodes[tabletType].size();
-            switch (opts.AvailabilityMode) {
-                case MODE_MAX_AVAILABILITY:
-                    if (tabletNodes > 1 && disabledNodesCnt * 2 > tabletNodes){
-                        error.Code = TStatus::DISALLOW_TEMP;
-                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType)
-                                                        << " has too many locked nodes: " << disabledNodesCnt
-                                                        << " limit: " << tabletNodes / 2 << " (50%)";
-                        error.Deadline = defaultDeadline;
-                        return false;
-                    }
-                    break;
-                case MODE_KEEP_AVAILABLE:
-                    if (tabletNodes > 1 && disabledNodesCnt > tabletNodes - 1) {
-                        error.Code = TStatus::DISALLOW_TEMP;
-                        error.Reason = TStringBuilder() << NKikimrConfig::TBootstrap_ETabletType_Name(tabletType)
-                                                        << " has too many locked nodes: " << disabledNodesCnt
-                                                        << ". At least one node must be available";
-                        error.Deadline = defaultDeadline;
-                        return false;
-                    }
-                    break;
-                case MODE_FORCE_RESTART:
-                    break;
-                default:
-                    error.Code = TStatus::WRONG_REQUEST;
-                    error.Reason = Sprintf("Unknown availability mode: %s (%" PRIu32 ")",
-                                   EAvailabilityMode_Name(opts.AvailabilityMode).data(),
-                                   static_cast<ui32>(opts.AvailabilityMode));
-                    error.Deadline = defaultDeadline;
-                    return false;
-            }
+        if (!ClusterInfo->SysNodesCheckers[tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode)) {
+            error.Code = TStatus::DISALLOW_TEMP;
+            error.Reason = ClusterInfo->SysNodesCheckers[tabletType]->ReadableReason(node.NodeId, opts.AvailabilityMode);
+            error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+            return false;
+        }
     }
 
     return true;
@@ -609,12 +561,10 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    bool isForceRestart = opts.AvailabilityMode == NKikimrCms::MODE_FORCE_RESTART;
-
-    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, isForceRestart))
+    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode))
     {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = ClusterInfo->ClusterNodes->ReadableReason();
+        error.Reason = ClusterInfo->ClusterNodes->ReadableReason(node.NodeId, opts.AvailabilityMode);
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
         return false;
@@ -622,10 +572,10 @@ bool TCms::TryToLockNode(const TAction& action,
 
     if (node.Tenant
         && opts.TenantPolicy != NONE
-        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, isForceRestart))
+        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode))
     {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = ClusterInfo->TenantNodesChecker[node.Tenant]->ReadableReason();
+        error.Reason = ClusterInfo->TenantNodesChecker[node.Tenant]->ReadableReason(node.NodeId, opts.AvailabilityMode);
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
         return false;
@@ -979,6 +929,8 @@ void TCms::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::Cleanup");
 
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
+
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvents::TEvPoisonPill);
 }
@@ -1258,15 +1210,15 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
     TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Add(1);
 }
 
-void TCms::StartCollecting(const TActorContext &ctx)
+void TCms::StartCollecting()
 {
     Y_VERIFY(Queue.empty());
     std::swap(NextQueue, Queue);
 
-    InfoCollectorStartTime = ctx.Now();
+    InfoCollectorStartTime = TActivationContext::Now();
 
     auto collector = CreateInfoCollector(SelfId(), State->Config.InfoCollectionTimeout);
-    ctx.ExecutorThread.RegisterActor(collector);
+    Register(collector);
 }
 
 void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx)
@@ -1338,23 +1290,29 @@ void TCms::PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx
     }
 }
 
-void TCms::ProcessQueue(const TActorContext &ctx)
+void TCms::ProcessQueue()
 {
-    while (!Queue.empty()) {
-        TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((ctx.Now() - Queue.front().ArrivedTime).MilliSeconds());
+    // To avoid getting stuck in the processing queue for too long,
+    // we'll process queue by one.
+    if (!Queue.empty()) {
+        TabletCounters->Percentile()[COUNTER_LATENCY_REQUEST_QUEUING].IncrementFor((TActivationContext::Now() - Queue.front().ArrivedTime).MilliSeconds());
         TabletCounters->Simple()[COUNTER_REQUESTS_QUEUE_SIZE].Sub(1);
 
-        ProcessRequest(Queue.front().Request, ctx);
+        ProcessRequest(Queue.front().Request);
         Queue.pop();
     }
 
-    // Process events received while collecting
-    if (!NextQueue.empty()) {
-        StartCollecting(ctx);
+    // Process events received while collecting and processing queue
+    if (Queue.empty() && !NextQueue.empty()) {
+        StartCollecting();
+    }
+
+    if (!Queue.empty()) {
+        Send(SelfId(), new TEvPrivate::TEvProcessQueue);
     }
 }
 
-void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
+void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
 {
     TRACE_EVENT(NKikimrServices::CMS);
     switch (ev->GetTypeRewrite()) {
@@ -1406,7 +1364,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
         }
 
         ClusterInfo->SetOutdated(true);
-        ProcessQueue(ctx);
+        ProcessQueue();
         return;
     }
 
@@ -1422,6 +1380,9 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     // We need to generate NodeCheckers after MigrateOldInfo to get
     // all the information about the tenants on the disconnected nodes
     info->GenerateTenantNodesCheckers();
+
+    if (!AppData(ctx)->DisableCheckingSysNodesCms)
+        info->GenerateSysTabletsNodesCheckers();
 
     AdjustInfo(info, ctx);
 
@@ -1449,7 +1410,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
 
     TabletCounters->Simple()[COUNTER_BOOTSTRAP_DIFFERS].Set(ClusterInfo->IsLocalBootConfDiffersFromConsole);
 
-    ProcessQueue(ctx);
+    ProcessQueue();
 }
 
 void TCms::Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx)
@@ -1970,7 +1931,14 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
 {
-    Execute(CreateTxUpdateConfig(ev), ctx);
+    if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
+        Execute(CreateTxUpdateConfig(ev), ctx);
+    } else {
+        // ignore and immediately ack messages from old persistent console subscriptions
+        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

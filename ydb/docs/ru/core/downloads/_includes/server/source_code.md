@@ -1,9 +1,9 @@
-Версия |  Дата выпуска | Ссылка
-:--- | :--- | :---
+Версия |  Дата выпуска | Ссылка | Список изменений
+:--- | :--- | :--- | :---
 **v22.5**
-v.22.5.10 | 09.02.23 | [https://github.com/ydb-platform/ydb/tree/22.5.10](https://github.com/ydb-platform/ydb/tree/22.5.10)
+v.22.5.10 | 09.02.23 | [https://github.com/ydb-platform/ydb/tree/22.5.10](https://github.com/ydb-platform/ydb/tree/22.5.10) | [См. список](../../../changelog-server.md#22-5)
 **v22.4**
-v.22.4.44 | 28.11.22 | [https://github.com/ydb-platform/ydb/tree/22.4.44](https://github.com/ydb-platform/ydb/tree/22.4.44)
+v.22.4.44 | 28.11.22 | [https://github.com/ydb-platform/ydb/tree/22.4.44](https://github.com/ydb-platform/ydb/tree/22.4.44) | [См. список](../../../changelog-server.md#22-4)
 v.22.4.31 | 23.10.22 | [https://github.com/ydb-platform/ydb/tree/22.4.31](https://github.com/ydb-platform/ydb/tree/22.4.31)
 v.22.4.30 | 09.10.22 | [https://github.com/ydb-platform/ydb/tree/22.4.30](https://github.com/ydb-platform/ydb/tree/22.4.30)
 v.22.4.21 | 03.10.22 | [https://github.com/ydb-platform/ydb/tree/22.4.21](https://github.com/ydb-platform/ydb/tree/22.4.21)

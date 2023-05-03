@@ -78,6 +78,7 @@ namespace NKikimr::NBsController {
         group->VirtualGroupName = cmd.GetName();
         group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
         group->HiveId = cmd.GetHiveId();
+        group->NeedAlter = true;
 
         if (cmd.GetBlobDepotId()) {
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::WORKING;
@@ -195,7 +196,7 @@ namespace NKikimr::NBsController {
         } else {
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::DELETING;
-            group->NeedAlter = false;
+            group->NeedAlter = true;
         }
     }
 
@@ -482,6 +483,7 @@ namespace NKikimr::NBsController {
             } else {
                 Self->Execute(std::make_unique<TTxUpdateGroup>(this, [&](TGroupInfo& group) {
                     group.VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED;
+                    group.NeedAlter = false;
                     group.ErrorReason = TStringBuilder() << "failed to create BlobDepot tablet"
                         << " Reason# " << NKikimrHive::EErrorReason_Name(record.GetErrorReason())
                         << " Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
@@ -621,31 +623,34 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::CommitVirtualGroupUpdates(TConfigState& state) {
         for (const auto& [base, overlay] : state.Groups.Diff()) {
-            TGroupInfo *group = overlay->second.Get();
-            auto startSetupMachine = [this, group, &state](bool restart) {
-                Y_VERIFY(group);
-                if (restart && group->VirtualGroupSetupMachineId) {
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0,
-                        std::exchange(group->VirtualGroupSetupMachineId, {}), {}, nullptr, 0));
-                }
-                if (group->VirtualGroupState && !group->VirtualGroupSetupMachineId) {
-                    state.Callbacks.push_back(std::bind(&TThis::StartVirtualGroupSetupMachine, this, group));
-                }
+            auto startSetupMachine = [this, &state, groupId = overlay->first](bool restart) {
+                state.Callbacks.push_back([this, restart, groupId = groupId] {
+                    TGroupInfo *group = FindGroup(groupId);
+                    Y_VERIFY(group);
+                    if (restart && group->VirtualGroupSetupMachineId) { // terminate currently running machine
+                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(
+                            group->VirtualGroupSetupMachineId, {}), {}, nullptr, 0));
+                    }
+                    // start new one, if required
+                    if (!group->VirtualGroupSetupMachineId) {
+                        StartVirtualGroupSetupMachine(group);
+                    }
+                });
             };
 
-            if (!base) { // new group was created
-                startSetupMachine(false);
-            } else if (!overlay->second) { // existing group was just deleted
-                if (base->second->VirtualGroupSetupMachineId) {
-                    state.Callbacks.push_back([actorId = base->second->VirtualGroupSetupMachineId] {
+            if (!overlay->second || !overlay->second->VirtualGroupState) { // existing group was just deleted (or became non-virtual)
+                if (const TActorId actorId = base ? base->second->VirtualGroupSetupMachineId : TActorId()) {
+                    state.Callbacks.push_back([actorId] {
                         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
                     });
                 }
-            } else if (overlay->second->NeedAlter.GetOrElse(false)) {
-                startSetupMachine(false);
-            } else if (base->second->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::DELETING &&
-                    overlay->second->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::DELETING) {
-                startSetupMachine(true);
+            } else if (overlay->second->NeedAlter && *overlay->second->NeedAlter) {
+                // we need to terminate currently running machine only if we are *initiating* blob depot deletion
+                const bool restartNeeded = base &&
+                    base->second->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::DELETING &&
+                    overlay->second->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::DELETING;
+
+                startSetupMachine(restartNeeded);
             }
         }
     }

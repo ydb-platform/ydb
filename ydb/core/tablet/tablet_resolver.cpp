@@ -863,7 +863,7 @@ public:
             HFunc(TEvPrivate::TEvRefreshNodes, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             default:
-                LOG_WARN(ctx, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32
+                LOG_WARN(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER, "TTabletResolver::StateWork unexpected event type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }

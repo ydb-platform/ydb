@@ -31,7 +31,7 @@ View the description of the delete consumer command:
 Delete the [previously created](#consumer-add) consumer with the `my-consumer` name for the `my-topic` topic:
 
 ```bash
-{{ ydb-cli }} -p db1 topic consumer drop \
+{{ ydb-cli }} -p quickstart topic consumer drop \
   --consumer my-consumer \
   my-topic
 ```

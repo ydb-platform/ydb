@@ -15,8 +15,6 @@ target_link_libraries(ydbd PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  contrib-libs-tcmalloc
   library-cpp-cpuid_check
   hyperscan_udf
   run
@@ -65,5 +63,9 @@ target_sources(ydbd PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/sqs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
+)
+target_allocator(ydbd
+  cpp-malloc-tcmalloc
+  contrib-libs-tcmalloc
 )
 vcs_info(ydbd)

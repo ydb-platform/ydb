@@ -14,7 +14,6 @@ target_include_directories(ydb-library-yql-utils-actors-ut PRIVATE
 target_link_libraries(ydb-library-yql-utils-actors-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-system
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-utils-actors
@@ -62,5 +61,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-utils-actors-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-utils-actors-ut)

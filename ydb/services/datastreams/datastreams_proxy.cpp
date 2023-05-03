@@ -76,7 +76,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                 const TString& workingDir, const TString& name);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     };
@@ -176,16 +176,16 @@ namespace NKikimr::NDataStreams::V1 {
         {
             return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
                                   static_cast<size_t>(NYds::EErrorCodes::IN_USE),
-                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " is already exists",
+                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " already exists",
                                   ctx);
         }
         return TBase::TBase::Handle(ev, ctx);
     }
 
-    void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 
@@ -563,18 +563,18 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-                ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+                ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
             }
         }
 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
 
@@ -616,12 +616,12 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TDescribeStreamActor::StateWork);
     }
 
-    void TDescribeStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TDescribeStreamActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 
@@ -742,7 +742,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     protected:
@@ -847,10 +847,10 @@ namespace NKikimr::NDataStreams::V1 {
         SendPendingRequests(ctx);
     }
 
-    void TListStreamsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TListStreamsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 
@@ -908,7 +908,7 @@ namespace NKikimr::NDataStreams::V1 {
         ~TListStreamConsumersActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     protected:
@@ -966,9 +966,9 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TListStreamConsumersActor::StateWork);
     }
 
-    void TListStreamConsumersActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TListStreamConsumersActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev);
         }
     }
 
@@ -1175,7 +1175,7 @@ namespace NKikimr::NDataStreams::V1 {
         ~TGetShardIteratorActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
 
@@ -1242,9 +1242,9 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TGetShardIteratorActor::StateWork);
     }
 
-    void TGetShardIteratorActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TGetShardIteratorActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
+        default: TBase::StateWork(ev);
         }
     }
 
@@ -1321,7 +1321,7 @@ namespace NKikimr::NDataStreams::V1 {
         ~TGetRecordsActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
@@ -1407,13 +1407,13 @@ namespace NKikimr::NDataStreams::V1 {
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     }
 
-    void TGetRecordsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TGetRecordsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
-        default: TBase::StateWork(ev, ctx);
+        default: TBase::StateWork(ev);
         }
     }
 
@@ -1471,7 +1471,7 @@ namespace NKikimr::NDataStreams::V1 {
                         return;
                     default:
                         return ReplyWithError(ConvertPersQueueInternalCodeToStatus(record.GetErrorCode()),
-                                              static_cast<size_t>(NYds::EErrorCodes::ERROR),
+                                              ConvertOldCode(record.GetErrorCode()),
                                               record.GetErrorReason(), ctx);
                 }
                 break;
@@ -1516,13 +1516,13 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
     }
 
     void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+        ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 
@@ -1571,7 +1571,7 @@ namespace NKikimr::NDataStreams::V1 {
         ~TListShardsActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
@@ -1657,12 +1657,12 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TListShardsActor::StateWork);
     }
 
-    void TListShardsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TListShardsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-        default: TBase::StateWork(ev, ctx);
+        default: TBase::StateWork(ev);
         }
     }
 
@@ -1798,13 +1798,13 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+            ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
     }
 
     void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, static_cast<size_t>(NYds::EErrorCodes::ERROR),
+        ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 
@@ -1854,7 +1854,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void StateWork(TAutoPtr<IEventHandle>& ev);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
                                          const TActorContext& ctx);
 
@@ -1878,9 +1878,9 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TDescribeStreamSummaryActor::StateWork);
     }
 
-    void TDescribeStreamSummaryActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void TDescribeStreamSummaryActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-        default: TBase::StateWork(ev, ctx);
+        default: TBase::StateWork(ev);
         }
     }
 

@@ -43,7 +43,6 @@ public:
 
     STFUNC(FakeState) {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
         Y_FAIL("This class cannot be used directly. For tests inherit from it");
     }
 

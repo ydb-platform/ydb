@@ -12,11 +12,10 @@ target_link_libraries(pgwire PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   ydb-core-base
   ydb-core-pgproxy
+  ydb-core-protos
   api-grpc
   cpp-client-ydb_driver
   cpp-client-draft
@@ -36,5 +35,9 @@ target_sources(pgwire PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_connection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pg_ydb_proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/pgwire.cpp
+)
+target_allocator(pgwire
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(pgwire)

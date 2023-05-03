@@ -104,4 +104,3 @@ template<>
 inline void Out<NKikimr::NPDisk::TOwner>(IOutputStream& os, const NKikimr::NPDisk::TPrintable_ui8& x) {
     os << static_cast<ui64>(x);
 }
-

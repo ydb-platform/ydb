@@ -21,8 +21,14 @@ public:
     virtual bool IsEmpty() const = 0;
     virtual bool IsFull() const = 0;
 
-    // these methods can throw `TDqChannelStorageException`
+    // methods Put/Get can throw `TDqChannelStorageException`
+
+    // TODO: support IZeroCopyInput
     virtual void Put(ui64 blobId, TBuffer&& blob) = 0;
+
+    // TODO: there is no way for client to delete blob.
+    // It is better to replace Get() with Pull() which will delete blob after read
+    // (current clients read each blob exactly once)
     virtual bool Get(ui64 blobId, TBuffer& data)  = 0;
 };
 

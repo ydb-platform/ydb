@@ -126,7 +126,7 @@ def signature(script, name):
        (MatchType seq 'EmptyDict (lambda '() (EmptyList)) (lambda '() seq)))
 )))
 
-(let ToSet (lambda '(list) (ToDict list (lambda '(x) x) (lambda '(x) (Void)) '('Hashed 'One))))
+(let ToSet (lambda '(list) (ToDict list (lambda '(x) x) (lambda '(x) (Void)) '('Auto 'One))))
 (let SetIsDisjointImpl (lambda '(dict scan) (Not (HasItems (SkipWhile
     (Apply KeysImpl scan)
     (lambda '(item) (Not (Contains dict item))))))))
@@ -156,7 +156,7 @@ def signature(script, name):
         (let key (Nth p '0))
         (let lookup (Lookup y key))
         (return (Map lookup (lambda '(r) '(key (Apply f key (Nth p '1) r)))))
-    )))) (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Hashed 'One)
+    )))) (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Auto 'One)
     )
 )))
 
@@ -166,7 +166,7 @@ def signature(script, name):
 
 (let SetDifferenceImpl (lambda '(x y) (ToDict (Filter (DictItems x) (lambda '(p)
     (Not (Contains y (Nth p '0)))))
-    (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Hashed 'One) )))
+    (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Auto 'One) )))
 
 (let SetUnionImpl (lambda '(f)
     (lambda '(x y) (ToDict (Extend
@@ -181,7 +181,7 @@ def signature(script, name):
         (return (If (Exists lookup) (Null) '(key (Apply f key lookup (Just (Nth p '1)) ))))
         ))))
         )
-        (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Hashed 'One)
+        (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Auto 'One)
     )
 )))
 
@@ -198,7 +198,7 @@ def signature(script, name):
         (return (If (Exists lookup) (Null) '(key (Apply f key lookup (Just (Nth p '1)) ))))
         ))))
         )
-        (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Hashed 'One)
+        (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Auto 'One)
     )
 )))
 
@@ -236,7 +236,7 @@ def signature(script, name):
    '('('Data (Apply factory (StructType '('Data (ListItemType (DictPayloadType (TypeOf dict))))) (lambda '(x) (Member x 'Data)))))
    '('('compact))
 ) 
-(lambda '(x) (Member x 'Key)) (lambda '(x) (Member x 'Data)) '('Hashed 'One)
+(lambda '(x) (Member x 'Key)) (lambda '(x) (Member x 'Data)) '('Auto 'One)
 )))))
 
 (let DictAggregate (lambda '(dict factory) (MatchType dict 'Null (lambda '() (Null)) (lambda '() (MatchType dict 'Optional

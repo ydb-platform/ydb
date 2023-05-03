@@ -39,8 +39,8 @@ bool PrepareSchemaPreset(NKikimrSchemeOp::TColumnTableSchemaPreset& proto, TOlap
         return false;
     }
     proto.Clear();
-    preset.Serialize(proto); 
-    
+    preset.Serialize(proto);
+
     store.Description.SetNextSchemaPresetId(presetId + 1);
     store.SchemaPresetByName[preset.GetName()] = preset.GetId();
     store.SchemaPresets[preset.GetId()] = std::move(preset);
@@ -153,7 +153,7 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores[txState->TargetPathId];
         Y_VERIFY(pendingInfo);
         Y_VERIFY(pendingInfo->AlterData);
@@ -165,7 +165,7 @@ public:
             auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
-            
+
             NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
             Y_VERIFY(path.IsResolved());
 
@@ -234,7 +234,7 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -277,7 +277,7 @@ public:
                      DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -312,7 +312,7 @@ public:
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -329,7 +329,7 @@ public:
                      DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         txState->ClearShardsInProgress();
 
         for (auto& shard : txState->Shards) {
@@ -482,6 +482,12 @@ public:
         if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
+            return result;
+        }
+
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
             return result;
         }
 

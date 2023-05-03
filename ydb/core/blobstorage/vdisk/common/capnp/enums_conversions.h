@@ -200,7 +200,7 @@ namespace NKikimrCapnProtoUtil {
             case NKikimrCapnProto::EVDiskInternalQueueId::IntEnd:
                 return NKikimrBlobStorage::EVDiskInternalQueueId::IntEnd;
             default:
-                throw std::runtime_error("Invalid Protobuf EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));
+                throw std::runtime_error("Invalid CapnProto EVDiskInternalQueueId value: " + std::to_string(static_cast<int>(value)));
         }
     }
 

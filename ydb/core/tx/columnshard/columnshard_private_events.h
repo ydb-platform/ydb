@@ -72,7 +72,7 @@ struct TEvPrivate {
             GroupedBlobRanges = NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->SwitchedPortions);
 
             if (blobManager.HasExternBlobs()) {
-                for (auto& [blobId, _] : GroupedBlobRanges) {
+                for (const auto& [blobId, _] : GroupedBlobRanges) {
                     TEvictMetadata meta;
                     if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
                         Externals.insert(blobId);

@@ -110,13 +110,13 @@ bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo
     return true;
 }
 
-TVector<TPortionInfo> MakeAppendedPortions(ui64 pathId, const TIndexInfo& indexInfo,
-                                           std::shared_ptr<arrow::RecordBatch> batch,
-                                           ui64 granule,
+TVector<TPortionInfo> MakeAppendedPortions(const ui64 pathId, const TIndexInfo& indexInfo,
+                                           const std::shared_ptr<arrow::RecordBatch> batch,
+                                           const ui64 granule,
                                            const TSnapshot& minSnapshot,
                                            TVector<TString>& blobs) {
     Y_VERIFY(batch->num_rows());
-    auto schema = indexInfo.ArrowSchemaWithSpecials();
+    const auto schema = indexInfo.ArrowSchemaWithSpecials();
     TVector<TPortionInfo> out;
 
     TString tierName;
@@ -124,12 +124,12 @@ TVector<TPortionInfo> MakeAppendedPortions(ui64 pathId, const TIndexInfo& indexI
     if (pathId) {
         if (auto* tiering = indexInfo.GetTiering(pathId)) {
             tierName = tiering->GetHottestTierName();
-            if (auto tierCompression = tiering->GetCompression(tierName)) {
+            if (const auto& tierCompression = tiering->GetCompression(tierName)) {
                 compression = *tierCompression;
             }
         }
     }
-    auto writeOptions = WriteOptions(compression);
+    const auto writeOptions = WriteOptions(compression);
 
     std::shared_ptr<arrow::RecordBatch> portionBatch = batch;
     for (i32 pos = 0; pos < batch->num_rows();) {
@@ -143,7 +143,7 @@ TVector<TPortionInfo> MakeAppendedPortions(ui64 pathId, const TIndexInfo& indexI
         // Serialize portion's columns into blobs
 
         bool ok = true;
-        for (auto& field : schema->fields()) {
+        for (const auto& field : schema->fields()) {
             const auto& name = field->name();
             ui32 columnId = indexInfo.GetColumnId(TString(name.data(), name.size()));
 
@@ -171,7 +171,7 @@ TVector<TPortionInfo> MakeAppendedPortions(ui64 pathId, const TIndexInfo& indexI
                 portionBatch = batch->Slice(pos);
             }
         } else {
-            i64 halfLen = portionBatch->num_rows() / 2;
+            const i64 halfLen = portionBatch->num_rows() / 2;
             Y_VERIFY(halfLen);
             portionBatch = batch->Slice(pos, halfLen);
         }
@@ -211,7 +211,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
     {
         TMap<NArrow::TReplaceKey, TVector<const TPortionInfo*>> points;
 
-        for (auto& portionInfo : portions) {
+        for (const auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
                 ++insertedCount;
                 if (portionInfo.Snapshot().PlanStep > oldTimePlanStep) {
@@ -232,8 +232,8 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
         ui64 bucketStartPortion = 0;
         bool isGood = false;
         int sum = 0;
-        for (auto& [key, vec] : points) {
-            for (auto& portionInfo : vec) {
+        for (const auto& [key, vec] : points) {
+            for (const auto* portionInfo : vec) {
                 if (portionInfo) {
                     ++sum;
                     ui64 currentPortion = portionInfo->Portion();
@@ -285,7 +285,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
 
     TVector<TPortionInfo> tmp;
     tmp.reserve(portions.size());
-    for (auto& portionInfo : portions) {
+    for (const auto& portionInfo : portions) {
         ui64 curPortion = portionInfo.Portion();
 
         // Prevent merge of compacted portions with no intersections
@@ -1698,7 +1698,7 @@ static std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(const TIndexInfo&
 
 static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo,
                                          std::shared_ptr<TColumnEngineForLogs::TChanges> changes) {
-    ui64 pathId = changes->SrcGranule->PathId;
+    const ui64 pathId = changes->SrcGranule->PathId;
     TVector<TString> blobs;
     auto& switchedProtions = changes->SwitchedPortions;
     Y_VERIFY(switchedProtions.size());
@@ -1738,14 +1738,14 @@ static TVector<TString> CompactInGranule(const TIndexInfo& indexInfo,
 static TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
 SliceGranuleBatches(const TIndexInfo& indexInfo,
                     const TColumnEngineForLogs::TChanges& changes,
-                    std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches,
+                    const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                     const TMark& ts0) {
     TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>> out;
 
     // Extract unique effective keys and their counts
     i64 numRows = 0;
     TMap<NArrow::TReplaceKey, ui32> uniqKeyCount;
-    for (auto& batch : batches) {
+    for (const auto& batch : batches) {
         Y_VERIFY(batch);
         if (batch->num_rows() == 0) {
             continue;
@@ -1804,7 +1804,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
     // Find offsets in source batches
     TVector<TVector<int>> offsets(batches.size()); // vec[batch][border] = offset
     for (size_t i = 0; i < batches.size(); ++i) {
-        auto& batch = batches[i];
+        const auto& batch = batches[i];
         auto& batchOffsets = offsets[i];
         batchOffsets.reserve(borders.size() + 1);
 
@@ -1838,7 +1838,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
         // Extract granule: slice source batches with offsets
         i64 granuleNumRows = 0;
         for (size_t i = 0; i < batches.size(); ++i) {
-            auto& batch = batches[i];
+            const auto& batch = batches[i];
             auto& batchOffsets = offsets[i];
 
             int offset = batchOffsets[granuleNo];
@@ -1971,7 +1971,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
 
     std::vector<std::pair<TMark, ui64>> tsIds;
     ui64 movedRows = TryMovePortions(ts0, portions, tsIds, changes->PortionsToMove);
-    auto srcBatches = PortionsToBatches(indexInfo, portions, changes->Blobs, movedRows != 0);
+    const auto& srcBatches = PortionsToBatches(indexInfo, portions, changes->Blobs, movedRows != 0);
     Y_VERIFY(srcBatches.size() == portions.size());
 
     TVector<TString> blobs;
@@ -1983,7 +1983,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
 
         // Calculate total number of rows.
         ui64 numRows = movedRows;
-        for (auto& batch : srcBatches) {
+        for (const auto& batch : srcBatches) {
             numRows += batch->num_rows();
         }
 
@@ -2071,7 +2071,7 @@ static TVector<TString> CompactSplitGranule(const TIndexInfo& indexInfo,
             }
         }
     } else {
-        auto batches = SliceGranuleBatches(indexInfo, *changes, std::move(srcBatches), ts0);
+        auto batches = SliceGranuleBatches(indexInfo, *changes, srcBatches, ts0);
 
         changes->SetTmpGranule(pathId, ts0);
         for (auto& [ts, batch] : batches) {

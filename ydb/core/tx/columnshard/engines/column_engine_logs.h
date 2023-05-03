@@ -118,7 +118,7 @@ public:
 
         THashMap<ui64, ui64> TmpToNewGranules(ui64 start) {
             THashMap<ui64, ui64> granuleRemap;
-            for (auto& [mark, counter] : TmpGranuleIds) {
+            for (const auto& [mark, counter] : TmpGranuleIds) {
                 ui64 granule = start + counter;
                 if (mark == SrcGranule->Mark) {
                     Y_VERIFY(!counter);
@@ -132,14 +132,11 @@ public:
             return granuleRemap;
         }
 
-        ui32 NumSplitInto(ui32 srcRows) const {
+        ui32 NumSplitInto(const ui32 srcRows) const {
             Y_VERIFY(srcRows > 1);
-            ui64 totalBytes = TotalBlobsSize();
-            ui32 numSplitInto = totalBytes / Limits.GranuleExpectedSize + 1;
-            if (numSplitInto < 2) {
-                numSplitInto = 2;
-            }
-            return numSplitInto;
+            const ui64 totalBytes = TotalBlobsSize();
+            const ui32 numSplitInto = (totalBytes / Limits.GranuleExpectedSize) + 1;
+            return std::max<ui32>(2, numSplitInto);
         }
 
         TMark DefaultMark;

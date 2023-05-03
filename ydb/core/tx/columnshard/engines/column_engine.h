@@ -147,10 +147,10 @@ public:
     THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
     bool NeedRepeat{false};
 
-    bool IsInsert() const { return Type == INSERT; }
-    bool IsCompaction() const { return Type == COMPACTION; }
-    bool IsCleanup() const { return Type == CLEANUP; }
-    bool IsTtl() const { return Type == TTL; }
+    bool IsInsert() const noexcept { return Type == INSERT; }
+    bool IsCompaction() const noexcept { return Type == COMPACTION; }
+    bool IsCleanup() const noexcept { return Type == CLEANUP; }
+    bool IsTtl() const noexcept { return Type == TTL; }
 
     const char * TypeString() const {
         switch (Type) {
@@ -170,36 +170,38 @@ public:
 
     ui64 TotalBlobsSize() const {
         ui64 size = 0;
-        for (auto& [blobId, blob] : Blobs) {
+        for (const auto& [_, blob] : Blobs) {
             size += blob.size();
         }
         return size;
     }
 
+    /// Returns blob-ranges grouped by blob-id.
     static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
     GroupedBlobRanges(const TVector<TPortionInfo>& portions) {
         Y_VERIFY(portions.size());
 
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-        for (auto& portionInfo : portions) {
+        for (const auto& portionInfo : portions) {
             Y_VERIFY(!portionInfo.Empty());
 
-            for (auto& rec : portionInfo.Records) {
+            for (const auto& rec : portionInfo.Records) {
                 sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
             }
         }
         return sameBlobRanges;
     }
 
+    /// Returns blob-ranges grouped by blob-id.
     static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
     GroupedBlobRanges(const TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>>& portions) {
         Y_VERIFY(portions.size());
 
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-        for (auto& [portionInfo, _] : portions) {
+        for (const auto& [portionInfo, _] : portions) {
             Y_VERIFY(!portionInfo.Empty());
 
-            for (auto& rec : portionInfo.Records) {
+            for (const auto& rec : portionInfo.Records) {
                 sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
             }
         }

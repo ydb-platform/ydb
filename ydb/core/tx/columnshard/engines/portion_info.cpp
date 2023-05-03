@@ -18,7 +18,7 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
                                         const std::shared_ptr<arrow::Field>& field,
                                         TColumnRecord&& record,
                                         const arrow::ipc::IpcWriteOptions& writeOptions,
-                                        ui32 limitBytes) {
+                                        const ui32 limitBytes) {
     auto blob = SerializeColumn(array, field, writeOptions);
     if (blob.size() >= limitBytes) {
         return {};

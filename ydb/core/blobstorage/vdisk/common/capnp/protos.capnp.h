@@ -2807,16 +2807,16 @@ inline ::capnp::Orphan< ::NKikimrCapnProto_::TLogoBlobID> TRangeQuery::Builder::
 
 inline  ::uint64_t TRangeQuery::Reader::getCookie() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TRangeQuery::Builder::getCookie() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 inline void TRangeQuery::Builder::setCookie( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value, 18446744073699546569ull);
 }
 
 inline  ::uint32_t TRangeQuery::Reader::getMaxResults() const {
@@ -2902,16 +2902,16 @@ inline void TExtremeQuery::Builder::setSize( ::uint64_t value) {
 
 inline  ::uint64_t TExtremeQuery::Reader::getCookie() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TExtremeQuery::Builder::getCookie() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 inline void TExtremeQuery::Builder::setCookie( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TTabletData::Reader::getId() const {
@@ -3084,16 +3084,16 @@ inline void TEvVGet::Builder::setShowInternals(bool value) {
 
 inline  ::uint64_t TEvVGet::Reader::getCookie() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 
 inline  ::uint64_t TEvVGet::Builder::getCookie() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, 18446744073699546569ull);
 }
 inline void TEvVGet::Builder::setCookie( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value, 18446744073699546569ull);
 }
 
 inline bool TEvVGet::Reader::hasMsgQoS() const {

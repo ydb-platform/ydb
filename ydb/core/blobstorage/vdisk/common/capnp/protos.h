@@ -520,16 +520,15 @@ namespace NKikimrCapnProto {
             TLogoBlobID::Reader GetTo() const { return getTo(); }
             bool HasFrom() const { return hasFrom(); }
             bool HasTo() const { return hasTo(); }
-            bool HasCookie() const { return getCookie() != 0; }
+            bool HasCookie() const { return getCookie() != UNSET_UINT64; }
             bool HasMaxResults() const { return getMaxResults() != 0; }
             const NKikimrCapnProto_::TRangeQuery::Reader& GetCapnpBase() const { return *this; }
 
             std::string ShortDebugString() const {
                 TStringStream ss;
                 ss << "{ "
-                   << "#notifyIfNotReady " << GetCookie() << " "
-                   << "#showInternals " << GetMaxResults() << " "
                    << "#cookie " << GetCookie() << " "
+                   << "#maxResults " << GetMaxResults() << " "
                    << "#from " << GetFrom().ShortDebugString() << " "
                    << "#to " << GetTo().ShortDebugString() << " "
                    << " }";
@@ -567,7 +566,7 @@ namespace NKikimrCapnProto {
             bool HasId() const { return hasId(); }
             bool HasShift() const { return getShift() != 0; }
             bool HasSize() const { return getSize() != 0; }
-            bool HasCookie() const { return getCookie() != 0; }
+            bool HasCookie() const { return getCookie() != UNSET_UINT64; }
             const NKikimrCapnProto_::TExtremeQuery::Reader& GetCapnpBase() const { return *this; }
 
             std::string ShortDebugString() const {
@@ -681,7 +680,7 @@ namespace NKikimrCapnProto {
             bool HasHandleClass() const { return getHandleClass() != NKikimrCapnProto_::EGetHandleClass::NOT_SET; }
             bool HasNotifyIfNotReady() const { return getNotifyIfNotReady() != 0; }
             bool HasShowInternals() const { return getShowInternals() != 0; }
-            bool HasCookie() const { return getCookie() != 0; }
+            bool HasCookie() const { return getCookie() != UNSET_UINT64; }
             bool HasIndexOnly() const { return getIndexOnly() != 0; }
             bool HasSuppressBarrierCheck() const { return getSuppressBarrierCheck() != 0; }
             bool HasTabletId() const { return getTabletId() != 0; }

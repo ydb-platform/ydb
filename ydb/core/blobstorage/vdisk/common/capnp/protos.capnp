@@ -131,7 +131,7 @@ struct TLogoBlobID {
 struct TRangeQuery {
     from @0 :TLogoBlobID;
     to @1 :TLogoBlobID;
-    cookie @2 :UInt64;
+    cookie @2 :UInt64 = 18446744073699546569;
     maxResults @3 :UInt32;
 }
 
@@ -139,7 +139,7 @@ struct TExtremeQuery {
     id @0 :TLogoBlobID;
     shift @1 :UInt64;
     size @2 :UInt64;
-    cookie @3 :UInt64;
+    cookie @3 :UInt64 = 18446744073699546569;
 }
 
 struct TTabletData {
@@ -153,7 +153,7 @@ struct TEvVGet {
     vDiskID @2 :TVDiskID;
     notifyIfNotReady @3 :Bool;
     showInternals @4 :Bool;
-    cookie @5 :UInt64;
+    cookie @5 :UInt64 = 18446744073699546569;
     msgQoS @6 :TMsgQoS;
     indexOnly @7 :Bool = false;
     handleClass @8 :EGetHandleClass;

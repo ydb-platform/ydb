@@ -232,7 +232,7 @@ namespace NActors {
         ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
             Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
-        ReceiverId = Params.Encryption ? RegisterWithSameMailbox(actor.Release()) : Register(actor.Release(), TMailboxType::ReadAsFilled);
+        ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor
         LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
@@ -806,7 +806,7 @@ namespace NActors {
         Y_VERIFY(outgoingStreamSizeAfter == outgoingStreamSizeBefore + packetSize &&
             xdcStreamSizeAfter == xdcStreamSizeBefore + packet.GetExternalSize(),
             "outgoingStreamSizeBefore# %zu outgoingStreamSizeAfter# %zu packetSize# %zu"
-            " xdcStreamSizeBefore# %zu xdcStreamSizeAfter# %zu externalSize# %zu",
+            " xdcStreamSizeBefore# %zu xdcStreamSizeAfter# %zu externalSize# %" PRIu32,
             outgoingStreamSizeBefore, outgoingStreamSizeAfter, packetSize,
             xdcStreamSizeBefore, xdcStreamSizeAfter, packet.GetExternalSize());
 #endif
@@ -819,7 +819,7 @@ namespace NActors {
             });
         }
 
-        LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %zu"
+        LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %" PRIu32
             " InflightDataAmount# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(), InflightDataAmount);
 
         // reset forced packet sending timestamp as we have confirmed all received data

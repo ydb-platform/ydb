@@ -138,8 +138,15 @@ struct TTcpPacketOutTask : TNonCopyable {
     NInterconnect::TOutgoingStream& OutgoingStream;
     NInterconnect::TOutgoingStream& XdcStream;
     NInterconnect::TOutgoingStream::TBookmark HeaderBookmark;
-    size_t InternalSize = 0;
-    size_t ExternalSize = 0;
+    ui32 InternalSize = 0;
+    ui32 ExternalSize = 0;
+
+    ui32 PreBookmarkChecksum = 0;
+    ui32 InternalChecksum = 0;
+    ui32 InternalChecksumLen = 0;
+    bool InsideBookmark = false;
+
+    ui32 ExternalChecksum = 0;
 
     TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
             NInterconnect::TOutgoingStream& xdcStream)
@@ -151,6 +158,12 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     // Preallocate some space to fill it later.
     NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {
+        if (Checksumming()) {
+            Y_VERIFY_DEBUG(!InsideBookmark);
+            InsideBookmark = true;
+            PreBookmarkChecksum = std::exchange(InternalChecksum, 0);
+            InternalChecksumLen = 0;
+        }
         Y_VERIFY_DEBUG(len <= GetInternalFreeAmount());
         InternalSize += len;
         return OutgoingStream.Bookmark(len);
@@ -158,6 +171,12 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     // Write previously bookmarked space.
     void WriteBookmark(NInterconnect::TOutgoingStream::TBookmark&& bookmark, const void *buffer, size_t len) {
+        if (Checksumming()) {
+            Y_VERIFY_DEBUG(InsideBookmark);
+            InsideBookmark = false;
+            const ui32 bookmarkChecksum = Crc32cExtendMSanCompatible(PreBookmarkChecksum, buffer, len);
+            InternalChecksum = Crc32cCombine(bookmarkChecksum, InternalChecksum, InternalChecksumLen);
+        }
         OutgoingStream.WriteBookmark(std::move(bookmark), {static_cast<const char*>(buffer), len});
     }
 
@@ -177,6 +196,7 @@ struct TTcpPacketOutTask : TNonCopyable {
         Y_VERIFY_DEBUG(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
         (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len});
+        ProcessChecksum<External>(buffer, len);
     }
 
     // Write some data with copying.
@@ -185,6 +205,19 @@ struct TTcpPacketOutTask : TNonCopyable {
         Y_VERIFY_DEBUG(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
         (External ? XdcStream : OutgoingStream).Write({static_cast<const char*>(buffer), len});
+        ProcessChecksum<External>(buffer, len);
+    }
+
+    template<bool External>
+    void ProcessChecksum(const void *buffer, size_t len) {
+        if (Checksumming()) {
+            if (External) {
+                ExternalChecksum = Crc32cExtendMSanCompatible(ExternalChecksum, buffer, len);
+            } else {
+                InternalChecksum = Crc32cExtendMSanCompatible(InternalChecksum, buffer, len);
+                InternalChecksumLen += len;
+            }
+        }
     }
 
     void Finish(ui64 serial, ui64 confirm) {
@@ -198,17 +231,13 @@ struct TTcpPacketOutTask : TNonCopyable {
         };
 
         if (Checksumming()) {
-            // pre-write header without checksum for correct checksum calculation
-            WriteBookmark(NInterconnect::TOutgoingStream::TBookmark(HeaderBookmark), &header, sizeof(header));
-
-            ui32 checksum = 0;
-            OutgoingStream.ScanLastBytes(GetPacketSize(), [&](TContiguousSpan span) {
-                checksum = Crc32cExtendMSanCompatible(checksum, span.data(), span.size());
-            });
-            header.Checksum = checksum;
+            Y_VERIFY_DEBUG(!InsideBookmark);
+            const ui32 headerChecksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header));
+            header.Checksum = Crc32cCombine(headerChecksum, InternalChecksum, InternalSize);
         }
 
-        WriteBookmark(std::exchange(HeaderBookmark, {}), &header, sizeof(header));
+        OutgoingStream.WriteBookmark(std::exchange(HeaderBookmark, {}), {reinterpret_cast<const char*>(&header),
+            sizeof(header)});
     }
 
     bool Checksumming() const {
@@ -216,11 +245,11 @@ struct TTcpPacketOutTask : TNonCopyable {
     }
 
     bool IsEmpty() const { return GetDataSize() == 0; }
-    size_t GetDataSize() const { return InternalSize + ExternalSize; }
-    size_t GetPacketSize() const { return sizeof(TTcpPacketHeader_v2) + InternalSize; }
-    size_t GetInternalFreeAmount() const { return TTcpPacketBuf::PacketDataLen - InternalSize; }
-    size_t GetExternalFreeAmount() const { return 16384 - ExternalSize; }
-    size_t GetExternalSize() const { return ExternalSize; }
+    ui32 GetDataSize() const { return InternalSize + ExternalSize; }
+    ui32 GetPacketSize() const { return sizeof(TTcpPacketHeader_v2) + InternalSize; }
+    ui32 GetInternalFreeAmount() const { return TTcpPacketBuf::PacketDataLen - InternalSize; }
+    ui32 GetExternalFreeAmount() const { return 16384 - ExternalSize; }
+    ui32 GetExternalSize() const { return ExternalSize; }
 };
 
 namespace NInterconnect::NDetail {

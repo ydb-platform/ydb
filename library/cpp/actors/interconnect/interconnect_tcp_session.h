@@ -316,12 +316,13 @@ namespace NActors {
 
         void PassAway() override;
 
-        TDeque<TIntrusivePtr<TRopeAlignedBuffer>> Buffers;
-        size_t FirstBufferOffset = 0;
+        TDeque<TRcBuf> Buffers;
 
         size_t CurrentBuffers = 1; // number of buffers currently required to allocate
-        static constexpr size_t MaxBuffers = 64; // maximum buffers possible
-        std::array<ui8, MaxBuffers> UsageHisto; // read count histogram
+        static constexpr size_t MaxBuffers = 72; // maximum buffers possible
+        static constexpr int BitsPerUsageCount = 5;
+        static constexpr size_t ItemsPerUsageCount = sizeof(ui64) * CHAR_BIT / BitsPerUsageCount;
+        std::array<ui64, (MaxBuffers + ItemsPerUsageCount - 1) / ItemsPerUsageCount> UsageHisto; // read count histogram
 
         void PreallocateBuffers();
 

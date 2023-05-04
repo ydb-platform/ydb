@@ -670,21 +670,26 @@ namespace NActors {
         return recvres;
     }
 
+    constexpr ui64 GetUsageCountClearMask(size_t items, int bits) {
+        ui64 mask = 0;
+        for (size_t i = 0; i < items; ++i) {
+            mask |= ui64(1 << bits - 2) << i * bits;
+        }
+        return mask;
+    }
+
     bool TInputSessionTCP::ReadMore() {
         PreallocateBuffers();
 
         TStackVec<TIoVec, MaxBuffers> buffs;
-        size_t offset = FirstBufferOffset;
-        for (const auto& item : Buffers) {
-            TIoVec iov{item->GetBuffer() + offset, item->GetCapacity() - offset};
-            buffs.push_back(iov);
+        for (auto& item : Buffers) {
+            buffs.push_back({item.GetDataMut(), item.size()});
             if (Params.Encryption) {
                 break; // do not put more than one buffer in queue to prevent using ReadV
             }
 #ifdef _win_
             break; // do the same thing for Windows build
 #endif
-            offset = 0;
         }
 
         ssize_t recvres = Read(*Socket, PollerToken, &Context->MainReadPending, buffs.data(), buffs.size());
@@ -701,27 +706,46 @@ namespace NActors {
         while (recvres) {
             Y_VERIFY(!Buffers.empty());
             auto& buffer = Buffers.front();
-            const size_t bytes = Min<size_t>(recvres, buffer->GetCapacity() - FirstBufferOffset);
-            IncomingData.Insert(IncomingData.End(), TRcBuf{buffer, {buffer->GetBuffer() + FirstBufferOffset, bytes}});
+            const size_t bytes = Min<size_t>(recvres, buffer.size());
             recvres -= bytes;
-            FirstBufferOffset += bytes;
-            if (FirstBufferOffset == buffer->GetCapacity()) {
+            if (const size_t newSize = buffer.size() - bytes) {
+                IncomingData.Insert(IncomingData.End(), TRcBuf(TRcBuf::Piece, buffer.data(), bytes, buffer));
+                buffer.TrimFront(newSize);
+            } else {
+                IncomingData.Insert(IncomingData.End(), std::move(buffer));
                 Buffers.pop_front();
-                FirstBufferOffset = 0;
             }
             ++numBuffersCovered;
         }
 
         if (Buffers.empty()) { // we have read all the data, increase number of buffers
             CurrentBuffers = Min(CurrentBuffers * 2, MaxBuffers);
-        } else if (++UsageHisto[numBuffersCovered - 1] == 64) { // time to shift
-            for (auto& value : UsageHisto) {
-                value /= 2;
+        } else {
+            Y_VERIFY_DEBUG(numBuffersCovered);
+
+            const size_t index = numBuffersCovered - 1;
+
+            static constexpr ui64 itemMask = (1 << BitsPerUsageCount) - 1;
+
+            const size_t word = index / ItemsPerUsageCount;
+            const size_t offset = index % ItemsPerUsageCount * BitsPerUsageCount;
+
+            if ((UsageHisto[word] >> offset & itemMask) == itemMask) { // time to shift
+                for (ui64& w : UsageHisto) {
+                    static constexpr ui64 mask = GetUsageCountClearMask(ItemsPerUsageCount, BitsPerUsageCount);
+                    w = (w & mask) >> 1;
+                }
             }
-            while (CurrentBuffers > 1 && !UsageHisto[CurrentBuffers - 1]) {
-                --CurrentBuffers;
+            UsageHisto[word] += 1 << offset;
+
+            while (CurrentBuffers > 1) {
+                const size_t index = CurrentBuffers - 1;
+                if (UsageHisto[index / ItemsPerUsageCount] >> index % ItemsPerUsageCount * BitsPerUsageCount & itemMask) {
+                    break;
+                } else {
+                    --CurrentBuffers;
+                }
             }
-            Y_VERIFY_DEBUG(UsageHisto[CurrentBuffers - 1]);
         }
 
         LastReceiveTimestamp = TActivationContext::Monotonic();
@@ -904,7 +928,7 @@ namespace NActors {
         // ensure that we have exactly "numBuffers" in queue
         LWPROBE_IF_TOO_LONG(SlowICReadLoopAdjustSize, ms) {
             while (Buffers.size() < CurrentBuffers) {
-                Buffers.emplace_back(TRopeAlignedBuffer::Allocate(Common->Settings.PreallocatedBufferSize));
+                Buffers.push_back(TRcBuf::Uninitialized(Common->Settings.PreallocatedBufferSize));
             }
         }
     }

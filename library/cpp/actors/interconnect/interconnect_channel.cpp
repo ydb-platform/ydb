@@ -203,7 +203,7 @@ namespace NActors {
                 }
             }
         } else if (event.Buffer) {
-            while (const size_t numb = Min(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
+            while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize())) {
                 const char *obuf = Iter.ContiguousData();
                 addChunk(obuf, numb, true);
@@ -257,6 +257,9 @@ namespace NActors {
             return false;
         }
 
+        // clear external checksum for this chunk
+        task.ExternalChecksum = 0;
+
         auto partBookmark = task.Bookmark(partSize);
 
         size_t bytesSerialized = 0;
@@ -274,12 +277,8 @@ namespace NActors {
         *ptr++ = static_cast<ui8>(EXdcCommand::PUSH_DATA);
         *reinterpret_cast<ui16*>(ptr) = bytesSerialized;
         ptr += sizeof(ui16);
-        if (!Params.Encryption) {
-            ui32 checksum = 0;
-            task.XdcStream.ScanLastBytes(bytesSerialized, [&](TContiguousSpan span) {
-                checksum = Crc32cExtendMSanCompatible(checksum, span.data(), span.size());
-            });
-            *reinterpret_cast<ui32*>(ptr) = checksum;
+        if (task.Checksumming()) {
+            *reinterpret_cast<ui32*>(ptr) = task.ExternalChecksum;
         }
 
         task.WriteBookmark(std::move(partBookmark), buffer, partSize);

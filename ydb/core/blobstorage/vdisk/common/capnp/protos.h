@@ -774,8 +774,7 @@ namespace NKikimrCapnProto {
             }
 
             void CopyFrom(const Builder& other) {
-                SetRangeQuery(other.GetRangeQuery());
-
+                // set the repeated field
                 for (auto from : other.elements) {
                     auto to = AddExtremeQueries();
 
@@ -785,21 +784,49 @@ namespace NKikimrCapnProto {
                     to.SetShift(from.GetShift());
                 }
 
-                SetVDiskID(other.GetVDiskID());
+                // set the primitive fields
                 SetNotifyIfNotReady(other.GetNotifyIfNotReady());
                 SetShowInternals(other.GetShowInternals());
                 SetCookie(other.GetCookie());
-                SetMsgQoS(other.GetMsgQoS());
                 SetIndexOnly(other.GetIndexOnly());
-                SetHandleClass(other.GetHandleClass());
                 SetSuppressBarrierCheck(other.GetSuppressBarrierCheck());
                 SetTabletId(other.GetTabletId());
-                SetAcquireBlockedGeneration(other.GetAcquireBlockedGeneration());
-                SetTimestamps(other.GetTimestamps());
                 SetForceBlockedGeneration(other.GetForceBlockedGeneration());
-                SetReaderTabletData(other.GetReaderTabletData());
-                SetForceBlockTabletData(other.GetForceBlockTabletData());
-                SetSnapshotId(other.GetSnapshotId());
+                SetAcquireBlockedGeneration(other.GetAcquireBlockedGeneration());
+
+                // set enum
+                if (other.HasHandleClass()) {
+                    SetHandleClass(other.GetHandleClass());
+                }
+
+                // set all other fields
+                if (other.HasRangeQuery()) {
+                    SetRangeQuery(other.GetRangeQuery());
+                }
+
+                if (other.HasVDiskID()) {
+                    SetVDiskID(other.GetVDiskID());
+                }
+
+                if (other.HasSnapshotId()) {
+                    SetSnapshotId(other.GetSnapshotId());
+                }
+
+                if (other.HasMsgQoS()) {
+                    SetMsgQoS(other.GetMsgQoS());
+                }
+
+                if (other.HasTimestamps()) {
+                    SetTimestamps(other.GetTimestamps());
+                }
+
+                if (other.HasReaderTabletData()) {
+                    SetReaderTabletData(other.GetReaderTabletData());
+                }
+
+                if (other.HasForceBlockTabletData()) {
+                    SetForceBlockTabletData(other.GetForceBlockTabletData());
+                }
             }
 
             bool SerializeToZeroCopyStream(NActors::TChunkSerializer *output) const {
@@ -819,11 +846,11 @@ namespace NKikimrCapnProto {
             }
 
             void ClearForceBlockTabletData() {
-                SetForceBlockTabletData(capnp::defaultValue<NKikimrCapnProto_::TTabletData>());
+                builder.disownForceBlockTabletData();
             }
 
             void ClearMsgQoS() {
-                SetMsgQoS(capnp::defaultValue<NKikimrCapnProto_::TMsgQoS>());
+                builder.disownMsgQoS();
             }
 
             void SetNotifyIfNotReady(const bool& value) { return builder.setNotifyIfNotReady(value); }

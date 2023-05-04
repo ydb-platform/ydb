@@ -1,6 +1,6 @@
 #include "cs_helper.h"
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 #include <library/cpp/actors/core/event.h>

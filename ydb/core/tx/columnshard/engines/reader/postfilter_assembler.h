@@ -2,7 +2,7 @@
 #include "conveyor_task.h"
 
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
-#include <ydb/core/formats/arrow_filter.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 

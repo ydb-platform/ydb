@@ -2,7 +2,7 @@
 
 #include "hash.h"
 
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/yql/public/udf/udf_value.h>

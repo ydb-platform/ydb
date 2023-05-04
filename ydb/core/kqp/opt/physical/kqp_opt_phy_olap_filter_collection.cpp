@@ -1,6 +1,6 @@
 #include "kqp_opt_phy_olap_filter_collection.h"
 
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/utils/log/log.h>
 

@@ -1,5 +1,5 @@
 #include "columnshard_common.h"
-#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 
 namespace NKikimr::NColumnShard {

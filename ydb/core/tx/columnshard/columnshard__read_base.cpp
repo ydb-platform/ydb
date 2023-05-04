@@ -1,7 +1,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard__read_base.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/formats/ssa_program_optimizer.h>
+#include <ydb/core/formats/arrow/ssa_program_optimizer.h>
 
 namespace NKikimr::NColumnShard {
 

@@ -4,9 +4,9 @@
 #include "column_engine_logs.h"
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
-#include <ydb/core/formats/one_batch_input_stream.h>
-#include <ydb/core/formats/merging_sorted_input_stream.h>
-#include <ydb/core/formats/custom_registry.h>
+#include <ydb/core/formats/arrow/one_batch_input_stream.h>
+#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
+#include <ydb/core/formats/arrow/custom_registry.h>
 
 namespace NKikimr::NOlap {
 

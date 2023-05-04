@@ -1,6 +1,6 @@
 #pragma once
 #include "db_wrapper.h"
-#include <ydb/core/formats/replace_key.h>
+#include <ydb/core/formats/arrow/replace_key.h>
 
 namespace NKikimr::NOlap {
 

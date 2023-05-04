@@ -1,7 +1,7 @@
 #include "kqp_opt_phy_rules.h"
 #include "kqp_opt_phy_olap_filter_collection.h"
 
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>

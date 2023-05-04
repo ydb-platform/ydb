@@ -1,7 +1,7 @@
 #include "kqp_olap_compiler.h"
 
-#include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 

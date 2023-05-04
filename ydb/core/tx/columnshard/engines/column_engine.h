@@ -8,7 +8,7 @@
 #include "columns_table.h"
 #include "granules_table.h"
 
-#include <ydb/core/formats/replace_key.h>
+#include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/blob.h>
 
 namespace NKikimr::NOlap {

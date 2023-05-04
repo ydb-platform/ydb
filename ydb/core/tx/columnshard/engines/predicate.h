@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/formats/program.h>
+#include <ydb/core/formats/arrow/program.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 

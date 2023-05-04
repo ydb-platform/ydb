@@ -2,8 +2,8 @@
 #include "insert_table.h"
 #include "column_engine.h"
 
-#include <ydb/core/formats/arrow_batch_builder.h>
-#include <ydb/core/formats/sort_cursor.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/sys_view/common/schema.h>
 
 namespace NKikimr::NOlap {

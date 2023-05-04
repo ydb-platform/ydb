@@ -7,29 +7,29 @@
 
 
 
-add_executable(ydb-core-formats-ut)
-target_compile_options(ydb-core-formats-ut PRIVATE
+add_executable(ydb-core-formats-arrow-ut)
+target_compile_options(ydb-core-formats-arrow-ut PRIVATE
   -Wno-unused-parameter
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-core-formats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats
+target_include_directories(ydb-core-formats-arrow-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
-target_link_libraries(ydb-core-formats-ut PUBLIC
+target_link_libraries(ydb-core-formats-arrow-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  ydb-core-formats
+  core-formats-arrow
   libs-apache-arrow
   ydb-library-arrow_kernels
   ydb-core-base
   udf-service-exception_policy
   yql-sql-pg_dummy
 )
-target_link_options(ydb-core-formats-ut PRIVATE
+target_link_options(ydb-core-formats-arrow-ut PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -39,22 +39,22 @@ target_link_options(ydb-core-formats-ut PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-core-formats-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/ut_arrow.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/ut_program_step.cpp
+target_sources(ydb-core-formats-arrow-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_arrow.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_program_step.cpp
 )
 set_property(
   TARGET
-  ydb-core-formats-ut
+  ydb-core-formats-arrow-ut
   PROPERTY
   SPLIT_FACTOR
   1
 )
 add_yunittest(
   NAME
-  ydb-core-formats-ut
+  ydb-core-formats-arrow-ut
   TEST_TARGET
-  ydb-core-formats-ut
+  ydb-core-formats-arrow-ut
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -64,20 +64,20 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-core-formats-ut
+  ydb-core-formats-arrow-ut
   PROPERTY
   LABELS
   SMALL
 )
 set_yunittest_property(
   TEST
-  ydb-core-formats-ut
+  ydb-core-formats-arrow-ut
   PROPERTY
   PROCESSORS
   1
 )
-target_allocator(ydb-core-formats-ut
+target_allocator(ydb-core-formats-arrow-ut
   cpp-malloc-tcmalloc
   libs-tcmalloc-no_percpu_cache
 )
-vcs_info(ydb-core-formats-ut)
+vcs_info(ydb-core-formats-arrow-ut)

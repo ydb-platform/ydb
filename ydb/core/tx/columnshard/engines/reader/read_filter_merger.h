@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/core/formats/arrow_filter.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/generic/hash.h>

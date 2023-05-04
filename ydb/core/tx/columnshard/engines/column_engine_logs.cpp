@@ -2,8 +2,8 @@
 #include "indexed_read_data.h"
 #include "filter.h"
 
-#include <ydb/core/formats/one_batch_input_stream.h>
-#include <ydb/core/formats/merging_sorted_input_stream.h>
+#include <ydb/core/formats/arrow/one_batch_input_stream.h>
+#include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
 
 #include <concepts>
 #include <span>

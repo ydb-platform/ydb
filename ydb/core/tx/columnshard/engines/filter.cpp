@@ -2,8 +2,8 @@
 #include "defs.h"
 #include "indexed_read_data.h"
 
-#include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/custom_registry.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/custom_registry.h>
 
 namespace NKikimr::NOlap {
 

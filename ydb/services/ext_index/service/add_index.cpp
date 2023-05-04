@@ -1,6 +1,6 @@
 #include "add_index.h"
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/formats/converter.h>
+#include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>

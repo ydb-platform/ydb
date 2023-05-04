@@ -1,7 +1,7 @@
 #include <ydb/core/tx/columnshard/columnshard_costs.h>
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/core/tx/columnshard/engines/granules_table.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/ssa.pb.h>
 #include <ydb/core/tx/columnshard/engines/predicate.h>

@@ -17,7 +17,7 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-protos
-  ydb-core-formats
+  core-formats-arrow
 )
 target_sources(columnshard-engines-reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/filter_assembler.cpp

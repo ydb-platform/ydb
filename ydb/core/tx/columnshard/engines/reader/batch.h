@@ -1,7 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 
-#include <ydb/core/formats/arrow_filter.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 

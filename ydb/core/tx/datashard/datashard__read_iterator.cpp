@@ -4,7 +4,7 @@
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 
-#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
 #include <util/system/hp_timer.h>
 

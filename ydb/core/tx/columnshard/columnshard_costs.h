@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/formats/arrow_batch_builder.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr::NOlap {

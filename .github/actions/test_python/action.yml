@@ -30,11 +30,10 @@ runs:
       source ${source_root}/ydb/tests/oss/launch/prepare.sh
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
-
-      pytest -o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/res.xml \
-        ${source_root}/ydb/tests/functional/ | \
+      cd ${source_root}/ydb/tests/functional/
+      pytest -o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml=test-results/xml/res.xml | \
       sed -e 's/\x1b\[[0-9;]*m//g' | \
-      tee >(gzip --stdout > ../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
+      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz) | \
       tee -a $GITHUB_STEP_SUMMARY
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master

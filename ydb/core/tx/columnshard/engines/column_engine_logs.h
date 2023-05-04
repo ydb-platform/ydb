@@ -17,6 +17,8 @@ class TCountersTable;
 /// Engine with 2 tables:
 /// - Granules: PK -> granules (use part of PK)
 /// - Columns: granule -> blobs
+///
+/// @note One instance per tablet.
 class TColumnEngineForLogs : public IColumnEngine {
 public:
     class TMarksGranules {
@@ -229,15 +231,15 @@ public:
 
 private:
     struct TGranuleMeta {
-        TGranuleRecord Record;
+        const TGranuleRecord Record;
         THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
 
-        TGranuleMeta(const TGranuleRecord& rec)
+        explicit TGranuleMeta(const TGranuleRecord& rec)
             : Record(rec)
         {}
 
-        ui64 PathId() const { return Record.PathId; }
-        bool Empty() const { return Portions.empty(); }
+        ui64 PathId() const noexcept { return Record.PathId; }
+        bool Empty() const noexcept { return Portions.empty(); }
     };
 
     TIndexInfo IndexInfo;
@@ -282,6 +284,8 @@ private:
     bool ApplyChanges(IDbWrapper& db, const TChanges& changes, const TSnapshot& snapshot, bool apply);
 
     void EraseGranule(ui64 pathId, ui64 granule, const TMark& mark);
+
+    /// Insert granule or check if same granule was already inserted.
     bool SetGranule(const TGranuleRecord& rec, bool apply);
     bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);

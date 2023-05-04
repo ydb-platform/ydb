@@ -104,7 +104,7 @@ public:
         db.EraseColumn(IndexId, row);
     }
 
-    bool Load(IDbWrapper& db, std::function<void(TColumnRecord&&)> callback) {
+    bool Load(IDbWrapper& db, std::function<void(const TColumnRecord&)> callback) {
         return db.LoadColumns(IndexId, callback);
     }
 

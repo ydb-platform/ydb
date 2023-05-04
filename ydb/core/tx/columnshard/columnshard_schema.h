@@ -516,7 +516,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static bool IndexGranules_Load(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
-                                   std::function<void(TGranuleRecord&&)> callback) {
+                                   const std::function<void(const TGranuleRecord&)>& callback) {
         auto rowset = db.Table<IndexGranules>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
@@ -528,8 +528,7 @@ struct Schema : NIceDb::Schema {
             ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
             ui64 txId = rowset.GetValue<IndexGranules::TxId>();
 
-            TGranuleRecord row(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey));
-            callback(std::move(row));
+            callback(TGranuleRecord(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey)));
 
             if (!rowset.Next())
                 return false;
@@ -555,7 +554,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
-                                  std::function<void(TColumnRecord&&)> callback) {
+                                  const std::function<void(const TColumnRecord&)>& callback) {
         auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
@@ -579,7 +578,7 @@ struct Schema : NIceDb::Schema {
             TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
             row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
 
-            callback(std::move(row));
+            callback(row);
 
             if (!rowset.Next())
                 return false;
@@ -595,7 +594,7 @@ struct Schema : NIceDb::Schema {
         );
     }
 
-    static bool IndexCounters_Load(NIceDb::TNiceDb& db, ui32 index, std::function<void(ui32 id, ui64 value)> callback) {
+    static bool IndexCounters_Load(NIceDb::TNiceDb& db, ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
         auto rowset = db.Table<IndexCounters>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;

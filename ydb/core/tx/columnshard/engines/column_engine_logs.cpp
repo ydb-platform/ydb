@@ -653,7 +653,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
 }
 
 bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
-    auto callback = [&](TGranuleRecord&& rec) {
+    auto callback = [&](const TGranuleRecord& rec) {
         bool ok = SetGranule(rec, true);
         Y_VERIFY(ok);
     };
@@ -662,7 +662,7 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
-    auto callback = [&](TColumnRecord&& row) {
+    auto callback = [&](const TColumnRecord& row) {
         lostBlobs.erase(row.BlobRange.BlobId); // We have such a blob in index. It isn't lost.
         AddColumnRecord(row);
     };
@@ -1309,24 +1309,27 @@ void TColumnEngineForLogs::FreeLocks(std::shared_ptr<TColumnEngineChanges> index
 }
 
 bool TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec, bool apply) {
-    TMark mark(rec.Mark);
+    const TMark mark(rec.Mark);
 
-    if (!apply) {
+    if (apply) {
+        // There should be only one granule with (PathId, Mark).
+        Y_VERIFY(PathGranules[rec.PathId].emplace(mark, rec.Granule).second);
+
+        // Allocate granule info and ensure that there is no granule with same id inserted before.
+        Y_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec)).second);
+    } else {
+        // Granule with same id already exists.
         if (Granules.contains(rec.Granule)) {
             return false;
         }
 
+        // Granule with same (PathId, Mark) already exists.
         if (PathGranules.contains(rec.PathId) && PathGranules[rec.PathId].contains(mark)) {
             return false;
         }
-        return true;
     }
 
-    PathGranules[rec.PathId].emplace(mark, rec.Granule);
-    auto& spg = Granules[rec.Granule];
-    Y_VERIFY(!spg);
-    spg = std::make_shared<TGranuleMeta>(rec);
-    return true; // It must return true if (apply == true)
+    return true;
 }
 
 void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& mark) {
@@ -1389,17 +1392,18 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
 
 void TColumnEngineForLogs::AddColumnRecord(const TColumnRecord& rec) {
     Y_VERIFY(rec.Valid());
-    auto& spg = Granules[rec.Granule];
+
+    const auto gi = Granules.find(rec.Granule);
 #if 0
-    if (!spg) {
+    if (gi == Granules.end()) {
         LOG_S_ERROR("No granule " << rec.Granule << " for record " << rec << " at tablet " << TabletId);
         Granules.erase(rec.Granule);
         return;
     }
 #else
-    Y_VERIFY(spg);
+    Y_VERIFY(gi != Granules.end());
 #endif
-    auto& portionInfo = spg->Portions[rec.Portion];
+    auto& portionInfo = gi->second->Portions[rec.Portion];
     portionInfo.AddRecord(IndexInfo, rec);
 }
 

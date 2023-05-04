@@ -83,12 +83,11 @@ public:
         pathGranules.swap(filtered);
     }
 
-    bool LoadGranules(ui32 index, const IColumnEngine&, std::function<void(TGranuleRecord&&)> callback) override {
+    bool LoadGranules(ui32 index, const IColumnEngine&, const std::function<void(const TGranuleRecord&)>& callback) override {
         auto& granules = Indices[index].Granules;
         for (auto& [pathId, vec] : granules) {
-            for (auto& rec : vec) {
-                TGranuleRecord tmp = rec;
-                callback(std::move(rec));
+            for (const auto& rec : vec) {
+                callback(rec);
             }
         }
         return true;
@@ -123,12 +122,11 @@ public:
         columns.swap(filtered);
     }
 
-    bool LoadColumns(ui32 index, std::function<void(TColumnRecord&&)> callback) override {
+    bool LoadColumns(ui32 index, const std::function<void(const TColumnRecord&)>& callback) override {
         auto& columns = Indices[index].Columns;
         for (auto& [granule, vec] : columns) {
-            for (auto& rec : vec) {
-                TColumnRecord tmp = rec;
-                callback(std::move(rec));
+            for (const auto& rec : vec) {
+                callback(rec);
             }
         }
         return true;
@@ -139,7 +137,7 @@ public:
         counters[counterId] = value;
     }
 
-    bool LoadCounters(ui32 index, std::function<void(ui32 id, ui64 value)> callback) override {
+    bool LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) override {
         auto& counters = Indices[index].Counters;
         for (auto& [id, value] : counters) {
             callback(id, value);

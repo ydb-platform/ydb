@@ -66,9 +66,7 @@ struct TMark {
         return Hash();
     }
 
-    operator bool () const {
-        Y_FAIL("unexpected call");
-    }
+    operator bool () const = delete;
 
     static TString Serialize(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
     static NArrow::TReplaceKey Deserialize(const TString& key, const std::shared_ptr<arrow::Schema>& schema);

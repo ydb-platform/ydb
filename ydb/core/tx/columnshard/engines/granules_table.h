@@ -48,7 +48,7 @@ public:
         db.EraseGranule(IndexId, Engine, row);
     }
 
-    bool Load(IDbWrapper& db, std::function<void(TGranuleRecord&&)> callback) {
+    bool Load(IDbWrapper& db, const std::function<void(const TGranuleRecord&)>& callback) {
         return db.LoadGranules(IndexId, Engine, callback);
     }
 

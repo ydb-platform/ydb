@@ -26,7 +26,7 @@ struct TPortionMeta {
         std::shared_ptr<arrow::Scalar> Min;
         std::shared_ptr<arrow::Scalar> Max;
 
-        bool HasMinMax() const {
+        bool HasMinMax() const noexcept {
             return Min.get() && Max.get();
         }
     };
@@ -123,7 +123,7 @@ struct TPortionInfo {
     }
 
     ui64 BlobsBytes() const {
-        ui32 sum = 0;
+        ui64 sum = 0;
         for (auto& rec : Records) {
             sum += rec.BlobRange.Size;
         }

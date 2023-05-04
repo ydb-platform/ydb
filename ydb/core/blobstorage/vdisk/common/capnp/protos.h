@@ -820,9 +820,11 @@ namespace NKikimrCapnProto {
             }
 
             void ClearForceBlockTabletData() {
-                auto data = MutableForceBlockTabletData();
-                data.SetGeneration(0);
-                data.SetId(0);
+                SetForceBlockTabletData(capnp::defaultValue<NKikimrCapnProto_::TTabletData>());
+            }
+
+            void ClearMsgQoS() {
+                SetMsgQoS(capnp::defaultValue<NKikimrCapnProto_::TMsgQoS>());
             }
 
             void SetNotifyIfNotReady(const bool& value) { return builder.setNotifyIfNotReady(value); }

@@ -1,4 +1,4 @@
-#include "result.h"
+#include "query.h"
 
 namespace NKikimr::NKqp {
 

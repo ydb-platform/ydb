@@ -8,6 +8,7 @@
 
 add_subdirectory(compilation)
 add_subdirectory(events)
+add_subdirectory(shutdown)
 add_subdirectory(simple)
 get_built_tool_path(
   TOOL_enum_parser_bin
@@ -36,6 +37,7 @@ target_link_libraries(core-kqp-common PUBLIC
   kqp-common-simple
   kqp-common-compilation
   kqp-common-events
+  kqp-common-shutdown
   core-kqp-provider
   tx-long_tx_service-public
   core-tx-sharding

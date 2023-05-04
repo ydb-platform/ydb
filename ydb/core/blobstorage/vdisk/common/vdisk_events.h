@@ -535,14 +535,100 @@ namespace NKikimr {
         {
             if (queryRecord) {
                 Y_VERIFY(queryRecord->HasMsgQoS());
-                auto *resultQoS = TBase::Record.MutableMsgQoS();
-                Swap(*resultQoS, *queryRecord->MutableMsgQoS());
+                Y_VERIFY(!TBase::Record.HasMsgQoS());
 
-                resultQoS->ClearDeadlineSeconds();
-                resultQoS->ClearSendMeCostSettings();
+                CopyFrom(queryRecord->GetMsgQoS(), TBase::Record.MutableMsgQoS());
+                queryRecord->ClearMsgQoS();
+
+                TBase::Record.MutableMsgQoS()->ClearDeadlineSeconds();
+                TBase::Record.MutableMsgQoS()->ClearSendMeCostSettings();
             } else {
                 Y_VERIFY(!SkeletonFrontIDPtr);
             }
+        }
+
+        void CopyFrom(NKikimrCapnProto::TMsgQoS::Reader from, NKikimrBlobStorage::TMsgQoS* to) {
+            // Copy primitive fields
+            to->SetDeadlineSeconds(from.GetDeadlineSeconds());
+            to->SetCost(from.GetCost());
+            to->SetSendMeCostSettings(from.GetSendMeCostSettings());
+
+            // Copy clientID union
+            if (from.HasProxyNodeId()) {
+                to->SetProxyNodeId(from.GetProxyNodeId());
+            }
+            if (from.HasReplVDiskId()) {
+                to->SetReplVDiskId(from.GetReplVDiskId());
+            }
+            if (from.HasVDiskLoadId()) {
+                to->SetVDiskLoadId(from.GetVDiskLoadId());
+            }
+            if (from.GetVPatchVDiskId()) {
+                to->SetVPatchVDiskId(from.GetVPatchVDiskId());
+            }
+
+            // Copy all other fields
+            if (from.HasMsgId()) {
+                CopyFrom(from.GetMsgId(), to->MutableMsgId());
+            }
+            if (from.HasCostSettings()) {
+                CopyFrom(from.GetCostSettings(), to->MutableCostSettings());
+            }
+            if (from.HasWindow()) {
+                CopyFrom(from.GetWindow(), to->MutableWindow());
+            }
+            if (from.HasExecTimeStats()) {
+                CopyFrom(from.GetExecTimeStats(), to->MutableExecTimeStats());
+            }
+            if (from.HasSenderActorId()) {
+                CopyFrom(from.GetSenderActorId(), to->MutableSenderActorId());
+            }
+
+            // Copy enums
+            to->SetExtQueueId(NKikimrCapnProtoUtil::convertToProtobuf(from.GetExtQueueId()));
+            to->SetIntQueueId(NKikimrCapnProtoUtil::convertToProtobuf(from.GetIntQueueId()));
+        }
+
+        void CopyFrom(NKikimrCapnProto::TMessageId::Reader from, NKikimrBlobStorage::TMessageId* to) {
+            to->SetSequenceId(from.GetSequenceId());
+            to->SetMsgId(from.GetMsgId());
+        }
+
+        void CopyFrom(NKikimrCapnProto::TVDiskCostSettings::Reader from, NKikimrBlobStorage::TVDiskCostSettings* to) {
+            to->SetSeekTimeUs(from.GetSeekTimeUs());
+            to->SetReadSpeedBps(from.GetReadSpeedBps());
+            to->SetWriteSpeedBps(from.GetWriteSpeedBps());
+            to->SetReadBlockSize(from.GetReadBlockSize());
+            to->SetWriteBlockSize(from.GetWriteBlockSize());
+            to->SetMinREALHugeBlobInBytes(from.GetMinREALHugeBlobInBytes());
+        }
+
+        void CopyFrom(NKikimrCapnProto::TWindowFeedback::Reader from, NKikimrBlobStorage::TWindowFeedback* to) {
+            to->SetStatus(NKikimrCapnProtoUtil::convertToProtobuf(from.GetStatus()));
+            to->SetActualWindowSize(from.GetActualWindowSize());
+            to->SetMaxWindowSize(from.GetMaxWindowSize());
+
+            if (from.HasExpectedMsgId()) {
+                CopyFrom(from.GetExpectedMsgId(), to->MutableExpectedMsgId());
+            }
+            if (from.HasFailedMsgId()) {
+                CopyFrom(from.GetFailedMsgId(), to->MutableFailedMsgId());
+            }
+        }
+
+        void CopyFrom(NKikimrCapnProto::TExecTimeStats::Reader from, NKikimrBlobStorage::TExecTimeStats* to) {
+            to->SetSubmitTimestamp(from.GetSubmitTimestamp());
+            to->SetInSenderQueue(from.GetInSenderQueue());
+            to->SetReceivedTimestamp(from.GetReceivedTimestamp());
+            to->SetTotal(from.GetTotal());
+            to->SetInQueue(from.GetInQueue());
+            to->SetExecution(from.GetExecution());
+            to->SetHugeWriteTime(from.GetHugeWriteTime());
+        }
+
+        void CopyFrom(NKikimrCapnProto::TActorId::Reader from, NActorsProto::TActorId* to) {
+            to->SetRawX1(from.GetRawX1());
+            to->SetRawX2(from.GetRawX2());
         }
 
         void MarkHugeWriteTime() {
@@ -583,157 +669,6 @@ namespace NKikimr {
         NKikimrBlobStorage::TExecTimeStats *GetExecTimeStats() {
             auto *msgQoS = TBase::Record.MutableMsgQoS();
             return msgQoS->HasExecTimeStats() ? msgQoS->MutableExecTimeStats() : nullptr;
-        }
-
-        void Swap(NKikimrBlobStorage::TMsgQoS& lhs, NKikimrCapnProto::TMsgQoS::Builder& rhs) {
-            // Swap primitive fields
-            uint32_t tempDeadlineSeconds = lhs.GetDeadlineSeconds();
-            lhs.SetDeadlineSeconds(rhs.GetDeadlineSeconds());
-            rhs.SetDeadlineSeconds(tempDeadlineSeconds);
-
-            uint64_t tempCost = lhs.GetCost();
-            lhs.SetCost(rhs.GetCost());
-            rhs.SetCost(tempCost);
-
-            bool tempSendMeCostSettings = lhs.GetSendMeCostSettings();
-            lhs.SetSendMeCostSettings(rhs.GetSendMeCostSettings());
-            rhs.SetSendMeCostSettings(tempSendMeCostSettings);
-
-            uint32_t tempProxyNodeId = lhs.GetProxyNodeId();
-            lhs.SetProxyNodeId(rhs.GetProxyNodeId());
-            rhs.SetProxyNodeId(tempProxyNodeId);
-
-            uint32_t tempReplVDiskId = lhs.GetReplVDiskId();
-            lhs.SetReplVDiskId(rhs.GetReplVDiskId());
-            rhs.SetReplVDiskId(tempReplVDiskId);
-
-            uint64_t tempVDiskLoadId = lhs.GetVDiskLoadId();
-            lhs.SetVDiskLoadId(rhs.GetVDiskLoadId());
-            rhs.SetVDiskLoadId(tempVDiskLoadId);
-
-            uint32_t tempVPatchVDiskId = lhs.GetVPatchVDiskId();
-            lhs.SetVPatchVDiskId(rhs.GetVPatchVDiskId());
-            rhs.SetVPatchVDiskId(tempVPatchVDiskId);
-
-            // Swap all other fields
-            Swap(*lhs.MutableMsgId(), *rhs.MutableMsgId());
-            Swap(*lhs.MutableCostSettings(), *rhs.MutableCostSettings());
-            Swap(*lhs.MutableWindow(), *rhs.MutableWindow());
-            Swap(*lhs.MutableExecTimeStats(), *rhs.MutableExecTimeStats());
-            Swap(*lhs.MutableSenderActorId(), *rhs.MutableSenderActorId());
-
-            // Swap enums
-            NKikimrCapnProto::EVDiskQueueId tempExtQueueId = NKikimrCapnProtoUtil::convertToCapnProto(lhs.GetExtQueueId());
-            lhs.SetExtQueueId(NKikimrCapnProtoUtil::convertToProtobuf(lhs.GetExtQueueId()));
-            rhs.SetExtQueueId(tempExtQueueId);
-
-            NKikimrCapnProto::EVDiskInternalQueueId tempIntQueueId = NKikimrCapnProtoUtil::convertToCapnProto(lhs.GetIntQueueId());
-            lhs.SetIntQueueId(NKikimrCapnProtoUtil::convertToProtobuf(lhs.GetIntQueueId()));
-            rhs.SetIntQueueId(tempIntQueueId);
-        }
-
-        void Swap(NKikimrBlobStorage::TMessageId& lhs, NKikimrCapnProto::TMessageId::Builder& rhs) {
-            // Swap sequenceId
-            uint64_t tempSequenceId = lhs.GetSequenceId();
-            lhs.SetSequenceId(rhs.GetSequenceId());
-            rhs.SetSequenceId(tempSequenceId);
-
-            // Swap msgId
-            uint64_t tempMsgId = lhs.GetMsgId();
-            lhs.SetMsgId(rhs.GetMsgId());
-            rhs.SetMsgId(tempMsgId);
-        }
-
-        void Swap(NKikimrBlobStorage::TVDiskCostSettings& lhs, NKikimrCapnProto::TVDiskCostSettings::Builder& rhs) {
-            // Swap all fields
-            uint64_t tempSeekTimeUs = lhs.GetSeekTimeUs();
-            lhs.SetSeekTimeUs(rhs.GetSeekTimeUs());
-            rhs.SetSeekTimeUs(tempSeekTimeUs);
-
-            uint64_t tempReadSpeedBps = lhs.GetReadSpeedBps();
-            lhs.SetReadSpeedBps(rhs.GetReadSpeedBps());
-            rhs.SetReadSpeedBps(tempReadSpeedBps);
-
-            uint64_t tempWriteSpeedBps = lhs.GetWriteSpeedBps();
-            lhs.SetWriteSpeedBps(rhs.GetWriteSpeedBps());
-            rhs.SetWriteSpeedBps(tempWriteSpeedBps);
-
-            uint64_t tempReadBlockSize = lhs.GetReadBlockSize();
-            lhs.SetReadBlockSize(rhs.GetReadBlockSize());
-            rhs.SetReadBlockSize(tempReadBlockSize);
-
-            uint64_t tempWriteBlockSize = lhs.GetWriteBlockSize();
-            lhs.SetWriteBlockSize(rhs.GetWriteBlockSize());
-            rhs.SetWriteBlockSize(tempWriteBlockSize);
-
-            uint32_t tempMinREALHugeBlobInBytes = lhs.GetMinREALHugeBlobInBytes();
-            lhs.SetMinREALHugeBlobInBytes(rhs.GetMinREALHugeBlobInBytes());
-            rhs.SetMinREALHugeBlobInBytes(tempMinREALHugeBlobInBytes);
-        }
-
-        void Swap(NKikimrBlobStorage::TWindowFeedback& lhs, NKikimrCapnProto::TWindowFeedback::Builder& rhs) {
-            // Swap status
-            NKikimrCapnProto::EStatus tempStatus = NKikimrCapnProtoUtil::convertToCapnProto(lhs.GetStatus());
-            lhs.SetStatus(NKikimrCapnProtoUtil::convertToProtobuf(lhs.GetStatus()));
-            rhs.SetStatus(tempStatus);
-
-            // Swap actualWindowSize
-            uint64_t tempActualWindowSize = lhs.GetActualWindowSize();
-            lhs.SetActualWindowSize(rhs.GetActualWindowSize());
-            rhs.SetActualWindowSize(tempActualWindowSize);
-
-            // Swap maxWindowSize
-            uint64_t tempMaxWindowSize = lhs.GetMaxWindowSize();
-            lhs.SetMaxWindowSize(rhs.GetMaxWindowSize());
-            rhs.SetMaxWindowSize(tempMaxWindowSize);
-
-            // Swap expectedMsgId
-            Swap(*lhs.MutableExpectedMsgId(), *rhs.MutableExpectedMsgId());
-            // Swap failedMsgId
-            Swap(*lhs.MutableFailedMsgId(), *rhs.MutableFailedMsgId());
-        }
-
-        void Swap(NKikimrBlobStorage::TExecTimeStats& lhs, NKikimrCapnProto::TExecTimeStats::Builder& rhs) {
-            // Swap all fields
-            uint64_t tempSubmitTimestamp = lhs.GetSubmitTimestamp();
-            lhs.SetSubmitTimestamp(rhs.GetSubmitTimestamp());
-            rhs.SetSubmitTimestamp(tempSubmitTimestamp);
-
-            uint64_t tempInSenderQueue = lhs.GetInSenderQueue();
-            lhs.SetInSenderQueue(rhs.GetInSenderQueue());
-            rhs.SetInSenderQueue(tempInSenderQueue);
-
-            uint64_t tempReceivedTimestamp = lhs.GetReceivedTimestamp();
-            lhs.SetReceivedTimestamp(rhs.GetReceivedTimestamp());
-            rhs.SetReceivedTimestamp(tempReceivedTimestamp);
-
-            uint64_t tempTotal = lhs.GetTotal();
-            lhs.SetTotal(rhs.GetTotal());
-            rhs.SetTotal(tempTotal);
-
-            uint64_t tempInQueue = lhs.GetInQueue();
-            lhs.SetInQueue(rhs.GetInQueue());
-            rhs.SetInQueue(tempInQueue);
-
-            uint64_t tempExecution = lhs.GetExecution();
-            lhs.SetExecution(rhs.GetExecution());
-            rhs.SetExecution(tempExecution);
-
-            uint64_t tempHugeWriteTime = lhs.GetHugeWriteTime();
-            lhs.SetHugeWriteTime(rhs.GetHugeWriteTime());
-            rhs.SetHugeWriteTime(tempHugeWriteTime);
-        }
-
-        void Swap(NActorsProto::TActorId& lhs, NKikimrCapnProto::TActorId::Builder& rhs) {
-            // Swap rawX1
-            uint64_t tempRawX1 = lhs.GetRawX1();
-            lhs.SetRawX1(rhs.GetRawX1());
-            rhs.SetRawX1(tempRawX1);
-
-            // Swap rawX2
-            uint64_t tempRawX2 = lhs.GetRawX2();
-            lhs.SetRawX2(rhs.GetRawX2());
-            rhs.SetRawX2(tempRawX2);
         }
     };
 

@@ -30,8 +30,8 @@ runs:
       rm -rf *
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer" \
-        -DCMAKE_C_FLAGS="-g -fno-omit-frame-pointer" \
+        -DCMAKE_CXX_FLAGS="-g" \
+        -DCMAKE_C_FLAGS="-g" \
         ../ydb
   - name: Build
     shell: bash

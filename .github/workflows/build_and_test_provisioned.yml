@@ -69,7 +69,7 @@ jobs:
         testman_url: ${{vars.TESTMO_URL}}
         testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
     - name: Run functional tests
-      if: inputs.run_functional_tests
+      if: inputs.run_functional_tests && (success() || failure()) && steps.build.conclusion != 'failure'
       uses: ./.github/actions/test_python
       with:
         log_suffix: ${{format('{0}{1}{2}', inputs.runner_label, inputs.sanitizer, 'functional')}}

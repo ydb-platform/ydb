@@ -1141,7 +1141,13 @@ namespace NKikimr {
             qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue());
             if (qos->GetSendMeCostSettings() && CostModel) {
                 auto settings = qos->MutableCostSettings();
-                CostModel->FillInSettings(*settings);
+//                CostModel->FillInSettings(*settings);
+                settings->SetSeekTimeUs(CostModel->SeekTimeUs);
+                settings->SetReadSpeedBps(CostModel->ReadSpeedBps);
+                settings->SetWriteSpeedBps(CostModel->WriteSpeedBps);
+                settings->SetReadBlockSize(CostModel->ReadBlockSize);
+                settings->SetWriteBlockSize(CostModel->WriteBlockSize);
+                settings->SetMinREALHugeBlobInBytes(CostModel->MinREALHugeBlobInBytes);
             }
         }
 

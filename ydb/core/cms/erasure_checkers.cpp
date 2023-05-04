@@ -1,208 +1,38 @@
 #include "erasure_checkers.h"
 
+#include <ydb/core/protos/cms.pb.h>
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
+
+#include <library/cpp/actors/core/log.h>
+
+#include <util/string/cast.h>
+#include <util/system/backtrace.h>
+#include <util/system/yassert.h>
+
+#include <bitset>
+#include <sstream>
+#include <vector>
+
 namespace NKikimr::NCms {
 
-bool TErasureCounterBase::IsDown(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration &retryTime, TErrorInfo &error) {
-    const auto &node = info->Node(vdisk.NodeId);
-    const auto &pdisk = info->PDisk(vdisk.PDiskId);
-    const auto defaultDeadline = TActivationContext::Now() + retryTime;
+using namespace Ydb::Maintenance;
 
-    // Check we received info for PDisk.
-    if (!pdisk.NodeId) {
-        ++Down;
-        error.Reason = TStringBuilder() << "Missing info for " << pdisk.ItemName();
-        return false;
-    }
-
-    return (node.NodeId != VDisk.NodeId && node.IsDown(error, defaultDeadline))
-        || (pdisk.PDiskId != VDisk.PDiskId && pdisk.IsDown(error, defaultDeadline))
-        || vdisk.IsDown(error, defaultDeadline);
-}
-
-bool TErasureCounterBase::IsLocked(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration &retryTime,
-        TDuration &duration, TErrorInfo &error)
-{
-    const auto &node = info->Node(vdisk.NodeId);
-    const auto &pdisk = info->PDisk(vdisk.PDiskId);
-
-    // Check we received info for VDisk.
-    if (!vdisk.NodeId || !vdisk.PDiskId) {
-        ++Down;
-        error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Missing info for " << vdisk.ItemName();
-        return false;
-    }
-
-    return node.IsLocked(error, retryTime, TActivationContext::Now(), duration)
-        || pdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration)
-        || vdisk.IsLocked(error, retryTime, TActivationContext::Now(), duration);
-}
-
-bool TErasureCounterBase::GroupAlreadyHasLockedDisks() const {
-    return HasAlreadyLockedDisks;
-}
-
-bool TErasureCounterBase::CheckForMaxAvailability(TErrorInfo &error, TInstant &defaultDeadline, bool allowPartial) const {
-    if (Locked + Down > 1) {
-        if (HasAlreadyLockedDisks && !allowPartial) {
-            error.Code = TStatus::DISALLOW;
-            error.Reason = "The request is incorrect: too many disks from the one group. "
-                           "Fix the request or set PartialPermissionAllowed to true";
-            return false;
-        }
-
-        error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group " << GroupId
-                                        << ". " << "Too many locked and down vdisks: " << Locked + Down;
-        error.Deadline = defaultDeadline;
-        return false;
-    }
-    return true;
-}
-
-void TDefaultErasureCounter::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
-        TDuration duration, TErrorInfo &error)
-{
-    Y_VERIFY_DEBUG(vdisk.VDiskId != VDisk.VDiskId);
-
-    // Check locks.
-    TErrorInfo err;
-    if (IsLocked(vdisk, info, retryTime, duration, err)) {
-        ++Locked;
-        error.Code = err.Code;
-        error.Reason = TStringBuilder() << "Issue in affected group " << GroupId
-                                        << ". " << err.Reason;
-        error.Deadline = Max(error.Deadline, err.Deadline);
-        return;
-    }
-
-    // Check if disk is down.
-    if (IsDown(vdisk, info, retryTime, err)) {
-        ++Down;
-        error.Code = err.Code;
-        error.Reason = TStringBuilder() << "Issue in affected group " << GroupId
-                                        << ". " << err.Reason;
-        error.Deadline = Max(error.Deadline, err.Deadline);
+IStorageGroupChecker::EVDiskState IStorageGroupChecker::VDiskState(NKikimrCms::EState state) {
+    switch (state) {
+        case NKikimrCms::UP:
+            return VDISK_STATE_UP;
+        case NKikimrCms::UNKNOWN:
+            return VDISK_STATE_UNSPECIFIED;
+        case NKikimrCms::DOWN:
+            return VDISK_STATE_DOWN;
+        case NKikimrCms::RESTART:
+            return VDISK_STATE_RESTART;
+        default:
+            Y_FAIL("Unknown EState");
     }
 }
 
-bool TDefaultErasureCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
-        TInstant &defaultDeadline, bool allowPartial) const
-{
-    if (HasAlreadyLockedDisks && allowPartial) {
-        error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = "You cannot get two or more disks from the same group at the same time"
-                        " without specifying the PartialPermissionAllowed parameter";
-        error.Deadline = defaultDeadline;
-        return false;
-    }
-
-    if (Down + Locked > info->BSGroup(GroupId).Erasure.ParityParts()) {
-        if (HasAlreadyLockedDisks && !allowPartial) {
-            error.Code = TStatus::DISALLOW;
-            error.Reason = "The request is incorrect: too many disks from the one group. "
-                           "Fix the request or set PartialPermissionAllowed to true";
-            return false;
-        }
-        error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Cannot lock disk " << VDisk.PrettyItemName()
-                                        << ". Too many locked nodes for group " << GroupId;
-        error.Deadline = defaultDeadline;
-        return false;
-    }
-    return true;
-}
-
-bool TMirror3dcCounter::CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo &error,
-        TInstant &defaultDeadline, bool allowPartial) const
-{
-    Y_UNUSED(info);
-
-    if (HasAlreadyLockedDisks && allowPartial) {
-        error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = "You cannot get two or more disks from the same group at the same time"
-                        " without specifying the PartialPermissionAllowed parameter";
-        error.Deadline = defaultDeadline;
-        return false;
-    }
-
-    if (DataCenterDisabledNodes.size() <= 1)
-        return true;
-
-    if (DataCenterDisabledNodes.size() == 2
-        && (DataCenterDisabledNodes.begin()->second <= 1
-            || (++DataCenterDisabledNodes.begin())->second <= 1))
-    {
-        return true;
-    }
-
-    if (HasAlreadyLockedDisks && !allowPartial) {
-        error.Code = TStatus::DISALLOW;
-        error.Reason = "The request is incorrect: too many disks from the one group. "
-                       "Fix the request or set PartialPermissionAllowed to true";
-        return false;
-    }
-
-    if (DataCenterDisabledNodes.size() > 2) {
-        error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = TStringBuilder() << "Issue in affected group " << GroupId
-                                        << ". Too many data centers have unavailable vdisks: "
-                                        << DataCenterDisabledNodes.size();
-        error.Deadline = defaultDeadline;
-        return false;
-    }
-
-    error.Code = TStatus::DISALLOW_TEMP;
-    error.Reason = TStringBuilder() << "Issue in affected group " << GroupId
-                                    << ". Data centers have too many unavailable vdisks";
-    error.Deadline = defaultDeadline;
-
-    return false;
-}
-
-void TMirror3dcCounter::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
-        TDuration duration, TErrorInfo &error)
-{
-    Y_VERIFY_DEBUG(vdisk.VDiskId != VDisk.VDiskId);
-
-    // Check locks.
-    TErrorInfo err;
-    if (IsLocked(vdisk, info, retryTime, duration, err)
-        || IsDown(vdisk, info, retryTime, err)) {
-        error.Code = err.Code;
-        error.Reason = TStringBuilder() << "Issue in affected group " << GroupId
-                                        << ". " << err.Reason;
-        error.Deadline = Max(error.Deadline, err.Deadline);
-        ++Locked;
-        ++DataCenterDisabledNodes[vdisk.VDiskId.FailRealm];
-    }
-}
-
-void TMirror3dcCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
-    for (const auto &vdId : info->BSGroup(GroupId).VDisks) {
-        if (vdId != VDisk.VDiskId)
-            CountVDisk(info->VDisk(vdId), info, retryTime, duration, error);
-    }
-    ++Locked;
-    ++DataCenterDisabledNodes[VDisk.VDiskId.FailRealm];
-
-    if (Locked && error.Code == TStatus::DISALLOW) {
-        HasAlreadyLockedDisks = true;
-    }
-}
-
-void TDefaultErasureCounter::CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error) {
-    for (const auto &vdId : info->BSGroup(GroupId).VDisks) {
-        if (vdId != VDisk.VDiskId)
-            CountVDisk(info->VDisk(vdId), info, retryTime, duration, error);
-    }
-    if (Locked && error.Code == TStatus::DISALLOW) {
-        HasAlreadyLockedDisks = true;
-    }
-    ++Locked;
-}
-
-TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpecies es, const TVDiskInfo &vdisk, ui32 groupId) {
+TSimpleSharedPtr<IStorageGroupChecker> CreateStorageGroupChecker(TErasureType::EErasureSpecies es, ui32 groupId) {
     switch (es) {
         case TErasureType::ErasureNone:
         case TErasureType::ErasureMirror3:
@@ -222,12 +52,310 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::Erasure2Plus2Block:
         case TErasureType::Erasure2Plus2Stripe:
         case TErasureType::ErasureMirror3of4:
-            return TSimpleSharedPtr<IErasureCounter>(new TDefaultErasureCounter(vdisk, groupId));
+            return TSimpleSharedPtr<IStorageGroupChecker>(new TDefaultErasureChecker(groupId));
         case TErasureType::ErasureMirror3dc:
-            return TSimpleSharedPtr<IErasureCounter>(new TMirror3dcCounter(vdisk, groupId));
+            return TSimpleSharedPtr<IStorageGroupChecker>(new TMirror3dcChecker(groupId));
         default:
             Y_FAIL("Unknown erasure type: %d", es);
     }
+}
+
+
+void TErasureCheckerBase::AddVDisk(const TVDiskID& vdiskId) {
+    if (DiskToState.contains(vdiskId)) {
+        return;
+    }
+    DiskToState[vdiskId].State = VDISK_STATE_UNSPECIFIED;
+}
+
+void TErasureCheckerBase::UpdateVDisk(const TVDiskID& vdiskId, EState state) {
+    AddVDisk(vdiskId);
+
+    const auto newState = VDiskState(state);
+
+    // The disk is marked based on the information obtained by InfoCollector.
+    // If we marked the disk DOWN, it means that there was a reason
+    if (DiskToState[vdiskId].State == VDISK_STATE_DOWN
+        && newState == VDISK_STATE_UP)
+        return;
+
+    if (DiskToState[vdiskId].State == VDISK_STATE_DOWN) {
+        --DownVDisksCount;
+    }
+
+    if (DiskToState[vdiskId].State == VDISK_STATE_LOCKED ||
+        DiskToState[vdiskId].State == VDISK_STATE_RESTART) {
+        --LockedVDisksCount;
+    }
+
+    DiskToState[vdiskId].State = newState;
+
+    if (newState == VDISK_STATE_RESTART || newState == VDISK_STATE_LOCKED) {
+        ++LockedVDisksCount;
+    }
+
+    if (newState == VDISK_STATE_DOWN) {
+        ++DownVDisksCount;
+    }
+}
+
+void TErasureCheckerBase::LockVDisk(const TVDiskID& vdiskId) {
+    Y_VERIFY(DiskToState.contains(vdiskId));
+
+    ++LockedVDisksCount;
+    if (DiskToState[vdiskId].State == VDISK_STATE_DOWN) {
+        DiskToState[vdiskId].State = VDISK_STATE_RESTART;
+        --DownVDisksCount;
+    } else {
+        DiskToState[vdiskId].State = VDISK_STATE_LOCKED;
+    }
+}
+
+void TErasureCheckerBase::UnlockVDisk(const TVDiskID& vdiskId) {
+    Y_VERIFY(DiskToState.contains(vdiskId));
+
+    --LockedVDisksCount;
+    if (DiskToState[vdiskId].State == VDISK_STATE_RESTART) {
+        DiskToState[vdiskId].State = VDISK_STATE_DOWN;
+        ++DownVDisksCount;
+    } else {
+        DiskToState[vdiskId].State = VDISK_STATE_UP;
+    }
+}
+
+void TErasureCheckerBase::EmplaceTask(const TVDiskID &vdiskId, i32 priority,
+                                      ui64 order, const std::string &taskUId) {
+
+    auto& priorities = DiskToState[vdiskId].Priorities;
+    auto it = priorities.lower_bound(TVDiskState::TTaskPriority(priority, order, ""));
+
+    if (it != priorities.end() && (it->Order == order && it->Priority == priority)) {
+        if (it->TaskUId == taskUId) {
+            return;
+        }
+        Y_FAIL("Task with the same priority and order already exists");
+    } else {
+        priorities.emplace_hint(it, priority, order, taskUId);
+    }
+}
+
+void TErasureCheckerBase::RemoveTask(const std::string &taskUId) {
+    auto taskUIdsEqual = [&taskUId](const TVDiskState::TTaskPriority &p) {
+      return p.TaskUId == taskUId;
+    };
+
+    for (auto &[vdiskId, vdiskState] : DiskToState) {
+            auto it = std::find_if(vdiskState.Priorities.begin(),
+                                   vdiskState.Priorities.end(), taskUIdsEqual);
+
+            if (it == vdiskState.Priorities.end()) {
+                continue;
+            }
+
+            vdiskState.Priorities.erase(it);
+
+    }
+}
+
+ActionState::ActionReason TDefaultErasureChecker::TryToLockVDisk(const TVDiskID &vdiskId, EAvailabilityMode mode, i32 priority, ui64 order) const {
+    Y_VERIFY(DiskToState.contains(vdiskId));
+
+    const auto& diskState = DiskToState.at(vdiskId);
+
+    if (diskState.State == VDISK_STATE_RESTART
+        || diskState.State == VDISK_STATE_LOCKED) {
+        return ActionState::ACTION_REASON_ALREADY_LOCKED;
+    }
+
+    auto taskPriority = TVDiskState::TTaskPriority(priority, order, "");
+    if (!diskState.Priorities.empty() && taskPriority < *diskState.Priorities.rbegin()) {
+        return ActionState::ACTION_REASON_LOW_PRIORITY;
+    }
+
+    if (mode == NKikimrCms::MODE_FORCE_RESTART) {
+        return ActionState::ACTION_REASON_OK;
+    }
+
+    // Check how many disks are waiting for higher prioriry task to be locked
+    ui32 priorityLockedCount = 0;
+    for (auto &[id, vdiskState] : DiskToState) {
+        if (vdiskState.State != VDISK_STATE_UP) {
+            continue;
+        }
+
+        if (!vdiskState.Priorities.empty() && taskPriority < *vdiskState.Priorities.rbegin()) {
+            ++priorityLockedCount;
+        }
+    }
+
+    ui32 disksLimit = 0;
+    if (diskState.State == VDISK_STATE_DOWN) {
+        disksLimit = 1;
+    }
+
+    switch (mode) {
+        case NKikimrCms::MODE_MAX_AVAILABILITY:
+            if ((LockedVDisksCount + DownVDisksCount + priorityLockedCount) > disksLimit) {
+                    return ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+            }
+            break;
+        case NKikimrCms::MODE_KEEP_AVAILABLE:
+            if ((LockedVDisksCount + DownVDisksCount + priorityLockedCount) >= disksLimit + 2) {
+                return ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+            }
+            break;
+        default:
+            Y_FAIL("Unexpected Availability mode");
+    }
+
+    return ActionState::ACTION_REASON_OK;
+}
+
+ActionState::ActionReason TMirror3dcChecker::TryToLockVDisk(const TVDiskID &vdiskId, EAvailabilityMode mode, i32 priority, ui64 order) const {
+    Y_VERIFY(DiskToState.contains(vdiskId));
+
+    const auto& diskState = DiskToState.at(vdiskId);
+    const auto taskPriority = TVDiskState::TTaskPriority(priority, order, "");
+
+    if (!diskState.Priorities.empty() && taskPriority < *diskState.Priorities.rbegin()) {
+        return ActionState::ACTION_REASON_LOW_PRIORITY;
+    }
+
+    if (mode == MODE_FORCE_RESTART) {
+        return ActionState::ACTION_REASON_OK;
+    }
+
+    if (diskState.State == VDISK_STATE_LOCKED
+        || diskState.State == VDISK_STATE_RESTART) {
+        return ActionState::ACTION_REASON_ALREADY_LOCKED;
+    }
+
+    const std::vector<std::bitset<9>> MaxOkGroups = {
+        0x1E0, 0x1D0, 0x1C8, 0x1C4, 0x1C2, 0x1C1,
+        0x138, 0xB8, 0x78, 0x3C, 0x3A, 0x39,
+        0x107, 0x87, 0x47, 0x27, 0x17, 0xF,
+    };
+
+    ui32 priorityLockedCount = 0;
+    std::bitset<9> groupState(0);
+    for (auto& [id, state] : DiskToState) {
+        if (id == vdiskId)
+            continue;
+
+        if (state.State != VDISK_STATE_UP
+            || (!state.Priorities.empty() && taskPriority < *state.Priorities.rbegin())) {
+            groupState |= (1 << (id.FailRealm * 3 + id.FailDomain));
+        }
+
+        if (!state.Priorities.empty() && taskPriority < *state.Priorities.rbegin()) {
+            ++priorityLockedCount;
+        }
+    }
+    groupState |= (1 << (vdiskId.FailRealm * 3 + vdiskId.FailDomain));
+
+    ui32 downVDisks = diskState.State == VDISK_STATE_DOWN ? DownVDisksCount - 1 : DownVDisksCount;
+    if (mode == NKikimrCms::MODE_MAX_AVAILABILITY) {
+        if ((downVDisks + LockedVDisksCount + priorityLockedCount) == 0) {
+            return ActionState::ACTION_REASON_OK;
+        }
+        return ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+    }
+
+    size_t minCount = 9;
+    for (auto okGroup : MaxOkGroups) {
+        auto xoredState = (~okGroup) & groupState;
+        minCount = std::min(minCount, xoredState.count());
+    }
+
+    if (minCount > 0) {
+        return ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS;
+    }
+
+    return ActionState::ACTION_REASON_OK;
+}
+
+std::string TDefaultErasureChecker::ReadableReason(const TVDiskID &vdiskId,
+                                       EAvailabilityMode mode, ActionState::ActionReason reason) const {
+    std::stringstream readableReason;
+
+    if (reason == ActionState::ACTION_REASON_OK) {
+        readableReason << "Action is OK";
+        return readableReason.str();
+    }
+
+    readableReason << "Cannot lock vdisk" << vdiskId.ToString() << ". ";
+
+    switch (reason) {
+        case ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS:
+            readableReason << "Group " << GroupId
+                << " has too many unavailable vdisks. "
+                << "Down disks count: " << DownVDisksCount
+                << ". Locked disks count: " << LockedVDisksCount;
+
+            if (mode == NKikimrCms::MODE_KEEP_AVAILABLE) {
+                readableReason << ". Limit of unavailable disks for mode " << NKikimrCms::EAvailabilityMode_Name(mode)
+                               << " is " << 2;
+            }
+            if (mode == NKikimrCms::MODE_MAX_AVAILABILITY) {
+                readableReason << ". Limit of unavailable disks for mode " << NKikimrCms::EAvailabilityMode_Name(mode)
+                               << " is " << 1;
+            }
+            break;
+        case ActionState::ACTION_REASON_ALREADY_LOCKED:
+            // TODO:: add info about lock id
+            readableReason << "Disk is already locked";
+            break;
+        case ActionState::ACTION_REASON_LOW_PRIORITY:
+            // TODO:: add info about task with higher priority
+            readableReason << "Task with higher priority in progress";
+            break;
+        default:
+            Y_FAIL("Unexpected Reason");
+    }
+
+    return readableReason.str();
+}
+
+std::string TMirror3dcChecker::ReadableReason(const TVDiskID &vdiskId,
+                                              EAvailabilityMode mode, ActionState::ActionReason reason) const {
+    std::stringstream readableReason;
+
+    if (reason == ActionState::ACTION_REASON_OK) {
+        readableReason << "Action is OK";
+        return readableReason.str();
+    }
+
+    readableReason << "Cannot lock vdisk" << vdiskId.ToString() << ". ";
+
+    switch (reason) {
+        case ActionState::ACTION_REASON_TOO_MANY_UNAVAILABLE_VDISKS:
+            readableReason << "Group " << GroupId
+                << " has too many unavailable vdisks. "
+                << "Down disks count: " << DownVDisksCount
+                << ". Locked disks count: " << LockedVDisksCount;
+
+            if (mode == NKikimrCms::MODE_KEEP_AVAILABLE) {
+                readableReason << ". Limit of unavailable disks for mode " << NKikimrCms::EAvailabilityMode_Name(mode)
+                               << " is 1";
+            }
+            if (mode == NKikimrCms::MODE_MAX_AVAILABILITY) {
+                readableReason << ". Limit of unavailable disks for mode " << NKikimrCms::EAvailabilityMode_Name(mode)
+                               << "4, 3 of which are in the same data center";
+            }
+            break;
+        case ActionState::ACTION_REASON_ALREADY_LOCKED:
+            // TODO:: add info about lock id
+            readableReason << "Disk is already locked";
+            break;
+        case ActionState::ACTION_REASON_LOW_PRIORITY:
+            // TODO:: add info about task with higher priority
+            readableReason << "Task with higher priority in progress";
+            break;
+        default:
+            Y_FAIL("Unexpected Reason");
+    }
+
+    return readableReason.str();
 }
 
 } // namespace NKikimr::NCms

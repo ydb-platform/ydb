@@ -87,11 +87,17 @@ message ActionState {
         // State storage broken. Too many (more than (nToSelect - 1) / 2) unavailable rings 
         ACTION_REASON_STATE_STORAGE_BROKEN = 5;
         // Issue in cluster disabled nodes limit
-        ACTION_REASON_DISABLED_NODES_LIMIT_RICHED = 6;
+        ACTION_REASON_DISABLED_NODES_LIMIT_REACHED = 6;
         // Issue in tenant limits
-        ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_RICHED = 7;
+        ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_REACHED = 7;
         // Wrong request
         ACTION_REASON_WRONG_REQUEST = 8;
+        // Low priority
+        ACTION_REASON_LOW_PRIORITY = 9;
+        // Lock is granded to this item
+        ACTION_REASON_ALREADY_LOCKED = 10;
+        // Limit to nodes with sys tablets
+        ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED = 11;
     }
 
     Action action = 1;

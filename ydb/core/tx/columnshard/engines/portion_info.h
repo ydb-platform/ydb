@@ -254,8 +254,8 @@ public:
 
     class TAssembleBlobInfo {
     private:
-        YDB_READONLY(ui32, NullRowsCount, 0);
-        YDB_READONLY_DEF(TString, Data);
+        ui32 NullRowsCount = 0;
+        TString Data;
     public:
         TAssembleBlobInfo(const ui32 rowsCount)
             : NullRowsCount(rowsCount) {
@@ -265,6 +265,14 @@ public:
         TAssembleBlobInfo(const TString& data)
             : Data(data) {
 
+        }
+
+        ui32 GetNullRowsCount() const noexcept {
+             return NullRowsCount;
+        }
+
+        const TString& GetData() const noexcept {
+            return Data;
         }
 
         std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(std::shared_ptr<arrow::Schema> schema) const {
@@ -280,10 +288,14 @@ public:
 
     class TPreparedColumn {
     private:
-        YDB_READONLY(ui32, ColumnId, 0);
+        ui32 ColumnId = 0;
         std::shared_ptr<arrow::Field> Field;
         std::vector<TAssembleBlobInfo> Blobs;
     public:
+        ui32 GetColumnId() const noexcept {
+            return ColumnId;
+        }
+
         const std::string& GetName() const {
             return Field->name();
         }
@@ -309,18 +321,20 @@ public:
         std::shared_ptr<arrow::Schema> Schema;
 
     public:
+        struct TAssembleOptions {
+            const bool ForwardAssemble = true;
+            std::optional<ui32> RecordsCountLimit;
+            std::optional<std::set<ui32>> IncludedColumnIds;
+            std::optional<std::set<ui32>> ExcludedColumnIds;
 
-        std::vector<std::string> GetSchemaColumnNames() const {
-            return Schema->field_names();
-        }
+            TAssembleOptions() noexcept
+                : TAssembleOptions(true)
+            {}
 
-        class TAssembleOptions {
-        private:
-            YDB_OPT(ui32, RecordsCountLimit);
-            YDB_FLAG_ACCESSOR(ForwardAssemble, true);
-            YDB_OPT(std::set<ui32>, IncludedColumnIds);
-            YDB_OPT(std::set<ui32>, ExcludedColumnIds);
-        public:
+            explicit TAssembleOptions(bool forward) noexcept
+                : ForwardAssemble(forward)
+            {}
+
             bool IsAcceptedColumn(const ui32 columnId) const {
                 if (IncludedColumnIds && !IncludedColumnIds->contains(columnId)) {
                     return false;
@@ -332,6 +346,10 @@ public:
             }
         };
 
+        std::vector<std::string> GetSchemaColumnNames() const {
+            return Schema->field_names();
+        }
+
         size_t GetColumnsCount() const {
             return Columns.size();
         }
@@ -340,10 +358,9 @@ public:
             : Columns(std::move(columns))
             , Schema(schema)
         {
-
         }
 
-        std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = Default<TAssembleOptions>()) const;
+        std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
     };
 
     template <class TExternalBlobInfo>

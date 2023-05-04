@@ -7,7 +7,7 @@ bool IDataTasksProcessor::ITask::DoExecute() {
     if (OwnerOperator && OwnerOperator->IsStopped()) {
         return true;
     } else {
-        DataProcessedFlag = true;
+        DataProcessed = true;
         return DoExecuteImpl();
     }
 }

@@ -233,11 +233,12 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(con
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector< std::shared_ptr<arrow::Field>> fields;
+    ui64 limit = options.RecordsCountLimit ? *options.RecordsCountLimit : Max<ui64>();
     for (auto&& i : Columns) {
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
         }
-        columns.emplace_back(i.Assemble(options.GetRecordsCountLimitDef(Max<ui32>()), !options.IsForwardAssemble()));
+        columns.emplace_back(i.Assemble(limit, !options.ForwardAssemble));
         fields.emplace_back(i.GetField());
     }
 

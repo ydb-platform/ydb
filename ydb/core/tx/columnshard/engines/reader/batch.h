@@ -19,31 +19,79 @@ class TGranule;
 
 class TBatch {
 private:
-    YDB_READONLY(ui64, BatchNo, 0);
-    YDB_READONLY(ui64, Portion, 0);
-    YDB_READONLY(ui64, Granule, 0);
-    YDB_READONLY(ui64, WaitingBytes, 0);
-    YDB_READONLY(ui64, FetchedBytes, 0);
+    ui64 BatchNo = 0;
+    ui64 Portion = 0;
+    ui64 Granule = 0;
+    ui64 WaitingBytes = 0;
+    ui64 FetchedBytes = 0;
 
     THashSet<TBlobRange> WaitIndexed;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilteredBatch);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilterBatch);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, FutureFilter);
-    
+    std::shared_ptr<arrow::RecordBatch> FilteredBatch;
+    std::shared_ptr<arrow::RecordBatch> FilterBatch;
+    std::shared_ptr<NArrow::TColumnFilter> Filter;
+    std::shared_ptr<NArrow::TColumnFilter> FutureFilter;
+
     ui32 OriginalRecordsCount = 0;
 
-    YDB_READONLY_FLAG(DuplicationsAvailable, false);
+    bool DuplicationsAvailable = false;
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
     TGranule* Owner;
     const TPortionInfo* PortionInfo = nullptr;
 
-    YDB_READONLY_DEF(std::optional<std::set<ui32>>, CurrentColumnIds);
+    std::optional<std::set<ui32>> CurrentColumnIds;
     std::set<ui32> AskedColumnIds;
     void ResetCommon(const std::set<ui32>& columnIds);
     ui64 GetUsefulBytes(const ui64 bytes) const;
 
 public:
+    bool IsDuplicationsAvailable() const noexcept {
+        return DuplicationsAvailable;
+    }
+
+    void SetDuplicationsAvailable(bool val) noexcept {
+        DuplicationsAvailable = val;
+    }
+
+    ui64 GetBatchNo() const noexcept {
+        return BatchNo;
+    }
+
+    ui64 GetPortion() const noexcept {
+        return Portion;
+    }
+
+    ui64 GetGranule() const noexcept {
+        return Granule;
+    }
+
+    ui64 GetWaitingBytes() const noexcept {
+        return WaitingBytes;
+    }
+
+    ui64 GetFetchedBytes() const noexcept {
+        return FetchedBytes;
+    }
+
+    const std::optional<std::set<ui32>>& GetCurrentColumnIds() const noexcept {
+        return CurrentColumnIds;
+    }
+
+    const std::shared_ptr<arrow::RecordBatch>& GetFilteredBatch() const noexcept {
+        return FilteredBatch;
+    }
+
+    const std::shared_ptr<arrow::RecordBatch>& GetFilterBatch() const noexcept {
+        return FilterBatch;
+    }
+
+    const std::shared_ptr<NArrow::TColumnFilter>& GetFilter() const noexcept {
+        return Filter;
+    }
+
+    const std::shared_ptr<NArrow::TColumnFilter>& GetFutureFilter() const noexcept {
+        return FutureFilter;
+    }
+
     ui64 GetUsefulWaitingBytes() const {
         return GetUsefulBytes(WaitingBytes);
     }

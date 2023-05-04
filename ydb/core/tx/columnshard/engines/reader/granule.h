@@ -13,27 +13,59 @@ class TGranulesFillingContext;
 
 class TGranule {
 private:
-    YDB_READONLY(ui64, GranuleId, 0);
+    ui64 GranuleId = 0;
 
-    YDB_READONLY_FLAG(NotIndexedBatchReady, false);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, NotIndexedBatch);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotIndexedBatchFutureFilter);
+    bool NotIndexedBatchReadyFlag = false;
+    std::shared_ptr<arrow::RecordBatch> NotIndexedBatch;
+    std::shared_ptr<NArrow::TColumnFilter> NotIndexedBatchFutureFilter;
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> NonSortableBatches;
     std::vector<std::shared_ptr<arrow::RecordBatch>> SortableBatches;
-    YDB_FLAG_ACCESSOR(DuplicationsAvailable, false);
-    YDB_READONLY_FLAG(Ready, false);
+    bool DuplicationsAvailableFlag = false;
+    bool ReadyFlag = false;
     std::deque<TBatch> Batches;
     std::set<ui32> WaitBatches;
     std::set<ui32> GranuleBatchNumbers;
     TGranulesFillingContext* Owner = nullptr;
-    YDB_READONLY_DEF(THashSet<const void*>, BatchesToDedup);
+    THashSet<const void*> BatchesToDedup;
 
     void CheckReady();
 public:
     TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
         : GranuleId(granuleId)
         , Owner(&owner) {
+    }
+
+    ui64 GetGranuleId() const noexcept {
+        return GranuleId;
+    }
+
+    const THashSet<const void*>& GetBatchesToDedup() const noexcept {
+        return BatchesToDedup;
+    }
+
+    const std::shared_ptr<arrow::RecordBatch>& GetNotIndexedBatch() const noexcept {
+        return NotIndexedBatch;
+    }
+
+    const std::shared_ptr<NArrow::TColumnFilter>& GetNotIndexedBatchFutureFilter() const noexcept {
+        return NotIndexedBatchFutureFilter;
+    }
+
+    bool IsNotIndexedBatchReady() const noexcept {
+        return NotIndexedBatchReadyFlag;
+    }
+
+    bool IsDuplicationsAvailable() const noexcept {
+        return DuplicationsAvailableFlag;
+    }
+
+    void SetDuplicationsAvailable(bool val) noexcept {
+        DuplicationsAvailableFlag = val;
+    }
+
+    bool IsReady() const noexcept {
+        return ReadyFlag;
     }
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> GetReadyBatches() const {

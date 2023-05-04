@@ -99,8 +99,8 @@ public:
 class TGranuleOrdered {
 private:
     bool StartedFlag = false;
-    YDB_ACCESSOR_DEF(std::deque<TBatch*>, Batches);
-    YDB_READONLY(const TGranule*, Granule, nullptr);
+    std::deque<TBatch*> Batches;
+    const TGranule* Granule = nullptr;
 public:
     bool Start() {
         if (!StartedFlag) {
@@ -109,14 +109,25 @@ public:
         } else {
             return false;
         }
-        
+
     }
 
     TGranuleOrdered(std::deque<TBatch*>&& batches, TGranule* granule)
         : Batches(std::move(batches))
         , Granule(granule)
     {
+    }
 
+    const std::deque<TBatch*>& GetBatches() const noexcept {
+        return Batches;
+    }
+
+    std::deque<TBatch*>& GetBatches() noexcept {
+        return Batches;
+    }
+
+    const TGranule* GetGranule() const noexcept {
+        return Granule;
     }
 };
 

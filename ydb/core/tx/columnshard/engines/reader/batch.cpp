@@ -19,7 +19,7 @@ TBatch::TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionI
         Owner->SetDuplicationsAvailable(true);
         if (portionInfo.CanHaveDups()) {
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "dup_portion");
-            DuplicationsAvailableFlag = true;
+            DuplicationsAvailable = true;
         }
     }
 }

@@ -13,24 +13,44 @@ namespace NKikimr::NOlap::NIndexedReader {
 class TGranulesFillingContext {
 private:
     bool AbortedFlag = false;
-    YDB_READONLY_DEF(TReadMetadata::TConstPtr, ReadMetadata);
+    TReadMetadata::TConstPtr ReadMetadata;
     const bool InternalReading = false;
     TIndexedReadData& Owner;
     THashMap<ui64, NIndexedReader::TGranule*> GranulesToOut;
     std::set<ui64> ReadyGranulesAccumulator;
     THashMap<ui64, NIndexedReader::TGranule> Granules;
-    YDB_READONLY_DEF(std::set<ui32>, EarlyFilterColumns);
-    YDB_READONLY_DEF(std::set<ui32>, PostFilterColumns);
+    std::set<ui32> EarlyFilterColumns;
+    std::set<ui32> PostFilterColumns;
     std::set<ui32> FilterStageColumns;
     std::set<ui32> UsedColumns;
-    YDB_READONLY_DEF(IOrderPolicy::TPtr, SortingPolicy);
-    YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
+    IOrderPolicy::TPtr SortingPolicy;
+    NColumnShard::TScanCounters Counters;
     std::vector<NIndexedReader::TBatch*> Batches;
 
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
 public:
     TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading, const ui32 batchesCount);
+
+    TReadMetadata::TConstPtr GetReadMetadata() const noexcept {
+        return ReadMetadata;
+    }
+
+    const std::set<ui32>& GetEarlyFilterColumns() const noexcept {
+        return EarlyFilterColumns;
+    }
+
+    const std::set<ui32>& GetPostFilterColumns() const noexcept {
+        return PostFilterColumns;
+    }
+
+    IOrderPolicy::TPtr GetSortingPolicy() const noexcept {
+        return SortingPolicy;
+    }
+
+    NColumnShard::TScanCounters GetCounters() const noexcept {
+        return Counters;
+    }
 
     NColumnShard::TDataTasksProcessorContainer GetTasksProcessor() const;
 

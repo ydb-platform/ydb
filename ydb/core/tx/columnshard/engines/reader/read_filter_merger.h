@@ -13,8 +13,8 @@ class TMergePartialStream {
 private:
     class TBatchIterator {
     private:
-        YDB_ACCESSOR(i64, Position, 0);
-        YDB_OPT(ui32, PoolId);
+        i64 Position = 0;
+        std::optional<ui32> PoolId;
         std::shared_ptr<arrow::RecordBatch> Batch;
 
         std::shared_ptr<NArrow::TColumnFilter> Filter;
@@ -77,6 +77,14 @@ private:
                 Y_VERIFY(c);
                 VersionColumns.emplace_back(c);
             }
+        }
+
+        bool HasPoolId() const noexcept {
+            return PoolId.has_value();
+        }
+
+        ui32 GetPoolIdUnsafe() const noexcept {
+            return *PoolId;
         }
 
         bool CheckNextBatch(const TBatchIterator& nextIterator) {

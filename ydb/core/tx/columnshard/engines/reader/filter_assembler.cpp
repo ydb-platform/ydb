@@ -9,7 +9,7 @@ bool TAssembleFilter::DoExecuteImpl() {
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-    options.SetIncludedColumnIds(FilterColumnIds);
+    options.IncludedColumnIds = FilterColumnIds;
     auto batch = BatchConstructor.Assemble(options);
     Y_VERIFY(batch);
     Y_VERIFY(batch->num_rows());
@@ -36,7 +36,7 @@ bool TAssembleFilter::DoExecuteImpl() {
 
     if ((size_t)batch->schema()->num_fields() < BatchConstructor.GetColumnsCount()) {
         TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-        options.SetExcludedColumnIds(FilterColumnIds);
+        options.ExcludedColumnIds = FilterColumnIds;
         auto addBatch = BatchConstructor.Assemble(options);
         Y_VERIFY(addBatch);
         Y_VERIFY(Filter->Apply(addBatch));
@@ -53,8 +53,8 @@ bool TAssembleFilter::DoExecuteImpl() {
 bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
     TBatch& batch = owner.GetBatchInfo(BatchNo);
     Y_VERIFY(OriginalCount);
-    owner.GetCounters().GetOriginalRowsCount()->Add(OriginalCount);
-    owner.GetCounters().GetAssembleFilterCount()->Add(1);
+    owner.GetCounters().OriginalRowsCount->Add(OriginalCount);
+    owner.GetCounters().AssembleFilterCount->Add(1);
     batch.InitFilter(Filter, FilteredBatch, OriginalCount, EarlyFilter);
     return true;
 }

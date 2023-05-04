@@ -10,15 +10,17 @@ bool TAssembleBatch::DoExecuteImpl() {
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
 
     Y_VERIFY(BatchConstructor.GetColumnsCount());
+    Y_VERIFY(Filter);
 
-    TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-    if (Filter->GetInactiveHeadSize() > Filter->GetInactiveTailSize()) {
-        options.SetRecordsCountLimit(Filter->Size() - Filter->GetInactiveHeadSize())
-            .SetForwardAssemble(false);
-        Filter->CutInactiveHead();
-    } else {
-        options.SetRecordsCountLimit(Filter->Size() - Filter->GetInactiveTailSize());
+    bool forward = Filter->GetInactiveHeadSize() <= Filter->GetInactiveTailSize();
+
+    TPortionInfo::TPreparedBatchData::TAssembleOptions options(forward);
+    options.RecordsCountLimit = Filter->Size() - (forward ? Filter->GetInactiveTailSize() : Filter->GetInactiveHeadSize());
+
+    if (forward) {
         Filter->CutInactiveTail();
+    } else {
+        Filter->CutInactiveHead();
     }
 
     auto addBatch = BatchConstructor.Assemble(options);

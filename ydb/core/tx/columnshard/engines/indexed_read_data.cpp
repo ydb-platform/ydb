@@ -117,11 +117,11 @@ void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::
     Y_VERIFY(IndexedBlobs.emplace(range).second);
     Y_VERIFY(IndexedBlobSubscriber.emplace(range, &batch).second);
     if (batch.GetFilter()) {
-        Counters.GetPostFilterBytes()->Add(range.Size);
+        Counters.PostFilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataAdditionalBytes += range.Size;
         FetchBlobsQueue.emplace_front(range);
     } else {
-        Counters.GetFilterBytes()->Add(range.Size);
+        Counters.FilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataFilterBytes += range.Size;
         FetchBlobsQueue.emplace_back(range);
     }
@@ -151,7 +151,7 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
     }
     GranulesContext->PrepareForStart();
 
-    Counters.GetPortionBytes()->Add(portionsBytes);
+    Counters.PortionBytes->Add(portionsBytes);
     auto& stats = ReadMetadata->ReadStats;
     stats->IndexGranules = ReadMetadata->SelectInfo->Granules.size();
     stats->IndexPortions = ReadMetadata->SelectInfo->Portions.size();

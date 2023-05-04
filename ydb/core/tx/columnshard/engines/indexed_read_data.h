@@ -21,8 +21,8 @@ class TIndexedReadData {
 private:
     std::unique_ptr<NIndexedReader::TGranulesFillingContext> GranulesContext;
 
-    YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
-    YDB_READONLY_DEF(NColumnShard::TDataTasksProcessorContainer, TasksProcessor);
+    NColumnShard::TScanCounters Counters;
+    NColumnShard::TDataTasksProcessorContainer TasksProcessor;
     TFetchBlobsQueue& FetchBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     bool OnePhaseReadMode = false;
@@ -37,6 +37,14 @@ private:
 public:
     TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, TFetchBlobsQueue& fetchBlobsQueue,
         const bool internalRead, const NColumnShard::TScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
+
+    const NColumnShard::TScanCounters& GetCounters() const noexcept {
+        return Counters;
+    }
+
+    const NColumnShard::TDataTasksProcessorContainer& GetTasksProcessor() const noexcept {
+        return TasksProcessor;
+    }
 
     NIndexedReader::TGranulesFillingContext& GetGranulesContext() {
         Y_VERIFY(GranulesContext);

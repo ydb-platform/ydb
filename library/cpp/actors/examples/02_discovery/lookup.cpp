@@ -51,8 +51,8 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExample::TEvReplicaInfo, Handle);
-            sFunc(TEvents::TEvUndelivered, HandleUndelivered);
-            sFunc(TEvInterconnect::TEvNodeDisconnected, HandleUndelivered);
+            cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
+            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleUndelivered);
         default:
             break;
         }

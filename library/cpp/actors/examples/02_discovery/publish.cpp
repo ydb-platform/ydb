@@ -46,9 +46,9 @@ public:
 
     STFUNC(StatePublish) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-            sFunc(TEvents::TEvUndelivered, SomeSleep);
-            sFunc(TEvInterconnect::TEvNodeDisconnected, SomeSleep);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            cFunc(TEvents::TEvUndelivered::EventType, SomeSleep);
+            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
         default:
             break;
         }
@@ -56,8 +56,8 @@ public:
 
     STFUNC(StateSleep) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-            sFunc(TEvents::TEvWakeup, Bootstrap);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+            cFunc(TEvents::TEvWakeup::EventType, Bootstrap);
         default:
             break;
         }
@@ -98,7 +98,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
             break;
         }

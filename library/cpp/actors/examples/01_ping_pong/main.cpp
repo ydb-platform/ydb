@@ -53,7 +53,7 @@ public:
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPing, Handle);
-            sFunc(TEvents::TEvWakeup, PrintStats);
+            cFunc(TEvents::TEvWakeup::EventType, PrintStats);
         }
 
         ++HandledEvents;
@@ -62,7 +62,7 @@ public:
     STFUNC(StatePing) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPong, Handle);
-            sFunc(TEvents::TEvWakeup, PrintStats);
+            cFunc(TEvents::TEvWakeup::EventType, PrintStats);
         }
 
         ++HandledEvents;

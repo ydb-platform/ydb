@@ -142,6 +142,7 @@ class KikimrConfigGenerator(object):
             enable_alter_database_create_hive_first=False,
             disable_iterator_reads=False,
             disable_iterator_lookups=False,
+            overrided_actor_system_config=None
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -211,6 +212,9 @@ class KikimrConfigGenerator(object):
         self.__bs_cache_file_path = bs_cache_file_path
 
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+
+        if overrided_actor_system_config:
+            self.yaml_config["actor_system_config"] = overrided_actor_system_config
 
         if disable_iterator_reads:
             if "table_service_config" not in self.yaml_config:

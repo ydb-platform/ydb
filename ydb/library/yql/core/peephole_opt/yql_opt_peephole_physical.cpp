@@ -4952,7 +4952,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth"}))
+        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth", "ToPg", "FromPg"}))
         {
             for (auto& child : node->ChildrenList()) {
                 if (!child->GetTypeAnn()->IsComputable()) {

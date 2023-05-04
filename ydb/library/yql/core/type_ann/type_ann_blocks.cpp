@@ -1,6 +1,7 @@
 #include "type_ann_blocks.h"
 #include "type_ann_list.h"
 #include "type_ann_wide.h"
+#include "type_ann_pg.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -343,6 +344,60 @@ IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNo
         if (isOptional && !resultType->IsOptionalOrNull()) {
             resultType = ctx.Expr.MakeType<TOptionalExprType>(resultType);
         }
+    }
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto child = input->Child(0);
+    if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+    auto resultType = ToPgImpl(input->Pos(), blockItemType, ctx.Expr);
+    if (!resultType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+    
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;    
+}
+
+IGraphTransformer::TStatus BlockFromPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto child = input->Child(0);
+    if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+    auto resultType = FromPgImpl(input->Pos(), blockItemType, ctx.Expr);
+    if (!resultType) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     if (isScalar) {

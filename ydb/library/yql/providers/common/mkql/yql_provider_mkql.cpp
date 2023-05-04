@@ -2463,6 +2463,18 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.ToPg(input, returnType);
     });
 
+    AddCallable("BlockFromPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto input = MkqlBuildExpr(*node.Child(0), ctx);
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockFromPg(input, returnType);
+    });
+
+    AddCallable("BlockToPg", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto input = MkqlBuildExpr(*node.Child(0), ctx);
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockToPg(input, returnType);
+    });
+
     AddCallable("WithContext", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
         return ctx.ProgramBuilder.WithContext(input, node.Child(1)->Content());

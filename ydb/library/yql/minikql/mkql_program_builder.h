@@ -261,6 +261,8 @@ public:
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
+    TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
+    TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);

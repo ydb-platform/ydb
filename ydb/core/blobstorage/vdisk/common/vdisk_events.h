@@ -1325,7 +1325,7 @@ namespace NKikimr {
                 errorReason = "TEvVGet rejected by VDisk. It has no VDiskID::GroupID. Record.GetVDiskID(): " + Record.GetVDiskID().ShortDebugString();
             } else if (!Record.HasMsgQoS()) {
                 errorReason = "TEvVGet rejected by VDisk. MsgQoS is undefined";
-            } else if (! Record.MutableMsgQoS()->HasExtQueueId()) {
+            } else if (!Record.GetMsgQoS().HasExtQueueId()) {
                 errorReason = "TEvVGet rejected by VDisk. ExtQueueId is undefined";
             } else {
                 return true;

@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/index_logic.h>
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
@@ -130,7 +131,8 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
 
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::CompactBlobs(TxEvent->IndexInfo, TxEvent->Tiering, TxEvent->IndexChanges);
+            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering);
+            TxEvent->Blobs = compactionLogic.Apply(TxEvent->IndexChanges);
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
             }

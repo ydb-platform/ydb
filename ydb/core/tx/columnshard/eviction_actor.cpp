@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/index_logic.h>
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
@@ -126,8 +127,9 @@ private:
             TCpuGuard guard(TxEvent->ResourceUsage);
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::EvictBlobs(TxEvent->IndexInfo, TxEvent->Tiering, TxEvent->IndexChanges);
+            NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering);
+            TxEvent->Blobs = evictionLogic.Apply(TxEvent->IndexChanges);
+            
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK;
             }

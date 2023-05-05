@@ -218,17 +218,6 @@ public:
                                         std::shared_ptr<TPredicate> to) const override;
     std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) override;
 
-    // Static part of IColumnEngine iface (called from actors). It's static cause there's no threads sync.
-
-    /// @note called from IndexingActor
-    static TVector<TString> IndexBlobs(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap, std::shared_ptr<TColumnEngineChanges> changes);
-
-    /// @note called from CompactionActor
-    static TVector<TString> CompactBlobs(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap, std::shared_ptr<TColumnEngineChanges> changes);
-
-    /// @note called from EvictionActor
-    static TVector<TString> EvictBlobs(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap, std::shared_ptr<TColumnEngineChanges> changes);
-
 private:
     struct TGranuleMeta {
         const TGranuleRecord Record;

@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "column_engine_logs.h"
+#include "index_logic.h"
 #include "predicate.h"
 
 
@@ -279,8 +280,8 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
     changes->Blobs.insert(blobs.begin(), blobs.end());
 
-    TVector<TString> newBlobs = TColumnEngineForLogs::IndexBlobs(engine.GetIndexInfo(), {}, changes);
-
+    TIndexationLogic logic(engine.GetIndexInfo());
+    TVector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
 
@@ -314,8 +315,8 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 
-    TVector<TString> newBlobs = TColumnEngineForLogs::CompactBlobs(engine.GetIndexInfo(), {}, changes);
-
+    TCompactionLogic logic(engine.GetIndexInfo());
+    TVector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
 

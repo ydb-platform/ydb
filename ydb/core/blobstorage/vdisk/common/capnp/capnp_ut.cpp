@@ -168,6 +168,7 @@ namespace NKikimr {
             tevvget->Record.MutableMsgQoS().SetExtQueueId(queueId);
 
             // check
+            UNIT_ASSERT(!tevvget->Record.MutableVDiskID().HasDomain());
             UNIT_ASSERT(tevvget->Record.MutableVDiskID().HasGroupID());
             UNIT_ASSERT(tevvget->Record.MutableMsgQoS().HasExtQueueId());
             UNIT_ASSERT(tevvget->Record.MutableVDiskID().GetGroupID() == groupId);

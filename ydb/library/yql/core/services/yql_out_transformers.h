@@ -41,10 +41,12 @@ public:
     TPlanOutputTransformer(
         IOutputStream* directOut,
         IPlanBuilder& builder,
-        NYson::EYsonFormat outputFormat)
+        NYson::EYsonFormat outputFormat,
+        TPlanSettings&& settings = {})
         : DirectOut_(directOut)
         , Builder_(builder)
         , OutputFormat_(outputFormat)
+        , PlanSettings_(std::move(settings))
     {
     }
 
@@ -62,6 +64,7 @@ private:
     IOutputStream* DirectOut_;
     IPlanBuilder& Builder_;
     NYson::EYsonFormat OutputFormat_;
+    TPlanSettings PlanSettings_;
 };
 
 class TExprLogTransformer {

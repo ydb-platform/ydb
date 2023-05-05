@@ -689,26 +689,6 @@ namespace NKikimrCapnProto {
             bool HasSnapshotId() const { return getSnapshotId().size() != 0; }
             const NKikimrCapnProto_::TEvVGet::Reader& GetCapnpBase() const { return *this; }
 
-            bool ParseFromZeroCopyStream(NActors::TRopeStream *input) {
-                NKikimrCapnProtoUtil::TRopeStream stream;
-                stream.underlying = input;
-
-                kj::BufferedInputStreamWrapper buffered(stream);
-
-                messageReader = std::make_unique<capnp::PackedMessageReader>(buffered);
-                static_cast<NKikimrCapnProto_::TEvVGet::Reader &>(*this) = messageReader->getRoot<NKikimrCapnProto_::TEvVGet>();
-                if (hasExtremeQueries()) {
-                    elements.reserve(getExtremeQueries().size());
-                    for (TExtremeQuery::Reader extremeQuery: getExtremeQueries()) {
-                        elements.push_back(extremeQuery);
-                    }
-                }
-
-                std::cerr << "\n\ndeserialized record: " << ShortDebugString() << "\n\n";
-
-                return true;
-            }
-
             std::string ShortDebugString() const {
                 TStringStream ss;
                 ss << "{ "
@@ -773,9 +753,9 @@ namespace NKikimrCapnProto {
                 return builder.totalSize().wordCount * 8;
             }
 
-            void CopyFrom(const Builder& other) {
+            void CopyFrom(const Reader& other) {
                 // set the repeated field
-                for (auto from : other.elements) {
+                for (auto from : other.GetExtremeQueries()) {
                     auto to = AddExtremeQueries();
 
                     to.SetId(from.GetId());
@@ -827,6 +807,28 @@ namespace NKikimrCapnProto {
                 if (other.HasForceBlockTabletData()) {
                     SetForceBlockTabletData(other.GetForceBlockTabletData());
                 }
+            }
+
+            bool ParseFromZeroCopyStream(NActors::TRopeStream *input) {
+                NKikimrCapnProtoUtil::TRopeStream stream;
+                stream.underlying = input;
+
+                kj::BufferedInputStreamWrapper buffered(stream);
+
+                std::unique_ptr<capnp::PackedMessageReader> messageReader = std::make_unique<capnp::PackedMessageReader>(buffered);
+                auto reader = messageReader->getRoot<NKikimrCapnProto_::TEvVGet>();
+                if (reader.hasExtremeQueries()) {
+                    elements.reserve(reader.getExtremeQueries().size());
+                    for (TExtremeQuery::Reader extremeQuery: reader.getExtremeQueries()) {
+                        elements.push_back(extremeQuery);
+                    }
+                }
+
+                CopyFrom(reader);
+
+                std::cerr << "\n\ndeserialized record: " << ShortDebugString() << "\n\n";
+
+                return true;
             }
 
             bool SerializeToZeroCopyStream(NActors::TChunkSerializer *output) const {

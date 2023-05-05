@@ -276,7 +276,7 @@ namespace NActors {
 
         LastHandshakeDone = TActivationContext::Now();
 
-        IssueRam(false);
+        GenerateTraffic();
     }
 
     void TInterconnectSessionTCP::Handle(TEvUpdateFromInputSession::TPtr& ev) {
@@ -380,13 +380,15 @@ namespace NActors {
                 return;
             }
             ProducePackets();
-            canProducePackets = NumEventsInReadyChannels && InflightDataAmount < GetTotalInflightAmountOfData() &&
-                GetUnsentSize() < GetUnsentLimit();
 
             if (!Socket) {
                 return;
             }
             WriteData();
+
+            canProducePackets = NumEventsInReadyChannels && InflightDataAmount < GetTotalInflightAmountOfData() &&
+                GetUnsentSize() < GetUnsentLimit();
+
             canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
                 (XdcStream && !ReceiveContext->XdcWriteBlocked);
 

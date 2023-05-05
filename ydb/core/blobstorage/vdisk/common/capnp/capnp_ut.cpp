@@ -173,7 +173,7 @@ namespace NKikimr {
             UNIT_ASSERT(!vdisk->HasDomain());
             UNIT_ASSERT(vdisk->HasGroupID());
             UNIT_ASSERT(qos->HasExtQueueId());
-            UNIT_ASSERT(vdisk->GetGroupID() == groupId + 1);
+            UNIT_ASSERT(vdisk->GetGroupID() == groupId);
             UNIT_ASSERT(qos->GetExtQueueId() == queueId);
         }
     };

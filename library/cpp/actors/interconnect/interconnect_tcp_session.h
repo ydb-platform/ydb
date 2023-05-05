@@ -492,7 +492,7 @@ namespace NActors {
         void WriteData();
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
-        void MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        ui32 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
@@ -562,6 +562,8 @@ namespace NActors {
         std::deque<TOutgoingPacket> SendQueue; // packet boundaries
         size_t OutgoingOffset = 0;
         size_t XdcOffset = 0;
+        size_t OutgoingIndex = 0; // index into current packet in SendQueue
+        bool ForceCurrentPacket = false;
 
         ui64 XdcBytesSent = 0;
 

@@ -67,10 +67,8 @@ bool TKeyRanges::DeserializeFromProto(const NKikimrKqp::TEvRemoteCostData::TCost
     return true;
 }
 
-TKeyRangesBuilder::TKeyRangesBuilder(const TIndexInfo& indexInfo)
-    : IndexInfo(indexInfo)
-{
-    Constructor.InitColumns(NArrow::MakeArrowSchema(IndexInfo.GetPrimaryKey()));
+TKeyRangesBuilder::TKeyRangesBuilder(const TIndexInfo& indexInfo) {
+    Constructor.InitColumns(NArrow::MakeArrowSchema(indexInfo.GetPrimaryKey()));
 }
 
 NKikimr::NOlap::NCosts::TKeyRanges TKeyRangesBuilder::Build() {

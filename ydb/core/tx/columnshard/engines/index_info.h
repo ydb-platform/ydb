@@ -113,12 +113,14 @@ public:
         Y_VERIFY(MinMaxIdxColumnsIds.contains(GetColumnId(ttlColumn)));
     }
 
+    TVector<ui32> GetColumnIds(const TVector<TString>& columnNames) const;
+
     std::shared_ptr<arrow::Schema> ArrowSchema() const;
     std::shared_ptr<arrow::Schema> ArrowSchemaWithSpecials() const;
     std::shared_ptr<arrow::Schema> AddColumns(const std::shared_ptr<arrow::Schema>& schema,
                                               const TVector<TString>& columns) const;
 
-    std::shared_ptr<arrow::Schema> ArrowSchema(const TVector<ui32>& columnIds) const;
+    std::shared_ptr<arrow::Schema> ArrowSchema(const TVector<ui32>& columnIds, bool withSpecials = false) const;
     std::shared_ptr<arrow::Schema> ArrowSchema(const TVector<TString>& columnNames) const;
     std::shared_ptr<arrow::Field> ArrowColumnField(ui32 columnId) const;
     std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const TString& metadata,
@@ -160,7 +162,7 @@ private:
     TCompression DefaultCompression;
 };
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids, bool withSpecials = false);
 
 /// Extracts columns with the specific ids from the schema.
 TVector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>& ids);

@@ -291,7 +291,8 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
 bool Insert(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap,
             TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
+    TColumnEngineForLogs engine(0, TestLimits());
+    engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
     THashSet<TUnifiedBlobId> lostBlobs;
     engine.Load(db, lostBlobs);
 
@@ -328,7 +329,8 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
 
 bool Compact(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange,
              TString>&& blobs, ui32& step, const TExpected& expected) {
-    TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
+    TColumnEngineForLogs engine(0, TestLimits());
+    engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
     THashSet<TUnifiedBlobId> lostBlobs;
     engine.Load(db, lostBlobs);
     return Compact(engine, db, snap, std::move(blobs), step, expected);
@@ -410,7 +412,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // load
 
-        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0);
+        TColumnEngineForLogs engine(0);
+        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -509,7 +512,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // load
 
-        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
+        TColumnEngineForLogs engine(0, TestLimits());
+        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -579,7 +583,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // inserts
         ui64 planStep = 1;
 
-        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
+        TColumnEngineForLogs engine(0, TestLimits());
+        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -610,7 +615,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         UNIT_ASSERT(overload);
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(TIndexInfo(tableInfo), 0, TestLimits());
+            TColumnEngineForLogs tmpEngine(0, TestLimits());
+            tmpEngine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
             UNIT_ASSERT(tmpEngine.GetOverloadedGranules(pathId));
         }
@@ -641,7 +647,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(TIndexInfo(tableInfo), 0, TestLimits());
+            TColumnEngineForLogs tmpEngine(0, TestLimits());
+            tmpEngine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
             UNIT_ASSERT(!tmpEngine.GetOverloadedGranules(pathId));
         }
@@ -682,7 +689,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // load
 
-        TColumnEngineForLogs engine(TIndexInfo(tableInfo), 0, TestLimits());
+        TColumnEngineForLogs engine(0, TestLimits());
+        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 

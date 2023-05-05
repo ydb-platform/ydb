@@ -170,9 +170,12 @@ public:
         EVICT
     };
 
-    TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits = {});
+    TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits = {});
 
-    const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
+    const TIndexInfo& GetIndexInfo() const override {
+        Y_VERIFY(IndexInfo);
+        return *IndexInfo;
+    }
 
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
         if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
@@ -232,7 +235,7 @@ private:
         bool Empty() const noexcept { return Portions.empty(); }
     };
 
-    TIndexInfo IndexInfo;
+    std::optional<TIndexInfo> IndexInfo;
     TCompactionLimits Limits;
     ui64 TabletId;
     std::shared_ptr<arrow::Schema> MarkSchema;

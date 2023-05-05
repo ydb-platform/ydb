@@ -237,22 +237,29 @@ std::shared_ptr<arrow::Schema> TIndexInfo::AddColumns(
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const TVector<ui32>& columnIds) const {
-    return MakeArrowSchema(Columns, columnIds);
+std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const TVector<ui32>& columnIds, bool withSpecials) const {
+    return MakeArrowSchema(Columns, columnIds, withSpecials);
+}
+
+TVector<ui32> TIndexInfo::GetColumnIds(const TVector<TString>& columnNames) const {
+    TVector<ui32> ids;
+    ids.reserve(columnNames.size());
+    for (auto& name : columnNames) {
+        auto columnId = GetColumnIdOptional(name);
+        if (!columnId) {
+            return {};
+        }
+        ids.emplace_back(*columnId);
+    }
+    return ids;
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const TVector<TString>& names) const {
-    TVector<ui32> ids;
-    ids.reserve(names.size());
-    for (auto& name : names) {
-        auto it = ColumnNames.find(name);
-        if (it == ColumnNames.end()) {
-            return {};
-        }
-        ids.emplace_back(it->second);
+    auto columnIds = GetColumnIds(names);
+    if (columnIds.empty()) {
+        return {};
     }
-
-    return MakeArrowSchema(Columns, ids);
+    return MakeArrowSchema(Columns, columnIds);
 }
 
 std::shared_ptr<arrow::Field> TIndexInfo::ArrowColumnField(ui32 columnId) const {
@@ -260,6 +267,9 @@ std::shared_ptr<arrow::Field> TIndexInfo::ArrowColumnField(ui32 columnId) const 
 }
 
 void TIndexInfo::SetAllKeys() {
+    /// @note Setting replace and sorting key to PK we are able to:
+    /// * apply REPLACE by MergeSort
+    /// * apply PK predicate before REPLACE
     const auto& primaryKeyNames = NamesOnly(GetPrimaryKey());
     // Update set of required columns with names from primary key.
     for (const auto& name: primaryKeyNames) {
@@ -320,21 +330,27 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
     return MinMaxIdxColumnsIds.contains(it->second);
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids, bool withSpecials) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(ids.size());
+    fields.reserve(withSpecials ? ids.size() + 2 : ids.size());
+
+    if (withSpecials) {
+        // Place special fields at the beginning of the schema.
+        fields.push_back(arrow::field(TIndexInfo::SPEC_COL_PLAN_STEP, arrow::uint64()));
+        fields.push_back(arrow::field(TIndexInfo::SPEC_COL_TX_ID, arrow::uint64()));
+    }
 
     for (const ui32 id: ids) {
         auto it = columns.find(id);
         if (it == columns.end()) {
-            return {};
+            continue;
         }
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());
         fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType)));
     }
-
+    
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 

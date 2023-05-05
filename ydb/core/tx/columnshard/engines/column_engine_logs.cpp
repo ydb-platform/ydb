@@ -208,23 +208,12 @@ TColumnEngineForLogs::TMarksGranules::SliceIntoGranules(const std::shared_ptr<ar
 }
 
 
-TColumnEngineForLogs::TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits)
-    : IndexInfo(std::move(info))
-    , Limits(limits)
+TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits)
+    : Limits(limits)
     , TabletId(tabletId)
     , LastPortion(0)
     , LastGranule(0)
 {
-    /// @note Setting replace and sorting key to PK we are able to:
-    /// * apply REPLACE by MergeSort
-    /// * apply PK predicate before REPLACE
-    IndexInfo.SetAllKeys();
-    MarkSchema = IndexInfo.GetEffectiveKey();
-
-    ui32 indexId = IndexInfo.GetId();
-    GranulesTable = std::make_shared<TGranulesTable>(*this, indexId);
-    ColumnsTable = std::make_shared<TColumnsTable>(indexId);
-    CountersTable = std::make_shared<TCountersTable>(indexId);
 }
 
 ui64 TColumnEngineForLogs::MemoryUsage() const {
@@ -352,11 +341,15 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 }
 
 void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
-    // TODO(chertus): use step/txId for keeping older schema versions for older snapshots
     Y_UNUSED(snapshot);
+    if (!GranulesTable) {
+        MarkSchema = info.GetEffectiveKey();
+        ui32 indexId = info.GetId();
+        GranulesTable = std::make_shared<TGranulesTable>(*this, indexId);
+        ColumnsTable = std::make_shared<TColumnsTable>(indexId);
+        CountersTable = std::make_shared<TCountersTable>(indexId);
+    }
     IndexInfo = std::move(info);
-    // copied from constructor above
-    IndexInfo.SetAllKeys();
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop) {
@@ -440,12 +433,13 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
     return ColumnsTable->Load(db, [&](const TColumnRecord& rec) {
+        auto& indexInfo = GetIndexInfo();
         Y_VERIFY(rec.Valid());
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(rec.BlobRange.BlobId);
         // Locate granule and append the record.
         if (const auto gi = Granules.find(rec.Granule); gi != Granules.end()) {
-            gi->second->Portions[rec.Portion].AddRecord(IndexInfo, rec);
+            gi->second->Portions[rec.Portion].AddRecord(indexInfo, rec);
         } else {
 #if 0
             LOG_S_ERROR("No granule " << rec.Granule << " for record " << rec << " at tablet " << TabletId);
@@ -671,6 +665,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     ui64 dropBlobs = 0;
     bool allowDrop = true;
 
+    auto& indexInfo = GetIndexInfo();
     for (const auto& [pathId, ttl] : pathEviction) {
         if (!PathGranules.contains(pathId)) {
             continue; // It's not an error: allow TTL over multiple shards with different pathIds presented
@@ -681,7 +676,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
 
         auto ttlColumnNames = ttl.GetTtlColumns();
         Y_VERIFY(ttlColumnNames.size() == 1); // TODO: support different ttl columns
-        ui32 ttlColumnId = IndexInfo.GetColumnId(*ttlColumnNames.begin());
+        ui32 ttlColumnId = indexInfo.GetColumnId(*ttlColumnNames.begin());
 
         for (const auto& [ts, granule] : PathGranules[pathId]) {
             auto spg = Granules[granule];
@@ -704,7 +699,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
                         TString tierName;
                         for (auto& tierRef : ttl.GetOrderedTiers()) { // TODO: lower/upper_bound + move into TEviction
                             auto& tierInfo = tierRef.Get();
-                            if (!IndexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
+                            if (!indexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
                                 continue; // Ignore tiers with bad ttl column
                             }
                             if (NArrow::ScalarLess(tierInfo.EvictScalar(schema), max)) {

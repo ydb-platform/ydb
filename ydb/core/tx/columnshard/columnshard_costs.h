@@ -95,7 +95,6 @@ private:
     NArrow::TRecordBatchConstructor Constructor;
     TVector<TMarkRangeFeatures> Features;
 
-    const TIndexInfo& IndexInfo;
     bool AddMarkFromPredicate(const std::shared_ptr<NOlap::TPredicate>& p);
     void AddMarkFromGranule(const TGranuleRecord& record);
 

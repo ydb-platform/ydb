@@ -272,12 +272,11 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
 void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const TTableSchema& schema) {
     NOlap::TSnapshot snapshot{version.Step, version.TxId};
     NOlap::TIndexInfo indexInfo = ConvertSchema(schema);
-
+    indexInfo.SetAllKeys();
     if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(std::move(indexInfo), TabletId);
-    } else {
-        PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
+        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
     }
+    PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
 
     for (auto& columnName : Ttl.TtlColumns()) {
         PrimaryIndex->GetIndexInfo().CheckTtlColumn(columnName);

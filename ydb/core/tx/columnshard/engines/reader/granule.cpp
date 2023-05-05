@@ -12,9 +12,10 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
             return;
         }
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)("batch_no", batchInfo.GetBatchNo())("count", WaitBatches.size());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
+        ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size());
     Y_VERIFY(!ReadyFlag);
-    Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchNo()));
+    Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchAddress().GetBatchGranuleIdx()));
     if (batch && batch->num_rows()) {
         if (batchInfo.IsSortableInGranule()) {
             SortableBatches.emplace_back(batch);
@@ -35,11 +36,12 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
     CheckReady();
 }
 
-NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const ui32 batchNo, const TPortionInfo& portionInfo) {
+NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const TPortionInfo& portionInfo) {
     Y_VERIFY(!ReadyFlag);
-    WaitBatches.emplace(batchNo);
-    Batches.emplace_back(TBatch(batchNo, *this, portionInfo));
-    Y_VERIFY(GranuleBatchNumbers.emplace(batchNo).second);
+    ui32 batchGranuleIdx = Batches.size();
+    WaitBatches.emplace(batchGranuleIdx);
+    Batches.emplace_back(TBatch(TBatchAddress(GranuleIdx, batchGranuleIdx), *this, portionInfo));
+    Y_VERIFY(GranuleBatchNumbers.emplace(batchGranuleIdx).second);
     Owner->OnNewBatch(Batches.back());
     return Batches.back();
 }

@@ -21,16 +21,16 @@ bool TAssembleFilter::DoExecuteImpl() {
         return true;
     }
     if (ReadMetadata->Program) {
-        auto earlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
         if (AllowEarlyFilter) {
+            auto earlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
             Filter->CombineSequential(*earlyFilter);
             if (!earlyFilter->Apply(batch)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
                 FilteredBatch = nullptr;
                 return true;
             }
-        } else {
-            EarlyFilter = earlyFilter;
+        } else if (BatchesOrderPolicy->NeedNotAppliedEarlyFilter()) {
+            EarlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
         }
     }
 
@@ -51,7 +51,7 @@ bool TAssembleFilter::DoExecuteImpl() {
 }
 
 bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
-    TBatch& batch = owner.GetBatchInfo(BatchNo);
+    TBatch& batch = owner.GetBatchInfo(BatchAddress);
     Y_VERIFY(OriginalCount);
     owner.GetCounters().OriginalRowsCount->Add(OriginalCount);
     owner.GetCounters().AssembleFilterCount->Add(1);

@@ -14,6 +14,7 @@ class TGranulesFillingContext;
 class TGranule {
 private:
     ui64 GranuleId = 0;
+    YDB_READONLY(ui64, GranuleIdx, 0);
 
     bool NotIndexedBatchReadyFlag = false;
     std::shared_ptr<arrow::RecordBatch> NotIndexedBatch;
@@ -31,8 +32,9 @@ private:
 
     void CheckReady();
 public:
-    TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
+    TGranule(const ui64 granuleId, const ui64 granuleIdx, TGranulesFillingContext& owner)
         : GranuleId(granuleId)
+        , GranuleIdx(granuleIdx)
         , Owner(&owner) {
     }
 
@@ -79,6 +81,11 @@ public:
         return result;
     }
 
+    TBatch& GetBatchInfo(const ui32 batchIdx) {
+        Y_VERIFY(batchIdx < Batches.size());
+        return Batches[batchIdx];
+    }
+
     void AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch);
 
     const TGranulesFillingContext& GetOwner() const {
@@ -89,7 +96,7 @@ public:
     const std::set<ui32>& GetEarlyFilterColumns() const;
     void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
     bool OnFilterReady(TBatch& batchInfo);
-    TBatch& AddBatch(const ui32 batchNo, const TPortionInfo& portionInfo);
+    TBatch& AddBatch(const TPortionInfo& portionInfo);
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) const;
 
 };

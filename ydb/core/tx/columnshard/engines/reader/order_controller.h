@@ -8,6 +8,14 @@ namespace NKikimr::NOlap::NIndexedReader {
 class TGranulesFillingContext;
 
 class IOrderPolicy {
+public:
+    enum class EFeatures: ui32 {
+        CanInterrupt = 1,
+        NeedNotAppliedEarlyFilter = 1 << 1
+    };
+    using TFeatures = ui32;
+private:
+    mutable std::optional<TFeatures> Features;
 protected:
     TReadMetadata::TConstPtr ReadMetadata;
     virtual void DoFill(TGranulesFillingContext& context) = 0;
@@ -21,6 +29,15 @@ protected:
     }
 
     void OnBatchFilterInitialized(TBatch& batch, TGranulesFillingContext& context);
+    virtual TFeatures DoGetFeatures() const {
+        return 0;
+    }
+    TFeatures GetFeatures() const {
+        if (!Features) {
+            Features = DoGetFeatures();
+        }
+        return *Features;
+    }
 public:
     using TPtr = std::shared_ptr<IOrderPolicy>;
     virtual ~IOrderPolicy() = default;
@@ -35,8 +52,12 @@ public:
 
     }
 
-    virtual bool CanInterrupt() const {
-        return false;
+    bool CanInterrupt() const {
+        return GetFeatures() & (TFeatures)EFeatures::CanInterrupt;
+    }
+
+    bool NeedNotAppliedEarlyFilter() const {
+        return GetFeatures() & (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;
     }
 
     bool OnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) {
@@ -143,6 +164,10 @@ protected:
     virtual void DoFill(TGranulesFillingContext& context) override;
     virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) override;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) override;
+    virtual TFeatures DoGetFeatures() const override {
+        return (TFeatures)EFeatures::CanInterrupt & (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;
+    }
+
 public:
     virtual std::set<ui32> GetFilterStageColumns() override {
         std::set<ui32> result = ReadMetadata->GetEarlyFilterColumnIds();
@@ -150,10 +175,6 @@ public:
             result.emplace(i);
         }
         return result;
-    }
-
-    virtual bool CanInterrupt() const override {
-        return true;
     }
 
     TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata);

@@ -53,16 +53,12 @@ bool TPKSortingWithLimit::DoWakeup(const TGranule& granule, TGranulesFillingCont
         }
         if (g.Start()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "granule_started")("granule_id", g.GetGranule()->GetGranuleId())("count", GranulesOutOrderForPortions.size());
-            MergeStream.AddIndependentSource(g.GetGranule()->GetNotIndexedBatch(), g.GetGranule()->GetNotIndexedBatchFutureFilter());
+            MergeStream.AddPoolSource({}, g.GetGranule()->GetNotIndexedBatch(), g.GetGranule()->GetNotIndexedBatchFutureFilter());
         }
         auto& batches = g.GetBatches();
-        while (batches.size() && batches.front()->IsFiltered() && CurrentItemsLimit) {
+        while (batches.size() && batches.front()->GetFetchedInfo().IsFiltered() && CurrentItemsLimit) {
             auto b = batches.front();
-            if (b->IsSortableInGranule()) {
-                MergeStream.AddPoolSource(0, b->GetFilterBatch());
-            } else {
-                MergeStream.AddIndependentSource(b->GetFilterBatch(), b->GetFutureFilter());
-            }
+            MergeStream.AddPoolSource(b->GetMergePoolId(), b->GetFetchedInfo().GetFilterBatch(), b->GetFetchedInfo().GetNotAppliedEarlyFilter());
             OnBatchFilterInitialized(*b, context);
             batches.pop_front();
         }
@@ -118,42 +114,43 @@ TPKSortingWithLimit::TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata)
     CurrentItemsLimit = ReadMetadata->Limit;
 }
 
-void IOrderPolicy::OnBatchFilterInitialized(TBatch& batch, TGranulesFillingContext& context) {
+void IOrderPolicy::OnBatchFilterInitialized(TBatch& batchOriginal, TGranulesFillingContext& context) {
+    auto& batch = batchOriginal.GetFetchedInfo();
     Y_VERIFY(!!batch.GetFilter());
     if (!batch.GetFilteredRecordsCount()) {
         context.GetCounters().EmptyFilterCount->Add(1);
-        context.GetCounters().EmptyFilterFetchedBytes->Add(batch.GetFetchedBytes());
-        context.GetCounters().SkippedBytes->Add(batch.GetFetchBytes(context.GetPostFilterColumns()));
-        batch.InitBatch(nullptr);
+        context.GetCounters().EmptyFilterFetchedBytes->Add(batchOriginal.GetFetchedBytes());
+        context.GetCounters().SkippedBytes->Add(batchOriginal.GetFetchBytes(context.GetPostFilterColumns()));
+        batchOriginal.InitBatch(nullptr);
     } else {
         context.GetCounters().FilteredRowsCount->Add(batch.GetFilterBatch()->num_rows());
-        if (batch.AskedColumnsAlready(context.GetPostFilterColumns())) {
+        if (batchOriginal.AskedColumnsAlready(context.GetPostFilterColumns())) {
             context.GetCounters().FilterOnlyCount->Add(1);
-            context.GetCounters().FilterOnlyFetchedBytes->Add(batch.GetFetchedBytes());
-            context.GetCounters().FilterOnlyUsefulBytes->Add(batch.GetUsefulFetchedBytes());
-            context.GetCounters().SkippedBytes->Add(batch.GetFetchBytes(context.GetPostFilterColumns()));
+            context.GetCounters().FilterOnlyFetchedBytes->Add(batchOriginal.GetFetchedBytes());
+            context.GetCounters().FilterOnlyUsefulBytes->Add(batchOriginal.GetUsefulFetchedBytes());
+            context.GetCounters().SkippedBytes->Add(batchOriginal.GetFetchBytes(context.GetPostFilterColumns()));
 
-            batch.InitBatch(batch.GetFilterBatch());
+            batchOriginal.InitBatch(batch.GetFilterBatch());
         } else {
-            context.GetCounters().TwoPhasesFilterFetchedBytes->Add(batch.GetFetchedBytes());
-            context.GetCounters().TwoPhasesFilterUsefulBytes->Add(batch.GetUsefulFetchedBytes());
+            context.GetCounters().TwoPhasesFilterFetchedBytes->Add(batchOriginal.GetFetchedBytes());
+            context.GetCounters().TwoPhasesFilterUsefulBytes->Add(batchOriginal.GetUsefulFetchedBytes());
 
-            batch.ResetWithFilter(context.GetPostFilterColumns());
-            if (batch.IsFetchingReady()) {
+            batchOriginal.ResetWithFilter(context.GetPostFilterColumns());
+            if (batchOriginal.IsFetchingReady()) {
                 auto processor = context.GetTasksProcessor();
-                if (auto assembleBatchTask = batch.AssembleTask(processor.GetObject(), context.GetReadMetadata())) {
+                if (auto assembleBatchTask = batchOriginal.AssembleTask(processor.GetObject(), context.GetReadMetadata())) {
                     processor.Add(context, assembleBatchTask);
                 }
             }
 
             context.GetCounters().TwoPhasesCount->Add(1);
-            context.GetCounters().TwoPhasesPostFilterFetchedBytes->Add(batch.GetWaitingBytes());
-            context.GetCounters().TwoPhasesPostFilterUsefulBytes->Add(batch.GetUsefulWaitingBytes());
+            context.GetCounters().TwoPhasesPostFilterFetchedBytes->Add(batchOriginal.GetWaitingBytes());
+            context.GetCounters().TwoPhasesPostFilterUsefulBytes->Add(batchOriginal.GetUsefulWaitingBytes());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "additional_data")
                 ("filtered_count", batch.GetFilterBatch()->num_rows())
-                ("blobs_count", batch.GetWaitingBlobs().size())
-                ("columns_count", batch.GetCurrentColumnIds()->size())
-                ("fetch_size", batch.GetWaitingBytes())
+                ("blobs_count", batchOriginal.GetWaitingBlobs().size())
+                ("columns_count", batchOriginal.GetCurrentColumnIds()->size())
+                ("fetch_size", batchOriginal.GetWaitingBytes())
                 ;
         }
     }

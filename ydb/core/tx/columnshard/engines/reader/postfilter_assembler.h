@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "conveyor_task.h"
 
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
@@ -18,7 +19,7 @@ private:
     std::shared_ptr<NArrow::TColumnFilter> Filter;
     std::shared_ptr<arrow::RecordBatch> FilterBatch;
 
-    const ui32 BatchNo;
+    const TBatchAddress BatchAddress;
 protected:
     virtual bool DoApply(TGranulesFillingContext& owner) const override;
     virtual bool DoExecuteImpl() override;

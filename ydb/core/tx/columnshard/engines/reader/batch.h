@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "conveyor_task.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -16,81 +17,86 @@ struct TReadMetadata;
 namespace NKikimr::NOlap::NIndexedReader {
 
 class TGranule;
+class TBatch;
+
+class TBatchFetchedInfo {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilteredBatch);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilterBatch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedEarlyFilter);
+    ui32 OriginalRecordsCount = 0;
+public:
+    void InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch,
+        const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> notAppliedEarlyFilter) {
+        Y_VERIFY(filter);
+        Y_VERIFY(!Filter);
+        Y_VERIFY(!FilterBatch);
+        Filter = filter;
+        FilterBatch = filterBatch;
+        OriginalRecordsCount = originalRecordsCount;
+        NotAppliedEarlyFilter = notAppliedEarlyFilter;
+    }
+
+    double GetUsefulDataKff() const {
+        if (!FilterBatch || !FilterBatch->num_rows()) {
+            return 0;
+        }
+        Y_VERIFY_DEBUG(OriginalRecordsCount);
+        if (!OriginalRecordsCount) {
+            return 0;
+        }
+        return 1.0 * FilterBatch->num_rows() / OriginalRecordsCount;
+    }
+
+    bool IsFiltered() const {
+        return !!Filter;
+    }
+
+    void InitBatch(std::shared_ptr<arrow::RecordBatch> fullBatch) {
+        Y_VERIFY(!FilteredBatch);
+        FilteredBatch = fullBatch;
+    }
+
+    ui32 GetFilteredRecordsCount() const {
+        Y_VERIFY(IsFiltered());
+        if (!FilterBatch) {
+            return 0;
+        } else {
+            return FilterBatch->num_rows();
+        }
+    }
+};
 
 class TBatch {
 private:
-    ui64 BatchNo = 0;
-    ui64 Portion = 0;
-    ui64 Granule = 0;
-    ui64 WaitingBytes = 0;
-    ui64 FetchedBytes = 0;
+    const TBatchAddress BatchAddress;
+    YDB_READONLY(ui64, Portion, 0);
+    YDB_READONLY(ui64, Granule, 0);
+    YDB_READONLY(ui64, WaitingBytes, 0);
+    YDB_READONLY(ui64, FetchedBytes, 0);
 
     THashSet<TBlobRange> WaitIndexed;
-    std::shared_ptr<arrow::RecordBatch> FilteredBatch;
-    std::shared_ptr<arrow::RecordBatch> FilterBatch;
-    std::shared_ptr<NArrow::TColumnFilter> Filter;
-    std::shared_ptr<NArrow::TColumnFilter> FutureFilter;
-
-    ui32 OriginalRecordsCount = 0;
-
-    bool DuplicationsAvailable = false;
+    
+    YDB_READONLY_FLAG(DuplicationsAvailable, false);
+    YDB_READONLY_DEF(TBatchFetchedInfo, FetchedInfo);
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
     TGranule* Owner;
     const TPortionInfo* PortionInfo = nullptr;
 
-    std::optional<std::set<ui32>> CurrentColumnIds;
+    YDB_READONLY_DEF(std::optional<std::set<ui32>>, CurrentColumnIds);
     std::set<ui32> AskedColumnIds;
     void ResetCommon(const std::set<ui32>& columnIds);
     ui64 GetUsefulBytes(const ui64 bytes) const;
 
 public:
-    bool IsDuplicationsAvailable() const noexcept {
-        return DuplicationsAvailable;
+    bool AllowEarlyFilter() const {
+        return PortionInfo->AllowEarlyFilter();
     }
-
-    void SetDuplicationsAvailable(bool val) noexcept {
-        DuplicationsAvailable = val;
+    const TBatchAddress& GetBatchAddress() const {
+        return BatchAddress;
     }
-
-    ui64 GetBatchNo() const noexcept {
-        return BatchNo;
-    }
-
-    ui64 GetPortion() const noexcept {
-        return Portion;
-    }
-
-    ui64 GetGranule() const noexcept {
-        return Granule;
-    }
-
-    ui64 GetWaitingBytes() const noexcept {
-        return WaitingBytes;
-    }
-
-    ui64 GetFetchedBytes() const noexcept {
-        return FetchedBytes;
-    }
-
-    const std::optional<std::set<ui32>>& GetCurrentColumnIds() const noexcept {
-        return CurrentColumnIds;
-    }
-
-    const std::shared_ptr<arrow::RecordBatch>& GetFilteredBatch() const noexcept {
-        return FilteredBatch;
-    }
-
-    const std::shared_ptr<arrow::RecordBatch>& GetFilterBatch() const noexcept {
-        return FilterBatch;
-    }
-
-    const std::shared_ptr<NArrow::TColumnFilter>& GetFilter() const noexcept {
-        return Filter;
-    }
-
-    const std::shared_ptr<NArrow::TColumnFilter>& GetFutureFilter() const noexcept {
-        return FutureFilter;
-    }
+    std::optional<ui32> GetMergePoolId() const;
 
     ui64 GetUsefulWaitingBytes() const {
         return GetUsefulBytes(WaitingBytes);
@@ -100,11 +106,10 @@ public:
         return GetUsefulBytes(FetchedBytes);
     }
 
-    bool NeedAdditionalData() const;
     bool IsSortableInGranule() const {
         return PortionInfo->IsSortableInGranule();
     }
-    TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionInfo);
+    TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo);
     bool AddIndexedReady(const TBlobRange& bRange, const TString& blobData);
     bool AskedColumnsAlready(const std::set<ui32>& columnIds) const;
 
@@ -112,19 +117,9 @@ public:
     void ResetWithFilter(const std::set<ui32>& columnIds);
     ui64 GetFetchBytes(const std::set<ui32>& columnIds);
 
-    bool IsFiltered() const {
-        return !!Filter;
-    }
-    ui32 GetFilteredRecordsCount() const {
-        Y_VERIFY(IsFiltered());
-        if (!FilterBatch) {
-            return 0;
-        } else {
-            return FilterBatch->num_rows();
-        }
-    }
+    ui32 GetFilteredRecordsCount() const;
     bool InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch,
-        const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> futureFilter);
+        const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> notAppliedEarlyFilter);
     void InitBatch(std::shared_ptr<arrow::RecordBatch> batch);
 
     NColumnShard::IDataTasksProcessor::ITask::TPtr AssembleTask(NColumnShard::IDataTasksProcessor::TPtr processor, std::shared_ptr<const NOlap::TReadMetadata> readMetadata);

@@ -116,7 +116,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) {
     Y_VERIFY(IndexedBlobs.emplace(range).second);
     Y_VERIFY(IndexedBlobSubscriber.emplace(range, &batch).second);
-    if (batch.GetFilter()) {
+    if (batch.GetFetchedInfo().GetFilter()) {
         Counters.PostFilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataAdditionalBytes += range.Size;
         FetchBlobsQueue.emplace_front(range);
@@ -138,16 +138,15 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
 
     NotIndexed.resize(inputBatch);
 
-    ui32 batchNo = inputBatch;
     Y_VERIFY(!GranulesContext);
-    GranulesContext = std::make_unique<NIndexedReader::TGranulesFillingContext>(ReadMetadata, *this, OnePhaseReadMode, inputBatch + ReadMetadata->SelectInfo->Portions.size());
+    GranulesContext = std::make_unique<NIndexedReader::TGranulesFillingContext>(ReadMetadata, *this, OnePhaseReadMode);
     ui64 portionsBytes = 0;
     for (auto& portionInfo : ReadMetadata->SelectInfo->Portions) {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
         NIndexedReader::TGranule& granule = GranulesContext->UpsertGranule(portionInfo.Records[0].Granule);
-        granule.AddBatch(batchNo++, portionInfo);
+        granule.AddBatch(portionInfo);
     }
     GranulesContext->PrepareForStart();
 

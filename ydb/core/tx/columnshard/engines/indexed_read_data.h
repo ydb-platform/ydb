@@ -55,7 +55,7 @@ public:
     void InitRead(ui32 numNotIndexed);
     void Abort() {
         Y_VERIFY(GranulesContext);
-            return GranulesContext->Abort();
+        return GranulesContext->Abort();
     }
     bool IsInProgress() const {
         Y_VERIFY(GranulesContext);

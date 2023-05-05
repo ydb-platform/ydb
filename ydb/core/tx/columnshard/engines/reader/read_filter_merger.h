@@ -13,8 +13,8 @@ class TMergePartialStream {
 private:
     class TBatchIterator {
     private:
-        i64 Position = 0;
-        std::optional<ui32> PoolId;
+        YDB_ACCESSOR(i64, Position, 0);
+        YDB_OPT(ui32, PoolId);
         std::shared_ptr<arrow::RecordBatch> Batch;
 
         std::shared_ptr<NArrow::TColumnFilter> Filter;
@@ -79,17 +79,9 @@ private:
             }
         }
 
-        bool HasPoolId() const noexcept {
-            return PoolId.has_value();
-        }
-
-        ui32 GetPoolIdUnsafe() const noexcept {
-            return *PoolId;
-        }
-
         bool CheckNextBatch(const TBatchIterator& nextIterator) {
             Y_VERIFY_DEBUG(nextIterator.Columns.size() == Columns.size());
-            return NArrow::ColumnsCompare(Columns, GetLastPosition(), nextIterator.Columns, 0) * ReverseSortKff < 0;
+            return NArrow::ColumnsCompare(Columns, GetLastPosition(), nextIterator.Columns, nextIterator.GetFirstPosition()) * ReverseSortKff < 0;
         }
 
         class TPosition {
@@ -163,6 +155,19 @@ private:
         }
     };
 
+    class TIteratorData {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+        YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+    public:
+        TIteratorData(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter)
+            : Batch(batch)
+            , Filter(filter)
+        {
+
+        }
+    };
+
     bool NextInHeap(const bool needPop) {
         if (SortHeap.empty()) {
             return false;
@@ -182,16 +187,17 @@ private:
                 SortHeap.pop_back();
             } else {
                 it->second.pop_front();
-                TBatchIterator newIterator(it->second.front(), nullptr, SortSchema, Reverse, SortHeap.back().GetPoolIdUnsafe());
-                SortHeap.back().CheckNextBatch(newIterator);
-                std::swap(SortHeap.back(), newIterator);
+                TBatchIterator oldIterator = std::move(SortHeap.back());
+                SortHeap.pop_back();
+                AddToHeap(SortHeap.back().GetPoolIdUnsafe(), it->second.front().GetBatch(), it->second.front().GetFilter(), false);
+                oldIterator.CheckNextBatch(SortHeap.back());
                 std::push_heap(SortHeap.begin(), SortHeap.end());
             }
         }
         return SortHeap.size();
     }
 
-    THashMap<ui32, std::deque<std::shared_ptr<arrow::RecordBatch>>> BatchPools;
+    THashMap<ui32, std::deque<TIteratorData>> BatchPools;
     std::vector<std::shared_ptr<arrow::RecordBatch>> IndependentBatches;
     std::vector<TBatchIterator> SortHeap;
     std::shared_ptr<arrow::Schema> SortSchema;
@@ -210,6 +216,19 @@ private:
         }
         return position;
     }
+
+    void AddToHeap(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const bool restoreHeap) {
+        if (!filter || filter->IsTotalAllowFilter()) {
+            SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema, Reverse, poolId));
+        } else if (filter->IsTotalDenyFilter()) {
+            return;
+        } else {
+            SortHeap.emplace_back(TBatchIterator(batch, filter, SortSchema, Reverse, poolId));
+        }
+        if (restoreHeap) {
+            std::push_heap(SortHeap.begin(), SortHeap.end());
+        }
+    }
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, const bool reverse)
         : SortSchema(sortSchema)
@@ -221,22 +240,6 @@ public:
         return SortHeap.size();
     }
 
-    void AddIndependentSource(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-        if (!batch || !batch->num_rows()) {
-            return;
-        }
-        Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortSchema));
-        IndependentBatches.emplace_back(batch);
-        if (!filter || filter->IsTotalAllowFilter()) {
-            SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema, Reverse, {}));
-        } else if (filter->IsTotalDenyFilter()) {
-            return;
-        } else {
-            SortHeap.emplace_back(TBatchIterator(batch, filter, SortSchema, Reverse, {}));
-        }
-        std::push_heap(SortHeap.begin(), SortHeap.end());
-    }
-
     bool HasRecordsInPool(const ui32 poolId) const {
         auto it = BatchPools.find(poolId);
         if (it == BatchPools.end()) {
@@ -245,18 +248,23 @@ public:
         return it->second.size();
     }
 
-    void AddPoolSource(const ui32 poolId, std::shared_ptr<arrow::RecordBatch> batch) {
+    void AddPoolSource(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
         if (!batch || !batch->num_rows()) {
             return;
         }
-        auto it = BatchPools.find(poolId);
-        if (it == BatchPools.end()) {
-            it = BatchPools.emplace(poolId, std::deque<std::shared_ptr<arrow::RecordBatch>>()).first;
-        }
-        it->second.emplace_back(batch);
-        if (it->second.size() == 1) {
-            SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema, Reverse, poolId));
-            std::push_heap(SortHeap.begin(), SortHeap.end());
+        Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortSchema));
+        if (!poolId) {
+            IndependentBatches.emplace_back(batch);
+            AddToHeap(poolId, batch, filter, true);
+        } else {
+            auto it = BatchPools.find(*poolId);
+            if (it == BatchPools.end()) {
+                it = BatchPools.emplace(*poolId, std::deque<TIteratorData>()).first;
+            }
+            it->second.emplace_back(batch, filter);
+            if (it->second.size() == 1) {
+                AddToHeap(poolId, batch, filter, true);
+            }
         }
     }
 

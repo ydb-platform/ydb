@@ -4,13 +4,12 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading, const ui32 batchesCount)
+TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading)
     : ReadMetadata(readMetadata)
     , InternalReading(internalReading)
     , Owner(owner)
     , Counters(owner.GetCounters())
 {
-    Batches.resize(batchesCount, nullptr);
     SortingPolicy = InternalReading ? std::make_shared<TNonSorting>(ReadMetadata) : ReadMetadata->BuildSortingPolicy();
 
     UsedColumns = ReadMetadata->GetUsedColumnIds();
@@ -44,11 +43,10 @@ void TGranulesFillingContext::OnBatchReady(const NIndexedReader::TBatch& batchIn
     return Owner.OnBatchReady(batchInfo, batch);
 }
 
-NKikimr::NOlap::NIndexedReader::TBatch& TGranulesFillingContext::GetBatchInfo(const ui32 batchNo) {
-    Y_VERIFY(batchNo < Batches.size());
-    auto ptr = Batches[batchNo];
-    Y_VERIFY(ptr);
-    return *ptr;
+NKikimr::NOlap::NIndexedReader::TBatch& TGranulesFillingContext::GetBatchInfo(const TBatchAddress& address) {
+    Y_VERIFY(address.GetGranuleIdx() < GranulesStorage.size());
+    auto& g = GranulesStorage[address.GetGranuleIdx()];
+    return g.GetBatchInfo(address.GetBatchGranuleIdx());
 }
 
 NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::GetTasksProcessor() const {
@@ -56,7 +54,7 @@ NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::Get
 }
 
 void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches) {
-    for (auto&& [_, g] : Granules) {
+    for (auto&& g : GranulesStorage) {
         if (!batches) {
             g.AddNotIndexedBatch(nullptr);
         } else {

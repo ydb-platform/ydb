@@ -4,8 +4,9 @@ This article provides examples of how to use the {{ ydb-short-name }} SDK to wor
 
 Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
 
-## Managing topics
-### Creating a topic
+## Managing topics {#manage}
+
+### Creating a topic {#create-topic}
 
 {% list tabs %}
 
@@ -16,23 +17,34 @@ The only mandatory parameter for creating a topic is its path, other parameters 
    For a full list of supported parameters, see the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
    Example of creating a topic with a list of supported codecs and a minimum number of partitions
+
    ```go
    err := db.Topic().Create(ctx, "topic-path",
        // optional
-   	  topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
+     topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
 
-   	  // optional
-   	  topicoptions.CreateWithMinActivePartitions(3),
+     // optional
+     topicoptions.CreateWithMinActivePartitions(3),
+   )
+   ```
+
+- Python
+
+   ```python
+   driver.topic_client.create_topic(topic_path,
+       supported_codecs=[ydb.TopicCodec.RAW, ydb.TopicCodec.GZIP], # optional
+       min_active_partitions=3,                                    # optional
    )
    ```
 
 {% endlist %}
 
-### Updating a topic
+### Updating a topic {#alter-topic}
 
 When you update a topic, you must specify the topic path and the parameters to be changed.
 
 {% list tabs %}
+
 - Go
 
    For a full list of supported parameters, see the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#AlterOption).
@@ -40,16 +52,21 @@ When you update a topic, you must specify the topic path and the parameters to b
    Example of adding a consumer to a topic
 
    ```go
-    err := db.Topic().Alter(ctx, "topic-path",
-   		topicoptions.AlterWithAddConsumers(topictypes.Consumer{
-   			Name:            "new-consumer",
-   			SupportedCodecs: []topictypes.Codec{topictypes.CodecRaw, topictypes.CodecGzip}, // optional
-   		}),
-   	)
+   err := db.Topic().Alter(ctx, "topic-path",
+     topicoptions.AlterWithAddConsumers(topictypes.Consumer{
+       Name:            "new-consumer",
+       SupportedCodecs: []topictypes.Codec{topictypes.CodecRaw, topictypes.CodecGzip}, // optional
+     }),
+   )
    ```
+
+- Python
+
+   This feature is under development.
+
 {% endlist %}
 
-### Getting topic information
+### Getting topic information {#describe-topic}
 
 {% list tabs %}
 
@@ -57,16 +74,23 @@ When you update a topic, you must specify the topic path and the parameters to b
 
    ```go
      descResult, err := db.Topic().Describe(ctx, "topic-path")
-   	if err != nil {
-   		log.Fatalf("failed drop topic: %v", err)
-   		return
-   	}
-   	fmt.Printf("describe: %#v\n", descResult)
+   if err != nil {
+     log.Fatalf("failed drop topic: %v", err)
+     return
+   }
+   fmt.Printf("describe: %#v\n", descResult)
+   ```
+
+- Python
+
+   ```python
+   info = driver.topic_client.describe_topic(topic_path)
+   print(info)
    ```
 
 {% endlist %}
 
-### Deleting a topic
+### Deleting a topic {#drop-topic}
 
 To delete a topic, just specify the path to it.
 
@@ -78,10 +102,16 @@ To delete a topic, just specify the path to it.
      err := db.Topic().Drop(ctx, "topic-path")
    ```
 
+- Python
+
+   ```python
+   driver.topic_client.drop_topic(topic_path)
+   ```
+
 {% endlist %}
 
+## Message writes {#write}
 
-## Message writes
 ### Connecting to a topic for message writes {#start-writer}
 
 Only connections with matching producer_id and message_group_id are currently supported. This restriction will be removed in the future.
@@ -100,10 +130,15 @@ Only connections with matching producer_id and message_group_id are currently su
    }
    ```
 
+- Python
+
+   ```python
+   writer = driver.topic_client.writer(topic_path)
+   ```
+
 {% endlist %}
 
-
-### Asynchronous message writes
+### Asynchronous message writes {#async-write}
 
 {% list tabs %}
 
@@ -126,8 +161,39 @@ Only connections with matching producer_id and message_group_id are currently su
    }
    ```
 
-{% endlist %}
+- Python
 
+   To deliver messages, you can either simply transmit message content (bytes, str) or set certain properties manually. You can send objects one-by-one or as a list. The `write` method is asynchronous. The method returns immediately once messages are put to the client's internal buffer; this is usually a fast process. If the internal buffer is filled up, you might need to wait until part of the data is sent to the server.
+
+   ```python
+   # Simple delivery of messages, without explicit metadata.
+   # Easy to get started, easy to use if everything you need is the message content.
+   writer = driver.topic_client.writer(topic_path)
+   writer.write("mess")  # Rows will be transmitted in UTF-8; this is the easiest way to send
+                         # text messages.
+   writer.write(bytes([1, 2, 3]))  # These bytes will be transmitted as they are, this is the easiest way to send
+                                   # binary data.
+   writer.write(["mess-1", "mess-2"])  # This line multiple messages per call
+                                       # to decrease overheads on internal SDK processes.
+                                       # This makes sense when the message stream is high.
+
+   # This is the full form; it is used when except the message content you need to manually specify its properties.
+   writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
+
+   writer.write(ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()))
+   writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
+
+   # In the full form, you can also send multiple messages per function call.
+   # This approach is useful when the message stream is high, and you want to
+   # reduce overheads on SDK internal calls.
+   writer.write([
+     ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
+     ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now(),
+     ])
+
+   ```
+
+{% endlist %}
 
 ### Message writes with storage confirmation on the server
 
@@ -155,16 +221,43 @@ Only connections with matching producer_id and message_group_id are currently su
    }
    ```
 
+- Python
+
+   There are two ways to get a message write acknowledgement from the server:
+
+   * `flush()`: Waits until all the messages previously written to the internal buffer are acknowledged.
+   * `write_with_ack(...)`: Sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
+
+   ```python
+   # Put multiple messages to the internal buffer and then wait
+   # until all of them are delivered to the server.
+   for mess in messages:
+       writer.write(mess)
+
+   writer.flush()
+
+   # You can send multiple messages and wait for an acknowledgment for the entire group.
+   writer.write_with_ack(["mess-1", "mess-2"])
+
+   # Waiting on sending each message: this method will return the result only after an
+   # acknowledgment from the server.
+   # This is the slowest message delivery option; use it when this mode is
+   # absolutely needed.
+   writer.write_with_ack("message")
+
+   ```
+
 {% endlist %}
 
-### Selecting a codec for message compression
+### Selecting a codec for message compression {#codec}
+
+By default, the SDK selects the codec automatically (subject to topic settings). In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
+
+If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
 {% list tabs %}
 
 - Go
-
-   By default, the SDK selects the codec automatically (subject to topic settings). In automatic mode, the SDK will first send one group of messages with each of the allowed codecs, then sometimes try to compress messages with all available codecs, and select the codec that provides the smallest message size. If the list of allowed codecs for the topic is empty, auto-select is made between Raw and Gzip codecs.
-   If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
    ```go
    producerAndGroupID := "group-id"
@@ -174,11 +267,18 @@ Only connections with matching producer_id and message_group_id are currently su
    )
    ```
 
+- Python
+
+   ```python
+   writer = driver.topic_client.writer(topic_path,
+       codec=ydb.TopicCodec.GZIP,
+   )
+   ```
+
 {% endlist %}
 
+## Reading messages {#reading}
 
-
-## Message reads
 ### Connecting to a topic for message reads {#start-reader}
 
 To create a connection to the existing `my-topic` topic via the added `my-consumer` consumer, use the following code:
@@ -192,6 +292,12 @@ To create a connection to the existing `my-topic` topic via the added `my-consum
    if err != nil {
        return err
    }
+   ```
+
+- Python
+
+   ```python
+   reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
    ```
 
 {% endlist %}
@@ -217,6 +323,10 @@ You can also use the advanced connection creation option to specify multiple top
        return err
    }
    ```
+
+- Python
+
+   This feature is under development.
 
 {% endlist %}
 
@@ -250,6 +360,14 @@ To read messages one by one, use the following code:
    }
    ```
 
+- Python
+
+   ```python
+   while True:
+       message = reader.receive_message()
+       process(message)
+   ```
+
 {% endlist %}
 
 To read message batches, use the following code:
@@ -268,6 +386,14 @@ To read message batches, use the following code:
            processBatch(batch)
        }
    }
+   ```
+
+- Python
+
+   ```python
+   while True:
+     batch = reader.receive_batch()
+     process(batch)
    ```
 
 {% endlist %}
@@ -293,6 +419,15 @@ To commit messages one by one, use the following code:
    }
    ```
 
+- Python
+
+   ```python
+   while True:
+       message = reader.receive_message()
+       process(message)
+       reader.commit(message)
+   ```
+
 {% endlist %}
 
 To commit message batches, use the following code:
@@ -312,6 +447,15 @@ To commit message batches, use the following code:
          r.Commit(batch.Context(), batch)
        }
    }
+   ```
+
+- Python
+
+   ```python
+   while True:
+     batch = reader.receive_batch()
+     process(batch)
+     reader.commit(batch)
    ```
 
 {% endlist %}
@@ -364,6 +508,10 @@ When reading starts, the client code must transmit the starting consumer offset 
    }
    ```
 
+- Python
+
+   This feature is under development.
+
 {% endlist %}
 
 ### Processing a server read interrupt {#stop}
@@ -395,6 +543,17 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
    ```
 
+- Python
+
+   No special processing is required.
+
+   ```python
+   while True:
+     batch = reader.receive_batch()
+     process(batch)
+     reader.commit(batch)
+   ```
+
 {% endlist %}
 
 #### Hard reading interruption {#hard-stop}
@@ -418,6 +577,23 @@ In case of a _hard interruption_, the client receives a notification that it is 
        _, _ = io.Copy(buf, mess)
        writeMessagesToDB(ctx, buf.Bytes())
    }
+   ```
+
+- Python
+
+   In this example, processing of messages within the batch will stop if the partition is reassigned during operation. This kind of optimization requires that you run extra code on the client side. In simple cases when processing of reassigned partitions is not a problem, you may skip this optimization.
+
+   ```python
+   def process_batch(batch):
+       for message in batch.messages:
+           if not batch.alive:
+               return False
+           process(message)
+       return True
+
+   batch = reader.receive_batch()
+   if process_batch(batch):
+       reader.commit(batch)
    ```
 
 {% endlist %}

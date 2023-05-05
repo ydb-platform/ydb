@@ -26,7 +26,7 @@ if __name__ == '__main__':
         if suite not in disabled_suites:
             print('Running suite: ', suite)
             xml_path = os.path.join(args.xml_dir, suite)
-            pytest_args = "-o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml={} {}".format(
+            pytest_args = "-n 32 -o junit_logging=log -o junit_log_passing_tests=False -v --junit-xml={} {}".format(
                 xml_path,
                 os.path.join(args.test_dir, suite)
             )

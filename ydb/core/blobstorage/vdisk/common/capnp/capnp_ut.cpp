@@ -5,14 +5,14 @@
 
 
 namespace NKikimr {
-    NKikimrCapnProto::TEvVGet::Reader reserialize(const NKikimrCapnProto::TEvVGet::Builder & original) {
+    NKikimrCapnProto::TEvVGet::Builder reserialize(const NKikimrCapnProto::TEvVGet::Builder & original) {
         NActors::TAllocChunkSerializer output;
         UNIT_ASSERT(original.SerializeToZeroCopyStream(&output));
         auto data = output.Release({});
 
         // Deserialize the bytes into a new object
         NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
-        NKikimrCapnProto::TEvVGet::Reader deserializedObject;
+        NKikimrCapnProto::TEvVGet::Builder deserializedObject;
         deserializedObject.ParseFromZeroCopyStream(&input);
 
         return deserializedObject;
@@ -167,9 +167,12 @@ namespace NKikimr {
             tevvget->Record.MutableVDiskID().SetGroupID(groupId);
             tevvget->Record.MutableMsgQoS().SetExtQueueId(queueId);
 
+            // reserialize
+            auto tevvgetReserialized = reserialize(tevvget->Record);
+
             // check
-            auto vdisk = tevvget->Record.MutableVDiskID();
-            auto qos = tevvget->Record.MutableMsgQoS();
+            auto vdisk = tevvgetReserialized.MutableVDiskID();
+            auto qos = tevvgetReserialized.MutableMsgQoS();
             UNIT_ASSERT(!vdisk->HasDomain());
             UNIT_ASSERT(vdisk->HasGroupID());
             UNIT_ASSERT(qos->HasExtQueueId());

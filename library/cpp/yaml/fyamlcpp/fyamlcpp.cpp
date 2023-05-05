@@ -318,6 +318,46 @@ TString TNodeRef::Scalar() const {
     return TString(text, size);
 }
 
+TMark TNodeRef::ScalarBeginMark() const {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    Y_ENSURE_EX(fy_node_is_scalar(Node_), TFyamlEx() << "Node is not Scalar: " << Path());
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
+        fy_document_iterator_create(),
+        &fy_document_iterator_destroy);
+    fy_document_iterator_node_start(it.get(), Node_);
+    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> ev(
+        fy_document_iterator_body_next(it.get()),
+        deleter);
+    auto* token = fy_event_get_token(ev.get());
+    auto* mark = fy_token_start_mark(token);
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
+TMark TNodeRef::ScalarEndMark() const {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    Y_ENSURE_EX(fy_node_is_scalar(Node_), TFyamlEx() << "Node is not Scalar: " << Path());
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
+        fy_document_iterator_create(),
+        &fy_document_iterator_destroy);
+    fy_document_iterator_node_start(it.get(), Node_);
+    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> ev(
+        fy_document_iterator_body_next(it.get()),
+        deleter);
+    auto* token = fy_event_get_token(ev.get());
+    auto* mark = fy_token_end_mark(token);
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
 TMapping TNodeRef::Map() const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     Y_ENSURE_EX(fy_node_is_mapping(Node_), TFyamlEx() << "Node is not Mapping: " << Path());

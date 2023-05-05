@@ -163,4 +163,23 @@ x: b
         UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("b").Sequence().at(1).Scalar(), "2");
         UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("b").Sequence().at(2).Scalar(), "3");
     }
+
+    Y_UNIT_TEST(ScalarMark) {
+        TString str = R"(
+a: foo
+test: [{obj: 123}]
+b: bar
+        )";
+
+        auto doc = NFyaml::TDocument::Parse(str);
+
+        auto node = doc.Root().Map().at("test").Sequence().at(0).Map().at("obj");
+
+        auto pos = str.find("123");
+        auto begin = node.ScalarBeginMark().InputPos;
+        auto end = node.ScalarEndMark().InputPos;
+
+        UNIT_ASSERT_VALUES_EQUAL(begin, pos);
+        UNIT_ASSERT_VALUES_EQUAL(end, pos + strlen("123"));
+    }
 }

@@ -150,6 +150,10 @@ public:
 
     TString Scalar() const;
 
+    TMark ScalarBeginMark() const;
+
+    TMark ScalarEndMark() const;
+
     void Insert(const TNodeRef& node);
 
     bool Empty() const { return Node_ == nullptr; }

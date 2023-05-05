@@ -14,13 +14,11 @@
                         "Group",
                         "Name"
                     ],
-                    "lookup_by": [
-                        "Group (1)"
-                    ],
                     "scan_by": [
+                        "Group [1, 1)",
                         "Name [Name1, Name3)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

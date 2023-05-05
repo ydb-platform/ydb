@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             auto params = TParamsBuilder(paramsType);
 
             auto result = ExecQueryAndTestResult(session, query, params.Build(), R"([])");
-            AssertTableReads(result, "/Root/KeyValue", 6);
+            AssertTableReads(result, "/Root/KeyValue", 0);
         }
 
         // not empty parameters
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             pl.EndList().Build();
 
             auto result = ExecQueryAndTestResult(session, query, params.Build(), R"([[[1u];["One"]]])");
-            AssertTableReads(result, "/Root/KeyValue", 6);
+            AssertTableReads(result, "/Root/KeyValue", 3);
         }
     }
 
@@ -142,10 +142,10 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, true /* optionalParams */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", 6);
+            AssertTableReads(result, "/Root/KeyValue", 3);
         });
         test(DisableOpt, false /* optionalParams */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", 6);
+            AssertTableReads(result, "/Root/KeyValue", 3);
         });
 
         test(EnableOpt, true /* optionalParams */, [](const TDataQueryResult& result) {
@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/KeyValue", 6);
+            AssertTableReads(result, "/Root/KeyValue", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 8);
+            AssertTableReads(result, "/Root/Test", 3);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 8);
+            AssertTableReads(result, "/Root/Test", 3);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -940,11 +940,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 8);
+            AssertTableReads(result, "/Root/Test", 4);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 8);
+            AssertTableReads(result, "/Root/Test", 4);
         });
     }
 

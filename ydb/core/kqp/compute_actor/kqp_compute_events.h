@@ -41,9 +41,26 @@ struct TEvKqpCompute {
         TDuration CpuTime;
         TDuration WaitTime;
         ui32 PageFaults = 0; // number of page faults occurred when filling in this message
+        bool RequestedBytesLimitReached = false;
         bool Finished = false;
         bool PageFault = false; // page fault was the reason for sending this message
         mutable THolder<TEvRemoteScanData> Remote;
+
+        ui32 GetRowsCount() const {
+            if (ArrowBatch) {
+                return ArrowBatch->num_rows();
+            } else {
+                return Rows.size();
+            }
+        }
+
+        bool IsEmpty() const {
+            if (ArrowBatch) {
+                return ArrowBatch->num_rows() == 0;
+            } else {
+                return Rows.size() == 0;
+            }
+        }
 
         bool IsSerializable() const override {
             return true;
@@ -77,6 +94,7 @@ struct TEvKqpCompute {
             ev->PageFault = pbEv->Record.GetPageFault();
             ev->PageFaults = pbEv->Record.GetPageFaults();
             ev->Finished = pbEv->Record.GetFinished();
+            ev->RequestedBytesLimitReached = pbEv->Record.GetRequestedBytesLimitReached();
             ev->LastKey = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetLastKey()).GetCells());
 
             auto rows = pbEv->Record.GetRows();
@@ -104,6 +122,7 @@ struct TEvKqpCompute {
                 Remote->Record.SetWaitTimeMs(WaitTime.MilliSeconds());
                 Remote->Record.SetPageFaults(PageFaults);
                 Remote->Record.SetFinished(Finished);
+                Remote->Record.SetRequestedBytesLimitReached(RequestedBytesLimitReached);
                 Remote->Record.SetPageFaults(PageFaults);
                 Remote->Record.SetPageFault(PageFault);
                 Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));

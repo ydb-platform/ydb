@@ -57,6 +57,7 @@ target_sources(ydb-core-cms PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/info_collector.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/logger.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/node_checkers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/sentinel.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/services.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/walle_api_handler.cpp
@@ -69,6 +70,11 @@ generate_enum_serilization(ydb-core-cms
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/services.h
   INCLUDE_HEADERS
   ydb/core/cms/services.h
+)
+generate_enum_serilization(ydb-core-cms
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/node_checkers.h
+  INCLUDE_HEADERS
+  ydb/core/cms/node_checkers.h
 )
 
 add_global_library_for(ydb-core-cms.global ydb-core-cms)
@@ -95,10 +101,10 @@ target_link_libraries(ydb-core-cms.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/d9287e52aed5bc947231449c57c31fe9.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/5aa7f9361b96d3de658aa5b60e0263fd.cpp
 )
 resources(ydb-core-cms.global
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/d9287e52aed5bc947231449c57c31fe9.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/5aa7f9361b96d3de658aa5b60e0263fd.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/index.html
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.css
@@ -108,6 +114,7 @@ resources(ydb-core-cms.global
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/common.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/common.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/configs.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/yaml_config.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/config_forms.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/datashard.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/datashard.js
@@ -119,6 +126,19 @@ resources(ydb-core-cms.global
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/datashard_slow_ops.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/enums.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/bootstrap.min.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/fuzzycomplete.min.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/fuzzycomplete.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/fuse.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/document-copy.svg
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/unfold-less.svg
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/unfold-more.svg
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/1-circle.svg
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/link.svg
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/gear.svg
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/require.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/jquery.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/main.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/question-circle.svg
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/bootstrap.bundle.min.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/theme.blue.css
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/proto_types.js
@@ -138,6 +158,7 @@ resources(ydb-core-cms.global
   cms/ui/common.css
   cms/ui/common.js
   cms/ui/configs.js
+  cms/ui/yaml_config.js
   cms/ui/config_forms.js
   cms/ui/datashard.css
   cms/ui/datashard.js
@@ -149,6 +170,19 @@ resources(ydb-core-cms.global
   cms/ui/datashard_slow_ops.js
   cms/ui/enums.js
   cms/ui/ext/bootstrap.min.css
+  cms/ui/ext/fuzzycomplete.min.css
+  cms/ui/ext/fuzzycomplete.min.js
+  cms/ui/ext/fuse.min.js
+  cms/ui/ext/document-copy.svg
+  cms/ui/ext/unfold-less.svg
+  cms/ui/ext/unfold-more.svg
+  cms/ui/ext/1-circle.svg
+  cms/ui/ext/link.svg
+  cms/ui/ext/gear.svg
+  cms/ui/ext/require.min.js
+  cms/ui/ext/jquery.min.js
+  cms/ui/main.js
+  cms/ui/ext/question-circle.svg
   cms/ui/ext/bootstrap.bundle.min.js
   cms/ui/ext/theme.blue.css
   cms/ui/proto_types.js

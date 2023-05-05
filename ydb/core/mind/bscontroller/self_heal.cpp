@@ -628,7 +628,7 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::ProcessVDiskStatus(
             const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s) {
-        THashSet<TGroupInfo*> groups, status;
+        THashSet<TGroupInfo*> groups;
         const TInstant now = TActivationContext::Now();
         const TMonotonic mono = TActivationContext::Monotonic();
         std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
@@ -653,7 +653,6 @@ namespace NKikimr::NBsController {
                             NotReadyVSlotIds.insert(slot->VSlotId);
                         }
                     }
-                    status.insert(const_cast<TGroupInfo*>(group));
                     ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus());
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
                         groups.insert(const_cast<TGroupInfo*>(group));
@@ -698,10 +697,6 @@ namespace NKikimr::NBsController {
 
         if (!lastSeenReadyQ.empty()) {
             Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
-        }
-
-        for (TGroupInfo *group : status) {
-            group->CalculateGroupStatus();
         }
 
         ScheduleVSlotReadyUpdate();

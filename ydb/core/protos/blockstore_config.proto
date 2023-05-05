@@ -116,11 +116,17 @@ message TVolumeConfig {
     // Encryption description.
     optional TEncryptionDesc EncryptionDesc = 44;
 
-    // Placement partition id.
+    // Placement partition id. Deprecated.
     optional string PlacementPartitionId = 45;
 
     // Tablet id of base disk.
     optional uint64 BaseDiskTabletId = 46;
+
+    // Placement partition index.
+    optional uint32 PlacementPartitionIndex = 47;
+
+    // Is partitions PoolKind set manually or by config.
+    optional bool IsPartitionsPoolKindSetManually = 48;
 }
 
 message TUpdateVolumeConfig {

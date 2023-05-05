@@ -146,13 +146,11 @@ namespace NKikimr::NBlobDepot {
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
         , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(StartTime + WatchdogDuration, this))
-    {}
+    {
+        agent.ExecutingQueries.PushBack(this);
+    }
 
     TBlobDepotAgent::TQuery::~TQuery() {
-        if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
-            STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
-                (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Duration, duration));
-        }
         Agent.QueryWatchdogMap.erase(QueryWatchdogMapIter);
     }
 
@@ -218,6 +216,11 @@ namespace NKikimr::NBlobDepot {
         TIntrusiveListItem<TQuery, TPendingId>::Unlink();
         Agent.DeletePendingQueries.PushBack(this);
         TRequestSender::ClearRequestsInFlight();
+
+        if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
+            STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
+                (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Duration, duration));
+        }
     }
 
     TString TBlobDepotAgent::TQuery::GetQueryId() const {

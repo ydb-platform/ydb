@@ -148,6 +148,17 @@ namespace NKikimr::NBsController {
         }
     };
 
+    struct TExGroupNotFound : TExError {
+        TExGroupNotFound(ui32 groupId) {
+            *this << "Group not found"
+                << TErrorParams::GroupId(groupId);
+        }
+
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kGroupNotFound;
+        }
+    };
+
     struct TExMayLoseData : TExError {
         TExMayLoseData(ui32 groupId) {
             *this << "Group may lose data"

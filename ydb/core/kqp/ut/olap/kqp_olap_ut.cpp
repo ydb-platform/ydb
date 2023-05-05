@@ -178,6 +178,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
     }
 
+    void WriteTestDataForClickBench(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+        UNIT_ASSERT(testTable == "/Root/benchTable"); // TODO: check schema instead
+
+        TClickHelper lHelper(kikimr.GetTestServer());
+        NYdb::NLongTx::TClient client(kikimr.GetDriver());
+
+        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
+
+        auto txId = resBeginTx.GetResult().tx_id();
+        auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
+        TString data = NArrow::SerializeBatchNoCompression(batch);
+
+        NLongTx::TLongTxWriteResult resWrite =
+                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
+
+        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+    }
+
     void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
         UNIT_ASSERT(testTable == "/Root/tableWithNulls"); // TODO: check schema instead
         TTableWithNullsHelper lHelper(kikimr.GetTestServer());
@@ -1128,6 +1149,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
             R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
             R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 OR NOT(`level` = 2 AND `uid` = "uid_3000002"))",
+            R"(`level` = 0 AND (`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
+            R"(`level` = 0 AND NOT(`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
             R"(`level` = 0 OR `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000003")",
             R"(`level` = 0 AND `uid` = "uid_3000000")",
@@ -1146,6 +1170,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(CAST("2" As Int32) >= `level`)",
             R"(`timestamp` >= CAST(3000001u AS Timestamp))",
             R"((`timestamp`, `level`) >= (CAST(3000001u AS Timestamp), 3))",
+#if SSA_RUNTIME_VERSION >= 2U
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
+#endif
         };
 
         std::vector<TString> testDataNoPush = {
@@ -1155,6 +1185,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
+            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
+            // Not strict function in the beginning causes to disable pushdown
+            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
+            // We can handle this case in future
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+#if SSA_RUNTIME_VERSION < 2U
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
+#endif
+        };
+
+        std::vector<TString> testDataPartialPush = {
+            R"(LENGTH(`uid`) > 0 AND `resource_id` = "10001")",
+            R"(`resource_id` = "10001" AND `level` > 1 AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` >= "10001" AND LENGTH(`uid`) > 0 AND `level` >= 1 AND `level` < 3)",
+            R"(LENGTH(`uid`) > 0 AND (`resource_id` >= "10001" OR `level`>= 1 AND `level` <= 3))",
+            R"(NOT(`resource_id` = "10001" OR `level` >= 1) AND LENGTH(`uid`) > 0)",
+            R"(NOT(`resource_id` = "10001" AND `level` != 1) AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level`)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1)",
         };
 
         auto buildQuery = [](const TString& predicate, bool pushEnabled) {
@@ -1224,6 +1279,131 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << pushQuery);
         }
+
+        for (const auto& predicate: testDataPartialPush) {
+            auto normalQuery = buildQuery(predicate, false);
+            auto pushQuery = buildQuery(predicate, true);
+
+            Cerr << "--- Run normal query ---\n";
+            Cerr << normalQuery << Endl;
+            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto goodResult = CollectStreamResult(it);
+
+            Cerr << "--- Run pushed down query ---\n";
+            Cerr << pushQuery << Endl;
+            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto pushResult = CollectStreamResult(it);
+
+            if (logQueries) {
+                Cerr << "Query: " << normalQuery << Endl;
+                Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
+                Cerr << "Received: " << pushResult.ResultSetYson << Endl;
+            }
+
+            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
+
+            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            auto ast = result.QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+            UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
+                          TStringBuilder() << "NarrowMap was removed. Query: " << pushQuery);
+        }
+    }
+
+#if SSA_RUNTIME_VERSION >= 2U
+    Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        EnableDebugLogging(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector< std::pair<TString, TString> > secondLvlFilters = {
+            { R"(`uid` LIKE "%30000%")", "TableFullScan" },
+            { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
+            { R"(`uid` LIKE "uid%")", "TableFullScan" },
+            { R"(`uid` LIKE "%001")", "TableFullScan" },
+            { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
+        };
+        std::string query = R"(
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                `level` >= 1 AND
+        )";
+
+        for (auto filter : secondLvlFilters) {
+            auto it = tableClient.StreamExecuteScanQuery(query + filter.first, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto result = CollectStreamResult(it);
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+
+            auto readNode = FindPlanNodeByKv(plan, "Node Type", filter.second);
+            UNIT_ASSERT(readNode.IsDefined());
+
+            auto& operators = readNode.GetMapSafe().at("Operators").GetArraySafe();
+            for (auto& op : operators) {
+                if (op.GetMapSafe().at("Name") == "TableFullScan") {
+                    UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
+                    auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
+                    int filterCmdCount = 0;
+                    std::string::size_type pos = 0;
+                    std::string filterCmd = R"("Filter":{)";
+                    while ((pos = ssa.find(filterCmd, pos)) != std::string::npos) {
+                        ++filterCmdCount;
+                        pos += filterCmd.size();
+                    }
+                    UNIT_ASSERT_EQUAL(filterCmdCount, 2);
+                }
+            }
+        }
+    }
+#endif
+
+    Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        EnableDebugLogging(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto query = R"(
+            PRAGMA Kikimr.OptEnablePredicateExtract = "false";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                `resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1;
+        )";
+
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+        UNIT_ASSERT_C(ast.find(R"("eq" '"resource_id")") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << query);
+        UNIT_ASSERT_C(ast.find(R"("gt" '"level")") == std::string::npos,
+                          TStringBuilder() << "Predicate pushed down. Query: " << query);
+        UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
+                          TStringBuilder() << "NarrowMap was removed. Query: " << query);
     }
 
     Y_UNIT_TEST(AggregationCountPushdown) {
@@ -1627,7 +1807,38 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregationsInternal(cases);
     }
 
-    void TestClickBench(const std::vector<TAggregationTestCase>& cases) {
+    void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        EnableDebugLogging(kikimr);
+        TClickHelper(kikimr).CreateClickBenchTable();
+        auto tableClient = kikimr.GetTableClient();
+
+
+        ui32 numIterations = 10;
+        const ui32 iterationPackSize = 2000;
+        for (ui64 i = 0; i < numIterations; ++i) {
+            WriteTestDataForClickBench(kikimr, "/Root/benchTable", 0, 1000000 + i * 1000000, iterationPackSize);
+        }
+
+        for (auto&& i : cases) {
+            const TString queryFixed = i.GetFixedQuery();
+            {
+                auto it = tableClient.StreamExecuteScanQuery(queryFixed).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = StreamResultToYson(it);
+                if (!i.GetExpectedReply().empty()) {
+                    CompareYson(result, i.GetExpectedReply());
+                }
+            }
+            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
+        }
+    }
+
+    void TestClickBenchInternal(const std::vector<TAggregationTestCase>& cases) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -1685,6 +1896,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(streamSender, TDuration::Seconds(10));
             Y_VERIFY(currentTest.CheckFinished());
         }
+    }
+
+    void TestClickBench(const std::vector<TAggregationTestCase>& cases) {
+        TestClickBenchBase(cases);
+        TestClickBenchInternal(cases);
     }
 
     void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases) {
@@ -2479,12 +2695,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )")
             .SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
 #if SSA_RUNTIME_VERSION >= 2U
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
+//            AddExpectedPlanOptions("TKqpOlapAgg")
+            .AddExpectedPlanOptions("WideCombiner")
 #else
-            .AddExpectedPlanOptions("CombineCore");
+            .AddExpectedPlanOptions("CombineCore")
 #endif
-
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
         TestAggregations({ testCase });
     }
 
@@ -2627,8 +2843,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY c DESC
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("WideCombiner")
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+        ;
 
         TAggregationTestCase q9;
         q9.SetQuery(R"(
@@ -2640,8 +2860,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .AddExpectedPlanOptions("WideCombiner")
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
 
         TAggregationTestCase q12;
         q12.SetQuery(R"(
@@ -2654,8 +2876,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10;
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("WideCombiner")
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
 
         TAggregationTestCase q14;
         q14.SetQuery(R"(
@@ -2668,10 +2893,42 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 10;
             )")
             //.SetExpectedReply("[[[\"40999\"];[4];1u];[[\"40998\"];[3];1u];[[\"40997\"];[2];1u]]")
-            .AddExpectedPlanOptions("TKqpOlapAgg")
-            .SetExpectedReadNodeType("TableFullScan");
+            // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
+            // .SetExpectedReadNodeType("TableFullScan");
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("WideCombiner")
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
 
-        TestClickBench({ q7, q9, q12, q14 });
+        TAggregationTestCase q22;
+        q22.SetQuery(R"(
+                SELECT
+                    SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID)
+                FROM `/Root/benchTable`
+                WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> ''
+                GROUP BY SearchPhrase
+                ORDER BY c DESC
+                LIMIT 10;
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("WideCombiner")
+            .SetExpectedReadNodeType("Aggregate-TableFullScan");
+
+        TAggregationTestCase q39;
+        q39.SetQuery(R"(
+                SELECT TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst, COUNT(*) AS PageViews
+                FROM `/Root/benchTable`
+                WHERE CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh == 0
+                GROUP BY
+                    TraficSourceID, SearchEngineID, AdvEngineID, IF (SearchEngineID = 0 AND AdvEngineID = 0, Referer, '') AS Src,
+                    URL AS Dst
+                ORDER BY PageViews DESC
+                LIMIT 10;
+            )")
+            .AddExpectedPlanOptions("KqpOlapFilter")
+            .AddExpectedPlanOptions("WideCombiner")
+            .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
+
+        TestClickBench({ q7, q9, q12, q14, q22, q39 });
     }
 
     Y_UNIT_TEST(StatsSysView) {

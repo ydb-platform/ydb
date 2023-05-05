@@ -1810,8 +1810,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     auto cgi = ev->Get()->Cgi();
 
-    auto action = cgi.Get("action");
-    if (action) {
+    if (const auto& action = cgi.Get("action")) {
         if (action == "cleanup-borrowed-parts") {
             Execute(CreateTxMonitoringCleanupBorrowedParts(this, ev), ctx);
             return true;
@@ -1833,8 +1832,24 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return true;
     }
 
-    Execute(CreateTxMonitoring(this, ev), ctx);
+    if (const auto& page = cgi.Get("page")) {
+        if (page == "main") {
+            // fallthrough
+        } else if (page == "change-sender") {
+            if (OutChangeSender) {
+                ctx.Send(ev->Forward(OutChangeSender));
+                return true;
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Change sender is not running"));
+                return true;
+            }
+        } else {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+            return true;
+        }
+    }
 
+    Execute(CreateTxMonitoring(this, ev), ctx);
     return true;
 }
 
@@ -3807,6 +3822,23 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncJobComplete::TPtr &ev, const TActorC
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "AsyncJob complete"
             << " at " << TabletID()
             << " for unknown tx " << ev->Cookie);
+    }
+
+    // Continue current Tx
+    PlanQueue.Progress(ctx);
+}
+
+void TDataShard::Handle(TEvPrivate::TEvRestartOperation::TPtr &ev, const TActorContext &ctx) {
+    const auto txId = ev->Get()->TxId;
+
+    if (auto op = Pipeline.FindOp(txId)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Restart op: " << txId
+            << " at " << TabletID());
+
+        if (op->IsWaitingForRestart()) {
+            op->ResetWaitingForRestartFlag();
+            Pipeline.AddCandidateOp(op);
+        }
     }
 
     // Continue current Tx

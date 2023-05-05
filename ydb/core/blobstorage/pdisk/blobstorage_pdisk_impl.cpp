@@ -95,6 +95,10 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     JointLogWrites.reserve(16 << 10);
     JointCommits.reserve(16 << 10);
     JointChunkForgets.reserve(16 << 10);
+
+    DebugInfoGenerator = [id = PDiskId, type = PDiskCategory]() {
+        return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
+    };
 }
 
 TString TPDisk::DynamicStateToString(bool isMultiline) {
@@ -507,7 +511,9 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
     }
     if (it != LogChunks.end()) {
         if (gapStart) {
-            it->IsEndOfSplice = true;
+            if (!chunksToRelease.empty()) {
+                it->IsEndOfSplice = true;
+            }
         }
         gapEnd = *it;
     }
@@ -1717,7 +1723,6 @@ TOwner TPDisk::FindNextOwnerId() {
     const TOwner start = LastOwnerId;
     do {
         ++LastOwnerId;
-        Mon.OwnerIdsIssued->Inc();
         if (LastOwnerId == OwnerEndUser) {
             LastOwnerId = OwnerBeginUser;
         }
@@ -1726,6 +1731,7 @@ TOwner TPDisk::FindNextOwnerId() {
         }
     } while (OwnerData[LastOwnerId].VDiskId != TVDiskID::InvalidId || OwnerData[LastOwnerId].OnQuarantine);
 
+    Mon.OwnerIdsIssued->Inc();
     *Mon.LastOwnerId = LastOwnerId;
     return LastOwnerId;
 }
@@ -1832,6 +1838,11 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
         return false;
     }
 
+    LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+            << " YardInitStart OwnerId " << owner
+            << " new OwnerRound# " << evYardInit.OwnerRound
+            << " ownerData.HaveRequestsInFlight()# " << ownerData.HaveRequestsInFlight()
+            << " Marker# BPD56");
     // Update round and wait for all pending requests of old owner to finish
     ownerData.OwnerRound = evYardInit.OwnerRound;
     return true;
@@ -3582,7 +3593,6 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     TConfigureScheduler conf(ownerId, 0);
     SchedulerConfigure(conf);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // External interface

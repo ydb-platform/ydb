@@ -183,6 +183,23 @@ namespace NKikimr {
                 bufferSizeBytes, vdiskIncarnationGuid, errorReason);
     }
 
+    static inline std::unique_ptr<TEvBlobStorage::TEvVPutResult>
+    CreateInternalResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& errorReason,
+            TEvBlobStorage::TEvVPut::TPtr &ev, const TInstant &now,
+            const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid) {
+
+        NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
+        const TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
+        const ui64 bufferSizeBytes = ev->Get()->GetBufferBytes();
+        const ui64 vcookie = record.GetCookie();
+        const ui64 *cookie = record.HasCookie() ? &vcookie : nullptr;
+        const auto oosStatus = vctx->GetOutOfSpaceState().GetGlobalStatusFlags();
+
+        return std::make_unique<TEvBlobStorage::TEvVPutResult>(status, id, vdiskID, cookie, oosStatus, now,
+                ev->Get()->GetCachedByteSize(), &ev->Get()->Record, nullptr, nullptr, nullptr,
+                bufferSizeBytes, vdiskIncarnationGuid, errorReason);
+    }
+
     static inline std::unique_ptr<TEvBlobStorage::TEvVBlockResult>
     CreateResult(const TVDiskContextPtr &vctx, const NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
             const TEvBlobStorage::TEvVBlockResult::TTabletActGen *actual,

@@ -480,6 +480,28 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
     return flag;
 }
 
+NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrHive::ETabletVolatileState state) {
+    NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
+    switch (state) {
+        case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STOPPED:
+            flag = NKikimrViewer::EFlag::Red;
+            break;
+        case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_BOOTING:
+            flag = NKikimrViewer::EFlag::Orange;
+            break;
+        case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STARTING:
+            flag = NKikimrViewer::EFlag::Yellow;
+            break;
+        case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+            flag = NKikimrViewer::EFlag::Green;
+            break;
+        default:
+            flag = NKikimrViewer::EFlag::Red;
+            break;
+    }
+    return flag;
+}
+
 NKikimrViewer::EFlag GetFlagFromUsage(double usage) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     if (usage >= 0.94) {

@@ -556,6 +556,8 @@ message TEvRemoteScanData {
     // backwards comparability.
     repeated bytes Rows = 8;
     optional TArrowBatch ArrowBatch = 10;
+
+    optional bool RequestedBytesLimitReached = 11 [default = false];
 }
 
 message TEvRemoteScanDataAck {

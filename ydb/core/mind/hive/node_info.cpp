@@ -175,6 +175,15 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
     return true;
 }
 
+i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
+    auto it = TabletAvailability.find(tablet.GetTabletType());
+    if (it == TabletAvailability.end()) {
+        return 0;
+    }
+
+    return it->second.GetPriority();
+}
+
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
     if (tablet.IsAliveOnLocal(Local)) {
         return !IsOverloaded();

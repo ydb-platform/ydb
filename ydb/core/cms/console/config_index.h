@@ -598,6 +598,9 @@ struct TSubscription : public TThrRefBase {
     // but not ignored for died tablets which are assumed to preserve their
     // configs.
     ui64 Cookie;
+
+    TString YamlConfig;
+    TMap<ui64, TString> VolatileYamlConfigs;
 };
 
 using TSubscriptionSet = THashSet<TSubscription::TPtr, TPtrHash>;
@@ -658,6 +661,12 @@ struct TInMemorySubscription : public TThrRefBase {
     THashSet<ui32> ItemKinds;
 
     NKikimrConfig::TConfigVersion LastProvided;
+
+    bool ServeYaml = false;
+    ui64 YamlConfigVersion = 0;
+    TMap<ui64, ui64> VolatileYamlConfigHashes;
+
+    bool FirstUpdateSent = false;
 
     TActorId Worker;
 };

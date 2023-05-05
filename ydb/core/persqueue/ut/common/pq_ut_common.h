@@ -66,7 +66,7 @@ struct TTestContext {
     }
 
     static void SetupLogging(TTestActorRuntime& runtime)  {
-        NActors::NLog::EPriority pqPriority = ENABLE_DETAILED_PQ_LOG ? NLog::PRI_TRACE : NLog::PRI_DEBUG;
+        NActors::NLog::EPriority pqPriority = ENABLE_DETAILED_PQ_LOG ? NLog::PRI_DEBUG : NLog::PRI_INFO;
         NActors::NLog::EPriority priority = ENABLE_DETAILED_KV_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
 

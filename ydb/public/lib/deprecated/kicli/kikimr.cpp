@@ -598,10 +598,13 @@ NThreading::TFuture<TResult> TKikimr::GetNodeConfig(ui32 nodeId,
                                                     const TString &tenant,
                                                     const TString &nodeType,
                                                     const TString& domain,
-                                                    const TString& token)
+                                                    const TString& token,
+                                                    bool serveYaml)
 {
     TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request = new NMsgBusProxy::TBusConsoleRequest;
-    auto &node = *request->Record.MutableGetNodeConfigRequest()->MutableNode();
+    auto &rec = request->Record;
+    rec.MutableGetNodeConfigRequest()->SetServeYaml(serveYaml);
+    auto &node = *rec.MutableGetNodeConfigRequest()->MutableNode();
     node.SetNodeId(nodeId);
     node.SetHost(host);
     node.SetTenant(tenant);

@@ -1774,6 +1774,125 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(RacyActivateAndEnqueue) {
+        TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+
+        TMaybe<TActorId> preventEnqueueingOnSpecificSender;
+        bool preventEnqueueing = true;
+        TVector<THolder<IEventHandle>> enqueued;
+        bool preventActivation = false;
+        TVector<THolder<IEventHandle>> activations;
+        THashMap<ui64, ui32> splitAcks;
+
+        env.GetServer()->GetRuntime()->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvChangeExchange::EvEnqueueRecords:
+                if (preventEnqueueing || (preventEnqueueingOnSpecificSender && *preventEnqueueingOnSpecificSender == ev->Recipient)) {
+                    enqueued.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                } else {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+            case TEvChangeExchange::EvActivateSender:
+                if (preventActivation && !ev->Get<TEvChangeExchange::TEvActivateSender>()->Record.HasOrigin()) {
+                    // local activation event
+                    activations.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                } else {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+            case TEvDataShard::EvSplitAck:
+                ++splitAcks[ev->Get<TEvDataShard::TEvSplitAck>()->Record.GetOperationCookie()];
+                break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto waitForSplitAcks = [&](ui64 txId, ui32 count) {
+            if (splitAcks[txId] != count) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return splitAcks[txId] == count;
+                });
+                env.GetServer()->GetRuntime()->DispatchEvents(opts);
+            }
+        };
+
+        auto sendDelayed = [&](bool& toggleFlag, TVector<THolder<IEventHandle>>& delayed) {
+            toggleFlag = false;
+            for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+                env.GetServer()->GetRuntime()->Send(ev.Release(), 0, true);
+            }
+        };
+
+        SetSplitMergePartCountLimit(env.GetServer()->GetRuntime(), -1);
+
+        // split
+        auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+            AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
+
+        // execute on old partitions
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20);
+        )");
+
+        // merge
+        tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 2);
+
+        auto txId = AsyncMergeTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds);
+        waitForSplitAcks(txId, 2);
+
+        // execute on new partition & enqueue on inactive sender
+        preventEnqueueing = false;
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), "UPSERT INTO `/Root/Table` (key, value) VALUES (3, 31);");
+
+        // send previously enqueued records & wait for activation msg
+        preventActivation = true;
+        sendDelayed(preventEnqueueing, enqueued);
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&activations](IEventHandle&) {
+                return !activations.empty();
+            });
+            env.GetServer()->GetRuntime()->DispatchEvents(opts);
+        }
+
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), txId);
+        UNIT_ASSERT_VALUES_EQUAL(activations.size(), 1);
+        preventEnqueueingOnSpecificSender = activations[0]->Recipient;
+
+        // generate one more record
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), "UPSERT INTO `/Root/Table` (key, value) VALUES (4, 42);");
+
+        // activate
+        sendDelayed(preventActivation, activations);
+        WaitForContent(env.GetServer(), env.GetEdgeActor(), "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":31},"key":[3]})",
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(enqueued.size(), 1);
+        preventEnqueueingOnSpecificSender.Clear();
+
+        sendDelayed(preventEnqueueing, enqueued);
+        WaitForContent(env.GetServer(), env.GetEdgeActor(), "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":31},"key":[3]})",
+            R"({"update":{"value":42},"key":[4]})",
+        });
+    }
+
     Y_UNIT_TEST(RacyCreateAndSend) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -1851,6 +1970,39 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });
+    }
+
+    Y_UNIT_TEST(RacySplitAndDropTable) {
+        TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+        auto& runtime = *env.GetServer()->GetRuntime();
+
+        TVector<THolder<IEventHandle>> enqueued;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
+                enqueued.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
+            UPSERT INTO `/Root/Table` (key, value)
+            VALUES (1, 10);
+        )"); 
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+        const auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+        AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 2);
+
+        const auto dropTxId = AsyncDropTable(env.GetServer(), env.GetEdgeActor(), "/Root", "Table");
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : std::exchange(enqueued, {})) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), dropTxId);
     }
 
     Y_UNIT_TEST(RenameTable) {

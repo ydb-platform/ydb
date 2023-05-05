@@ -2,6 +2,7 @@ import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/config.proto";
 import "ydb/core/protos/console_base.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/draft/ydb_console.proto";
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";
@@ -115,6 +116,7 @@ message TConfigItem {
         HttpProxyConfigItem = 53;
         SchemeShardConfigItem = 54;
         ClientCertificateAuthorizationConfigItem = 55;
+        YamlConfigEnabledItem = 63;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
@@ -228,6 +230,69 @@ message TConfigureResponse {
     repeated TAffectedConfig AffectedConfigs = 3;
 }
 
+message TApplyConfigRequest {
+    optional Ydb.Console.ApplyConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TApplyConfigResponse {
+    optional Ydb.Console.ApplyConfigResponse Response = 1;
+}
+
+message TAddVolatileConfigRequest {
+    optional Ydb.Console.AddVolatileConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TAddVolatileConfigResponse {
+    optional Ydb.Console.AddVolatileConfigResponse Response = 1;
+}
+
+message TGetAllConfigsRequest {
+    optional Ydb.Console.GetConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TGetAllConfigsResponse {
+    optional Ydb.Console.GetConfigResponse Response = 1;
+}
+
+message TRemoveVolatileConfigRequest {
+    optional Ydb.Console.RemoveVolatileConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TRemoveVolatileConfigResponse {
+    optional Ydb.Console.RemoveVolatileConfigResponse Response = 1;
+}
+
+message TResolveConfigRequest {
+    optional Ydb.Console.ResolveConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TResolveConfigResponse {
+    optional Ydb.Console.ResolveConfigResponse Response = 1;
+}
+
+message TResolveAllConfigRequest {
+    optional Ydb.Console.ResolveAllConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TResolveAllConfigResponse {
+    optional Ydb.Console.ResolveAllConfigResponse Response = 1;
+}
+
+message TGetYamlConfigRequest {
+}
+
+message TVolatileYamlConfig {
+    optional uint64 Id = 1;
+    optional string Config = 2;
+    optional bool NotChanged = 3;
+}
+
 // Get items of specified kinds with specified attributes.
 // If multiple filters are specified then items complying
 // with at least one of them are returned (except kinds filter
@@ -282,11 +347,14 @@ message TGetNodeConfigRequest {
     optional TNodeAttributes Node = 1;
     // Filter items by specified kinds (return full config by default).
     repeated uint32 ItemKinds = 2;
+    optional bool ServeYaml = 3;
 }
 
 message TGetNodeConfigResponse {
     optional TStatus Status = 1;
     optional NKikimrConfig.TAppConfig Config = 2;
+    optional string YamlConfig = 3;
+    repeated TVolatileYamlConfig VolatileConfigs = 4;
 }
 
 message TSubscriber {
@@ -303,11 +371,19 @@ message TConfigId {
     repeated TConfigItemId ItemIds = 1;
 }
 
+message TVolatileYamlConfigVersion {
+    optional uint64 Id = 1;
+    optional uint64 Hash = 2;
+}
+
 message TConfigSubscriptionRequest {
     optional uint64 Generation = 1;
     optional TNodeAttributes Options = 2;
     repeated uint32 ConfigItemKinds = 3;
     optional NKikimrConfig.TConfigVersion KnownVersion = 4;
+    optional bool ServeYaml = 5;
+    optional uint64 YamlVersion = 6;
+    repeated TVolatileYamlConfigVersion VolatileYamlVersion = 7;
 }
 
 message TConfigSubscriptionResponse {
@@ -329,6 +405,9 @@ message TConfigSubscriptionNotification {
     optional uint64 Generation = 2;
     optional NKikimrConfig.TAppConfig Config = 3;
     repeated uint32 AffectedKinds = 4;
+    optional string YamlConfig = 5;
+    optional bool YamlConfigNotChanged = 6;
+    repeated TVolatileYamlConfig VolatileConfigs = 7;
 }
 
 message TSubscription {
@@ -409,6 +488,7 @@ message TConfigNotificationRequest {
     optional TConfigId ConfigId = 2;
     // Updated config.
     optional NKikimrConfig.TAppConfig Config = 3;
+    repeated uint32 ItemKinds = 4;
 }
 
 message TConfigNotificationResponse {

@@ -14,7 +14,71 @@ namespace NGRpcService {
 
 using namespace NActors;
 
+class TResponseStatusCounter {
+
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> TypeGroup;
+    TString Status;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Counter = nullptr;
+    TRWMutex RWLock;
+
+public:
+
+    TResponseStatusCounter(TIntrusivePtr<::NMonitoring::TDynamicCounters> typeGroup, TString&& status)
+        : TypeGroup(std::move(typeGroup))
+        , Status(std::move(status)) {
+    }
+
+    void Set(ui64 value) {
+        {
+            TReadGuard guard(RWLock);
+            if (Counter == nullptr && value == 0) {
+                return;
+            }
+            if (Counter != nullptr) {
+                Counter->Set(value);
+                return;
+            }
+        }
+        TWriteGuard guard(RWLock);
+        if (Counter == nullptr) {
+            Counter = TypeGroup->GetSubgroup("status", Status)->GetExpiringNamedCounter(
+                "name", "api.grpc.response.count", true
+            );
+        }
+        Counter->Set(value);
+    }
+
+    void operator+=(ui64 value) {
+        if (value == 0) {
+            return;
+        }
+        {
+            TReadGuard guard(RWLock);
+            if (Counter != nullptr) {
+                *Counter += value;
+                return;
+            }
+        }
+        TWriteGuard guard(RWLock);
+        if (Counter == nullptr) {
+            Counter = TypeGroup->GetSubgroup("status", Status)->GetExpiringNamedCounter(
+                "name", "api.grpc.response.count", true
+            );
+        }
+        *Counter += value;
+    }
+
+    ui64 Val() {
+        TReadGuard guard(RWLock);
+        if (Counter == nullptr) {
+            return 0;
+        }
+        return Counter->Val();
+    }
+};
+
 struct TYdbRpcCounters {
+
     TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
         const char* requestName, bool forDatabase);
 
@@ -28,7 +92,7 @@ struct TYdbRpcCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcError;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcNotAuthenticated;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcResourceExhausted;
-    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> ResponseByStatus;
+    THashMap<ui32, std::shared_ptr<TResponseStatusCounter>> ResponseByStatus;
 };
 
 class TYdbCounterBlock : public NGrpc::ICounterBlock {
@@ -54,6 +118,16 @@ protected:
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
 
     TYdbRpcCounters YdbCounters;
+
+private:
+
+    std::shared_ptr<TResponseStatusCounter> GetResponseCounterByStatus(ui32 status) {
+        auto it = YdbCounters.ResponseByStatus.find(status);
+        if (it == YdbCounters.ResponseByStatus.end()) {
+            return YdbCounters.ResponseByStatus[0];
+        }
+        return it->second;
+    }
 
 public:
     TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
@@ -129,12 +203,7 @@ public:
             NotOkResponseCounter->Inc();
             YdbCounters.ResponseRpcError->Inc();
         } else if (!Streaming) {
-            auto statusCounter = YdbCounters.ResponseByStatus.FindPtr(status);
-            if (statusCounter) {
-                (*statusCounter)->Inc();
-            } else {
-                YdbCounters.ResponseByStatus[0]->Inc();
-            }
+            *GetResponseCounterByStatus(status) += 1;
         }
 
         if (Percentile) {
@@ -183,41 +252,41 @@ TYdbRpcCounters::TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counte
         typeGroup->GetSubgroup("status", "RESOURCE_EXHAUSTED")->GetNamedCounter("name", countName, true);
 
     ResponseByStatus[Ydb::StatusIds::STATUS_CODE_UNSPECIFIED] =
-        typeGroup->GetSubgroup("status", "UNSPECIFIED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "UNSPECIFIED");
     ResponseByStatus[Ydb::StatusIds::SUCCESS] =
-        typeGroup->GetSubgroup("status", "SUCCESS")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "SUCCESS");
     ResponseByStatus[Ydb::StatusIds::BAD_REQUEST] =
-        typeGroup->GetSubgroup("status", "BAD_REQUEST")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "BAD_REQUEST");
     ResponseByStatus[Ydb::StatusIds::UNAUTHORIZED] =
-        typeGroup->GetSubgroup("status", "UNAUTHORIZED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "UNAUTHORIZED");
     ResponseByStatus[Ydb::StatusIds::INTERNAL_ERROR] =
-        typeGroup->GetSubgroup("status", "INTERNAL_ERROR")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "INTERNAL_ERROR");
     ResponseByStatus[Ydb::StatusIds::ABORTED] =
-        typeGroup->GetSubgroup("status", "ABORTED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "ABORTED");
     ResponseByStatus[Ydb::StatusIds::UNAVAILABLE] =
-        typeGroup->GetSubgroup("status", "UNAVAILABLE")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "UNAVAILABLE");
     ResponseByStatus[Ydb::StatusIds::OVERLOADED] =
-        typeGroup->GetSubgroup("status", "OVERLOADED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "OVERLOADED");
     ResponseByStatus[Ydb::StatusIds::SCHEME_ERROR] =
-        typeGroup->GetSubgroup("status", "SCHEME_ERROR")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "SCHEME_ERROR");
     ResponseByStatus[Ydb::StatusIds::GENERIC_ERROR] =
-        typeGroup->GetSubgroup("status", "GENERIC_ERROR")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "GENERIC_ERROR");
     ResponseByStatus[Ydb::StatusIds::TIMEOUT] =
-        typeGroup->GetSubgroup("status", "TIMEOUT")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "TIMEOUT");
     ResponseByStatus[Ydb::StatusIds::BAD_SESSION] =
-        typeGroup->GetSubgroup("status", "BAD_SESSION")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "BAD_SESSION");
     ResponseByStatus[Ydb::StatusIds::PRECONDITION_FAILED] =
-        typeGroup->GetSubgroup("status", "PRECONDITION_FAILED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "PRECONDITION_FAILED");
     ResponseByStatus[Ydb::StatusIds::ALREADY_EXISTS] =
-        typeGroup->GetSubgroup("status", "ALREADY_EXISTS")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "ALREADY_EXISTS");
     ResponseByStatus[Ydb::StatusIds::NOT_FOUND] =
-        typeGroup->GetSubgroup("status", "NOT_FOUND")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "NOT_FOUND");
     ResponseByStatus[Ydb::StatusIds::SESSION_EXPIRED] =
-        typeGroup->GetSubgroup("status", "SESSION_EXPIRED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "SESSION_EXPIRED");
     ResponseByStatus[Ydb::StatusIds::CANCELLED] =
-        typeGroup->GetSubgroup("status", "CANCELLED")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "CANCELLED");
     ResponseByStatus[Ydb::StatusIds::SESSION_BUSY] =
-        typeGroup->GetSubgroup("status", "SESSION_BUSY")->GetNamedCounter("name", countName, true);
+        std::make_shared<TResponseStatusCounter>(typeGroup, "SESSION_BUSY");
 }
 
 TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
@@ -414,13 +483,15 @@ class TGRpcDbCountersRegistry {
 
 public:
     void Initialize(TActorSystem* actorSystem) {
-        if (Y_LIKELY(ActorSystem)) {
-            return;
-        }
-        ActorSystem = actorSystem;
+        with_lock(InitLock) {
+            if (Y_LIKELY(ActorSystem)) {
+                return;
+            }
+            ActorSystem = actorSystem;
 
-        auto callback = MakeIntrusive<TGRpcDbWatcherCallback>();
-        DbWatcherActorId = ActorSystem->Register(NSysView::CreateDbWatcherActor(callback));
+            auto callback = MakeIntrusive<TGRpcDbWatcherCallback>();
+            DbWatcherActorId = ActorSystem->Register(NSysView::CreateDbWatcherActor(callback));
+        }
     }
 
     TYdbDbCounterBlockPtr GetCounterBlock(
@@ -460,6 +531,7 @@ private:
     TConcurrentRWHashMap<TString, TIntrusivePtr<TGRpcDbCounters>, 256> DbCounters;
     TActorSystem* ActorSystem = {};
     TActorId DbWatcherActorId;
+    TMutex InitLock;
 };
 
 

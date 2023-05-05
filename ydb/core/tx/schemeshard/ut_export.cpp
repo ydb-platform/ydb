@@ -1,3 +1,4 @@
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -155,6 +156,21 @@ namespace {
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, ui64 tabletId, const TString& key, const TString& value) {
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            (
+                (let key '( '('key (Utf8 '%s) ) ) )
+                (let row '( '('value (Utf8 '%s) ) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", key.c_str(), value.c_str()), result, error);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
 } // anonymous
@@ -667,21 +683,6 @@ partitioning_settings {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        auto writeRow = [&](ui64 tabletId, const char* key, const char* value) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-                (
-                    (let key '( '('key (Utf8 '%s) ) ) )
-                    (let row '( '('value (Utf8 '%s) ) ) )
-                    (return (AsList (UpdateRow '__user__Table key row) ))
-                )
-            )", key, value), result, error);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        };
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Utf8" }
@@ -690,8 +691,8 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        writeRow(TTestTxConfig::FakeHiveTablets, "a", "valueA");
-        writeRow(TTestTxConfig::FakeHiveTablets, "b", "valueB");
+        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
+        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "b", "valueB");
 
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -795,27 +796,8 @@ partitioning_settings {
 
     Y_UNIT_TEST(ShouldExcludeBackupTableFromStats) {
         TTestBasicRuntime runtime;
-        TTestEnvOptions opts;
-        opts.DisableStatsBatching(true);
-
-        TTestEnv env(runtime, opts);
-
+        TTestEnv env(runtime, TTestEnvOptions().DisableStatsBatching(true));
         ui64 txId = 100;
-
-        auto writeRow = [&](ui64 tabletId, const TString& key, const TString& value) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-                (
-                    (let key '( '('key (Utf8 '%s) ) ) )
-                    (let row '( '('value (Utf8 '%s) ) ) )
-                    (return (AsList (UpdateRow '__user__Table key row) ))
-                )
-            )", key.c_str(), value.c_str()), result, error);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        };
 
         THashSet<ui64> statsCollected;
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
@@ -850,7 +832,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         for (int i = 1; i < 500; ++i) {
-            writeRow(TTestTxConfig::FakeHiveTablets, Sprintf("a%i", i), "value");
+            WriteRow(runtime, TTestTxConfig::FakeHiveTablets, Sprintf("a%i", i), "value");
         }
 
         // trigger memtable's compaction
@@ -932,5 +914,150 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
         UNIT_ASSERT(item.has_start_time());
         UNIT_ASSERT(item.has_end_time());
+    }
+
+    Y_UNIT_TEST(ShouldRestartOnScanErrors) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        THolder<IEventHandle> injectResult;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSharedCache::EvResult) {
+                const auto* msg = ev->Get<NSharedCache::TEvResult>();
+                UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+
+                auto result = MakeHolder<NSharedCache::TEvResult>(msg->Origin, msg->Cookie, NKikimrProto::ERROR);
+                std::move(msg->Loaded.begin(), msg->Loaded.end(), std::back_inserter(result->Loaded));
+
+                injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, result.Release(), ev->Flags, ev->Cookie);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        if (!injectResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                return bool(injectResult);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(injectResult.Release(), 0, true);
+
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnConcurrentTxs) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        THolder<IEventHandle> copyTables;
+        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                    copyTables.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+
+        if (!copyTables) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&copyTables](IEventHandle&) -> bool {
+                return bool(copyTables);
+            });
+            runtime.DispatchEvents(opts);
+        }
+        
+        THolder<IEventHandle> proposeTxResult;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
+                proposeTxResult.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "extra"  Type: "Utf8"}
+        )");
+
+        if (!proposeTxResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&proposeTxResult](IEventHandle&) -> bool {
+                return bool(proposeTxResult);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(origObserver);
+        runtime.Send(copyTables.Release(), 0, true);
+        runtime.Send(proposeTxResult.Release(), 0, true);
+        env.TestWaitNotification(runtime, txId);
+
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 }

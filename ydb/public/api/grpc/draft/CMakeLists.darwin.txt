@@ -27,6 +27,7 @@ target_proto_messages(api-grpc-draft PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_query_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_topic_tx_v1.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_console_v1.proto
 )
 target_proto_addincls(api-grpc-draft
   ./

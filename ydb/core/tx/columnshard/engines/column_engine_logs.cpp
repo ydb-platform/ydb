@@ -772,6 +772,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
                 changes->PortionsToDrop.push_back(info);
                 dropPortions.insert(portion);
             }
+
+            if (affectedRecords > maxRecords) {
+                break;
+            }
         }
 
         if (affectedRecords > maxRecords) {
@@ -787,29 +791,40 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
     }
 
     // Add stale portions of alive paths
-    THashSet<ui64> activeCleanupGranules;
+    THashSet<ui64> cleanGranules;
     for (ui64 granule : CleanupGranules) {
         auto spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
+
+        bool isClean = true;
         for (auto& [portion, info] : spg->Portions) {
-            if (dropPortions.count(portion)) {
+            if (info.IsActive() || dropPortions.count(portion)) {
                 continue;
             }
 
-            if (!info.IsActive()) {
-                activeCleanupGranules.insert(granule);
-                if (info.XSnapshot() < snapshot) {
-                    affectedRecords += info.NumRecords();
-                    changes->PortionsToDrop.push_back(info);
-                }
+            isClean = false;
+            if (info.XSnapshot() < snapshot) {
+                affectedRecords += info.NumRecords();
+                changes->PortionsToDrop.push_back(info);
             }
+
+            if (affectedRecords > maxRecords) {
+                break;
+            }
+        }
+
+        if (isClean) {
+            cleanGranules.insert(granule);
         }
 
         if (affectedRecords > maxRecords) {
             break;
         }
     }
-    CleanupGranules.swap(activeCleanupGranules);
+
+    for (ui64 granule : cleanGranules) {
+        CleanupGranules.erase(granule);
+    }
 
     return changes;
 }
@@ -1008,15 +1023,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         Y_VERIFY(changes->CompactionInfo);
         for (auto& portionInfo : changes->SwitchedPortions) {
             CleanupGranules.insert(portionInfo.Granule());
-        }
-    } else if (changes->IsCleanup()) {
-        for (auto& portionInfo : changes->PortionsToDrop) {
-            ui64 granule = portionInfo.Granule();
-            auto& meta = Granules[granule];
-            Y_VERIFY(meta);
-            if (meta->AllActive()) {
-                CleanupGranules.erase(granule);
-            }
         }
     }
 
@@ -1368,7 +1374,7 @@ bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& c
         Y_VERIFY(!portionInfo.Empty());
         ui64 granule = portionInfo.Granule();
         if (GranulesInSplit.count(granule)) {
-            LOG_S_DEBUG("Cannot insert into splitting granule " << granule << " at tablet " << TabletId);
+            LOG_S_NOTICE("Cannot insert into splitting granule " << granule << " at tablet " << TabletId);
             return false;
         }
     }
@@ -1490,8 +1496,21 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
     inserted = 0;
     ui64 sumSize = 0;
     ui64 sumMaxSize = 0;
+    std::shared_ptr<arrow::Scalar> minPk0;
+    std::shared_ptr<arrow::Scalar> maxPk0;
+    if (actual.size()) {
+        actual[0]->MinMaxValue(actual[0]->FirstPkColumn, minPk0, maxPk0);
+    }
+    bool pkEqual = !!minPk0 && !!maxPk0 && arrow::ScalarEquals(*minPk0, *maxPk0);
     for (auto* portionInfo : actual) {
         Y_VERIFY(portionInfo);
+        if (pkEqual) {
+            std::shared_ptr<arrow::Scalar> minPkCurrent;
+            std::shared_ptr<arrow::Scalar> maxPkCurrent;
+            portionInfo->MinMaxValue(portionInfo->FirstPkColumn, minPkCurrent, maxPkCurrent);
+            pkEqual = !!minPkCurrent && !!maxPkCurrent && arrow::ScalarEquals(*minPk0, *minPkCurrent)
+                && arrow::ScalarEquals(*maxPk0, *maxPkCurrent);
+        }
         auto sizes = portionInfo->BlobsSizes();
         sumSize += sizes.first;
         sumMaxSize += sizes.second;
@@ -1500,8 +1519,8 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
         }
     }
 
-    return sumMaxSize >= limits.GranuleBlobSplitSize
-        || sumSize >= limits.GranuleOverloadSize;
+    return !pkEqual && (sumMaxSize >= limits.GranuleBlobSplitSize
+        || sumSize >= limits.GranuleOverloadSize);
 }
 
 std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact() {

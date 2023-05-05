@@ -1198,6 +1198,11 @@
             "Match": {"Type": "Callable", "Name": "EndsWith"}
         },
         {
+            "Name": "TCoCmpStringContains",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "StringContains"}
+        },
+        {
             "Name": "TCoInc",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Inc"},

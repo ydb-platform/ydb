@@ -110,6 +110,7 @@ struct TRpcServices {
         EvListOperations,
         EvExportToYt,
         EvDiscoverPQClusters,
+        EvListFederationDatabases,
         EvBulkUpsert,
         EvWhoAmI,
         EvKikhouseDescribeTable,

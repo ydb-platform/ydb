@@ -781,6 +781,22 @@ void TPathDescriber::DescribeBlobDepot(const TPath& path) {
     Self->DescribeBlobDepot(path->PathId, path->Name, *Result->Record.MutablePathDescription()->MutableBlobDepotDescription());
 }
 
+static bool ConsiderAsDropped(const TPath& path) {
+    Y_VERIFY(path.IsResolved());
+
+    if (path.Base()->IsTable() || path.Base()->IsTableIndex()) {
+        return false;
+    }
+    if (path.Base()->IsDirectory() || path.Base()->IsDomainRoot()) {
+        return false;
+    }
+    if (path.IsCdcStream()) {
+        return false;
+    }
+
+    return true;
+}
+
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
@@ -806,7 +822,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         checks
             .NotDeleted();
 
-        if (checks && !path.Base()->IsTable() && !path.Base()->IsTableIndex() && !path.Base()->IsDirectory() && !path.Base()->IsDomainRoot()) {
+        if (checks && ConsiderAsDropped(path)) {
             // KIKIMR-13173
             // PQ BSV drop their shard before PlanStep
             // If they are being deleted consider them as deleted

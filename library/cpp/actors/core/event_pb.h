@@ -228,7 +228,7 @@ namespace NActors {
             return result;
         }
 
-        static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
+        static IEventBase* Load(TEventSerializedData *input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());

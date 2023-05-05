@@ -17,9 +17,9 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
-
-#include <util/generic/stack.h>
+#include <util/datetime/base.h>
 #include <util/generic/queue.h>
+#include <util/generic/stack.h>
 
 namespace NKikimr::NCms {
 
@@ -40,6 +40,7 @@ public:
             EvLogAndSend,
             EvCleanupLog,
             EvStartCollecting,
+            EvProcessQueue,
 
             EvEnd
         };
@@ -70,6 +71,8 @@ public:
         };
 
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
+
+        struct TEvProcessQueue : public TEventLocal<TEvProcessQueue, EvProcessQueue> {};
     };
 
     void PersistNodeTenants(TTransactionContext& txc, const TActorContext& ctx);
@@ -110,17 +113,14 @@ private:
         {}
     };
 
-    struct TNodeCounter {
-        ui32 Total = 0;
-        ui32 Down = 0;
-        ui32 Locked = 0;
-        NKikimrCms::TStatus::ECode Code = NKikimrCms::TStatus::DISALLOW_TEMP;
+    struct TRequestsQueueItem {
+        TAutoPtr<IEventHandle> Request;
+        TInstant ArrivedTime;
 
-        void CountNode(const TNodeInfo &node, bool ignoreDownState);
-        // Check if we can lock one more node and stay in lock limits.
-        bool CheckLimit(ui32 limit, NKikimrCms::EAvailabilityMode mode) const;
-        // Check if we can lock one more node and stay in lock ration limits.
-        bool CheckRatio(ui32 ratio, NKikimrCms::EAvailabilityMode mode) const;
+        TRequestsQueueItem(TAutoPtr<IEventHandle> req, TInstant arrivedTime)
+            : Request(std::move(req))
+            , ArrivedTime(arrivedTime)
+        {}
     };
 
     ITransaction *CreateTxGetLogTail(TEvCms::TEvGetLogTailRequest::TPtr &ev);
@@ -222,7 +222,8 @@ private:
             CFunc(TEvPrivate::EvCleanupExpired, CleanupExpired);
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
             CFunc(TEvPrivate::EvCleanupWalle, CleanupWalleTasks);
-            CFunc(TEvPrivate::EvStartCollecting, StartCollecting); 
+            CFunc(TEvPrivate::EvStartCollecting, StartCollecting);
+            CFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
@@ -415,8 +416,8 @@ private:
     TString NotSupportedReason;
     TQueue<TAutoPtr<IEventHandle>> InitQueue;
 
-    TQueue<TAutoPtr<IEventHandle>> Queue;
-    TQueue<TAutoPtr<IEventHandle>> NextQueue;
+    TQueue<TRequestsQueueItem> Queue;
+    TQueue<TRequestsQueueItem> NextQueue;
 
     TCmsStatePtr State;
     TLogger Logger;
@@ -434,6 +435,8 @@ private:
     // Monitoring
     THolder<class NKikimr::TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
+
+    TInstant InfoCollectorStartTime;
 
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)

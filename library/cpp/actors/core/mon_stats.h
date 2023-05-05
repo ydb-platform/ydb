@@ -63,6 +63,10 @@ namespace NActors {
         ui64 IncreasingThreadsByNeedyState = 0;
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
+        i64 MaxConsumedCpuUs = 0;
+        i64 MinConsumedCpuUs = 0;
+        i64 MaxBookedCpuUs = 0;
+        i64 MinBookedCpuUs = 0;
         i16 WrongWakenedThreadCount = 0;
         i16 CurrentThreadCount = 0;
         i16 PotentialMaxThreadCount = 0;
@@ -100,6 +104,7 @@ namespace NActors {
         ui64 MailboxPushedOutBySoftPreemption = 0;
         ui64 MailboxPushedOutByTime = 0;
         ui64 MailboxPushedOutByEventCount = 0;
+        ui64 NotEnoughCpuExecutions = 0;
 
         TExecutorThreadStats(size_t activityVecSize = 5) // must be not empty as 0 used as default
             : ElapsedTicksByActivity(activityVecSize)
@@ -136,6 +141,7 @@ namespace NActors {
             MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
             MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);
             MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount);
+            NotEnoughCpuExecutions += RelaxedLoad(&other.NotEnoughCpuExecutions);
 
             ActivationTimeHistogram.Aggregate(other.ActivationTimeHistogram);
             EventDeliveryTimeHistogram.Aggregate(other.EventDeliveryTimeHistogram);

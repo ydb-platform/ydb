@@ -551,6 +551,7 @@ protected:
 
     template <NKikimrConfig::THiveConfig::EHiveNodeSelectStrategy Strategy>
     TNodeInfo* SelectNode(const std::vector<TSelectedNode>& selectedNodes);
+    TVector<TSelectedNode> SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const;
 
 public:
     void AssignTabletGroups(TLeaderTabletInfo& tablet);

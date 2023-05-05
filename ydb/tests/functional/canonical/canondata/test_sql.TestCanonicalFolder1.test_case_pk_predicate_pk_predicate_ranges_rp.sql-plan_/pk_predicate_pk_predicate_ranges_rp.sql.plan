@@ -16,20 +16,7 @@
                     ],
                     "scan_by": [
                         "Group (1, 3]",
-                        "Name (-\u221e, +\u221e)"
-                    ],
-                    "type": "Scan"
-                },
-                {
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ],
-                    "scan_by": [
-                        "Group [4, 10)",
-                        "Name (-\u221e, +\u221e)"
+                        "Group [4, 10)"
                     ],
                     "type": "Scan"
                 }

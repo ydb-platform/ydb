@@ -778,10 +778,11 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
             ));
             return false;
         }
+        static const std::unordered_set<std::string> FilterOps = {"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with"};
         auto opStr = op->Content();
-        if (opStr != "eq"sv && opStr != "neq"sv && opStr != "lt"sv && opStr != "lte"sv && opStr != "gt"sv && opStr != "gte"sv) {
+        if (FilterOps.find(TString(opStr)) == FilterOps.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                TStringBuilder() << "Expected one of eq/neq/lt/lte/gt/gte operators in OLAP comparison filter, got: " << op->Content()
+                TStringBuilder() << "Expected one of eq/neq/lt/lte/gt/gte/string_contains/starts_with/ends_with operators in OLAP comparison filter, got: " << op->Content()
             ));
             return false;
         }

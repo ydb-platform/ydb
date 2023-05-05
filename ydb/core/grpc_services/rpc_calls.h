@@ -16,6 +16,7 @@
 #include <ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/api/protos/federation_discovery.pb.h>
 
 #include <ydb/public/api/protos/yq.pb.h>
 
@@ -70,6 +71,7 @@ using TEvDescribeTopicRequest = TGRpcRequestValidationWrapper<TRpcServices::EvDe
 using TEvDescribeConsumerRequest = TGRpcRequestValidationWrapper<TRpcServices::EvDescribeConsumer, Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse, true, TRateLimiterMode::Rps>;
 
 using TEvDiscoverPQClustersRequest = TGRpcRequestWrapper<TRpcServices::EvDiscoverPQClusters, Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest, Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse, true>;
+using TEvListFederationDatabasesRequest = TGRpcRequestWrapper<TRpcServices::EvListFederationDatabases, Ydb::FederationDiscovery::ListFederationDatabasesRequest, Ydb::FederationDiscovery::ListFederationDatabasesResponse, true>;
 
 using TEvLoginRequest = TGRpcRequestWrapperNoAuth<TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 using TEvNodeCheckRequest = TGRpcRequestWrapperNoAuth<TRpcServices::EvNodeCheckRequest, Ydb::Monitoring::NodeCheckRequest, Ydb::Monitoring::NodeCheckResponse>;

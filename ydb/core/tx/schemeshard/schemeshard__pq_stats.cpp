@@ -23,6 +23,7 @@ public:
 
     // returns true to continue batching
     bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    void ScheduleNextBatch(const TActorContext& ctx) override;
 };
 
 
@@ -82,6 +83,10 @@ void TTxStoreTopicStats::Complete(const TActorContext&) {
     Queue.WriteQueueSizeMetric();
 }
 
+void TTxStoreTopicStats::ScheduleNextBatch(const TActorContext& ctx) {
+    Self->ExecuteTopicStatsBatch(ctx);
+}
+
 
 void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
@@ -122,7 +127,7 @@ void TSchemeShard::ExecuteTopicStatsBatch(const TActorContext& ctx) {
                     "Will execute TTxStoreStats, queue# " << TopicStatsQueue.Size());
 
         TopicPersistStatsPending = true;
-        Execute(new TTxStoreTopicStats(this, TopicStatsQueue, TopicPersistStatsPending), ctx);
+        EnqueueExecute(new TTxStoreTopicStats(this, TopicStatsQueue, TopicPersistStatsPending));
 
         ScheduleTopicStatsBatch(ctx);
     }

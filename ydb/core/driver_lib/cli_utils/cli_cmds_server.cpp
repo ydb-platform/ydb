@@ -694,6 +694,14 @@ protected:
         // will be replaced with proper version info
         RunConfig.Labels["branch"] = GetBranch();
         RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
+
+        for (const auto& [name, value] : RunConfig.Labels) {
+            auto *label = RunConfig.AppConfig.AddLabels();
+            label->SetName(name);
+            label->SetValue(value);
+        }
+
+        RunConfig.ClusterName = ClusterName;
     }
 
     inline bool LoadConfigFromCMS() {

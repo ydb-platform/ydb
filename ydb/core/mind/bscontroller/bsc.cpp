@@ -57,14 +57,11 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
 }
 
 void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
-    Status = {};
+    Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
-    if (VirtualGroupState) {
-        if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
-            Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL);
-        } else {
-            Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
-        }
+    if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
+            (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW && VDisksInGroup.empty())) {
+        Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
     }
 
     if (VDisksInGroup) {
@@ -315,7 +312,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerConfigRequest: {
             auto *msg = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>();
             if (msg->SelfHeal) {
-                return 1; // locally-generated self-heal commands
+                return 2; // locally-generated self-heal commands
             }
             const auto& record = msg->Record;
             const auto& request = record.GetRequest();
@@ -352,6 +349,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDecommitGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kWipeVDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

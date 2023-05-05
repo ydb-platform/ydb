@@ -24,6 +24,9 @@ public:
         DbPath = "/Root/LbCommunal/account";
         Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(DbRoot);
         Server->ServerSettings.PQConfig.SetTestDatabaseRoot(DbRoot);
+
+        Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(false);
+
         Server->StartServer();
         //Server->EnableLogs()
         Server->EnableLogs({ NKikimrServices::KQP_PROXY }, NActors::NLog::PRI_EMERG);
@@ -308,28 +311,34 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == topic);
         }
 
-        for (auto topic : std::vector<TString> {"account/topic2", "account/topic2-mirrored-from-dc2"}) {
-            grpc::ClientContext rcontext;
+        for (ui32 i = 0; i < 2; ++i) {
+            for (auto topic : std::vector<TString> {"account/topic2", "account/topic2-mirrored-from-dc2"}) {
+                grpc::ClientContext rcontext;
 
-            auto readStream = TopicStubP_->StreamRead(&rcontext);
-            UNIT_ASSERT(readStream);
-            Ydb::Topic::StreamReadMessage::FromClient req;
-            Ydb::Topic::StreamReadMessage::FromServer resp;
+                if (i > 0) {
+                    rcontext.AddMetadata("x-ydb-database", "/Root/LbCommunal");
+                }
 
-            req.mutable_init_request()->add_topics_read_settings()->set_path(topic);
+                auto readStream = TopicStubP_->StreamRead(&rcontext);
+                UNIT_ASSERT(readStream);
+                Ydb::Topic::StreamReadMessage::FromClient req;
+                Ydb::Topic::StreamReadMessage::FromServer resp;
 
-            req.mutable_init_request()->set_consumer("user");
+                req.mutable_init_request()->add_topics_read_settings()->set_path(topic);
 
-            Cerr << "BEFORE PARSING " << topic << "\n";
+                req.mutable_init_request()->set_consumer("user");
 
-            UNIT_ASSERT(readStream->Write(req));
-            UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
-            UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
-            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == topic);
+                Cerr << "BEFORE PARSING " << topic << "\n";
+
+                UNIT_ASSERT(readStream->Write(req));
+                UNIT_ASSERT(readStream->Read(&resp));
+                Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+                UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+                UNIT_ASSERT(readStream->Read(&resp));
+                Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+                UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+                UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == topic);
+            }
         }
 
     }

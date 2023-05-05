@@ -695,6 +695,12 @@ public:
             return result;
         }
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
+            return result;
+        }
+
         TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo;
         {
             tableInfo->AlterVersion = 1;

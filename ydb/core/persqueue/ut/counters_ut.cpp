@@ -5,7 +5,8 @@
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-
+#include <ydb/core/testlib/fake_scheme_shard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 namespace NKikimr::NPQ {
 
 namespace {
@@ -83,6 +84,7 @@ Y_UNIT_TEST(Partition) {
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
     PQGetPartInfo(0, 30, tc);
+
 
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
@@ -226,6 +228,8 @@ Y_UNIT_TEST(Partition) {
         const TString countersStr = ((NMon::TEvHttpInfoRes*) resp)->Answer.substr(sizeof("HTTP/1.1 200 Ok Content-Type: application/json Connection: Close "));
         const TString referenceStr = NResource::Find(TStringBuf("counters_labeled.json"));
         CompareJsons(countersStr, referenceStr);
+
+
     });
 }
 
@@ -250,7 +254,12 @@ Y_UNIT_TEST(PartitionFirstClass) {
             return TTestActorRuntime::DefaultObserverFunc(runtime, event);
         });
 
-        PQTabletPrepare({}, {}, tc);
+        PQTabletPrepare({}, {{"client", true}}, tc);
+        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+        ui64 ssId = 325;
+        BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+        PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, ssId, tc);
 
         IActor* actor = CreateTabletCountersAggregator(false);
         auto aggregatorId = tc.Runtime->Register(actor);
@@ -267,6 +276,42 @@ Y_UNIT_TEST(PartitionFirstClass) {
             tc.Runtime->DispatchEvents(options);
         }
         UNIT_ASSERT(dbRegistered);
+
+        {
+            NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+            result->SetPath("/Root");
+            TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+            for (auto& attr : attrs) {
+                auto ua = result->MutablePathDescription()->AddUserAttributes();
+                ua->SetKey(attr);
+                ua->SetValue(attr);
+            }
+            NSchemeCache::TDescribeResult::TCPtr cres = result;
+            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+            tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+        {
+            auto counters = tc.Runtime->GetAppData(0).Counters;
+            auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+            TStringStream countersStr;
+            dbGroup->OutputHtml(countersStr);
+            const TString referenceCounters = NResource::Find(TStringBuf("counters_topics.html"));
+            Cerr << "REF: " << referenceCounters << "\n";
+            Cerr << "COUNTERS: " << countersStr.Str() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        }
     });
 }
 

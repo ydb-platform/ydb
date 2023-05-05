@@ -196,6 +196,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (tabletInfo.MaxCount != 0) {
                 tabletAvailability->SetMaxCount(tabletInfo.MaxCount);
             }
+            tabletAvailability->SetPriority(tabletInfo.Priority);
         }
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());

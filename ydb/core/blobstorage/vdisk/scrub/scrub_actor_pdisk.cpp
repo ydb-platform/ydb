@@ -13,7 +13,7 @@ namespace NKikimr {
         auto *m = res->Get();
         Y_VERIFY_S(m->Status == NKikimrProto::OK || m->Status == NKikimrProto::CORRUPTED,
             "Status# " << NKikimrProto::EReplyStatus_Name(m->Status));
-        return m->Status == NKikimrProto::OK ? std::make_optional(m->Data.ToString()) : std::nullopt;
+        return m->Status == NKikimrProto::OK && m->Data.IsReadable() ? std::make_optional(m->Data.ToString()) : std::nullopt;
     }
 
     bool TScrubCoroImpl::IsReadable(const TDiskPart& part) {

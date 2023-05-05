@@ -161,7 +161,7 @@ public:
         icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
         icb->RegisterSharedControl(MaxFallbackDataSize, "BlobCache.MaxFallbackDataSize");
 
-        LOG_S_DEBUG("MaxCacheDataSize: " << (i64)MaxCacheDataSize
+        LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
@@ -295,7 +295,7 @@ private:
     void Handle(TEvBlobCache::TEvForgetBlob::TPtr& ev, const TActorContext&) {
         const TUnifiedBlobId& blobId = ev->Get()->BlobId;
 
-        LOG_S_DEBUG("Forgetting blob: " << blobId);
+        LOG_S_INFO("Forgetting blob: " << blobId);
 
         Forgets->Inc();
 
@@ -550,7 +550,7 @@ private:
         Y_VERIFY(!blobRanges.empty());
         ui64 tabletId = blobRanges.front().BlobId.GetTabletId();
 
-        LOG_S_DEBUG("Sending read from Tablet: " << tabletId
+        LOG_S_INFO("Sending read from Tablet: " << tabletId
             << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
             << " cookie: " << cookie);
 
@@ -583,7 +583,7 @@ private:
             auto cookieIt = CookieToRange.find(readCookie);
             if (cookieIt == CookieToRange.end()) {
                 // This might only happen in case fo race between response and pipe close
-                LOG_S_INFO("Unknown read result cookie: " << readCookie);
+                LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
                 return;
             }
 
@@ -623,12 +623,12 @@ private:
         const auto& record = ev->Get()->Record;
         ui64 tabletId = record.GetTabletId();
         ui64 readCookie = ev->Cookie;
-        LOG_S_DEBUG("Got read result from tablet: " << tabletId);
+        LOG_S_INFO("Got read result from tablet: " << tabletId);
 
         auto cookieIt = CookieToRange.find(readCookie);
         if (cookieIt == CookieToRange.end()) {
             // This might only happen in case fo race between response and pipe close
-            LOG_S_INFO("Unknown read result cookie: " << readCookie);
+            LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
             return;
         }
 

@@ -67,26 +67,11 @@ std::tuple<TString, TString, TString> ParseCloudSecurityToken(const TString& tok
 }
 
 void TProxyActor::Bootstrap() {
+    RetrieveUserAndQueueParameters();
     this->Become(&TProxyActor::StateFunc);
 
     StartTs_ = TActivationContext::Now();
     RLOG_SQS_DEBUG("Request proxy started");
-    const auto& cfg = Cfg();
-
-    if (cfg.GetYandexCloudMode()) {
-        TString securityToken;
-#define SQS_REQUEST_CASE(action)                                                                                              \
-        const auto& request = Request_.Y_CAT(Get, action)();                                                                  \
-        securityToken = ExtractSecurityToken<typename std::remove_reference<decltype(request)>::type, TCredentials>(request);
-        SQS_SWITCH_REQUEST(Request_, Y_VERIFY(false));
-#undef SQS_REQUEST_CASE
-        auto items = ParseCloudSecurityToken(securityToken);
-        UserName_ = std::get<0>(items);
-        FolderId_ = std::get<1>(items);
-
-        // TODO: handle empty cloud id better
-        RLOG_SQS_DEBUG("Proxy actor: used " << UserName_ << " as an account name and " << QueueName_ << " as a queue name");
-    }
 
     if (!UserName_ || !QueueName_) {
         RLOG_SQS_WARN("Validation error: No " << (!UserName_ ? "user name" : "queue name") << " in proxy actor");
@@ -94,6 +79,7 @@ void TProxyActor::Bootstrap() {
         return;
     }
 
+    const auto& cfg = Cfg();
     if (cfg.GetRequestTimeoutMs()) {
         this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(), TimeoutCookie_.Get());
     }
@@ -244,14 +230,24 @@ bool TProxyActor::NeedCreateProxyActor(EAction action) {
 }
 
 void TProxyActor::RetrieveUserAndQueueParameters() {
-// User name might be changed later in bootstrap for cloud mode
+    TString securityToken;
 #define SQS_REQUEST_CASE(action)                                        \
-    UserName_ = Request_.Y_CAT(Get, action)().GetAuth().GetUserName();  \
-    QueueName_ = Request_.Y_CAT(Get, action)().GetQueueName();          \
+    const auto& request = Request_.Y_CAT(Get, action)();                \
+    UserName_ = request.GetAuth().GetUserName();                        \
+    FolderId_ = request.GetAuth().GetFolderId();                        \
+    QueueName_ = request.GetQueueName();                                \
+    securityToken = ExtractSecurityToken(request);                      \
 
     SQS_SWITCH_REQUEST(Request_, throw TSQSException(NErrors::INVALID_ACTION) << "Incorrect request type")
 
     #undef SQS_REQUEST_CASE
+
+    if (Cfg().GetYandexCloudMode() && !FolderId_) {
+        auto items = ParseCloudSecurityToken(securityToken);
+        UserName_ = std::get<0>(items);
+        FolderId_ = std::get<1>(items);
+    }
+    RLOG_SQS_DEBUG("Proxy actor: used user_name='" << UserName_ << "', queue_name='" << QueueName_ << "', folder_id='" << FolderId_ << "'");
 }
 
 } // namespace NKikimr::NSQS

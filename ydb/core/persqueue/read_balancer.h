@@ -12,6 +12,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -198,7 +199,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void Die(const TActorContext& ctx) override {
         StopFindSubDomainPathId();
         StopWatchingSubDomainPathId();
-        
+
         for (auto& pipe : TabletPipes) {
             NTabletPipe::CloseClient(ctx, pipe.second);
         }
@@ -294,6 +295,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
     void RestartPipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
+    void UpdateCounters(const TActorContext&);
+
     void RespondWithACL(
         const TEvPersQueue::TEvCheckACL::TPtr &request,
         const NKikimrPQ::EAccess &access,
@@ -339,7 +342,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     NACLib::TSecurityObject ACL;
     TInstant LastACLUpdate;
 
-    THashSet<TString> Consumers;
+
+    struct TConsumerInfo {
+        TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+        THolder<TTabletLabeledCountersBase> Aggr;
+    };
+
+    THashMap<TString, TConsumerInfo> Consumers;
 
     ui64 TxId;
     ui32 NumActiveParts;
@@ -425,6 +434,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     ui32 TotalGroups;
     bool NoGroupsInBase;
 
+
     struct TClientInfo {
         THashMap<ui32, TClientGroupInfo> ClientGroupsInfo; //map from group to info
         ui32 SessionsWithGroup = 0;
@@ -443,7 +453,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         void AddSession(const ui32 group, const THashMap<ui32, TPartitionInfo>& partitionsInfo,
                         const TActorId& sender, const NKikimrPQ::TRegisterReadSession& record);
         TStringBuilder GetPrefix() const;
-
     };
 
     THashMap<TString, TClientInfo> ClientsInfo; //map from userId -> to info
@@ -456,9 +465,18 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     bool WaitingForACL;
 
+    TVector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+
+    TString DatabasePath;
+    TString DatabaseId;
+    TString FolderId;
+    TString CloudId;
+
     struct TPartitionStats {
         ui64 DataSize = 0;
         ui64 UsedReserveSize = 0;
+        NKikimrPQ::TAggregatedCounters Counters;
+        bool HasCounters = false;
     };
 
     struct TPartitionMetrics {

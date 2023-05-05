@@ -65,6 +65,21 @@ public:
             ApiHandlers["/api/managenotificationrequest"] = new TApiMethodHandler<TJsonProxyCms<TEvCms::TEvManageNotificationRequest,
                                                                                                 TEvCms::TEvManageNotificationResponse>>;
 
+            ApiHandlers["/api/console/yamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvGetAllConfigsRequest,
+                                                                                            NConsole::TEvConsole::TEvGetAllConfigsResponse, true, true>>;
+
+            ApiHandlers["/api/console/removevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvRemoveVolatileConfigRequest,
+                                                                                            NConsole::TEvConsole::TEvRemoveVolatileConfigResponse, true, true>>;
+
+            ApiHandlers["/api/console/configurevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvAddVolatileConfigRequest,
+                                                                                            NConsole::TEvConsole::TEvAddVolatileConfigResponse, true, true>>;
+
+            ApiHandlers["/api/console/resolveyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvResolveConfigRequest,
+                                                                                            NConsole::TEvConsole::TEvResolveConfigResponse, true, true>>;
+
+            ApiHandlers["/api/console/resolveallyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvResolveAllConfigRequest,
+                                                                                            NConsole::TEvConsole::TEvResolveAllConfigResponse, true, true>>;
+
             ApiHandlers["/api/console/configure"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvConfigureRequest,
                                                                                             NConsole::TEvConsole::TEvConfigureResponse,
                                                                                             true>>;

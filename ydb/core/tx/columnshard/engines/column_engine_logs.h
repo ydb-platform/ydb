@@ -294,15 +294,6 @@ private:
 
         ui64 PathId() const { return Record.PathId; }
         bool Empty() const { return Portions.empty(); }
-
-        bool AllActive() const {
-            for (auto& [_, portionInfo] : Portions) {
-                if (!portionInfo.IsActive()) {
-                    return false;
-                }
-            }
-            return true;
-        }
     };
 
     TIndexInfo IndexInfo;

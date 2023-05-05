@@ -412,7 +412,7 @@ public:
             return result;
         }
 
-        if (!context.SS->CheckLocks(srcPath.Base()->PathId, Transaction, errStr)) {
+        if (!isBackup && !context.SS->CheckLocks(srcPath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }

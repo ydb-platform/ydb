@@ -83,6 +83,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
+#include <ydb/services/console/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
@@ -326,6 +327,38 @@ public:
     {
         if (Config.HasCmsConfig())
             appData->DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(Config.GetCmsConfig());
+    }
+};
+
+class TLabelsInitializer : public IAppDataInitializer {
+    const NKikimrConfig::TAppConfig& Config;
+
+public:
+    TLabelsInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig.AppConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        for (const auto& label : Config.GetLabels()) {
+            appData->Labels[label.GetName()] = label.GetValue();
+        }
+    }
+};
+
+class TClusterNameInitializer : public IAppDataInitializer {
+    const TKikimrRunConfig& Config;
+
+public:
+    TClusterNameInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        appData->ClusterName = Config.ClusterName;
     }
 };
 
@@ -777,6 +810,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasCms) {
             server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
+
+            server.AddService(new NGRpcService::TGRpcConsoleService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasCms.IsRlAllowed()));
         }
 
         if (hasDiscovery) {
@@ -867,7 +903,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 opts.SetKeepAliveEnable(false);
             }
         }
-        
+
         NConsole::SetGRpcLibraryFunction();
 
 #define GET_PATH_TO_FILE(GRPC_CONFIG, PRIMARY_FIELD, SECONDARY_FIELD) \
@@ -1087,6 +1123,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TDynamicNameserviceInitializer(runConfig));
     // setup cms
     appDataInitializers.AddAppDataInitializer(new TCmsInitializer(runConfig));
+    // setup labels
+    appDataInitializers.AddAppDataInitializer(new TLabelsInitializer(runConfig));
+    // setup cluster name
+    appDataInitializers.AddAppDataInitializer(new TClusterNameInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 }

@@ -107,6 +107,9 @@ public:
         for (ui32 group : xrange(size_t(1), Part->Scheme->Groups.size())) {
             AltGroups.emplace_back(Part.Get(), NPage::TGroupId(group));
         }
+        for (ui32 group : xrange(Part->HistoricIndexes.size())) {
+            HistoryGroups.emplace_back(Part.Get(), NPage::TGroupId(group, true));
+        }
         FillKey();
     }
 
@@ -128,6 +131,26 @@ public:
                 // eagerly include all data up to the next row id
                 CurrentSize += GetPageSize(g.Pos->GetPageId(), g.GroupId);
                 ++g.Pos;
+            }
+        }
+        // Include mvcc data
+        if (!HistoryGroups.empty()) {
+            auto& h = HistoryGroups[0];
+            const auto& hscheme = Part->Scheme->HistoryGroup;
+            Y_VERIFY_DEBUG(hscheme.ColsKeyIdx.size() == 3);
+            while (h.Pos && h.Pos->Cell(hscheme.ColsKeyIdx[0]).AsValue<TRowId>() < nextRowId) {
+                // eagerly include all history up to the next row id
+                CurrentSize += GetPageSize(h.Pos->GetPageId(), h.GroupId);
+                ++h.Pos;
+            }
+            TRowId nextHistoryRowId = h.Pos ? h.Pos->GetRowId() : Max<TRowId>();
+            for (size_t index = 1; index < HistoryGroups.size(); ++index) {
+                auto& g = HistoryGroups[index];
+                while (g.Pos && g.Pos->GetRowId() < nextHistoryRowId) {
+                    // eagerly include all data up to the next row id
+                    CurrentSize += GetPageSize(g.Pos->GetPageId(), g.GroupId);
+                    ++g.Pos;
+                }
             }
         }
         FillKey();
@@ -205,6 +228,7 @@ private:
     ui64 LastRowId = 0;
     ui64 LastSize = 0;
     TSmallVec<TGroupState> AltGroups;
+    TSmallVec<TGroupState> HistoryGroups;
 };
 
 // This iterator skipps pages that are screened. Currently the logic is simple:

@@ -313,7 +313,7 @@ function filterUnaffected(inp, filter) {
     return result;
 }
 
-function copyToClipboard(ev) {
+function copyDataToClipboard(ev) {
     var element = ev.data.elem;
     var temp = $("<input>");
     $("body").append(temp);
@@ -333,7 +333,7 @@ function renderConsolePopup(data, user, time) {
     var cmd = $("<pre></pre>");
     cmd.html(syntaxHighlight(JSON.stringify(data['Action'], null, 2)));
     var copyCmd = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
-    copyCmd.click({elem: cmd}, copyToClipboard);
+    copyCmd.click({elem: cmd}, copyDataToClipboard);
     cmdDiv.append(copyCmd);
     cmdDiv.append(cmd);
     div.append(renderSpoiler("Command", cmdDiv));
@@ -350,7 +350,7 @@ function renderConsolePopup(data, user, time) {
             oldConfigData = filterUnaffected(oldConfigData, data['AffectedKinds']);
             oldConfig.html(syntaxHighlight(JSON.stringify(oldConfigData, null, 2)));
             var copyOldConfig = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
-            copyOldConfig.click({elem: oldConfig}, copyToClipboard);
+            copyOldConfig.click({elem: oldConfig}, copyDataToClipboard);
             oldConfigDiv.append(copyOldConfig);
             oldConfigDiv.append(oldConfig);
             div.append(renderSpoiler(
@@ -363,7 +363,7 @@ function renderConsolePopup(data, user, time) {
             newConfigData = filterUnaffected(newConfigData, data['AffectedKinds']);
             newConfig.html(syntaxHighlight(JSON.stringify(newConfigData, null, 2)));
             var copyNewConfig = $("<div class=\"icon-copy\" style=\"float:right; cursor:pointer;\"></div>");
-            copyNewConfig.click({elem: newConfig}, copyToClipboard);
+            copyNewConfig.click({elem: newConfig}, copyDataToClipboard);
             newConfigDiv.append(copyNewConfig);
             newConfigDiv.append(newConfig);
             div.append(renderSpoiler(

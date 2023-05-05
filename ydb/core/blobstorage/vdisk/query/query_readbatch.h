@@ -185,7 +185,7 @@ namespace NKikimr {
                                  glue.Part.Offset <= ActualRead.Offset &&
                                  (ActualRead.Offset + ActualRead.Size) <= (glue.Part.Offset + glue.Part.Size));
 
-                    if (glue.Success) {
+                    if (glue.Success && glue.Data.IsReadable(ActualRead.Offset - glue.Part.Offset, ActualRead.Size)) {
                         const char *ptr = glue.Data.DataPtr<const char>(ActualRead.Offset - glue.Part.Offset, ActualRead.Size);
                         const size_t size = ActualRead.Size;
                         processor(ptr, size);

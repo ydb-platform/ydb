@@ -8,6 +8,7 @@
 
 add_subdirectory(ut)
 add_subdirectory(validators)
+add_subdirectory(yaml_config)
 
 add_library(core-cms-console)
 target_link_libraries(core-cms-console PUBLIC
@@ -21,6 +22,7 @@ target_link_libraries(core-cms-console PUBLIC
   core-blobstorage-base
   core-blobstorage-groupinfo
   cms-console-validators
+  cms-console-yaml_config
   ydb-core-control
   core-engine-minikql
   ydb-core-mind
@@ -46,12 +48,14 @@ target_sources(core-cms-console PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console_tenants_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__add_config_subscription.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__alter_tenant.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__apply_yaml_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__cleanup_subscriptions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__configure.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__create_tenant.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__init_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__load_state.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__get_log_tail.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__get_yaml_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__log_cleanup.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__remove_computational_units.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/console__remove_config_subscription.cpp

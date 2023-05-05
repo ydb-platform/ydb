@@ -1091,7 +1091,7 @@ message TTableServiceConfig {
         reserved 13;
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
-        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 0]; // 0 is for disable
+        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
     }
 
     message TSpillingServiceConfig {
@@ -1246,7 +1246,7 @@ message TTableServiceConfig {
     optional bool EnablePublishKqpProxyByRM = 34 [default = false];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
-    optional bool EnablePredicateExtractForDataQueries = 37 [default = false];
+    optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
 };
 
 // Config describes immediate controls and allows
@@ -1709,6 +1709,11 @@ message TClientCertificateAuthorization {
     optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
 }
 
+message TLabel {
+    optional string Name = 1;
+    optional string Value = 2;
+}
+
 message TAppConfig {
     optional TActorSystemConfig ActorSystemConfig = 1;
     optional TLogConfig LogConfig = 2;
@@ -1767,6 +1772,7 @@ message TAppConfig {
     optional TBackgroundTasksConfig BackgroundTasksConfig = 60;
     optional TAuditConfig AuditConfig = 61;
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
+    optional bool YamlConfigEnabled = 64;
 
     optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 
@@ -1774,4 +1780,5 @@ message TAppConfig {
     optional string ClusterYamlConfig = 101;
 
     optional TConfigVersion Version = 102;
+    repeated TLabel Labels = 103;
 }

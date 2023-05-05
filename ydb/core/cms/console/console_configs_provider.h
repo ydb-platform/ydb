@@ -23,6 +23,7 @@ public:
             EvSetConfigs,
             EvSetSubscriptions,
             EvUpdateConfigs,
+            EvUpdateYamlConfig,
             EvUpdateSubscriptions,
             EvWorkerDisconnected,
 
@@ -98,6 +99,17 @@ public:
             TAutoPtr<IEventHandle> Event;
         };
 
+        struct TEvUpdateYamlConfig : public TEventLocal<TEvUpdateYamlConfig, EvUpdateYamlConfig> {
+            TEvUpdateYamlConfig(const TString &yamlConfig, const TMap<ui64, TString> &volatileYamlConfigs = {})
+                : YamlConfig(yamlConfig)
+                , VolatileYamlConfigs(volatileYamlConfigs)
+            {
+            }
+
+            TString YamlConfig;
+            TMap<ui64, TString> VolatileYamlConfigs;
+        };
+
         struct TEvUpdateSubscriptions : public TEventLocal<TEvUpdateSubscriptions, EvUpdateSubscriptions> {
             TEvUpdateSubscriptions(const TSubscriptionModifications &mod, TAutoPtr<IEventHandle> ev)
                 : Event(ev)
@@ -130,6 +142,7 @@ private:
     void CheckSubscription(TInMemorySubscription::TPtr subscriptions,
                            const TActorContext &ctx);
 
+    void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx);
@@ -146,6 +159,7 @@ private:
     void Handle(TEvPrivate::TEvSetConfigs::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSetSubscriptions::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateConfigs::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, const TActorContext &ctx);
 
     void HandlePoison(const TActorContext &ctx)
@@ -158,6 +172,7 @@ private:
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::CMS_CONFIGS);
         switch (ev->GetTypeRewrite()) {
+            hFuncTraced(NMon::TEvHttpInfo, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionRequest, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionCanceled, Handle);
             HFuncTraced(TEvConsole::TEvCheckConfigUpdatesRequest, Handle);
@@ -174,6 +189,7 @@ private:
             HFuncTraced(TEvPrivate::TEvSetConfigs, Handle);
             HFuncTraced(TEvPrivate::TEvSetSubscriptions, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateConfigs, Handle);
+            HFuncTraced(TEvPrivate::TEvUpdateYamlConfig, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateSubscriptions, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
 
@@ -201,6 +217,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx);
+    void DumpStateHTML(IOutputStream &os) const;
     void Die(const TActorContext &ctx) override;
 
 private:
@@ -209,6 +226,11 @@ private:
     TConfigIndex ConfigIndex;
     TSubscriptionIndex SubscriptionIndex;
     TInMemorySubscriptionIndex InMemoryIndex;
+
+    TString YamlConfig;
+    TMap<ui64, TString> VolatileYamlConfigs;
+    ui64 YamlConfigVersion = 0;
+    TMap<ui64, ui64> VolatileYamlConfigHashes;
 };
 
 } // namespace NKikimr::NConsole

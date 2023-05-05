@@ -151,8 +151,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Name>;
     };
 
+    struct YamlConfig : Table<103> {
+        struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Config : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Version>;
+        using TColumns = TableColumns<Version, Config>;
+    };
+
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
-                                 RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators>;
+                                 RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
+                                 YamlConfig>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

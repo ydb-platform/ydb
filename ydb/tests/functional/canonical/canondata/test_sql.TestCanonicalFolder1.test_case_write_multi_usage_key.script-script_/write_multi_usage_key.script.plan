@@ -160,7 +160,7 @@
                                                         "Name": "Filter"
                                                     },
                                                     {
-                                                        "ReadRange": [
+                                                        "ReadRanges": [
                                                             "Group (-\u221e, +\u221e)",
                                                             "Name (-\u221e, +\u221e)"
                                                         ],

@@ -13,6 +13,13 @@ namespace NActors {
     struct TCpuConsumption {
         double ConsumedUs = 0;
         double BookedUs = 0;
+        ui64 NotEnoughCpuExecutions = 0;
+
+        void Add(const TCpuConsumption& other) {
+            ConsumedUs += other.ConsumedUs;
+            BookedUs += other.BookedUs;
+            NotEnoughCpuExecutions += other.NotEnoughCpuExecutions;
+        }
     };
 
     class IExecutorPool : TNonCopyable {

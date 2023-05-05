@@ -18,6 +18,7 @@ enum EResultStatus {
     SCHEMA_ERROR = 7;
     SCHEMA_CHANGED = 8;
     OVERLOADED = 9;
+    STORAGE_ERROR = 10;
 
     UNKNOWN = 0xFFFF;
 }

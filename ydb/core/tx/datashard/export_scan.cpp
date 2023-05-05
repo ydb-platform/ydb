@@ -217,15 +217,23 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        const bool success = (abort == EAbort::None) && Success;
-
+        auto outcome = EExportOutcome::Success;
         if (abort != EAbort::None) {
-            Error = "Aborted by scan host env";
-            Send(Uploader, new TEvents::TEvPoisonPill());
+            outcome = EExportOutcome::Aborted;
+        } else if (!Success) {
+            outcome = EExportOutcome::Error;
         }
 
         PassAway();
-        return new TExportScanProduct(success, Error, Stats->BytesRead, Stats->Rows);
+        return new TExportScanProduct(outcome, Error, Stats->BytesRead, Stats->Rows);
+    }
+
+    void PassAway() override {
+        if (const auto& actorId = std::exchange(Uploader, {})) {
+            Send(actorId, new TEvents::TEvPoisonPill());
+        }
+
+        IActorCallback::PassAway();
     }
 
     STATEFN(StateWork) {

@@ -136,6 +136,7 @@ public:
                 } else {
                     DropFromVSlotReadyTimestampQ();
                 }
+                const_cast<TGroupInfo&>(*Group).CalculateGroupStatus();
             }
         }
 
@@ -825,6 +826,7 @@ public:
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
+        THashSet<TGroupId> GroupsRequested;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1428,6 +1430,7 @@ private:
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizer = false;
+    std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
     NKikimrBlobStorage::TSerialManagementStage::E SerialManagementStage
             = NKikimrBlobStorage::TSerialManagementStage::DISCOVER_SERIAL;
 
@@ -1649,6 +1652,10 @@ private:
 
     void Execute(TAutoPtr<ITransaction> tx) {
         TTabletExecutedFlat::Execute(tx, TActivationContext::AsActorContext());
+    }
+
+    void Execute(std::unique_ptr<ITransaction> tx) {
+        TTabletExecutedFlat::Execute(tx.release(), TActivationContext::AsActorContext());
     }
 
     void OnActivateExecutor(const TActorContext&) override;

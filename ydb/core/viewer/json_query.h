@@ -114,9 +114,16 @@ public:
         } else if (Action == "explain" || Action == "explain-ast") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        } else if (Action == "explain-scan") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+        } else if (Action == "explain-script") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
         }
         if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         }
         if (database) {
             request.SetDatabase(database);
@@ -398,7 +405,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
                       {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
-                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, explain, explain-ast)","required":false,"type":"string"},
+                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, explain, explain-ast, explain-scan, explain-script)","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
     }
 };

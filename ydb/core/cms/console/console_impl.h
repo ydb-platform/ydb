@@ -91,11 +91,17 @@ private:
             FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigureRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvGetAllConfigsRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvAddVolatileConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvRemoveVolatileConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetLogTailRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvCreateTenantRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvDescribeTenantOptionsRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvGetConfigRequest, Handle);
+            FFunc(TEvConsole::EvApplyConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);

@@ -123,5 +123,6 @@ bool IsIdentityLambda(const TExprNode& lambda);
 TExprNode::TPtr MakeExpandMap(TPositionHandle pos, const TVector<TString>& columns, const TExprNode::TPtr& input, TExprContext& ctx);
 TExprNode::TPtr MakeNarrowMap(TPositionHandle pos, const TVector<TString>& columns, const TExprNode::TPtr& input, TExprContext& ctx);
 
+bool IsStrict(const TExprNode::TPtr& node);
 
 }

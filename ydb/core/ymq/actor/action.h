@@ -69,20 +69,6 @@ public:
         return true;
     }
 
-    void DoCloudBootstrap() {
-        if (!SecurityToken_) {
-            // TODO: use access service
-            MakeError(MutableErrorDesc(), NErrors::INVALID_CLIENT_TOKEN_ID, "Failed to parse cloud id.");
-            SendReplyAndDie();
-            return;
-        }
-
-        auto items = ParseCloudSecurityToken(SecurityToken_);
-        UserName_ = std::get<0>(items);
-        FolderId_ = std::get<1>(items);
-        UserSID_ = std::get<2>(items);
-    }
-
     void DoBootstrap() {
         ui64 configurationFlags = 0;
         if (TDerived::NeedQueueAttributes()) {
@@ -122,7 +108,16 @@ public:
         DoBootstrap();
     }
 
-    void Bootstrap(const NActors::TActorContext&) {
+    void Bootstrap(const NActors::TActorContext&) {    
+        #define SQS_REQUEST_CASE(action)                                        \
+            const auto& request = SourceSqsRequest_.Y_CAT(Get, action)();       \
+            auto response = Response_.Y_CAT(Mutable, action)();                 \
+            FillAuthInformation(request);                                       \
+            response->SetRequestId(RequestId_);
+            
+        SQS_SWITCH_REQUEST_CUSTOM(SourceSqsRequest_, ENUMERATE_ALL_ACTIONS, Y_VERIFY(false));
+        #undef SQS_REQUEST_CASE 
+
         RLOG_SQS_DEBUG("Request started. Actor: " << this->SelfId()); // log new request id
         StartTs_ = TActivationContext::Now();
 
@@ -136,7 +131,11 @@ public:
         }
 
         if (IsCloud()) {
-            DoCloudBootstrap();
+            if (!FolderId_) {
+                MakeError(MutableErrorDesc(), NErrors::INVALID_CLIENT_TOKEN_ID, "Failed to parse cloud_id/folder_id.");
+                SendReplyAndDie();
+                return;
+            }
 
             if (TDerived::CreateMissingAccount()) {
                 CreateAccountOnTheFly();
@@ -149,16 +148,6 @@ public:
     }
 
 protected:
-    template<typename TReq>
-    void CopySecurityToken(const TReq& request) {
-        SecurityToken_ = ExtractSecurityToken<TReq, TCredentials>(request);
-    }
-
-    template<typename TReq>
-    void CopyAccountName(const TReq& request) {
-        UserName_ = request.GetAuth().GetUserName();
-    }
-
     virtual void DoAction() = 0;
 
     virtual TError* MutableErrorDesc() = 0;
@@ -533,6 +522,21 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQuota::TEvClearance, HandleQuota);
             hFunc(TEvWakeup, HandleWakeup);
+        }
+    }
+
+    template<class TReq>
+    void FillAuthInformation(const TReq& request) {
+        SecurityToken_ = ExtractSecurityToken(request);
+        UserName_ = request.GetAuth().GetUserName();
+        FolderId_ = request.GetAuth().GetFolderId();
+        UserSID_ = request.GetAuth().GetUserSID();
+        
+        if (IsCloud() && !FolderId_) {
+            auto items = ParseCloudSecurityToken(SecurityToken_);
+            UserName_ = std::get<0>(items);
+            FolderId_ = std::get<1>(items);
+            UserSID_ = std::get<2>(items);
         }
     }
 

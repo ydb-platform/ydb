@@ -70,14 +70,20 @@ struct TEvExportScan {
 
 }; // TEvExportScan
 
+enum class EExportOutcome {
+    Success,
+    Error,
+    Aborted,
+};
+
 struct TExportScanProduct: public IDestructable {
-    bool Success;
+    EExportOutcome Outcome;
     TString Error;
     ui64 BytesRead;
     ui64 RowsRead;
 
-    explicit TExportScanProduct(bool success, TString error, ui64 bytes, ui64 rows)
-        : Success(success)
+    explicit TExportScanProduct(EExportOutcome outcome, TString error, ui64 bytes, ui64 rows)
+        : Outcome(outcome)
         , Error(std::move(error))
         , BytesRead(bytes)
         , RowsRead(rows)

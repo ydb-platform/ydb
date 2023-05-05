@@ -255,8 +255,9 @@ namespace NKikimr {
             IFaceMonGroup->PatchStartMsgs()++;
             UpdateVPatchCtx();
             std::unique_ptr<IActor> actor{CreateSkeletonVPatchActor(SelfId(), GInfo->Type, ev, now, SkeletonFrontIDPtr,
-                    IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(), VPatchCtx,
-                    VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())};
+                    IFaceMonGroup->PatchFoundPartsMsgsPtr(), IFaceMonGroup->PatchResMsgsPtr(),
+                    VCtx->Histograms.GetHistogram(NKikimrBlobStorage::FastRead), VCtx->Histograms.GetHistogram(NKikimrBlobStorage::AsyncBlob),
+                    VPatchCtx, VCtx->VDiskLogPrefix, Db->GetVDiskIncarnationGuid())};
             TActorId vPatchActor = Register(actor.release());
             VPatchActors.emplace(patchedBlobId, vPatchActor);
         }
@@ -738,8 +739,14 @@ namespace NKikimr {
             }
 
             // no more errors (at least for for log writes)
-            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result = CreateResult(VCtx, NKikimrProto::OK, TString(), ev, now,
-                    SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result;
+            if (ev->Get()->IsInternal) {
+                result = CreateInternalResult(VCtx, NKikimrProto::OK, TString(), ev, now,
+                        SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            } else {
+                result = CreateResult(VCtx, NKikimrProto::OK, TString(), ev, now,
+                        SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid());
+            }
             if (info.WrittenBeyondBarrier) {
                 result->Record.SetWrittenBeyondBarrier(true);
             }
@@ -940,10 +947,19 @@ namespace NKikimr {
                 if (record.HasCookie())
                     cookie = record.GetCookie();
                 auto handleClass = ev->Get()->Record.GetHandleClass();
-                auto result = std::make_unique<TEvBlobStorage::TEvVGetResult>(NKikimrProto::OK, SelfVDiskId, now,
-                    ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
-                    IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), cookie, ev->GetChannel(),
-                    Db->GetVDiskIncarnationGuid());
+                
+                std::unique_ptr<TEvBlobStorage::TEvVGetResult> result;
+                if (ev->Get()->IsInternal) {
+                    result.reset(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, SelfVDiskId, now,
+                            ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, cookie, ev->GetChannel(),
+                            Db->GetVDiskIncarnationGuid()));
+                } else {
+                    result.reset(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, SelfVDiskId, now,
+                            ev->Get()->GetCachedByteSize(), &record, ev->Get()->GetIsLocalMon() ? nullptr : SkeletonFrontIDPtr,
+                            IFaceMonGroup->GetResMsgsPtr(), VCtx->Histograms.GetHistogram(handleClass), cookie, ev->GetChannel(),
+                            Db->GetVDiskIncarnationGuid()));
+                }
+
                 if (record.GetAcquireBlockedGeneration()) {
                     ui64 tabletId = record.GetTabletId();
                     if (tabletId) {
@@ -960,6 +976,7 @@ namespace NKikimr {
                 // create a query actor and pass read-only snapshot to it
                 IActor *actor = CreateLevelIndexQueryActor(QueryCtx, std::move(keepChecker), ctx,
                     std::move(*fullSnap), ctx.SelfID, ev, std::move(result), Db->ReplID);
+
                 if (actor) {
                     auto aid = ctx.Register(actor);
                     ActiveActors.Insert(aid);

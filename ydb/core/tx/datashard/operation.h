@@ -333,6 +333,11 @@ public:
     void ResetWaitingForSnapshotFlag() { ResetFlag(TTxFlags::WaitingForSnapshot); }
     bool IsWaitingForSnapshot() const { return HasWaitingForSnapshotFlag(); }
 
+    bool HasWaitingForRestartFlag() const { return HasFlag(TTxFlags::WaitingForRestart); }
+    void SetWaitingForRestartFlag(bool val = true) { SetFlag(TTxFlags::WaitingForRestart, val); }
+    void ResetWaitingForRestartFlag() { ResetFlag(TTxFlags::WaitingForRestart); }
+    bool IsWaitingForRestart() const { return HasWaitingForRestartFlag(); }
+
     bool HasResultSentFlag() const { return HasFlag(TTxFlags::ResultSent); }
     void SetResultSentFlag(bool val = true) { SetFlag(TTxFlags::ResultSent, val); }
 

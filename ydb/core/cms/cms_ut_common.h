@@ -123,6 +123,8 @@ public:
     void RestartCms();
     void SendRestartCms();
     void SendToCms(IEventBase *event);
+    void CreateDefaultCmsPipe();
+    void DestroyDefaultCmsPipe();
 
     NKikimrCms::TCmsConfig GetCmsConfig();
     void SendCmsConfig(const NKikimrCms::TCmsConfig &config);
@@ -390,6 +392,7 @@ public:
     void EnableNoisyBSCPipe();
 
     const ui64 CmsId;
+    i32 ProcessQueueCount;
 
 private:
     void SetupLogging();
@@ -419,6 +422,8 @@ private:
                           NKikimrCms::TStatus::ECode code);
 
     TActorId Sender;
+    TActorId ClientId;
+    TActorId CmsTabletActor;
 };
 
 } // NCmsTest

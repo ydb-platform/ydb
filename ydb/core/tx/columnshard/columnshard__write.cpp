@@ -157,6 +157,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                 errCode = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
             } else if (putStatus == NKikimrProto::TRYLATER || putStatus == NKikimrProto::OUT_OF_SPACE) {
                 errCode = NKikimrTxColumnShard::EResultStatus::OVERLOADED;
+            } else {
+                errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
             }
             --WritesInFly; // write failed
         }

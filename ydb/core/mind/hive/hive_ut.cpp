@@ -4986,6 +4986,172 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT(storageInfo.ChannelsSize() > 0);
         }
     }
+
+    Y_UNIT_TEST(TestHiveBalancerWithSpareNodes) {
+        static const int NUM_NODES = 6;
+        static const int NUM_TABLETS = 9;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        runtime.LocationCallback = GetLocation;
+        Setup(runtime, true);
+        SendKillLocal(runtime, 0);
+        SendKillLocal(runtime, 1);
+        SendKillLocal(runtime, 3);
+        SendKillLocal(runtime, 4);
+        SendKillLocal(runtime, 5);
+        {
+            TLocalConfig::TPtr local = new TLocalConfig();
+            local->TabletClassInfo[TTabletTypes::Dummy].SetupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet,
+                TMailboxType::Simple, 0,
+                TMailboxType::Simple, 0);
+            local->TabletClassInfo[TTabletTypes::Dummy].MaxCount = 2;
+            CreateLocal(runtime, 0, local); // max 2 dummies on 0
+        }
+        {
+            TLocalConfig::TPtr local = new TLocalConfig();
+            // it can't be empty, otherwise it will fallback to default behavior
+            local->TabletClassInfo[TTabletTypes::Unknown].SetupInfo = nullptr;
+            CreateLocal(runtime, 1, local); // no tablets on 1
+        }
+
+        // 3, 4 & 5 are spare nodes for Dummy
+
+        for (int i = 3; i != 5; ++i) {
+            TLocalConfig::TPtr local = new TLocalConfig();
+            local->TabletClassInfo[TTabletTypes::Dummy].SetupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet,
+                TMailboxType::Simple, 0,
+                TMailboxType::Simple, 0);
+            local->TabletClassInfo[TTabletTypes::Dummy].MaxCount = 3;
+            local->TabletClassInfo[TTabletTypes::Dummy].Priority = -1;
+            CreateLocal(runtime, i, local);
+        }
+
+        {
+            TLocalConfig::TPtr local = new TLocalConfig();
+            local->TabletClassInfo[TTabletTypes::Dummy].SetupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet,
+                TMailboxType::Simple, 0,
+                TMailboxType::Simple, 0);
+            local->TabletClassInfo[TTabletTypes::Dummy].Priority = -2;
+            CreateLocal(runtime, 5, local);
+        }
+
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+        for (int nodeIdx = 0; nodeIdx < NUM_NODES; ++nodeIdx) {
+            TActorId senderLocal = runtime.AllocateEdgeActor(nodeIdx);
+            THolder<TEvHive::TEvTabletMetrics> ev = MakeHolder<TEvHive::TEvTabletMetrics>();
+            ev->Record.MutableTotalResourceUsage()->SetCPU(999); // KIKIMR-9870
+            runtime.SendToPipe(hiveTablet, senderLocal, ev.Release(), nodeIdx, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            TEvLocal::TEvTabletMetricsAck* response = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
+            Y_UNUSED(response);
+        }
+
+        // creating NUM_TABLETS tablets
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<ui64> tablets;
+        for (int i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(1));
+            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(ToString(2));
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            tablets.emplace_back(tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        auto getNodeTablets = [&] {
+            std::array<int, NUM_NODES> nodeTablets = {};
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                UNIT_ASSERT_C(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < NUM_NODES),
+                        "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
+                nodeTablets[tablet.GetNodeID() - nodeBase]++;
+            }
+
+            return nodeTablets;
+        };
+
+        auto shutdownNode = [&] (ui32 nodeIndex, int expectedDrainMovements) {
+            const ui32 nodeId = runtime.GetNodeId(nodeIndex);
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvDrainNode(nodeId));
+            TAutoPtr<IEventHandle> handle;
+            auto drainResponse = runtime.GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(drainResponse->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
+            int drainMovements = drainResponse->Record.GetMovements();
+            UNIT_ASSERT_VALUES_EQUAL(drainMovements, expectedDrainMovements);
+
+            SendKillLocal(runtime, nodeIndex);
+
+            WaitForEvServerDisconnected(runtime);
+
+            for (TTabletId tabletId : tablets) {
+                MakeSureTabletIsUp(runtime, tabletId, 0);
+            }
+        };
+
+        auto nodeTablets = getNodeTablets();
+
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 2);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[2], NUM_TABLETS - 2);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[3], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[4], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[5], 0);
+
+        shutdownNode(0, 2);
+
+        nodeTablets = getNodeTablets();
+
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[2], NUM_TABLETS);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[3], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[4], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[5], 0);
+
+        shutdownNode(2, NUM_TABLETS);
+
+        nodeTablets = getNodeTablets();
+
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[2], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[3], 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[4], 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[5], 3);
+
+        shutdownNode(3, 3);
+
+        nodeTablets = getNodeTablets();
+
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[2], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[3], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[4], 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[5], NUM_TABLETS - 3);
+
+        shutdownNode(4, 3);
+
+        nodeTablets = getNodeTablets();
+
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[2], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[3], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[4], 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodeTablets[5], NUM_TABLETS);
+    }
 }
 
 }

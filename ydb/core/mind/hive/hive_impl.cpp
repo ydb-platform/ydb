@@ -1082,6 +1082,22 @@ TNodeInfo* THive::SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATE
     return itNode->Node;
 }
 
+TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNode> selectedNodes, const TTabletInfo& tablet) const
+{
+    i32 priority = std::numeric_limits<i32>::min();
+    for (const TSelectedNode& selectedNode : selectedNodes) {
+        priority = std::max(priority, selectedNode.Node->GetPriorityForTablet(tablet));
+    }
+
+    auto it = std::partition(selectedNodes.begin(), selectedNodes.end(), [&] (const TSelectedNode& selectedNode) {
+        return selectedNode.Node->GetPriorityForTablet(tablet) == priority;
+    });
+
+    selectedNodes.erase(it, selectedNodes.end());
+
+    return selectedNodes;
+}
+
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     BLOG_D("[FBN] Finding best node for tablet " << tablet.ToString());
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
@@ -1233,6 +1249,8 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
 
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
+        selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet);
+
         switch (GetNodeSelectStrategy()) {
             case NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM:
                 selectedNode = SelectNode<NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM>(selectedNodes);
@@ -1808,8 +1826,12 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
+    const auto& request(ev->Get()->Record);
     THolder<TEvHive::TEvResponseHiveNodeStats> response = MakeHolder<TEvHive::TEvResponseHiveNodeStats>();
     auto& record = response->Record;
+    if (request.GetReturnExtendedTabletInfo()) {
+        record.SetExtendedTabletInfo(true);
+    }
     for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
         auto& nodeStats = *record.AddNodeStats();
         const TNodeInfo& node = it->second;
@@ -1817,14 +1839,66 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
         }
-        for (const auto& [state, set] : node.Tablets) {
-            if (!set.empty()) {
-                auto* stateStats = nodeStats.AddStateStats();
-                stateStats->SetVolatileState(state);
-                stateStats->SetCount(set.size());
+        if (request.GetReturnExtendedTabletInfo()) {
+            if (request.HasFilterTabletsByPathId()) {
+                auto itTabletsOfObject = node.TabletsOfObject.find(request.GetFilterTabletsByPathId());
+                if (itTabletsOfObject != node.TabletsOfObject.end()) {
+                    std::vector<std::vector<ui32>> tabletStateToTypeToCount;
+                    tabletStateToTypeToCount.resize(NKikimrHive::ETabletVolatileState_ARRAYSIZE);
+                    for (const TTabletInfo* tablet : itTabletsOfObject->second) {
+                        NKikimrHive::ETabletVolatileState state = tablet->GetVolatileState();
+                        if (state > NKikimrHive::ETabletVolatileState_MAX) {
+                            continue;
+                        }
+                        std::vector<ui32>& tabletTypeToCount(tabletStateToTypeToCount[state]);
+                        TTabletTypes::EType type = tablet->GetTabletType();
+                        if (static_cast<size_t>(type) >= tabletTypeToCount.size()) {
+                            tabletTypeToCount.resize(type + 1);
+                        }
+                        tabletTypeToCount[type]++;
+                    }
+                    for (unsigned int state = 0; state < tabletStateToTypeToCount.size(); ++state) {
+                        const std::vector<ui32>& tabletTypeToCount(tabletStateToTypeToCount[state]);
+                        for (unsigned int type = 0; type < tabletTypeToCount.size(); ++type) {
+                            if (tabletTypeToCount[type] > 0) {
+                                auto* stateStats = nodeStats.AddStateStats();
+                                stateStats->SetVolatileState(static_cast<NKikimrHive::ETabletVolatileState>(state));
+                                stateStats->SetTabletType(static_cast<TTabletTypes::EType>(type));
+                                stateStats->SetCount(tabletTypeToCount[type]);
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (const auto& [state, set] : node.Tablets) {
+                    std::vector<ui32> tabletTypeToCount;
+                    for (const TTabletInfo* tablet : set) {
+                        TTabletTypes::EType type = tablet->GetTabletType();
+                        if (static_cast<size_t>(type) >= tabletTypeToCount.size()) {
+                            tabletTypeToCount.resize(type + 1);
+                        }
+                        tabletTypeToCount[type]++;
+                    }
+                    for (unsigned int type = 0; type < tabletTypeToCount.size(); ++type) {
+                        if (tabletTypeToCount[type] > 0) {
+                            auto* stateStats = nodeStats.AddStateStats();
+                            stateStats->SetVolatileState(state);
+                            stateStats->SetTabletType(static_cast<TTabletTypes::EType>(type));
+                            stateStats->SetCount(tabletTypeToCount[type]);
+                        }
+                    }
+                }
+            }
+        } else {
+            for (const auto& [state, set] : node.Tablets) {
+                if (!set.empty()) {
+                    auto* stateStats = nodeStats.AddStateStats();
+                    stateStats->SetVolatileState(state);
+                    stateStats->SetCount(set.size());
+                }
             }
         }
-        if (ev->Get()->Record.GetReturnMetrics()) {
+        if (request.GetReturnMetrics()) {
             nodeStats.MutableMetrics()->CopyFrom(MetricsFromResourceRawValues(node.GetResourceCurrentValues()));
         }
         if (!node.IsAlive()) {

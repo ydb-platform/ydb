@@ -672,6 +672,15 @@ void TColumnShard::SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& s
     }
 }
 
+void TColumnShard::ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly) {
+    LOG_S_DEBUG("Scheduling GC at tablet " << TabletID());
+
+    UpdateBlobMangerCounters();
+    if (BlobManager->CanCollectGarbage(cleanupOnly)) {
+        Execute(CreateTxRunGc(), ctx);
+    }
+}
+
 void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
     if (periodic && LastBackActivation > TInstant::Now() - ActivationPeriod) {
         return;
@@ -1087,7 +1096,7 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
 
         if (evict.State == EEvictState::UNKNOWN) {
             LOG_S_ERROR("Forget unknown blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
-        } else if (NOlap::IsExported(evict.State)) {
+        } else if (NOlap::CouldBeExported(evict.State)) {
             Y_VERIFY(evict.Blob == blobId);
             strBlobs += "'" + blobId.ToStringNew() + "' ";
             tierBlobs[meta.GetTierName()].emplace_back(std::move(evict));

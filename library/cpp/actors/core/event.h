@@ -80,7 +80,8 @@ namespace NActors {
                 Y_FAIL("Event type %" PRIu32 " doesn't match the expected type %" PRIu32, Type, TEventType::EventType);
 
             if (!Event) {
-                Event.Reset(TEventType::Load(Buffer.Get()));
+                static TEventSerializedData empty;
+                Event.Reset(TEventType::Load(Buffer ? Buffer.Get() : &empty));
             }
 
             if (Event) {

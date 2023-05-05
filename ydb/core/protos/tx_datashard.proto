@@ -591,6 +591,7 @@ message TLock {
     optional uint64 Counter = 4;
     optional fixed64 SchemeShard = 5;
     optional uint64 PathId = 6;
+    optional bool HasWrites = 7;
 }
 
 message TTabletInfo {

@@ -290,6 +290,12 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
         function = TProgram::TAssignment::FUNC_CMP_GREATER;
     } else if (comparison.Operator() == "gte") {
         function = TProgram::TAssignment::FUNC_CMP_GREATER_EQUAL;
+    } else if (comparison.Operator() == "string_contains") {
+        function = TProgram::TAssignment::FUNC_STR_MATCH;
+    } else if (comparison.Operator() == "starts_with") {
+        function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
+    } else if (comparison.Operator() == "ends_with") {
+        function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
     }
 
     cmpFunc->SetId(function);
@@ -474,6 +480,14 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
     if (auto maybeOlapOperation = operation.Maybe<TKqpOlapOperationBase>()) {
         CompileOlapProgramImpl(maybeOlapOperation.Cast().Input(), ctx);
         if (auto maybeFilter = operation.Maybe<TKqpOlapFilter>()) {
+            // On the first level of filters we apply fast and light filters: <, >, !=, == etc.
+            // On the second level we apply high-cost filters (LIKE operation) on top of filtered data from the 1st level.
+            if (maybeFilter.Cast().Input().Maybe<TKqpOlapFilter>()) {
+                // The 2nd level of filters use the result of 1st level as input.
+                // We create an empty projection to run first level apply.
+                // Because real execution of filters is done on Projection and GroupBy steps.
+                ctx.CreateProjection();
+            }
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);

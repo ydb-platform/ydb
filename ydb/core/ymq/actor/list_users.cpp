@@ -22,10 +22,6 @@ public:
     TListUsersActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListUsers, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableListUsers()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:

@@ -14,11 +14,7 @@ public:
     TDeleteQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::DeleteQueue, std::move(cb))
     {
-        UserName_ = Request().GetAuth().GetUserName();
-        Response_.MutableDeleteQueue()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
-   }
+    }
 
 private:
     bool DoValidate() override {
@@ -93,10 +89,6 @@ public:
     TDeleteQueueBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TCommonBatchActor(sourceSqsRequest, EAction::DeleteQueueBatch, std::move(cb))
     {
-        UserName_ = Request().GetAuth().GetUserName();
-        Response_.MutableDeleteQueueBatch()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:
@@ -106,7 +98,7 @@ private:
         for (size_t i = 0; i < Request().EntriesSize(); ++i) {
             const auto& entry = Request().GetEntries(i);
             auto& req = *ret[i].MutableDeleteQueue();
-            req.MutableAuth()->SetUserName(UserName_);
+            *req.MutableAuth() = Request().GetAuth();
 
             if (Request().HasCredentials()) {
                 *req.MutableCredentials() = Request().GetCredentials();

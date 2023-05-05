@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TConfigsCacheTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_DOMAIN_LOG_1));
 
         TSaveCallback save = [](auto&) {
-            Y_ASSERT(false);
+            UNIT_ASSERT(false);
         };
 
         TLoadCallback load = [](auto &config) {

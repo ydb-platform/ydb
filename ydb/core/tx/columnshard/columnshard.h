@@ -41,6 +41,9 @@ inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResu
     case NKikimrTxColumnShard::OVERLOADED:
         return Ydb::StatusIds::OVERLOADED;
 
+    case NKikimrTxColumnShard::STORAGE_ERROR:
+        return Ydb::StatusIds::UNAVAILABLE;
+
     default:
         return Ydb::StatusIds::GENERIC_ERROR;
     }

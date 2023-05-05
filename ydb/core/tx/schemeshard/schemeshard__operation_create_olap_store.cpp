@@ -516,6 +516,12 @@ public:
             return result;
         }
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Olap schema operations are not supported in serverless db");
+            return result;
+        }
+
         TOlapStoreInfo::TPtr storeInfo = CreateOlapStore(createDescription, status, errStr);
         if (!storeInfo.Get()) {
             result->SetError(status, errStr);

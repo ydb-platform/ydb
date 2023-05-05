@@ -172,10 +172,7 @@ public:
             ctx.Send(res.TxInfo.Source, event.Release(), 0, res.TxInfo.Cookie);
         }
 
-        Self->UpdateBlobMangerCounters();
-        if (Self->BlobManager->CanCollectGarbage()) {
-            Self->Execute(Self->CreateTxRunGc(), ctx);
-        }
+        Self->ScheduleNextGC(ctx);
 
         switch (Trigger) {
             case ETriggerActivities::POST_INSERT:

@@ -298,6 +298,7 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
             // TODO: support pg types
             Y_VERIFY(column.PType.GetTypeId() != NScheme::NTypeIds::Pg);
             item->SetType(appData->TypeRegistry->GetTypeName(column.PType.GetTypeId()));
+            item->SetNotNull(column.NotNull);
 
             ui32 order = Max<ui32>();
             if (implKeyToImplColumn.contains(column.Name)) {

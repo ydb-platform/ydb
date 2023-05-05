@@ -304,7 +304,7 @@ namespace Tests {
             }
             desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
 
-            TVector<TString> grpcServices = {"yql", "clickhouse_internal", "datastreams", "table_service", "scripting", "experimental", "discovery", "pqcd", "pq", "pqv1" };
+            TVector<TString> grpcServices = {"yql", "clickhouse_internal", "datastreams", "table_service", "scripting", "experimental", "discovery", "pqcd", "fds", "pq", "pqv1" };
             desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
 
             system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);

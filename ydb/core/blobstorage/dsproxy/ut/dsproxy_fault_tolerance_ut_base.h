@@ -66,8 +66,8 @@ public:
         }
     }
 
-    NKikimrProto::EReplyStatus PutWithResult(const TLogoBlobID& id, const TString& buffer, TEvBlobStorage::TEvPut::ETactic tactic
-            = TEvBlobStorage::TEvPut::TacticDefault) {
+    TAutoPtr<TEvBlobStorage::TEvPutResult> PutWithResult(const TLogoBlobID& id, const TString& buffer,
+            TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault) {
         SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max(),
                     NKikimrBlobStorage::TabletLog, tactic));
         auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>();
@@ -99,7 +99,7 @@ public:
                     Y_FAIL();
             }
         }
-        return resp->Get()->Status;
+        return resp->Release();
     }
 
     NKikimrProto::EReplyStatus PutToVDisk(ui32 vdiskOrderNum, const TLogoBlobID& id, const TString& part) {
@@ -144,7 +144,7 @@ public:
 
     void Put(const TLogoBlobID& id, const TString& buffer, NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK,
             TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault) {
-        UNIT_ASSERT_VALUES_EQUAL(PutWithResult(id, buffer, tactic), expectedStatus);
+        UNIT_ASSERT_VALUES_EQUAL(PutWithResult(id, buffer, tactic)->Status, expectedStatus);
     }
 
     void CheckBlob(const TLogoBlobID& id, bool mustRestoreFirst, NKikimrProto::EReplyStatus status, const TString& buffer) {

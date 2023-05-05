@@ -21,6 +21,7 @@ enum EVirtualGroupState {
     NEW = 0; // just created
     CREATE_FAILED = 1; // error while creating VirtualGroup
     WORKING = 2; // operational
+    DELETING = 3; // going to delete from Hive
 }
 
 message TGroupDecommitStatus {
@@ -492,6 +493,10 @@ message TDecommitGroups {
     repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 3; // where to store decommitted groups' data
 }
 
+message TCancelVirtualGroup {
+    uint32 GroupId = 1; // id of a group we are going to cancel
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -533,6 +538,7 @@ message TConfigRequest {
             TWipeVDisk WipeVDisk = 41;
             TSanitizeGroup SanitizeGroup = 42;
             TReadSettings ReadSettings = 43;
+            TCancelVirtualGroup CancelVirtualGroup = 44;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -698,6 +704,7 @@ message TConfigResponse {
             kDiskIsNotDonor = 8;
             kAlready = 9;
             kMayGetDegraded = 10;
+            kGroupNotFound = 11;
         }
 
         message TFailParam {

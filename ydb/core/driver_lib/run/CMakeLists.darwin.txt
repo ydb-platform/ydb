@@ -120,6 +120,7 @@ target_link_libraries(run PUBLIC
   lib-deprecated-client
   ydb-services-auth
   ydb-services-cms
+  ydb-services-console
   ydb-services-datastreams
   ydb-services-discovery
   ydb-services-fq

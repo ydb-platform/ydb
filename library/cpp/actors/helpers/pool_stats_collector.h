@@ -135,6 +135,11 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByNeedyState;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByStarvedState;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByHoggishState;
+        NMonitoring::TDynamicCounters::TCounterPtr NotEnoughCpuExecutions;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxConsumedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MinConsumedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxBookedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MinBookedCpu;
 
 
         THistogramCounters LegacyActivationTimeHistogram;
@@ -190,6 +195,11 @@ private:
             IncreasingThreadsByNeedyState = PoolGroup->GetCounter("IncreasingThreadsByNeedyState", true);
             DecreasingThreadsByStarvedState = PoolGroup->GetCounter("DecreasingThreadsByStarvedState", true);
             DecreasingThreadsByHoggishState = PoolGroup->GetCounter("DecreasingThreadsByHoggishState", true);
+            NotEnoughCpuExecutions = PoolGroup->GetCounter("NotEnoughCpuExecutions", true);
+            MaxConsumedCpu = PoolGroup->GetCounter("MaxConsumedCpuByPool", false);
+            MinConsumedCpu = PoolGroup->GetCounter("MinConsumedCpuByPool", false);
+            MaxBookedCpu = PoolGroup->GetCounter("MaxBookedCpuByPool", false);
+            MinBookedCpu = PoolGroup->GetCounter("MinBookedCpuByPool", false);
 
             LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
             ActivationTimeHistogram = PoolGroup->GetHistogram(
@@ -237,6 +247,7 @@ private:
             *IncreasingThreadsByNeedyState = poolStats.IncreasingThreadsByNeedyState;
             *DecreasingThreadsByStarvedState = poolStats.DecreasingThreadsByStarvedState;
             *DecreasingThreadsByHoggishState = poolStats.DecreasingThreadsByHoggishState;
+            *NotEnoughCpuExecutions = stats.NotEnoughCpuExecutions;
 
             LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
             ActivationTimeHistogram->Reset();
@@ -281,6 +292,38 @@ private:
         }
     };
 
+    struct TActorSystemCounters {
+        TIntrusivePtr<NMonitoring::TDynamicCounters> Group;
+
+        NMonitoring::TDynamicCounters::TCounterPtr MaxConsumedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MinConsumedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxBookedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr MinBookedCpu;
+
+        void Init(NMonitoring::TDynamicCounters* group) {
+            Group = group;
+
+            MaxConsumedCpu = Group->GetCounter("MaxConsumedCpu", false);
+            MinConsumedCpu = Group->GetCounter("MinConsumedCpu", false);
+            MaxBookedCpu = Group->GetCounter("MaxBookedCpu", false);
+            MinBookedCpu = Group->GetCounter("MinBookedCpu", false);
+        }
+
+        void Set(const THarmonizerStats& harmonizerStats) {
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
+            *MaxConsumedCpu = harmonizerStats.MaxConsumedCpu;
+            *MinConsumedCpu = harmonizerStats.MinConsumedCpu;
+            *MaxBookedCpu = harmonizerStats.MaxBookedCpu;
+            *MinBookedCpu = harmonizerStats.MinBookedCpu;
+#else
+            Y_UNUSED(poolStats);
+            Y_UNUSED(stats);
+            Y_UNUSED(numThreads);
+#endif
+        }
+
+    };
+
 public:
     static constexpr IActor::EActivityType ActorActivityType() {
         return IActor::ACTORLIB_STATS;
@@ -297,6 +340,7 @@ public:
         for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
             PoolCounters[poolId].Init(Counters.Get(), setup.GetPoolName(poolId), setup.GetThreads(poolId));
         }
+        ActorSystemCounters.Init(Counters.Get());
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -322,6 +366,8 @@ private:
             ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats);
             SetAggregatedCounters(PoolCounters[poolId], poolStats, stats);
         }
+        THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
+        ActorSystemCounters.Set(harmonizerStats);
 
         OnWakeup(ctx);
 
@@ -343,6 +389,7 @@ protected:
     NMonitoring::TDynamicCounterPtr Counters;
 
     TVector<TExecutorPoolCounters> PoolCounters;
+    TActorSystemCounters ActorSystemCounters;
 };
 
 } // NActors

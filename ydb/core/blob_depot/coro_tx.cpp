@@ -1,5 +1,10 @@
 #include "coro_tx.h"
 
+#include <util/system/sanitizers.h>
+#include <util/system/type_name.h>
+#include <util/system/info.h>
+#include <util/system/protect.h>
+
 namespace NKikimr::NBlobDepot {
 
     thread_local TCoroTx *TCoroTx::Current = nullptr;
@@ -12,10 +17,15 @@ namespace NKikimr::NBlobDepot {
         END_CORO
     };
 
+    static const size_t PageSize = NSystemInfo::GetPageSize();
+
+    static size_t AlignStackSize(size_t size) {
+        size += PageSize - (size & PageSize - 1) & PageSize - 1;
 #ifndef NDEBUG
-    static constexpr ui64 StackSentinel = 0x8E0CDBFD41F04520;
-    static constexpr size_t NumStackSentinels = 8;
+        size += PageSize;
 #endif
+        return size;
+    }
 
     class TCoroTx::TContext : public ITrampoLine {
         TMappedAllocation Stack;
@@ -24,34 +34,27 @@ namespace NKikimr::NBlobDepot {
 
         EOutcome Outcome = EOutcome::UNSET;
 
-        std::weak_ptr<TToken> Token;
+        TTokens Tokens;
         std::function<void()> Body;
 
         bool Finished = false;
+        bool Aborted = false;
 
     public:
-        TContext(const std::weak_ptr<TToken>& token, std::function<void()>&& body)
-            : Stack(65536)
+        TContext(TTokens&& tokens, std::function<void()>&& body)
+            : Stack(AlignStackSize(65536))
             , Context({this, TArrayRef(Stack.Begin(), Stack.End())})
-            , Token(token)
+            , Tokens(std::move(tokens))
             , Body(std::move(body))
         {
-#ifndef NDEBUG
-            char *p;
-#   if STACK_GROW_DOWN
-            p = Stack.Begin();
-#   else
-            p = Stack.End() - sizeof(StackSentinel) * NumStackSentinels;
-#   endif
-            for (size_t i = 0; i < NumStackSentinels; ++i) {
-                memcpy(p + i * sizeof(StackSentinel), &StackSentinel, sizeof(StackSentinel));
-            }
+#if !defined(NDEBUG)
+            ProtectMemory(STACK_GROW_DOWN ? Stack.Begin() : Stack.End() - PageSize, PageSize, EProtectMemoryMode::PM_NONE);
 #endif
         }
 
         ~TContext() {
             if (!Finished) {
-                Finished = true;
+                Aborted = true;
                 Resume();
             }
         }
@@ -62,24 +65,10 @@ namespace NKikimr::NBlobDepot {
             TExceptionSafeContext returnContext;
             Y_VERIFY(!BackContext);
             BackContext = &returnContext;
+            Y_VERIFY_DEBUG(CurrentTx() || Aborted);
             returnContext.SwitchTo(&Context);
             Y_VERIFY(BackContext == &returnContext);
             BackContext = nullptr;
-
-            // validate stack
-#ifndef NDEBUG
-            char *p;
-#   if STACK_GROW_DOWN
-            p = Stack.Begin();
-#   else
-            p = Stack.End() - sizeof(StackSentinel) * NumStackSentinels;
-#   endif
-            for (size_t i = 0; i < NumStackSentinels; ++i) {
-                ui64 temp;
-                memcpy(&temp, p + i * sizeof(StackSentinel), sizeof(StackSentinel));
-                Y_VERIFY(StackSentinel == temp);
-            }
-#endif
 
             Y_VERIFY(Outcome != EOutcome::UNSET);
             return Outcome;
@@ -90,14 +79,26 @@ namespace NKikimr::NBlobDepot {
             Outcome = outcome;
             Y_VERIFY(BackContext);
             Context.SwitchTo(BackContext);
-            if (Token.expired() || Finished) {
+            if (IsExpired()) {
                 throw TExDead();
             }
         }
 
     private:
+        bool IsExpired() const {
+            if (Aborted) {
+                return true;
+            }
+            for (auto& token : Tokens) {
+                if (token.expired()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void DoRun() override {
-            if (!Token.expired()) {
+            if (!IsExpired()) {
                 try {
                     Body();
                 } catch (const TExDead&) {
@@ -109,9 +110,9 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    TCoroTx::TCoroTx(TBlobDepot *self, const std::weak_ptr<TToken>& token, std::function<void()> body)
+    TCoroTx::TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void()> body)
         : TTransactionBase(self)
-        , Context(std::make_unique<TContext>(token, std::move(body)))
+        , Context(std::make_unique<TContext>(std::move(tokens), std::move(body)))
     {}
 
     TCoroTx::TCoroTx(TCoroTx& predecessor)

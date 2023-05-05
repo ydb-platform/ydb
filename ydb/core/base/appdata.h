@@ -176,6 +176,10 @@ struct TAppData {
 
     TKikimrScopeId LocalScopeId;
 
+    TMap<TString, TString> Labels;
+
+    TString ClusterName;
+
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
             TMap<TString, ui32> servicePools,

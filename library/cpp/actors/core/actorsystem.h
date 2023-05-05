@@ -299,6 +299,8 @@ namespace NActors {
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
 
+        THarmonizerStats GetHarmonizerStats() const;
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }

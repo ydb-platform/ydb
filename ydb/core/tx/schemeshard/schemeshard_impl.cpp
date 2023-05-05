@@ -1170,10 +1170,8 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
         // check lock is free
         if (LockedPaths.contains(pathId)) {
             auto explain = TStringBuilder()
-                << "fail user constraint in CheckLocks section:"
-                << " checking path locks fails, path with id " << pathId
-                << " has been locked by txId: " << LockedPaths.at(pathId)
-                << " but ApplyIf declare that it should be free";
+                << "path '" << pathId << "'"
+                << " has been locked by tx: " << LockedPaths.at(pathId);
             errStr.append(explain);
             return false;
         }
@@ -1185,20 +1183,18 @@ bool TSchemeShard::CheckLocks(const TPathId pathId, const TTxId lockTxId, TStrin
 
     if (!LockedPaths.contains(pathId)) {
         auto explain = TStringBuilder()
-            << "fail user constraint in CheckLocks section:"
-            << " checking path locks fails, path with id " << pathId
+            << "path '" << pathId << "'"
             << " hasn't been locked at all"
-            << " but ApplyIf declare that it should be locked by: " << lockTxId;
+            << " but it is declared that it should be locked by tx: " << lockTxId;
         errStr.append(explain);
         return false;
     }
 
     if (LockedPaths.at(pathId) != lockTxId) {
         auto explain = TStringBuilder()
-            << "fail user constraint in CheckLocks section:"
-            << " checking path locks fails, path with id " << pathId
-            << " has been locked by txId: " << LockedPaths.at(pathId)
-            << " but ApplyIf declare that it should be locked by: " << lockTxId;
+            << "path '" << pathId << "'"
+            << " has been locked by tx: " << LockedPaths.at(pathId)
+            << " but it is declared that it should be locked by: " << lockTxId;
         errStr.append(explain);
         return false;
     }

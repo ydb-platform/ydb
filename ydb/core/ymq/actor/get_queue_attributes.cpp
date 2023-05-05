@@ -48,10 +48,6 @@ public:
     TGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::GetQueueAttributes, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableGetQueueAttributes()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:
@@ -297,10 +293,6 @@ public:
     TGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TCommonBatchActor(sourceSqsRequest, EAction::GetQueueAttributesBatch, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableGetQueueAttributesBatch()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:
@@ -310,7 +302,7 @@ private:
         for (size_t i = 0; i < Request().EntriesSize(); ++i) {
             const auto& entry = Request().GetEntries(i);
             auto& req = *ret[i].MutableGetQueueAttributes();
-            req.MutableAuth()->SetUserName(UserName_);
+            *req.MutableAuth() = Request().GetAuth();
 
             if (Request().HasCredentials()) {
                 *req.MutableCredentials() = Request().GetCredentials();

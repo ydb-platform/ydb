@@ -17,6 +17,7 @@ struct TLimits {
     static constexpr const ui32 MIN_BYTES_TO_INSERT = 4 * 1024 * 1024;
     static constexpr const ui64 MAX_BYTES_TO_INSERT = 16 * 1024 * 1024;
     static constexpr const ui32 MAX_TX_RECORDS = 100000;
+    static constexpr const ui64 MAX_BLOBS_TO_DELETE = NOlap::TCompactionLimits::MAX_BLOBS_TO_DELETE;
 
     TControlWrapper MinInsertBytes;
     TControlWrapper MaxInsertBytes;

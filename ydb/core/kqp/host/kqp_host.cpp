@@ -1132,11 +1132,16 @@ private:
                 settings.PathPrefix = tablePathPrefix;
             }
             settings.EndOfQueryCommit = sqlAutoCommit;
-            settings.Flags.insert("DisableEmitStartsWith");
             settings.Flags.insert("FlexibleTypes");
-            if (SessionCtx->Query().Type == EKikimrQueryType::Scan) {
-                // We enable EmitAggApply for aggregate pushdowns to Column Shards which are accessed by Scan query only
+            if (SessionCtx->Query().Type == EKikimrQueryType::Scan
+                || SessionCtx->Query().Type == EKikimrQueryType::YqlScript
+                || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming)
+            {
+                // We enable EmitAggApply and AnsiLike for filter and aggregate pushdowns to Column Shards
                 settings.Flags.insert("EmitAggApply");
+                settings.Flags.insert("AnsiLike");
+            } else {
+                settings.Flags.insert("DisableEmitStartsWith");
             }
 
             ui16 actualSyntaxVersion = 0;

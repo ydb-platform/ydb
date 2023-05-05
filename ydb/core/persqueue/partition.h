@@ -164,6 +164,7 @@ private:
 
     void ReadTimestampForOffset(const TString& user, TUserInfo& ui, const TActorContext& ctx);
     void ReportCounters(const TActorContext& ctx);
+    bool UpdateCounters(const TActorContext& ctx);
     void ScheduleUpdateAvailableSize(const TActorContext& ctx);
     void SetDeadlinesForWrites(const TActorContext& ctx);
 

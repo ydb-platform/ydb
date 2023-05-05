@@ -23,7 +23,7 @@ namespace NActors {
             Stop();
         }
 
-        void ProcessEventsInLoop() {
+        bool ProcessEventsInLoop() {
             fd_set readfds, writefds, exceptfds;
 
             FD_ZERO(&readfds);
@@ -51,11 +51,13 @@ namespace NActors {
             if (res == -1) {
                 const int err = LastSocketError();
                 if (err == EINTR) {
-                    return; // try a bit later
+                    return false; // try a bit later
                 } else {
                     Y_FAIL("select() failed with %s", strerror(err));
                 }
             }
+
+            bool flag = false;
 
             with_lock (Mutex) {
                 for (const auto& [fd, record] : Descriptors) {
@@ -70,9 +72,13 @@ namespace NActors {
                             record->Flags &= ~WRITE;
                         }
                         Notify(record.Get(), read, write);
+                    } else {
+                        flag = true;
                     }
                 }
             }
+
+            return flag;
         }
 
         void UnregisterSocketInLoop(const TIntrusivePtr<TSharedDescriptor>& socket) {

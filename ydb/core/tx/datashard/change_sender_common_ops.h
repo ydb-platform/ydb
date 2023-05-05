@@ -8,6 +8,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/mon.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -92,6 +93,16 @@ class TBaseChangeSender: public IChangeSender {
     void SendRecords();
 
 protected:
+    template <typename T>
+    void RemoveRecords(TVector<T>&& records) {
+        TVector<ui64> remove(Reserve(records.size()));
+        for (const auto& record : records) {
+            remove.push_back(record.Order);
+        }
+
+        ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+    }
+
     void CreateSenders(const TVector<ui64>& partitionIds) override;
     void KillSenders() override;
     void RemoveRecords() override;
@@ -104,6 +115,8 @@ protected:
 
     explicit TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver,
         const TDataShardId& dataShard, const TPathId& pathId);
+
+    void RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
 private:
     IActorOps* const ActorOps;

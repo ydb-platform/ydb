@@ -23,10 +23,6 @@ public:
     TDeleteUserActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::DeleteUser, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableDeleteUser()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:

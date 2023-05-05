@@ -178,6 +178,15 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
         Y_VERIFY(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
 
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
+        TGenStep genStep{blobId.Generation(), blobId.Step()};
+        if (genStep <= LastCollectedGenStep) {
+            LOG_S_WARN("BlobManager at tablet " << TabletInfo->TabletID
+                << " Load not keeped blob " << unifiedBlobId.ToStringNew() << " collected by GenStep: "
+                << std::get<0>(LastCollectedGenStep) << ":" << std::get<1>(LastCollectedGenStep));
+            KeepsToErase.emplace_back(unifiedBlobId);
+            continue;
+        }
+
         BlobsToKeep.insert(blobId);
 
         // Keep + DontKeep (probably in different gen:steps)
@@ -186,12 +195,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
             continue;
         }
 
-        TGenStep genStep{blobId.Generation(), blobId.Step()};
         genStepsWithBlobsToKeep.insert(genStep);
-
-        Y_VERIFY(genStep > LastCollectedGenStep,
-            "Blob %s in keep queue is before last barrier (%" PRIu32 ":%" PRIu32 ")",
-            unifiedBlobId.ToStringNew().c_str(), std::get<0>(LastCollectedGenStep), std::get<1>(LastCollectedGenStep));
     }
 
     AllocatedGenSteps.clear();
@@ -207,11 +211,13 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     return true;
 }
 
-bool TBlobManager::CanCollectGarbage() const {
+bool TBlobManager::CanCollectGarbage(bool cleanupOnly) const {
     if (KeepsToErase.size() || DeletesToErase.size()) {
         return true;
     }
-
+    if (cleanupOnly) {
+        return false;
+    }
     return NeedStorageCG();
 }
 
@@ -317,7 +323,7 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
                 // Remove the blob from keep list if its also in the delete list
                 gl.KeepList.erase(*blobIt);
                 // Skipped blobs still need to be deleted from BlobsToKeep table
-                KeepsToErase.push_back(TUnifiedBlobId(blobGroup, *blobIt));
+                KeepsToErase.emplace_back(TUnifiedBlobId(blobGroup, *blobIt));
 
                 if (CurrentGen == blobIt->Generation()) {
                     // If this blob was created and deleted in the current generation then
@@ -326,7 +332,7 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
                     // a scenario when Keep flag was sent in the old generation and then tablet restarted
                     // before getting the result and removing the blob from the Keep list.
                     skipDontKeep = true;
-                    DeletesToErase.push_back(TUnifiedBlobId(blobGroup, *blobIt));
+                    DeletesToErase.emplace_back(TUnifiedBlobId(blobGroup, *blobIt));
                     ++CountersUpdate.BlobSkippedEntries;
                 }
             }
@@ -363,12 +369,11 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
     return requests;
 }
 
-bool TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db) {
+size_t TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db, size_t maxBlobsToCleanup) {
     if (KeepsToErase.empty() && DeletesToErase.empty()) {
-        return false;
+        return 0;
     }
 
-    static constexpr size_t maxBlobsToCleanup = 100000;
     size_t numBlobs = 0;
 
     for (; !KeepsToErase.empty() && numBlobs < maxBlobsToCleanup; ++numBlobs) {
@@ -381,7 +386,8 @@ bool TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db) {
         DeletesToErase.pop_front();
     }
 
-    return true;
+    Y_VERIFY(numBlobs <= maxBlobsToCleanup);
+    return numBlobs;
 }
 
 void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, IBlobManagerDb& db) {
@@ -398,8 +404,12 @@ void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, 
     const auto& keepList = it->second.KeepList;
     const auto& dontKeepList = it->second.DontKeepList;
 
-    static constexpr size_t maxBlobsToCleanup = 100000;
-    size_t blobsToForget = keepList.size() + dontKeepList.size() + KeepsToErase.size() + DeletesToErase.size();
+    // NOTE: It clears blobs of different groups.
+    // It's expected to be safe cause we have GC result for the blobs or don't need such result.
+    size_t maxBlobsToCleanup = TLimits::MAX_BLOBS_TO_DELETE;
+    maxBlobsToCleanup -= CleanupFlaggedBlobs(db, maxBlobsToCleanup);
+
+    size_t blobsToForget = keepList.size() + dontKeepList.size();
 
     if (blobsToForget < maxBlobsToCleanup) {
         for (const auto& blobId : keepList) {
@@ -410,16 +420,12 @@ void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, 
         }
     } else {
         for (const auto& blobId : keepList) {
-            KeepsToErase.push_back(TUnifiedBlobId(group, blobId));
+            KeepsToErase.emplace_back(TUnifiedBlobId(group, blobId));
         }
         for (const auto& blobId : dontKeepList) {
-            DeletesToErase.push_back(TUnifiedBlobId(group, blobId));
+            DeletesToErase.emplace_back(TUnifiedBlobId(group, blobId));
         }
     }
-
-    // NOTE: It clears blobs of different groups.
-    // It's expected to be safe cause we have GC result for the blobs or don't need such result.
-    CleanupFlaggedBlobs(db);
 
     ++CountersUpdate.GcRequestsSent;
     CountersUpdate.BlobKeepEntries += keepList.size();
@@ -457,9 +463,19 @@ void TBlobManager::SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
         << " Blob count: " << blobBatch.BatchInfo->BlobSizes.size());
 
     // Add this batch to KeepQueue
+    TGenStep edgeGenStep = EdgeGenStep();
     for (ui32 i = 0; i < blobBatch.BatchInfo->BlobSizes.size(); ++i) {
         const TUnifiedBlobId blobId = blobBatch.BatchInfo->MakeBlobId(i);
-        BlobsToKeep.insert(blobId.GetLogoBlobId());
+        Y_VERIFY_DEBUG(blobId.IsDsBlob(), "Not a DS blob id: %s", blobId.ToStringNew().c_str());
+
+        auto logoblobId = blobId.GetLogoBlobId();
+        TGenStep genStep{logoblobId.Generation(), logoblobId.Step()};
+
+        Y_VERIFY(genStep > edgeGenStep,
+            "Trying to keep blob %s that could be already collected by edge barrier (%" PRIu32 ":%" PRIu32 ")",
+            blobId.ToStringNew().c_str(), std::get<0>(edgeGenStep), std::get<1>(edgeGenStep));
+
+        BlobsToKeep.insert(std::move(logoblobId));
         db.AddBlobToKeep(blobId);
     }
 
@@ -507,14 +523,9 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
     }
 }
 
-bool TBlobManager::ExportOneToOne(const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TEvictMetadata& meta,
+bool TBlobManager::ExportOneToOne(TEvictedBlob&& evict, const NKikimrTxColumnShard::TEvictMetadata& meta,
                                   IBlobManagerDb& db)
 {
-    NOlap::TEvictedBlob evict{
-        .State = EEvictState::EVICTING,
-        .Blob = blobId
-    };
-
     if (EvictedBlobs.count(evict) || DroppedEvictedBlobs.count(evict)) {
         return false;
     }
@@ -697,23 +708,19 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
 
     // Check if the blob is marked for delayed deletion
     if (blobId.IsSmallBlob()) {
-        if (SmallBlobsToDeleteDelayed.count(blobId)) {
+        if (SmallBlobsToDeleteDelayed.erase(blobId)) {
             LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delayed Small Blob " << blobId
                 << " is no longer in use" );
-            SmallBlobsToDeleteDelayed.erase(blobId);
             SmallBlobsToDelete.insert(blobId);
         }
     } else {
         TLogoBlobID logoBlobId = blobId.GetLogoBlobId();
-        auto delayedIt = BlobsToDeleteDelayed.find(logoBlobId);
-        if (delayedIt != BlobsToDeleteDelayed.end()) {
+        if (BlobsToDeleteDelayed.erase(logoBlobId)) {
             LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Delayed Blob " << blobId);
             BlobsToDelete.insert(logoBlobId);
-            BlobsToDeleteDelayed.erase(delayedIt);
+            NBlobCache::ForgetBlob(blobId);
         }
     }
-
-    NBlobCache::ForgetBlob(blobId);
 }
 
 bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {

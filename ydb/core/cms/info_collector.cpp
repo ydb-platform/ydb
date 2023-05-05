@@ -83,14 +83,14 @@ private:
 
     // Nodes
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
-    
-    //Configs
+
+    // Configs
     void RequestBootstrapConfig();
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev);
-    
+    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev);
+
     // State Storage
     void RequestStateStorageConfig();
-    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr &ev);
+    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev);
 
     // BSC
     void RequestBaseConfig();
@@ -121,6 +121,8 @@ private:
     bool BootstrapConfigReceived;
     bool BaseConfigReceived;
     bool StateStorageInfoReceived;
+
+    THashSet<ui32> UndeliveredNodes;
     THashMap<ui32, TSet<ui32>> NodeEvents; // nodeId -> expected events
     THashMap<TPDiskID, TPDiskStateInfo, TPDiskIDHash> PDiskInfo;
     THashMap<TVDiskID, TVDiskStateInfo> VDiskInfo;
@@ -148,6 +150,12 @@ void TInfoCollector::ReplyAndDie() {
 
     if (StateStorageInfoReceived) {
         Info->ApplyStateStorageInfo(Info->StateStorageInfo);
+    }
+
+    // It is also necessary to mark the disks,
+    // and to do this we must wait for the base config
+    for (auto nodeId : UndeliveredNodes) {
+        Info->ClearNode(nodeId);
     }
 
     Send(Client, std::move(ev));
@@ -200,42 +208,47 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
 }
 
 void TInfoCollector::RequestBootstrapConfig() {
-    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem;
-    Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-         new TEvConfigsDispatcher::TEvGetConfigRequest(configKind));
+    const auto configKind = static_cast<ui32>(NKikimrConsole::TConfigItem::BootstrapConfigItem);
+    Send(MakeConfigsDispatcherID(SelfId().NodeId()), new TEvConfigsDispatcher::TEvGetConfigRequest(configKind));
 }
 
-void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev) {
-    auto &config  = ev->Get()->Config;
-    NKikimrConfig::TBootstrap bootstrap;
+void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
+    const auto& config  = ev->Get()->Config;
+    const auto& initialBootstrapConfig = AppData()->BootstrapConfig;
+    const NKikimrConfig::TBootstrap* bootstrapConfig = nullptr;
 
     BootstrapConfigReceived = true;
-    if (!config->HasBootstrapConfig()){
+    if (!config->HasBootstrapConfig()) {
         LOG_I("Couldn't collect bootstrap config from Console. Taking the local config");
-        bootstrap.CopyFrom(AppData()->BootstrapConfig); 
+        bootstrapConfig = &initialBootstrapConfig;
     } else {
-        LOG_D("Got Bootstrap config"
-              << ": record# " <<  config->ShortDebugString());
+        const auto& currentBootstrapConfig = config->GetBootstrapConfig();
 
-        if (!::google::protobuf::util::MessageDifferencer::Equals(AppData()->BootstrapConfig, config->GetBootstrapConfig())) {
+        LOG_T("Got Bootstrap config"
+              << ": record# " <<  currentBootstrapConfig.ShortDebugString());
+
+        if (!::google::protobuf::util::MessageDifferencer::Equals(initialBootstrapConfig, currentBootstrapConfig)) {
             LOG_D("Local Bootstrap config is different from the config from the console");
             Info->IsLocalBootConfDiffersFromConsole = true;
         }
-        bootstrap = config->GetBootstrapConfig();
+
+        bootstrapConfig = &currentBootstrapConfig;
     }
 
-    Info->ApplySysTabletsInfo(bootstrap);
+    Y_VERIFY(bootstrapConfig);
+    Info->ApplySysTabletsInfo(*bootstrapConfig);
+
     MaybeReplyAndDie();
 }
 
 void TInfoCollector::RequestStateStorageConfig() {
-    const auto& domains = *AppData()->DomainsInfo;
-    ui32 domainUid = domains.Domains.begin()->second->DomainUid;
-    const ui32 stateStorageGroup = domains.GetDefaultStateStorageGroup(domainUid);
+    const auto& domains = AppData()->DomainsInfo->Domains;
+    Y_VERIFY(domains.size() <= 1);
 
-    const TActorId proxy = MakeStateStorageProxyID(stateStorageGroup);
-
-    Send(proxy, new TEvStateStorage::TEvListStateStorage());
+    for (const auto& domain : domains) {
+        const auto ssProxyId = MakeStateStorageProxyID(domain.second->DefaultStateStorageGroup);
+        Send(ssProxyId, new TEvStateStorage::TEvListStateStorage());
+    }
 }
 
 void TInfoCollector::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
@@ -255,7 +268,7 @@ void TInfoCollector::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev
 void TInfoCollector::RequestBaseConfig() {
     using namespace NTabletPipe;
 
-    const auto domains = AppData()->DomainsInfo->Domains;
+    const auto& domains = AppData()->DomainsInfo->Domains;
     Y_VERIFY(domains.size() <= 1);
 
     for (const auto& domain : domains) {
@@ -270,7 +283,7 @@ void TInfoCollector::RequestBaseConfig() {
 
 void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record.GetResponse();
-    LOG_D("Got base config"
+    LOG_T("Got base config"
         << ": record# " << record.ShortDebugString());
 
     if (!record.GetSuccess() || !record.StatusSize() || !record.GetStatus(0).GetSuccess()) {
@@ -328,7 +341,7 @@ void TInfoCollector::SendNodeRequests(ui32 nodeId) {
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvPDiskStateRequest(), TEvWhiteboard::EvPDiskStateResponse);
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvVDiskStateRequest(), TEvWhiteboard::EvVDiskStateResponse);
 
-    const auto domains = AppData()->DomainsInfo->Domains;
+    const auto& domains = AppData()->DomainsInfo->Domains;
     Y_VERIFY(domains.size() <= 1);
 
     for (const auto& domain : domains) {
@@ -370,7 +383,7 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     const auto& record = ev->Get()->Record;
 
-    LOG_D("Got system state"
+    LOG_T("Got system state"
         << ": nodeId# " << nodeId
         << ", record# " << record.DebugString());
 
@@ -393,7 +406,7 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     const auto& record = ev->Get()->Record;
 
-    LOG_D("Got tablet state"
+    LOG_T("Got tablet state"
         << ": nodeId# " << nodeId
         << ", record# " << record.DebugString());
 
@@ -412,7 +425,7 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     auto& record = ev->Get()->Record;
 
-    LOG_D("Got PDisk state"
+    LOG_T("Got PDisk state"
         << ": nodeId# " << nodeId
         << ", record# " << record.DebugString());
 
@@ -433,7 +446,7 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     auto& record = ev->Get()->Record;
 
-    LOG_D("Got VDisk state"
+    LOG_T("Got VDisk state"
         << ": nodeId# " << nodeId
         << ", record# " << record.DebugString());
 
@@ -454,7 +467,7 @@ void TInfoCollector::Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     const auto& record = ev->Get()->Record;
 
-    LOG_D("Got TenantPoolStatus"
+    LOG_T("Got TenantPoolStatus"
         << ": nodeId# " << nodeId
         << ", record# " << record.DebugString());
 
@@ -470,7 +483,7 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     const auto& msg = *ev->Get();
     const ui32 nodeId = ev->Cookie;
 
-    LOG_D("Undelivered"
+    LOG_T("Undelivered"
         << ": nodeId# " << nodeId
         << ", source# " << msg.SourceType
         << ", reason# " << msg.Reason);
@@ -482,9 +495,11 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     if (msg.SourceType == TEvTenantPool::EvGetStatus && msg.Reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-        ResponseProcessed(nodeId, TEvTenantPool::EvTenantPoolStatus);
+        if (IsNodeInfoRequired(nodeId, TEvTenantPool::EvTenantPoolStatus)) {
+            return ResponseProcessed(nodeId, TEvTenantPool::EvTenantPoolStatus);
+        }
     } else {
-        Info->ClearNode(nodeId);
+        UndeliveredNodes.insert(nodeId);
         NodeEvents[nodeId].clear();
     }
 
@@ -494,7 +509,7 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
 void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_D("Disconnected"
+    LOG_T("Disconnected"
         << ": nodeId# " << nodeId);
 
     if (!NodeEvents.contains(nodeId)) {

@@ -360,7 +360,34 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
     artifactFlags = 0;
     if (!artifactsRow.EndOfSet()) {
         artifactFlags = artifactsRow.GetValue<Schema::TxArtifacts::Flags>();
-        locks = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({});
+        locks.clear();
+
+        // Deserialize persisted locks from database
+        // Unfortunately there was a bad version briefly deployed to clusters
+        // that had an additional field in the locks structure, so we have to
+        // guess an element data size. Luckily there's always either 0 or 1
+        // locks in the column, so guessing is not really ambiguous.
+        TStringBuf data = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({});
+        if (!data.empty()) {
+            size_t elementSize = sizeof(TSysTables::TLocksTable::TPersistentLock);
+            if ((data.size() % elementSize) != 0) {
+                size_t badElementSize = elementSize + 8;
+                Y_VERIFY_S((data.size() % badElementSize) == 0,
+                    "Unexpected Schema::TxArtifacts::Locks column size " << data.size()
+                    << " (expected divisible by " << elementSize << " or " << badElementSize << ")");
+                elementSize = badElementSize;
+            }
+
+            const char* p = data.data();
+            size_t count = data.size() / elementSize;
+            locks.reserve(count);
+
+            for (size_t i = 0; i < count; ++i) {
+                locks.push_back(TSysTables::TLocksTable::TLock::FromPersistent(
+                    ReadUnaligned<TSysTables::TLocksTable::TPersistentLock>(p)));
+                p += elementSize;
+            }
+        }
     }
 
     return true;

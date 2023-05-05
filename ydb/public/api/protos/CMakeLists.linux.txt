@@ -26,6 +26,8 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_query.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/fq.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_console.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/federation_discovery.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_auth.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto

@@ -26,10 +26,6 @@ public:
     TListQueuesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::ListQueues, std::move(cb))
     {
-        CopyAccountName(Request());
-        Response_.MutableListQueues()->SetRequestId(RequestId_);
-
-        CopySecurityToken(Request());
     }
 
 private:

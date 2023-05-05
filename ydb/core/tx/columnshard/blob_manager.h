@@ -90,7 +90,7 @@ protected:
 
 public:
     // Lazily export blob to external object store. Keep it available via blobId.
-    virtual bool ExportOneToOne(const TUnifiedBlobId& blobId, const TEvictMetadata& meta, IBlobManagerDb& db) = 0;
+    virtual bool ExportOneToOne(TEvictedBlob&& evict, const TEvictMetadata& meta, IBlobManagerDb& db) = 0;
     virtual bool DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
     virtual bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) = 0;
     virtual bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) = 0;
@@ -210,14 +210,14 @@ public:
     // Loads the state at startup
     bool LoadState(IBlobManagerDb& db);
 
-    bool CanCollectGarbage() const;
+    bool CanCollectGarbage(bool cleanupOnly = false) const;
     bool NeedStorageCG() const;
 
     // Prepares Keep/DontKeep lists and GC barrier
     THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> PreparePerGroupGCRequests();
 
     // Cleanup blobs that have correct flags (skipped or already marked with correct flags)
-    bool CleanupFlaggedBlobs(IBlobManagerDb& db);
+    size_t CleanupFlaggedBlobs(IBlobManagerDb& db, size_t maxBlobsToCleanup);
 
     // Called with GC result received from Distributed Storage
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, IBlobManagerDb& db);
@@ -234,7 +234,7 @@ public:
     void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
 
     // Implementation of IBlobExporter
-    bool ExportOneToOne(const TUnifiedBlobId& blobId, const TEvictMetadata& meta, IBlobManagerDb& db) override;
+    bool ExportOneToOne(TEvictedBlob&& evict, const TEvictMetadata& meta, IBlobManagerDb& db) override;
     bool DropOneToOne(const TUnifiedBlobId& blob, IBlobManagerDb& db) override;
     bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) override;
     bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) override;
@@ -259,6 +259,10 @@ private:
     void PerformDelayedDeletes(IBlobManagerDb& db);
 
     bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false);
+
+    TGenStep EdgeGenStep() const {
+        return (CollectGenStepInFlight == TGenStep{0, 0}) ? LastCollectedGenStep : CollectGenStepInFlight;
+    }
 };
 
 }

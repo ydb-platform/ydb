@@ -115,16 +115,16 @@ struct TPortionInfo {
     std::pair<ui32, ui32> BlobsSizes() const {
         ui32 sum = 0;
         ui32 max = 0;
-        for (auto& rec : Records) {
+        for (const auto& rec : Records) {
             sum += rec.BlobRange.Size;
             max = Max(max, rec.BlobRange.Size);
         }
         return {sum, max};
     }
 
-    ui64 BlobsBytes() const {
+    ui64 BlobsBytes() const noexcept {
         ui64 sum = 0;
-        for (auto& rec : Records) {
+        for (const auto& rec : Records) {
             sum += rec.BlobRange.Size;
         }
         return sum;

@@ -249,7 +249,7 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
     Counters.Granules = Granules.size();
     Counters.EmptyGranules = EmptyGranules.size();
     Counters.OverloadedGranules = 0;
-    for (auto& [pathId, set] : PathsGranulesOverloaded) {
+    for (const auto& [_, set] : PathsGranulesOverloaded) {
         Counters.OverloadedGranules += set.size();
     }
 
@@ -389,7 +389,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
 #endif
 
     THashSet<ui64> emptyGranulePaths;
-    for (auto& [granule, spg] : Granules) {
+    for (const auto& [granule, spg] : Granules) {
         if (spg->Empty()) {
             EmptyGranules.insert(granule);
             emptyGranulePaths.insert(spg->PathId());
@@ -397,7 +397,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
             CompactionGranules.insert(granule);
             CleanupGranules.insert(granule);
         }
-        for (auto& [_, portionInfo] : spg->Portions) {
+        for (const auto& [_, portionInfo] : spg->Portions) {
             UpdatePortionStats(portionInfo, EStatsUpdateType::LOAD);
         }
     }
@@ -439,12 +439,23 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
-    auto callback = [&](const TColumnRecord& row) {
-        lostBlobs.erase(row.BlobRange.BlobId); // We have such a blob in index. It isn't lost.
-        AddColumnRecord(row);
-    };
-
-    return ColumnsTable->Load(db, callback);
+    return ColumnsTable->Load(db, [&](const TColumnRecord& rec) {
+        Y_VERIFY(rec.Valid());
+        // Do not count the blob as lost since it exists in the index.
+        lostBlobs.erase(rec.BlobRange.BlobId);
+        // Locate granule and append the record.
+        if (const auto gi = Granules.find(rec.Granule); gi != Granules.end()) {
+            gi->second->Portions[rec.Portion].AddRecord(IndexInfo, rec);
+        } else {
+#if 0
+            LOG_S_ERROR("No granule " << rec.Granule << " for record " << rec << " at tablet " << TabletId);
+            Granules.erase(rec.Granule);
+            return;
+#else
+            Y_VERIFY(false);
+#endif
+        }
+    });
 }
 
 bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
@@ -476,13 +487,15 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<
 
     changes->InitSnapshot = LastSnapshot;
 
-    for (auto& data : changes->DataToIndex) {
-        ui64 pathId = data.PathId;
+    for (const auto& data : changes->DataToIndex) {
+        const ui64 pathId = data.PathId;
+
         if (changes->PathToGranule.contains(pathId)) {
             continue;
         }
 
         if (PathGranules.contains(pathId)) {
+            // Abort inserting if the path has overloaded granules.
             if (PathsGranulesOverloaded.contains(pathId)) {
                 return {};
             }
@@ -492,7 +505,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<
             auto& dst = changes->PathToGranule[pathId];
             dst.reserve(src.size());
             for (const auto& [ts, granule] : src) {
-                dst.emplace_back(std::make_pair(ts, granule));
+                dst.emplace_back(ts, granule);
             }
         } else {
             // It could reserve more then needed in case of the same pathId in DataToIndex
@@ -658,7 +671,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     ui64 dropBlobs = 0;
     bool allowDrop = true;
 
-    for (auto& [pathId, ttl] : pathEviction) {
+    for (const auto& [pathId, ttl] : pathEviction) {
         if (!PathGranules.contains(pathId)) {
             continue; // It's not an error: allow TTL over multiple shards with different pathIds presented
         }
@@ -753,27 +766,26 @@ TVector<TVector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGranuleTrack
 }
 
 void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) {
-    for (auto [granule, spg] : granules) {
-        if (!spg) {
-            spg = Granules[granule];
-        }
-        Y_VERIFY(spg);
-        ui64 pathId = spg->Record.PathId;
+    for (const auto& [granule, spg] : granules) {
+        const ui64 pathId = spg->Record.PathId;
 
         ui64 size = 0;
-        for (auto& [portion, portionInfo] : spg->Portions) {
+        // Calculate byte-size of active portions.
+        for (const auto& [_, portionInfo] : spg->Portions) {
             if (portionInfo.IsActive()) {
-                size += portionInfo.BlobsSizes().first;
+                size += portionInfo.BlobsBytes();
             }
         }
 
+        // Size exceeds the configured limit. Mark granule as overloaded.
         if (size >= Limits.GranuleOverloadSize) {
             PathsGranulesOverloaded.emplace(pathId, granule);
-        } else if (PathsGranulesOverloaded.contains(pathId)) {
-            auto& granules = PathsGranulesOverloaded[pathId];
-            granules.erase(granule);
-            if (granules.empty()) {
-                PathsGranulesOverloaded.erase(pathId);
+        } else  if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
+            // Size is under limit. Remove granule from the overloaded set.
+            pi->second.erase(granule);
+            // Remove entry for the pathId if there it has no overloaded granules any more.
+            if (pi->second.empty()) {
+                PathsGranulesOverloaded.erase(pi);
             }
         }
     }
@@ -845,17 +857,32 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     // Update overloaded granules (only if tx would be applyed)
     if (changes->IsInsert() || changes->IsCompaction() || changes->IsCleanup()) {
         THashMap<ui64, std::shared_ptr<TGranuleMeta>> granules;
+
+        const auto emplace_granule = [&](const ui64 id) {
+            // Lookup granule in the global table.
+            const auto gi = Granules.find(id);
+            // Granule should exists.
+            Y_VERIFY(gi != Granules.end());
+            // Emplace granule.
+            granules.emplace(id, gi->second);
+        };
+
         if (changes->IsCleanup()) {
-            for (auto& portionInfo : changes->PortionsToDrop) {
-                granules[portionInfo.Granule()] = {};
+            granules.reserve(changes->PortionsToDrop.size());
+
+            for (const auto& portionInfo : changes->PortionsToDrop) {
+                emplace_granule(portionInfo.Granule());
             }
         } else if (changes->IsCompaction() && !changes->CompactionInfo->InGranule) {
-            granules[changes->SrcGranule->Granule] = {};
+            emplace_granule(changes->SrcGranule->Granule);
         } else {
-            for (auto& portionInfo : changes->AppendedPortions) {
-                granules[portionInfo.Granule()] = {};
+            granules.reserve(changes->AppendedPortions.size());
+
+            for (const auto& portionInfo : changes->AppendedPortions) {
+                emplace_granule(portionInfo.Granule());
             }
         }
+
         UpdateOverloaded(granules);
     }
     return true;
@@ -1167,27 +1194,10 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
     return true; // It must return true if (apply == true)
 }
 
-void TColumnEngineForLogs::AddColumnRecord(const TColumnRecord& rec) {
-    Y_VERIFY(rec.Valid());
-
-    const auto gi = Granules.find(rec.Granule);
-#if 0
-    if (gi == Granules.end()) {
-        LOG_S_ERROR("No granule " << rec.Granule << " for record " << rec << " at tablet " << TabletId);
-        Granules.erase(rec.Granule);
-        return;
-    }
-#else
-    Y_VERIFY(gi != Granules.end());
-#endif
-    auto& portionInfo = gi->second->Portions[rec.Portion];
-    portionInfo.AddRecord(IndexInfo, rec);
-}
-
 bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const {
     Y_UNUSED(commitSnap);
     // Does insert have granule in split?
-    for (auto& portionInfo : changes.AppendedPortions) {
+    for (const auto& portionInfo : changes.AppendedPortions) {
         Y_VERIFY(!portionInfo.Empty());
         ui64 granule = portionInfo.Granule();
         if (GranulesInSplit.contains(granule)) {
@@ -1216,7 +1226,7 @@ TMap<TSnapshot, TVector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 gra
     Y_VERIFY(spg);
 
     TMap<TSnapshot, TVector<ui64>> out;
-    for (auto& [portion, portionInfo] : spg->Portions) {
+    for (const auto& [portion, portionInfo] : spg->Portions) {
         if (portionInfo.Empty()) {
             continue;
         }

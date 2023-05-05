@@ -1,4 +1,5 @@
 #pragma once
+
 #include "defs.h"
 #include "column_engine.h"
 #include "scalars.h"
@@ -174,8 +175,8 @@ public:
     const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
 
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
-        if (PathsGranulesOverloaded.contains(pathId)) {
-            return &PathsGranulesOverloaded.find(pathId)->second;
+        if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
+            return &pi->second;
         }
         return nullptr;
     }
@@ -242,6 +243,8 @@ private:
     THashMap<ui64, TMap<TMark, ui64>> PathGranules; // path_id -> {mark, granule}
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
     THashSet<ui64> GranulesInSplit;
+    /// Set of empty granules.
+    /// Just for providing count of empty granules.
     THashSet<ui64> EmptyGranules;
     THashMap<ui64, THashSet<ui64>> PathsGranulesOverloaded;
     TSet<ui64> CompactionGranules;
@@ -278,7 +281,6 @@ private:
     bool SetGranule(const TGranuleRecord& rec, bool apply);
     bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
-    void AddColumnRecord(const TColumnRecord& row);
     void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                             EStatsUpdateType updateType) const;
@@ -287,7 +289,8 @@ private:
     TMap<TSnapshot, TVector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;
     void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules);
 
-    TVector<TVector<std::pair<TMark, ui64>>> EmptyGranuleTracks(ui64 pathId) const;
+    /// Return lists of adjacent empty granules for the path.
+    TVector<TVector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;
 };
 
 }

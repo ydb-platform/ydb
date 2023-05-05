@@ -148,7 +148,7 @@ namespace NKikimr {
             UNIT_ASSERT(tevvgetClone->SerializeToArcadiaStream(&output));
             auto data = output.Release({});
             NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
-            NKikimrCapnProto::TEvVGet::Reader tevvgetCloneDeserialized;
+            NKikimrCapnProto::TEvVGet::Builder tevvgetCloneDeserialized;
             tevvgetCloneDeserialized.ParseFromZeroCopyStream(&input);
 
             UNIT_ASSERT(tevvgetCloneDeserialized.GetMsgQoS().GetMsgId().GetMsgId() == msgId);

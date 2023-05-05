@@ -12,7 +12,7 @@ on:
       image:
         type: string
         required: false
-        default: fd8snjpoq85qqv0mk9gi
+        default: fd8earpjmhevh8h6ug5o
       run_unit_tests:
         type: boolean
         default: true
@@ -30,7 +30,7 @@ on:
       image:
         type: string
         required: false
-        default: fd8snjpoq85qqv0mk9gi
+        default: fd8earpjmhevh8h6ug5o
       run_unit_tests:
         type: boolean
         default: true

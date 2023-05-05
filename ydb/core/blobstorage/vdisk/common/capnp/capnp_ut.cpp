@@ -157,5 +157,21 @@ namespace NKikimr {
             UNIT_ASSERT(tevvget->Record.GetMsgQoS().GetMsgId().GetMsgId() == msgId);
             UNIT_ASSERT(tevvget->Record.GetMsgQoS().GetMsgId().GetSequenceId() == sequenceId);
         }
+
+        Y_UNIT_TEST(AccessFieldThroughMutable) {
+            auto tevvget = std::make_unique<TEvBlobStorage::TEvVGet>();
+            uint32_t groupId = 1234;
+            auto queueId = NKikimrCapnProto::EVDiskQueueId::GetDiscover;
+
+            // set
+            tevvget->Record.MutableVDiskID().SetGroupID(groupId);
+            tevvget->Record.MutableMsgQoS().SetExtQueueId(queueId);
+
+            // check
+            UNIT_ASSERT(tevvget->Record.MutableVDiskID().HasGroupID());
+            UNIT_ASSERT(tevvget->Record.MutableMsgQoS().HasExtQueueId());
+            UNIT_ASSERT(tevvget->Record.MutableVDiskID().GetGroupID() == groupId);
+            UNIT_ASSERT(tevvget->Record.MutableMsgQoS().GetExtQueueId() == queueId);
+        }
     };
 };

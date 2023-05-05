@@ -10441,21 +10441,24 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             TString alias;
-            if (!values[0].GetLiteral(alias, Ctx)) {
+            if (!values.front().GetLiteral(alias, Ctx)) {
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return{};
             }
 
-            TMaybe<std::pair<TString, TString>> fileWithToken;
+            TContext::TLibraryStuff library;
+            std::get<TPosition>(library) = values.front().Build()->GetPos();
             if (values.size() > 1) {
-                fileWithToken.ConstructInPlace();
-                if (!values[1].GetLiteral(fileWithToken->first, Ctx)) {
+                auto& first = std::get<1U>(library);
+                first.emplace();
+                first->second = values[1].Build()->GetPos();
+                if (!values[1].GetLiteral(first->first, Ctx)) {
                     Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                     return{};
                 }
 
                 TSet<TString> names;
-                SubstParameters(fileWithToken->first, Nothing(), &names);
+                SubstParameters(first->first, Nothing(), &names);
                 for (const auto& name : names) {
                     auto namedNode = GetNamedNode(name);
                     if (!namedNode) {
@@ -10463,14 +10466,17 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                     }
                 }
                 if (values.size() > 2) {
-                    if (!values[2].GetLiteral(fileWithToken->second, Ctx)) {
+                    auto& second = std::get<2U>(library);
+                    second.emplace();
+                    second->second = values[2].Build()->GetPos();
+                    if (!values[2].GetLiteral(second->first, Ctx)) {
                         Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                         return{};
                     }
                 }
             }
 
-            Ctx.Libraries[alias] = fileWithToken;
+            Ctx.Libraries[alias] = std::move(library);
             Ctx.IncrementMonCounter("sql_pragma", "library");
         } else if (normalizedPragma == "directread") {
             Ctx.PragmaDirectRead = true;

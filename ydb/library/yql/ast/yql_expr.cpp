@@ -1238,11 +1238,11 @@ namespace {
         }
 
         if (url) {
-            if (!ctx.ModuleResolver->AddFromUrl(name->GetContent(), url, token, ctx.Expr, ctx.SyntaxVersion, 0)) {
+            if (!ctx.ModuleResolver->AddFromUrl(name->GetContent(), url, token, ctx.Expr, ctx.SyntaxVersion, 0, name->GetPosition())) {
                 return false;
             }
         } else {
-            if (!ctx.ModuleResolver->AddFromFile(name->GetContent(), ctx.Expr, ctx.SyntaxVersion, 0)) {
+            if (!ctx.ModuleResolver->AddFromFile(name->GetContent(), ctx.Expr, ctx.SyntaxVersion, 0, name->GetPosition())) {
                 return false;
             }
         }

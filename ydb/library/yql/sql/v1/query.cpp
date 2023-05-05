@@ -2215,11 +2215,11 @@ public:
             }
 
             for (const auto& lib : ctx.Libraries) {
-                auto node = Y("library", new TAstAtomNodeImpl(Pos, lib.first, TNodeFlags::ArbitraryContent));
-                if (lib.second) {
-                    node = L(node, new TAstAtomNodeImpl(Pos, lib.second->first, TNodeFlags::ArbitraryContent));
-                    if (lib.second->second) {
-                        node = L(node, new TAstAtomNodeImpl(Pos, lib.second->second, TNodeFlags::ArbitraryContent));
+                auto node = Y("library", new TAstAtomNodeImpl(std::get<TPosition>(lib.second), lib.first, TNodeFlags::ArbitraryContent));
+                if (const auto& first = std::get<1U>(lib.second)) {
+                    node = L(node, new TAstAtomNodeImpl(first->second, first->first, TNodeFlags::ArbitraryContent));
+                    if (const auto& second = std::get<2U>(lib.second)) {
+                        node = L(node, new TAstAtomNodeImpl(second->second, second->first, TNodeFlags::ArbitraryContent));
                     }
                 }
 

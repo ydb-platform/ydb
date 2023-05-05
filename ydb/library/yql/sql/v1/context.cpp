@@ -86,7 +86,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
 {
     for (auto lib : settings.Libraries) {
-        Libraries[lib] = Nothing();
+        Libraries.emplace(lib, TLibraryStuff());
     }
 
     Scoped = MakeIntrusive<TScopedState>();

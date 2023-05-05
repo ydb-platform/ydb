@@ -5,7 +5,6 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
@@ -13,46 +12,14 @@
 
 #include <type_traits>
 
-namespace NKikimr::NMiniKQL {
-class TStructType;
+namespace NYql::NUdf {
+class TUnboxedValue;
 }
 
 namespace NKikimr::NSharding {
 
-struct TExternalTableColumn {
-    ui32 Id;
-    NScheme::TTypeInfo Type;
-    TString TypeMod;
-};
-
-struct TColumnUnboxedPlaceInfo: public TExternalTableColumn {
-private:
-    using TBase = TExternalTableColumn;
-public:
-    const ui32 Idx;
-    const TString Name;
-
-    TColumnUnboxedPlaceInfo(const TExternalTableColumn& baseInfo, const ui32 idx, const TString& name)
-        : TBase(baseInfo)
-        , Idx(idx)
-        , Name(name) {
-
-    }
-};
-
-class TUnboxedValueReader {
-private:
-    YDB_READONLY_DEF(std::vector<TColumnUnboxedPlaceInfo>, ColumnsInfo);
-    template <class T>
-    static void FieldToHashString(const NKikimr::NUdf::TUnboxedValue& value, IHashCalcer& hashCalcer) {
-        static_assert(std::is_arithmetic<T>::value);
-        const T result = value.Get<T>();
-        hashCalcer.Update((const ui8*)&result, sizeof(result));
-    }
-public:
-    void BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, IHashCalcer& hashCalcer) const;
-    TUnboxedValueReader(const NMiniKQL::TStructType* structInfo, const TMap<TString, TExternalTableColumn>& columnsRemap, const std::vector<TString>& shardingColumns);
-};
+class TUnboxedValueReader;
+struct TExternalTableColumn;
 
 class TShardingBase {
 private:
@@ -66,10 +33,10 @@ public:
     static std::unique_ptr<TShardingBase> BuildShardingOperator(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
 
     virtual const std::vector<TString>& GetShardingColumns() const = 0;
-    ui32 CalcShardId(const NKikimr::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const {
+    ui32 CalcShardId(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const {
         return CalcHash(value, readerInfo) % ShardsCount;
     }
-    virtual ui64 CalcHash(const NKikimr::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const = 0;
+    virtual ui64 CalcHash(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const = 0;
 
     virtual std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const;
     virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
@@ -113,7 +80,7 @@ public:
         return ShardingColumns;
     }
 
-    virtual ui64 CalcHash(const NKikimr::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override;
+    virtual ui64 CalcHash(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override;
 };
 
 // KIKIMR-11529
@@ -155,7 +122,7 @@ public:
         return ShardingColumns;
     }
 
-    virtual ui64 CalcHash(const NKikimr::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override;
+    virtual ui64 CalcHash(const NYql::NUdf::TUnboxedValue& value, const TUnboxedValueReader& readerInfo) const override;
 
 };
 

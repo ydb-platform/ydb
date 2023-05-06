@@ -1168,6 +1168,8 @@ namespace NKikimr {
             // set up reception time
             TInstant now = TAppData::TimeProvider->Now();
 
+            std::cout << "[HandleRequestWithQoS] msgId: " << msgQoS->GetMsgId().ShortDebugString() << "  , reader: " << record.GetMsgQoS().GetMsgId().ShortDebugString() << "\n\n";
+
             const NBackpressure::TMessageId msgId(msgQoS->GetMsgId());
             const TInstant deadline = CalcDeadline(msgQoS->GetDeadlineSeconds());
             auto extQueueId = msgQoS->GetExtQueueId();

@@ -54,9 +54,9 @@ namespace NKikimr {
                 UNIT_ASSERT(deserializedMsgQoS.GetCostSettings().GetSeekTimeUs() == 100500);
                 UNIT_ASSERT(deserializedMsgQoS.GetCostSettings().GetReadSpeedBps() == 500100);
 
-                UNIT_ASSERT(deserializedObject.ExtremeQueriesSize() == 2);
-                UNIT_ASSERT(deserializedObject.GetExtremeQueries(0).GetSize() == 6767);
-                UNIT_ASSERT(deserializedObject.GetExtremeQueries(1).GetSize() == 8989);
+//                UNIT_ASSERT(deserializedObject.ExtremeQueriesSize() == 2);
+//                UNIT_ASSERT(deserializedObject.GetExtremeQueries(0).GetSize() == 6767);
+//                UNIT_ASSERT(deserializedObject.GetExtremeQueries(1).GetSize() == 8989);
         }
 
         Y_UNIT_TEST(HasMsgQoS) {

@@ -206,13 +206,19 @@ namespace NKikimr {
             explicit TMessageId(ui64 sequenceId, ui64 msgId)
                 : SequenceId(sequenceId)
                 , MsgId(msgId)
-            {}
+            {
+                Y_VERIFY(SequenceId != 18446744073699546569ull);
+                Y_VERIFY(MsgId != 18446744073699546569ull);
+            }
 
             template <typename TProtoMessageId>
             TMessageId(const TProtoMessageId& from)
                 : SequenceId(from.GetSequenceId())
                 , MsgId(from.GetMsgId())
-            {}
+            {
+                Y_VERIFY(SequenceId != 18446744073699546569ull);
+                Y_VERIFY(MsgId != 18446744073699546569ull);
+            }
 
             template <typename TProtoMessageId>
             void Serialize(TProtoMessageId &to) const {

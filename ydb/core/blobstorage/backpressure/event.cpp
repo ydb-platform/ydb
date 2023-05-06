@@ -33,19 +33,19 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
 
     auto processMsgQoS = [&](auto& record) {
         // prepare extra buffer with some changed params
-        auto& msgQoS = *record.MutableMsgQoS();
+        auto msgQoS = record.MutableMsgQoS();
         if (sendMeCostSettings) {
-            msgQoS.SetSendMeCostSettings(true);
+            msgQoS->SetSendMeCostSettings(true);
         }
-        auto& id = *msgQoS.MutableMsgId();
-        id.SetMsgId(msgId);
-        id.SetSequenceId(sequenceId);
-        clientId.Serialize(&msgQoS);
+        auto id = msgQoS->MutableMsgId();
+        id->SetMsgId(msgId);
+        id->SetSequenceId(sequenceId);
+        clientId.Serialize(msgQoS);
 
         // update in sender queue duration
         TDuration inSenderQueue = TDuration::Seconds(processingTimer.Passed());
-        auto& execTimeStats = *msgQoS.MutableExecTimeStats();
-        execTimeStats.SetInSenderQueue(inSenderQueue.GetValue());
+        auto execTimeStats = msgQoS->MutableExecTimeStats();
+        execTimeStats->SetInSenderQueue(inSenderQueue.GetValue());
         LWTRACK(DSQueueVPutIsSent, Orbit, inSenderQueue.SecondsFloat() * 1e3);
     };
 

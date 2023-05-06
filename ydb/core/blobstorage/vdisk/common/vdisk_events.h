@@ -134,7 +134,7 @@ namespace NKikimr {
             }
 
             template<typename SerializerType>
-            void Serialize(SerializerType *msgQoS) const {
+            void Serialize(SerializerType msgQoS) const {
                 switch (Type) {
                     case EQueueClientType::None:
                         break;

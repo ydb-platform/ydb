@@ -558,6 +558,8 @@ private:
             ExtraBlockChecksSupport = record.GetExtraBlockChecksSupport();
             ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true, ExtraBlockChecksSupport));
             if (record.HasExpectedMsgId()) {
+                Y_VERIFY(record.GetExpectedMsgId().GetMsgId() != 18446744073699546569ull);
+                Y_VERIFY(record.GetExpectedMsgId().GetSequenceId() != 18446744073699546569ull);
                 Queue.SetMessageId(NBackpressure::TMessageId(record.GetExpectedMsgId()));
             }
             if (record.HasCostSettings()) {

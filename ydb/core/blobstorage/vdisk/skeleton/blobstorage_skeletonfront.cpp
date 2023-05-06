@@ -1170,6 +1170,9 @@ namespace NKikimr {
 
             std::cout << "[HandleRequestWithQoS] msgId: " << msgQoS->GetMsgId().ShortDebugString() << "  , reader: " << record.GetMsgQoS().GetMsgId().ShortDebugString() << "\n\n";
 
+            Y_VERIFY(msgQoS->GetMsgId().GetMsgId() != 18446744073699546569ull);
+            Y_VERIFY(msgQoS->GetMsgId().GetSequenceId() != 18446744073699546569ull);
+
             const NBackpressure::TMessageId msgId(msgQoS->GetMsgId());
             const TInstant deadline = CalcDeadline(msgQoS->GetDeadlineSeconds());
             auto extQueueId = msgQoS->GetExtQueueId();

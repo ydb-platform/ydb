@@ -276,6 +276,8 @@ public:
             return ParseVariableSetStmt(CAST_NODE(VariableSetStmt, node)) != nullptr;
         case T_DeleteStmt:
             return ParseDeleteStmt(CAST_NODE(DeleteStmt, node)) != nullptr;
+        case T_TransactionStmt:
+            return true;
         default:
             NodeNotImplemented(value, node);
             return false;

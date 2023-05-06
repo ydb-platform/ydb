@@ -86,39 +86,39 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     ui64 tabletId = ReadMetadata->TabletId;
     TUInt64 tabletIds[NUM_KINDS] = { tabletId, tabletId, tabletId, tabletId, tabletId };
     TUInt64 rows[NUM_KINDS] = {
-        stats.Inserted.Rows,
-        stats.Compacted.Rows,
-        stats.SplitCompacted.Rows,
-        stats.Inactive.Rows,
-        stats.Evicted.Rows
+        (ui64)stats.Inserted.Rows,
+        (ui64)stats.Compacted.Rows,
+        (ui64)stats.SplitCompacted.Rows,
+        (ui64)stats.Inactive.Rows,
+        (ui64)stats.Evicted.Rows
     };
     TUInt64 bytes[NUM_KINDS] = {
-        stats.Inserted.Bytes,
-        stats.Compacted.Bytes,
-        stats.SplitCompacted.Bytes,
-        stats.Inactive.Bytes,
-        stats.Evicted.Bytes
+        (ui64)stats.Inserted.Bytes,
+        (ui64)stats.Compacted.Bytes,
+        (ui64)stats.SplitCompacted.Bytes,
+        (ui64)stats.Inactive.Bytes,
+        (ui64)stats.Evicted.Bytes
     };
     TUInt64 rawBytes[NUM_KINDS] = {
-        stats.Inserted.RawBytes,
-        stats.Compacted.RawBytes,
-        stats.SplitCompacted.RawBytes,
-        stats.Inactive.RawBytes,
-        stats.Evicted.RawBytes
+        (ui64)stats.Inserted.RawBytes,
+        (ui64)stats.Compacted.RawBytes,
+        (ui64)stats.SplitCompacted.RawBytes,
+        (ui64)stats.Inactive.RawBytes,
+        (ui64)stats.Evicted.RawBytes
     };
     TUInt64 portions[NUM_KINDS] = {
-        stats.Inserted.Portions,
-        stats.Compacted.Portions,
-        stats.SplitCompacted.Portions,
-        stats.Inactive.Portions,
-        stats.Evicted.Portions
+        (ui64)stats.Inserted.Portions,
+        (ui64)stats.Compacted.Portions,
+        (ui64)stats.SplitCompacted.Portions,
+        (ui64)stats.Inactive.Portions,
+        (ui64)stats.Evicted.Portions
     };
     TUInt64 blobs[NUM_KINDS] = {
-        stats.Inserted.Blobs,
-        stats.Compacted.Blobs,
-        stats.SplitCompacted.Blobs,
-        stats.Inactive.Blobs,
-        stats.Evicted.Blobs
+        (ui64)stats.Inserted.Blobs,
+        (ui64)stats.Compacted.Blobs,
+        (ui64)stats.SplitCompacted.Blobs,
+        (ui64)stats.Inactive.Blobs,
+        (ui64)stats.Evicted.Blobs
     };
 
     if (Reverse) {

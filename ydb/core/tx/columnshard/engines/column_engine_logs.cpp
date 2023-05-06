@@ -292,6 +292,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
             srcStats = &engineStats.SplitCompacted;
             break;
         case NOlap::TPortionMeta::INACTIVE:
+            Y_VERIFY_DEBUG(false); // Stale portions are not set INACTIVE. They have IsActive() property instead.
             srcStats = &engineStats.Inactive;
             break;
         case NOlap::TPortionMeta::EVICTED:
@@ -931,8 +932,9 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             Y_VERIFY(!portionInfo.IsActive());
 
             ui64 granule = portionInfo.Granule();
-            if (!Granules.contains(granule)) {
-                LOG_S_ERROR("Cannot update portion " << portionInfo << " with unknown granule at tablet " << TabletId);
+            ui64 portion = portionInfo.Portion();
+            if (!Granules.contains(granule) || !Granules[granule]->Portions.contains(portion)) {
+                LOG_S_ERROR("Cannot update unknown portion " << portionInfo << " at tablet " << TabletId);
                 return false;
             }
 
@@ -1170,7 +1172,8 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
     ui64 portion = portionInfo.Portion();
 
     if (!apply) {
-        if (!Granules.contains(granule)) {
+        if (!Granules.contains(granule) || !Granules[granule]->Portions.contains(portion)) {
+            LOG_S_ERROR("Cannot erase unknown portion " << portionInfo << " at tablet " << TabletId);
             return false;
         }
         return true;
@@ -1178,14 +1181,13 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
 
     auto& spg = Granules[granule];
     Y_VERIFY(spg);
-    if (spg->Portions.contains(portion)) {
-        if (updateStats) {
-            UpdatePortionStats(spg->Portions[portion], EStatsUpdateType::ERASE);
-        }
-        spg->Portions.erase(portion);
-    } else {
-        LOG_S_ERROR("Erase for unknown portion " << portionInfo << " at tablet " << TabletId);
+    Y_VERIFY(spg->Portions.contains(portion));
+
+    if (updateStats) {
+        UpdatePortionStats(spg->Portions[portion], EStatsUpdateType::ERASE);
     }
+    spg->Portions.erase(portion);
+
     return true; // It must return true if (apply == true)
 }
 

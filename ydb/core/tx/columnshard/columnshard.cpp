@@ -328,6 +328,14 @@ void TColumnShard::SendPeriodicStats() {
             NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
             auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
 
+            if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
+                LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows
+                    << " Bytes: " << activeIndexStats.Bytes << TabletID());
+
+                activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
+                activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
+            }
+
             tabletStats->SetRowCount(activeIndexStats.Rows);
             tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
             // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)

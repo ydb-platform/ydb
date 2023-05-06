@@ -294,19 +294,19 @@ struct TSelectInfo {
 
 struct TColumnEngineStats {
     struct TPortionsStats {
-        ui64 Portions{};
-        ui64 Blobs{};
-        ui64 Rows{};
-        ui64 Bytes{};
-        ui64 RawBytes{};
+        i64 Portions{};
+        i64 Blobs{};
+        i64 Rows{};
+        i64 Bytes{};
+        i64 RawBytes{};
     };
 
-    ui64 Tables{};
-    ui64 Granules{};
-    ui64 EmptyGranules{};
-    ui64 OverloadedGranules{};
-    ui64 ColumnRecords{};
-    ui64 ColumnMetadataBytes{};
+    i64 Tables{};
+    i64 Granules{};
+    i64 EmptyGranules{};
+    i64 OverloadedGranules{};
+    i64 ColumnRecords{};
+    i64 ColumnMetadataBytes{};
     TPortionsStats Inserted{};
     TPortionsStats Compacted{};
     TPortionsStats SplitCompacted{};
@@ -323,11 +323,11 @@ struct TColumnEngineStats {
         };
     }
 
-    ui64 ActivePortions() const { return Inserted.Portions + Compacted.Portions + SplitCompacted.Portions; }
-    ui64 ActiveBlobs() const { return Inserted.Blobs + Compacted.Blobs + SplitCompacted.Blobs; }
-    ui64 ActiveRows() const { return Inserted.Rows + Compacted.Rows + SplitCompacted.Rows; }
-    ui64 ActiveBytes() const { return Inserted.Bytes + Compacted.Bytes + SplitCompacted.Bytes; }
-    ui64 ActiveRawBytes() const { return Inserted.RawBytes + Compacted.RawBytes + SplitCompacted.RawBytes; }
+    i64 ActivePortions() const { return Inserted.Portions + Compacted.Portions + SplitCompacted.Portions; }
+    i64 ActiveBlobs() const { return Inserted.Blobs + Compacted.Blobs + SplitCompacted.Blobs; }
+    i64 ActiveRows() const { return Inserted.Rows + Compacted.Rows + SplitCompacted.Rows; }
+    i64 ActiveBytes() const { return Inserted.Bytes + Compacted.Bytes + SplitCompacted.Bytes; }
+    i64 ActiveRawBytes() const { return Inserted.RawBytes + Compacted.RawBytes + SplitCompacted.RawBytes; }
 
     void Clear() {
         *this = {};

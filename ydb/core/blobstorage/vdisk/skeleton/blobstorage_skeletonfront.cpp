@@ -1170,6 +1170,8 @@ namespace NKikimr {
 
             std::cout << "[HandleRequestWithQoS] msgId: " << msgQoS->GetMsgId().ShortDebugString() << "  , reader: " << record.GetMsgQoS().GetMsgId().ShortDebugString() << "\n\n";
 
+            Y_VERIFY(record.GetMsgQoS().GetMsgId().GetMsgId() != 18446744073699546569ull);
+            Y_VERIFY(record.GetMsgQoS().GetMsgId().GetSequenceId() != 18446744073699546569ull);
             Y_VERIFY(msgQoS->GetMsgId().GetMsgId() != 18446744073699546569ull);
             Y_VERIFY(msgQoS->GetMsgId().GetSequenceId() != 18446744073699546569ull);
 

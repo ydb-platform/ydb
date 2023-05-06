@@ -1444,6 +1444,15 @@ namespace NKikimr {
         void Reply(TPtr& ev, const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason,
                 TInstant now, const TWindowStatus& wstatus) {
             auto window = ev->Get()->Record.MutableMsgQoS()->MutableWindow();
+
+            std::cout << "[Reply] errorReason:   " << errorReason.data() << "\n";
+
+            Y_VERIFY(window->GetExpectedMsgId().GetMsgId() != 18446744073699546569ull);
+            Y_VERIFY(window->GetExpectedMsgId().GetSequenceId() != 18446744073699546569ull);
+
+            Y_VERIFY(window->GetFailedMsgId().GetMsgId() != 18446744073699546569ull);
+            Y_VERIFY(window->GetFailedMsgId().GetSequenceId() != 18446744073699546569ull);
+
             wstatus.Serialize(*window);
             Reply(ev, ctx, status, errorReason, now);
         }

@@ -65,6 +65,10 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
             for (ui32 i = 0, count = ev->GetPayloadCount(); i < count; ++i) {
                 clone->AddPayload(TRope(ev->GetPayload(i)));
             }
+
+            Y_VERIFY(clone->Record.GetMsgQoS().GetMsgId().GetMsgId() != 18446744073699546569ull);
+            Y_VERIFY(clone->Record.GetMsgQoS().GetMsgId().GetSequenceId() != 18446744073699546569ull);
+
             return clone;
         };
         ctx.Send(remoteVDisk, Apply(callback).release(), flags, queueCookie, std::move(traceId));

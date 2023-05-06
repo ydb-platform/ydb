@@ -1443,7 +1443,8 @@ namespace NKikimr {
         template<typename TPtr>
         void Reply(TPtr& ev, const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason,
                 TInstant now, const TWindowStatus& wstatus) {
-            wstatus.Serialize(*ev->Get()->Record.MutableMsgQoS()->MutableWindow());
+            auto window = ev->Get()->Record.MutableMsgQoS()->MutableWindow();
+            wstatus.Serialize(*window);
             Reply(ev, ctx, status, errorReason, now);
         }
 

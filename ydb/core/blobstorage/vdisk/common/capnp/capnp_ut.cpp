@@ -39,7 +39,7 @@ namespace NKikimr {
                 originalObject.AddExtremeQueries().SetSize(8989);
 
 
-                NKikimrCapnProto::TEvVGet::Reader deserializedObject = reserialize(originalObject);
+                NKikimrCapnProto::TEvVGet::Builder deserializedObject = reserialize(originalObject);
 
                 // Check that the new object has the correct fields
                 UNIT_ASSERT(deserializedObject.GetAcquireBlockedGeneration() == true);
@@ -73,7 +73,7 @@ namespace NKikimr {
             id.SetMsgId(1234);
             id.SetSequenceId(1234);
 
-            NKikimrCapnProto::TEvVGet::Reader deserializedObject = reserialize(originalObject);
+            NKikimrCapnProto::TEvVGet::Builder deserializedObject = reserialize(originalObject);
 
             // Check that deserializedObject.HasMsgQoS() == true
             UNIT_ASSERT(deserializedObject.HasMsgQoS());
@@ -89,7 +89,7 @@ namespace NKikimr {
             auto originalMsgQoS = originalObject.MutableMsgQoS();
             originalMsgQoS.SetExtQueueId(NKikimrCapnProto::EVDiskQueueId::GetDiscover);
 
-            NKikimrCapnProto::TEvVGet::Reader deserializedObject = reserialize(originalObject);
+            NKikimrCapnProto::TEvVGet::Builder deserializedObject = reserialize(originalObject);
 
             // Check that deserializedObject.HasMsgQoS() == true
             UNIT_ASSERT(deserializedObject.HasMsgQoS());
@@ -109,7 +109,7 @@ namespace NKikimr {
             UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
             UNIT_ASSERT(from.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);
 
-            NKikimrCapnProto::TEvVGet::Reader reserializedFrom = reserialize(from), reserializedTo = reserialize(to);
+            NKikimrCapnProto::TEvVGet::Builder reserializedFrom = reserialize(from), reserializedTo = reserialize(to);
 
             UNIT_ASSERT(reserializedFrom.GetMsgQoS().GetMsgId().GetMsgId() == 1234);
             UNIT_ASSERT(reserializedFrom.GetMsgQoS().GetMsgId().GetSequenceId() == 4321);

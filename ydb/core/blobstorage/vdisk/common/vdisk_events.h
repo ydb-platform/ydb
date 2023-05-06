@@ -301,9 +301,14 @@ namespace NKikimr {
                 to.SetStatus(Status);
                 to.SetActualWindowSize(ActualWindowSize);
                 to.SetMaxWindowSize(MaxWindowSize);
-                ExpectedMsgId.Serialize(*to.MutableExpectedMsgId());
-                if (!FailedMsgId.Empty())
-                    FailedMsgId.Serialize(*to.MutableFailedMsgId());
+
+                auto expectedMsgId = to.MutableExpectedMsgId();
+                ExpectedMsgId.Serialize(*expectedMsgId);
+
+                if (!FailedMsgId.Empty()) {
+                    auto failedMsgId = to.MutableFailedMsgId();
+                    FailedMsgId.Serialize(*failedMsgId);
+                }
             }
         };
 

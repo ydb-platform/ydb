@@ -84,6 +84,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
    * `JSON`: The record structure is given on the [changefeed description](../../../../concepts/cdc#record-structure) page.
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
+* `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc#initial-scan). Disabled by default.
 
 The code below adds a changefeed named `updates_feed`, where the values of updated table columns will be exported in JSON format:
 
@@ -111,6 +112,16 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     VIRTUAL_TIMESTAMPS = TRUE
+);
+```
+
+Example of creating a changefeed with initial scan:
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    INITIAL_SCAN = TRUE
 );
 ```
 

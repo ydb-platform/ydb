@@ -49,10 +49,12 @@ namespace NKikimrCapnProto {
 
             void SetSequenceId(const uint64_t& value) {
                 std::cerr << "\n\n=======\n\nsetting sequenceId to " << value << "\n\n=========\n\n";
+                Y_VERIFY(value != UNSET_UINT64);
                 return setSequenceId(value);
             }
             void SetMsgId(const uint64_t& value) {
                 std::cerr << "\n\n=======\n\nsetting msgId to " << value << "\n\n=========\n\n";
+                Y_VERIFY(value != UNSET_UINT64);
                 return setMsgId(value);
             }
             const NKikimrCapnProto_::TMessageId::Builder& GetCapnpBase() const { return *this; }

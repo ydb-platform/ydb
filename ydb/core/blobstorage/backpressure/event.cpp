@@ -42,6 +42,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         id->SetSequenceId(sequenceId);
         clientId.Serialize(msgQoS);
 
+        std::cout << "[processMsgQoS] GetMsgId = " << id->GetMsgId() << ", GetSequenceId = " << id->GetSequenceId() << "\n";
         std::cout << "[processMsgQoS] msgId = " << msgId << ", sequenceId = " << sequenceId << "\n";
 
         // update in sender queue duration

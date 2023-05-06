@@ -593,6 +593,19 @@ namespace NKikimrCapnProto {
             void SetSize(const uint64_t& value) { return setSize(value); }
             void SetCookie(const uint64_t& value) { return setCookie(value); }
             void SetId(const TLogoBlobID::Reader& value) { return setId(value.GetCapnpBase()); }
+
+            void CopyFrom(const Reader& other) {
+                // copy primitive fields
+                SetShift(other.GetShift());
+                SetSize(other.GetSize());
+                SetCookie(other.GetCookie());
+
+                // copy all other fields
+                if (other.HasId()) {
+                    SetId(other.GetId());
+                }
+            }
+
             TLogoBlobID::Builder MutableId() { return getId(); }
             const NKikimrCapnProto_::TExtremeQuery::Builder& GetCapnpBase() const { return *this; }
         };
@@ -820,7 +833,7 @@ namespace NKikimrCapnProto {
                 if (reader.hasExtremeQueries()) {
                     elements.reserve(reader.getExtremeQueries().size());
                     for (TExtremeQuery::Reader extremeQuery: reader.getExtremeQueries()) {
-                        elements.push_back(extremeQuery);
+                        AddExtremeQueries().CopyFrom(extremeQuery);
                     }
                 }
 

@@ -150,9 +150,9 @@ public:
 
     TString Scalar() const;
 
-    TMark ScalarBeginMark() const;
+    TMark BeginMark() const;
 
-    TMark ScalarEndMark() const;
+    TMark EndMark() const;
 
     void Insert(const TNodeRef& node);
 
@@ -218,6 +218,8 @@ public:
     explicit operator bool() const { return Pair_ != nullptr; }
 
     TNodeRef Key() const;
+
+    int Index(const TNodeRef& node) const;
 
     void SetKey(const TNodeRef& node);
 

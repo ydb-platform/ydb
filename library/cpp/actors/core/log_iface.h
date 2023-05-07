@@ -8,15 +8,15 @@ namespace NActors {
         using EComponent = int;
 
         enum EPriority : ui16 { // migrate it to EPrio whenever possible
-            PRI_EMERG,
-            PRI_ALERT,
-            PRI_CRIT,
-            PRI_ERROR,
-            PRI_WARN,
-            PRI_NOTICE,
-            PRI_INFO,
-            PRI_DEBUG,
-            PRI_TRACE
+            PRI_EMERG /* "EMERG" */,
+            PRI_ALERT /* "ALERT" */,
+            PRI_CRIT /* "CRIT" */,
+            PRI_ERROR /* "ERROR" */,
+            PRI_WARN /* "WARN" */,
+            PRI_NOTICE /* "NOTICE" */,
+            PRI_INFO /* "INFO" */,
+            PRI_DEBUG /* "DEBUG" */,
+            PRI_TRACE /* "TRACE" */
         };
 
         enum class EPrio : ui16 {
@@ -78,7 +78,7 @@ namespace NActors {
         struct TEvLogBufferLevelListTag {};
 
         class TEvLog
-            : public TEventLocal<TEvLog, int(EEv::Log)> 
+            : public TEventLocal<TEvLog, int(EEv::Log)>
             , public TIntrusiveListItem<TEvLog, TEvLogBufferMainListTag>
             , public TIntrusiveListItem<TEvLog, TEvLogBufferLevelListTag>
         {

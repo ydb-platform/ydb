@@ -1,9 +1,7 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/protos/ssa.pb.h>
-#include <ydb/core/tx/columnshard/engines/predicate.h>
+#include "engines/reader/description.h"
+#include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
 #include <library/cpp/cache/cache.h>
 
 namespace NKikimr::NOlap {
@@ -12,46 +10,12 @@ namespace NKikimr::NOlap {
 
 namespace NKikimr::NColumnShard {
 
+using TReadDescription = NOlap::TReadDescription;
+using IColumnResolver = NOlap::IColumnResolver;
 using NOlap::TWriteId;
 
 std::pair<NOlap::TPredicate, NOlap::TPredicate>
 RangePredicates(const TSerializedTableRange& range, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-
-class IColumnResolver {
-public:
-    virtual ~IColumnResolver() = default;
-    virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
-    virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
-};
-
-// Describes read/scan request
-struct TReadDescription {
-    // Table
-    ui64 PathId = 0;
-    TString TableName;
-    bool ReadNothing = false;
-    // Less[OrEqual], Greater[OrEqual] or both
-    // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare
-    // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
-    std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
-    std::shared_ptr<NOlap::TPredicate> LessPredicate;
-
-    // SSA Program
-    std::shared_ptr<NSsa::TProgram> Program;
-    std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
-
-    // List of columns
-    TVector<ui32> ColumnIds;
-    TVector<TString> ColumnNames;
-    // Order
-    bool Ascending = false;
-    bool Descending = false;
-    // Snapshot
-    ui64 PlanStep = 0;
-    ui64 TxId = 0;
-
-    std::shared_ptr<NSsa::TProgram> AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
-};
 
 class TBatchCache {
 public:

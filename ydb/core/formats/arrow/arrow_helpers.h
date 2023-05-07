@@ -1,6 +1,7 @@
 #pragma once
 #include "switch_type.h"
 #include "size_calcer.h"
+#include "replace_key.h"
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>

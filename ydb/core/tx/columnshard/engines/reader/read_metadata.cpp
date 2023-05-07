@@ -10,19 +10,7 @@ std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(NColum
 }
 
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
-    std::set<ui32> result;
-    if (LessPredicate) {
-        for (auto&& i : LessPredicate->ColumnNames()) {
-            result.emplace(IndexInfo.GetColumnId(i));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-        }
-    }
-    if (GreaterPredicate) {
-        for (auto&& i : GreaterPredicate->ColumnNames()) {
-            result.emplace(IndexInfo.GetColumnId(i));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-        }
-    }
+    std::set<ui32> result = GetPKRangesFilter().GetColumnIds(IndexInfo);
     if (Program) {
         for (auto&& i : Program->GetEarlyFilterColumns()) {
             auto id = IndexInfo.GetColumnIdOptional(i);
@@ -102,7 +90,7 @@ void TReadStats::PrintToLog() {
 }
 
 NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
-    if (Limit && Sorting != ESorting::NONE && IndexInfo.IsSorted() && IndexInfo.GetSortingKey()->num_fields()) {
+    if (Limit && IsSorted() && IndexInfo.IsSorted() && IndexInfo.GetSortingKey()->num_fields()) {
         ui32 idx = 0;
         for (auto&& i : IndexInfo.GetPrimaryKey()) {
             if (idx >= IndexInfo.GetSortingKey()->fields().size()) {

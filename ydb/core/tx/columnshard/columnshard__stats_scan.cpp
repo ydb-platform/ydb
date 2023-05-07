@@ -54,19 +54,7 @@ std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {
 }
 
 void TStatsIterator::ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& batch) {
-    NArrow::TColumnFilter filter;
-    if (ReadMetadata->LessPredicate) {
-        auto cmpType = ReadMetadata->LessPredicate->Inclusive ?
-            NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-        filter.And(NArrow::TColumnFilter::MakePredicateFilter(batch, ReadMetadata->LessPredicate->Batch, cmpType));
-    }
-
-    if (ReadMetadata->GreaterPredicate) {
-        auto cmpType = ReadMetadata->GreaterPredicate->Inclusive ?
-            NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-        filter.And(NArrow::TColumnFilter::MakePredicateFilter(batch, ReadMetadata->GreaterPredicate->Batch, cmpType));
-    }
-
+    NArrow::TColumnFilter filter = ReadMetadata->GetPKRangesFilter().BuildFilter(batch);
     filter.Apply(batch);
 }
 

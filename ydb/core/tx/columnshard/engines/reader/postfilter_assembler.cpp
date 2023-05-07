@@ -10,19 +10,9 @@ bool TAssembleBatch::DoExecuteImpl() {
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
 
     Y_VERIFY(BatchConstructor.GetColumnsCount());
-    Y_VERIFY(Filter);
 
-    bool forward = Filter->GetInactiveHeadSize() <= Filter->GetInactiveTailSize();
-
-    TPortionInfo::TPreparedBatchData::TAssembleOptions options(forward);
-    options.RecordsCountLimit = Filter->Size() - (forward ? Filter->GetInactiveTailSize() : Filter->GetInactiveHeadSize());
-
-    if (forward) {
-        Filter->CutInactiveTail();
-    } else {
-        Filter->CutInactiveHead();
-    }
-
+    TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+    options.RecordsCountLimit = Filter->Size();
     auto addBatch = BatchConstructor.Assemble(options);
     Y_VERIFY(addBatch);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)

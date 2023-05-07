@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/counters.h>
 #include <ydb/core/tx/columnshard/columnshard__scan.h>
-#include <ydb/core/tx/columnshard/engines/predicate.h>
+#include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
@@ -51,35 +51,55 @@ struct TReadStats {
 
 // Holds all metadata that is needed to perform read/scan
 struct TReadMetadataBase {
+public:
+    enum class ESorting {
+        NONE = 0 /* "not_sorted" */,
+        ASC /* "ascending" */,
+        DESC /* "descending" */,
+    };
+private:
+    const ESorting Sorting = ESorting::ASC; // Sorting inside returned batches
+    std::optional<TPKRangesFilter> PKRangesFilter;
+public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
-    enum class ESorting {
-        NONE = 0,
-        ASC,
-        DESC,
-    };
+    void SetPKRangesFilter(const TPKRangesFilter& value) {
+        Y_VERIFY(IsSorted() && value.IsReverse() == IsDescSorted());
+        Y_VERIFY(!PKRangesFilter);
+        PKRangesFilter = value;
+    }
 
+    const TPKRangesFilter& GetPKRangesFilter() const {
+        Y_VERIFY(!!PKRangesFilter);
+        return *PKRangesFilter;
+    }
+
+    TReadMetadataBase(const ESorting sorting)
+        : Sorting(sorting)
+    {
+
+    }
     virtual ~TReadMetadataBase() = default;
 
-    std::shared_ptr<NOlap::TPredicate> LessPredicate;
-    std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
     std::shared_ptr<arrow::Schema> BlobSchema;
     std::shared_ptr<arrow::Schema> LoadSchema; // ResultSchema + required for intermediate operations
     std::shared_ptr<arrow::Schema> ResultSchema; // TODO: add Program modifications
     std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<const THashSet<TUnifiedBlobId>> ExternBlobs;
-    ESorting Sorting{ESorting::ASC}; // Sorting inside returned batches
     ui64 Limit{0}; // TODO
+
+    virtual void Dump(IOutputStream& out) const {
+        out << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
+            << " " << Sorting << " sorted";
+    }
 
     bool IsAscSorted() const { return Sorting == ESorting::ASC; }
     bool IsDescSorted() const { return Sorting == ESorting::DESC; }
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
-    void SetDescSorting() { Sorting = ESorting::DESC; }
 
     virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TScanCounters& scanCounters) const = 0;
-    virtual void Dump(IOutputStream& out) const { Y_UNUSED(out); };
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -90,6 +110,9 @@ struct TReadMetadataBase {
 
 // Holds all metadata that is needed to perform read/scan
 struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadMetadata> {
+private:
+    using TBase = TReadMetadataBase;
+public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
     TIndexInfo IndexInfo;
@@ -102,8 +125,9 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
 
     std::shared_ptr<NIndexedReader::IOrderPolicy> BuildSortingPolicy() const;
 
-    TReadMetadata(const TIndexInfo& info)
-        : IndexInfo(info)
+    TReadMetadata(const TIndexInfo& info, const ESorting sorting)
+        : TBase(sorting)
+        , IndexInfo(info)
         , ReadStats(std::make_shared<TReadStats>(info.GetId()))
     {}
 
@@ -164,14 +188,8 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
             << " with program steps: " << (Program ? Program->Steps.size() : 0)
-            << (Sorting == ESorting::NONE ? " not" : (Sorting == ESorting::ASC ? " asc" : " desc"))
-            << " sorted, at snapshot: " << PlanStep << ":" << TxId;
-        if (GreaterPredicate) {
-            out << " from{" << *GreaterPredicate << "}";
-        }
-        if (LessPredicate) {
-            out << " to{" << *LessPredicate << "}";
-        }
+            << " at snapshot: " << PlanStep << ":" << TxId;
+        TBase::Dump(out);
         if (SelectInfo) {
             out << ", " << *SelectInfo;
         }
@@ -184,6 +202,9 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
 };
 
 struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadStatsMetadata> {
+private:
+    using TBase = TReadMetadataBase;
+public:
     using TConstPtr = std::shared_ptr<const TReadStatsMetadata>;
 
     const ui64 TabletId;
@@ -191,8 +212,9 @@ struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_
     TVector<ui32> ResultColumnIds;
     THashMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
 
-    explicit TReadStatsMetadata(ui64 tabletId)
-        : TabletId(tabletId)
+    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting)
+        : TBase(sorting)
+        , TabletId(tabletId)
     {}
 
     TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;

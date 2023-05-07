@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "column_engine.h"
-#include "predicate.h"
+#include "predicate/predicate.h"
 #include "reader/queue.h"
 #include "reader/granule.h"
 #include "reader/batch.h"
@@ -72,9 +72,8 @@ public:
 
     void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) {
         Y_VERIFY(batchNo < NotIndexed.size());
-        if (!NotIndexed[batchNo]) {
-            ++ReadyNotIndexed;
-        }
+        Y_VERIFY(!NotIndexed[batchNo]);
+        ++ReadyNotIndexed;
         NotIndexed[batchNo] = MakeNotIndexedBatch(batch, planStep, txId);
     }
 

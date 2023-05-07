@@ -7,6 +7,7 @@
 #include "insert_table.h"
 #include "columns_table.h"
 #include "granules_table.h"
+#include "predicate/filter.h"
 
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -352,8 +353,7 @@ public:
 
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const THashSet<ui32>& columnIds,
-                                                std::shared_ptr<TPredicate> from,
-                                                std::shared_ptr<TPredicate> to) const = 0;
+                                                const TPKRangesFilter& pkRangesFilter) const = 0;
     virtual std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,

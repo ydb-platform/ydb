@@ -81,46 +81,17 @@ NArrow::TColumnFilter MakeReplaceFilterLastWins(const std::shared_ptr<arrow::Rec
 
 NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata) {
     Y_VERIFY(portion);
-    NArrow::TColumnFilter result;
+    NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
     if (readMetadata.PlanStep) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
         result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.PlanStep, readMetadata.TxId));
-    }
-
-    if (readMetadata.LessPredicate) {
-        auto cmpType = readMetadata.LessPredicate->Inclusive ?
-            NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(portion, readMetadata.LessPredicate->Batch, cmpType));
-    }
-
-    if (readMetadata.GreaterPredicate) {
-        auto cmpType = readMetadata.GreaterPredicate->Inclusive ?
-            NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(portion, readMetadata.GreaterPredicate->Batch, cmpType));
     }
 
     return result;
 }
 
 NArrow::TColumnFilter FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata) {
-    NArrow::TColumnFilter result;
-    if (readMetadata.LessPredicate) {
-        Y_VERIFY(NArrow::HasAllColumns(batch, readMetadata.LessPredicate->Batch->schema()));
-
-        auto cmpType = readMetadata.LessPredicate->Inclusive ?
-            NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(batch, readMetadata.LessPredicate->Batch, cmpType));
-    }
-
-    if (readMetadata.GreaterPredicate) {
-        Y_VERIFY(NArrow::HasAllColumns(batch, readMetadata.GreaterPredicate->Batch->schema()));
-
-        auto cmpType = readMetadata.GreaterPredicate->Inclusive ?
-            NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(batch, readMetadata.GreaterPredicate->Batch, cmpType));
-    }
-
-    return result;
+    return readMetadata.GetPKRangesFilter().BuildFilter(batch);
 }
 
 NArrow::TColumnFilter EarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch, std::shared_ptr<NSsa::TProgram> ssa) {

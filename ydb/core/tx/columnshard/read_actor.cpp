@@ -6,6 +6,17 @@
 namespace NKikimr::NColumnShard {
 
 class TReadActor : public TActorBootstrapped<TReadActor> {
+private:
+    void BuildResult(const TActorContext& ctx) {
+        auto ready = IndexedData.GetReadyResults(Max<i64>());
+        LOG_S_TRACE("Ready results with " << ready.size() << " batches at tablet " << TabletId << " (read)");
+
+        size_t next = 1;
+        for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
+            bool lastOne = Finished() && (next == ready.size());
+            SendResult(ctx, it->ResultBatch, lastOne);
+        }
+    }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_READ_ACTOR;
@@ -66,15 +77,7 @@ public:
             return;
         }
 
-        auto ready = IndexedData.GetReadyResults(Max<i64>());
-        LOG_S_TRACE("Ready results with " << ready.size() << " batches at tablet " << TabletId << " (read)");
-
-        size_t next = 1;
-        for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
-            bool lastOne = Finished() && (next == ready.size());
-            SendResult(ctx, it->ResultBatch, lastOne);
-        }
-
+        BuildResult(ctx);
         DieFinished(ctx);
     }
 
@@ -211,6 +214,9 @@ public:
             }
             for (auto&& blobRange : IndexedBlobs) {
                 SendReadRequest(ctx, blobRange);
+            }
+            if (WaitCommitted.empty() && IndexedBlobs.empty()) {
+                BuildResult(ctx);
             }
         }
 

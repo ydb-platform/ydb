@@ -5,16 +5,17 @@
 
 namespace NKikimr::NOlap {
 
-TPredicate::TPredicate(EOperation op, std::shared_ptr<arrow::RecordBatch> batch, bool inclusive) noexcept
-    : Batch(std::move(batch))
-    , Operation(op)
-    , Inclusive(inclusive)
-{}
-
-TPredicate::TPredicate(EOperation op, const TString& serializedBatch, const std::shared_ptr<arrow::Schema>& schema, bool inclusive)
+TPredicate::TPredicate(EOperation op, std::shared_ptr<arrow::RecordBatch> batch) noexcept
     : Operation(op)
-    , Inclusive(inclusive)
+    , Batch(std::move(batch))
 {
+    Y_VERIFY(IsFrom() || IsTo());
+}
+
+TPredicate::TPredicate(EOperation op, const TString& serializedBatch, const std::shared_ptr<arrow::Schema>& schema)
+    : Operation(op)
+{
+    Y_VERIFY(IsFrom() || IsTo());
     if (!serializedBatch.empty()) {
         Batch = NArrow::DeserializeBatch(serializedBatch, schema);
         Y_VERIFY(Batch);
@@ -32,11 +33,6 @@ TVector<TString> TPredicate::ColumnNames() const {
 
 IOutputStream& operator << (IOutputStream& out, const TPredicate& pred) {
     out << NSsa::GetFunctionName(pred.Operation);
-    if (pred.Inclusive) {
-        out << "(incl) ";
-    } else {
-        out << "(excl) ";
-    }
 
     for (i32 i = 0; i < pred.Batch->num_columns(); ++i) {
         auto array = pred.Batch->column(i);

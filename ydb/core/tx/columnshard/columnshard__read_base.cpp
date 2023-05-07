@@ -6,11 +6,11 @@
 namespace NKikimr::NColumnShard {
 
 std::shared_ptr<NOlap::TReadMetadata>
-TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
+TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const NOlap::TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index,
                                  const TBatchCache& batchCache,
-                                 TString& error) const {
+                                 TString& error, const bool isReverse) const {
     Y_UNUSED(ctx);
 
     if (!insertTable || !index) {
@@ -23,7 +23,7 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     }
 
     const NOlap::TIndexInfo& indexInfo = index->GetIndexInfo();
-    auto spOut = std::make_shared<NOlap::TReadMetadata>(indexInfo);
+    auto spOut = std::make_shared<NOlap::TReadMetadata>(indexInfo, isReverse ? NOlap::TReadMetadata::ESorting::DESC : NOlap::TReadMetadata::ESorting::ASC);
     auto& out = *spOut;
 
     out.PlanStep = read.PlanStep;
@@ -81,17 +81,10 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
         requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
         requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_TX_ID);
 
-        // Predicate columns
-        if (read.LessPredicate) {
-            for (auto& col : read.LessPredicate->ColumnNames()) {
-                requiredColumns.insert(col);
-            }
+        for (auto&& i : read.PKRangesFilter.GetColumnNames()) {
+            requiredColumns.emplace(i);
         }
-        if (read.GreaterPredicate) {
-            for (auto& col : read.GreaterPredicate->ColumnNames()) {
-                requiredColumns.insert(col);
-            }
-        }
+        out.SetPKRangesFilter(read.PKRangesFilter);
 
         for (auto& col : columns) {
             requiredColumns.erase(col);
@@ -105,21 +98,6 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     out.LoadSchema = indexInfo.AddColumns(out.ResultSchema, columns);
     if (!out.LoadSchema) {
         return {};
-    }
-
-    if (read.LessPredicate) {
-        if (!read.LessPredicate->Good() ||
-            !read.LessPredicate->IsTo()) {
-            return {};
-        }
-        out.LessPredicate = read.LessPredicate;
-    }
-    if (read.GreaterPredicate) {
-        if (!read.GreaterPredicate->Good() ||
-            !read.GreaterPredicate->IsFrom()) {
-            return {};
-        }
-        out.GreaterPredicate = read.GreaterPredicate;
     }
 
     THashSet<ui32> columnIds;
@@ -138,14 +116,13 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     if (read.ReadNothing) {
         out.SelectInfo = std::make_shared<NOlap::TSelectInfo>();
     } else {
-        out.SelectInfo = index->Select(read.PathId, {read.PlanStep, read.TxId}, columnIds,
-                                       out.GreaterPredicate, out.LessPredicate);
+        out.SelectInfo = index->Select(read.PathId, {read.PlanStep, read.TxId}, columnIds, out.GetPKRangesFilter());
     }
     return spOut;
 }
 
 bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapProgramType programType,
-    TString serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver)
+    TString serializedProgram, NOlap::TReadDescription& read, const NOlap::IColumnResolver& columnResolver)
 {
     if (serializedProgram.empty()) {
         return true;

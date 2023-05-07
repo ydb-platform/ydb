@@ -218,8 +218,7 @@ public:
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
-                                        std::shared_ptr<TPredicate> from,
-                                        std::shared_ptr<TPredicate> to) const override;
+                                        const TPKRangesFilter& pkRangesFilter) const override;
     std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) override;
 
 private:

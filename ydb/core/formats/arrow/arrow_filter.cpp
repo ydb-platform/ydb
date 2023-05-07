@@ -186,72 +186,11 @@ void TColumnFilter::Add(const bool value, const ui32 count) {
     Count += count;
 }
 
-ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2) {
+ui32 TColumnFilter::CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2) {
     const ui32 f = std::min(f1, f2);
     const ui32 s = std::max(s1, s2);
     Y_VERIFY(f >= s);
     return f - s;
-}
-
-void TColumnFilter::And(const TColumnFilter& extFilter) {
-    if (Filter.empty() && extFilter.Filter.empty()) {
-        DefaultFilterValue = (extFilter.DefaultFilterValue && DefaultFilterValue);
-    } else if (Filter.empty()) {
-        if (DefaultFilterValue) {
-            Filter = extFilter.Filter;
-            Count = extFilter.Count;
-            CurrentValue = extFilter.CurrentValue;
-        }
-    } else if (extFilter.Filter.empty()) {
-        if (!extFilter.DefaultFilterValue) {
-            DefaultFilterValue = false;
-            Filter.clear();
-            Count = 0;
-        }
-    } else {
-        Y_VERIFY(extFilter.Count == Count);
-        auto itSelf = Filter.begin();
-        auto itExt = extFilter.Filter.cbegin();
-
-        std::deque<ui32> result;
-        ui32 selfPos = 0;
-        ui32 extPos = 0;
-        bool curSelf = GetStartValue();
-        bool curExt = extFilter.GetStartValue();
-        bool curCurrent = false;
-        ui32 count = 0;
-
-        while (itSelf != Filter.end() && itExt != extFilter.Filter.cend()) {
-            const ui32 delta = CrossSize(extPos, extPos + *itExt, selfPos, selfPos + *itSelf);
-            if (delta) {
-                if (!count || curCurrent != (curSelf && curExt)) {
-                    result.emplace_back(delta);
-                    curCurrent = (curSelf && curExt);
-                } else {
-                    result.back() += delta;
-                }
-                count += delta;
-            }
-            if (selfPos + *itSelf < extPos + *itExt) {
-                selfPos += *itSelf;
-                curSelf = !curSelf;
-                ++itSelf;
-            } else if (selfPos + *itSelf > extPos + *itExt) {
-                extPos += *itExt;
-                curExt = !curExt;
-                ++itExt;
-            } else {
-                curExt = !curExt;
-                curSelf = !curSelf;
-                ++itSelf;
-                ++itExt;
-            }
-        }
-        Y_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
-        std::swap(result, Filter);
-        std::swap(curCurrent, CurrentValue);
-        std::swap(count, Count);
-    }
 }
 
 NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType) {
@@ -386,55 +325,6 @@ void TColumnFilter::CombineSequential(const TColumnFilter& extFilter) {
         std::swap(result, Filter);
         std::swap(curCurrent, CurrentValue);
         std::swap(count, Count);
-    }
-}
-
-void TColumnFilter::CutInactiveTail() {
-    if (Filter.empty()) {
-        return;
-    }
-    if (!CurrentValue) {
-        Count -= Filter.back();
-        Filter.pop_back();
-        CurrentValue = !CurrentValue;
-        if (Filter.empty()) {
-            CurrentValue = DefaultFilterValue;
-        }
-    }
-}
-
-void TColumnFilter::CutInactiveHead() {
-    if (Filter.empty()) {
-        return;
-    }
-    if (!GetStartValue()) {
-        Count -= Filter.front();
-        Filter.pop_front();
-        if (Filter.empty()) {
-            CurrentValue = DefaultFilterValue;
-        }
-    }
-}
-
-ui32 TColumnFilter::GetInactiveTailSize() const {
-    if (Filter.empty()) {
-        return 0;
-    }
-    if (CurrentValue) {
-        return 0;
-    } else {
-        return Filter.back();
-    }
-}
-
-ui32 TColumnFilter::GetInactiveHeadSize() const {
-    if (Filter.empty()) {
-        return 0;
-    }
-    if (GetStartValue()) {
-        return 0;
-    } else {
-        return Filter[0];
     }
 }
 

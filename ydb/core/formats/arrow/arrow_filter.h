@@ -90,6 +90,7 @@ private:
         }
     };
 
+    static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
 public:
 
     using TIterator = TIteratorImpl<std::deque<ui32>::const_iterator>;
@@ -148,14 +149,6 @@ public:
         return Count;
     }
 
-    ui32 GetInactiveHeadSize() const;
-
-    ui32 GetInactiveTailSize() const;
-
-    void CutInactiveTail();
-
-    void CutInactiveHead();
-
     std::vector<bool> BuildSimpleFilter() const;
 
     TColumnFilter() = default;
@@ -178,7 +171,79 @@ public:
 
     void Add(const bool value, const ui32 count = 1);
 
-    void And(const TColumnFilter& extFilter);
+    template <class TCalcer>
+    void Merge(const TColumnFilter& extFilter, const TCalcer actor) {
+        if (Filter.empty() && extFilter.Filter.empty()) {
+            DefaultFilterValue = (extFilter.DefaultFilterValue && DefaultFilterValue);
+        } else if (Filter.empty()) {
+            if (DefaultFilterValue) {
+                Filter = extFilter.Filter;
+                Count = extFilter.Count;
+                CurrentValue = extFilter.CurrentValue;
+            }
+        } else if (extFilter.Filter.empty()) {
+            if (!extFilter.DefaultFilterValue) {
+                DefaultFilterValue = false;
+                Filter.clear();
+                Count = 0;
+            }
+        } else {
+            Y_VERIFY(extFilter.Count == Count);
+            auto itSelf = Filter.begin();
+            auto itExt = extFilter.Filter.cbegin();
+
+            std::deque<ui32> result;
+            ui32 selfPos = 0;
+            ui32 extPos = 0;
+            bool curSelf = GetStartValue();
+            bool curExt = extFilter.GetStartValue();
+            bool curCurrent = false;
+            ui32 count = 0;
+
+            while (itSelf != Filter.end() && itExt != extFilter.Filter.cend()) {
+                const ui32 delta = CrossSize(extPos, extPos + *itExt, selfPos, selfPos + *itSelf);
+                if (delta) {
+                    if (!count || curCurrent != actor(curSelf, curExt)) {
+                        result.emplace_back(delta);
+                        curCurrent = actor(curSelf, curExt);
+                    } else {
+                        result.back() += delta;
+                    }
+                    count += delta;
+                }
+                if (selfPos + *itSelf < extPos + *itExt) {
+                    selfPos += *itSelf;
+                    curSelf = !curSelf;
+                    ++itSelf;
+                } else if (selfPos + *itSelf > extPos + *itExt) {
+                    extPos += *itExt;
+                    curExt = !curExt;
+                    ++itExt;
+                } else {
+                    curExt = !curExt;
+                    curSelf = !curSelf;
+                    ++itSelf;
+                    ++itExt;
+                }
+            }
+            Y_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
+            std::swap(result, Filter);
+            std::swap(curCurrent, CurrentValue);
+            std::swap(count, Count);
+        }
+    }
+
+
+    void And(const TColumnFilter& extFilter) {
+        return Merge(extFilter, [](const bool selfBool, const bool extBool) {
+            return selfBool && extBool;
+            });
+    }
+    void Or(const TColumnFilter& extFilter) {
+        return Merge(extFilter, [](const bool selfBool, const bool extBool) {
+            return selfBool || extBool;
+            });
+    }
 
     // It makes a filter using composite predicate
     static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border,

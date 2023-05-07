@@ -13,15 +13,6 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-std::optional<NArrow::TReplaceKey> ExtractKey(const std::shared_ptr<TPredicate>& pkPredicate,
-                                              const std::shared_ptr<arrow::Schema>& key) {
-    if (pkPredicate) {
-        Y_VERIFY(pkPredicate->Good());
-        return NArrow::TReplaceKey::FromBatch(pkPredicate->Batch, key, 0);
-    }
-    return {};
-}
-
 bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portions, const TCompactionLimits& limits,
                         const TSnapshot& snap, TColumnEngineForLogs::TMarksGranules& marksGranules) {
     ui64 oldTimePlanStep = snap.PlanStep - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
@@ -1245,8 +1236,8 @@ TMap<TSnapshot, TVector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 gra
 
 std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot snapshot,
                                                           const THashSet<ui32>& columnIds,
-                                                          std::shared_ptr<TPredicate> from,
-                                                          std::shared_ptr<TPredicate> to) const {
+                                                          const TPKRangesFilter& pkRangesFilter) const
+{
     auto out = std::make_shared<TSelectInfo>();
     if (!PathGranules.contains(pathId)) {
         return out;
@@ -1258,55 +1249,65 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     }
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
-
-    std::optional<NArrow::TReplaceKey> keyFrom = ExtractKey(from, GetIndexKey());
-    std::optional<NArrow::TReplaceKey> keyTo = ExtractKey(to, GetIndexKey());
-
-    // Apply FROM
-    auto it = pathGranules.begin();
-    if (keyFrom) {
-        it = pathGranules.upper_bound(TMark(*keyFrom));
-        --it;
-    }
-    for (; it != pathGranules.end(); ++it) {
-        auto& mark = it->first;
-        ui64 granule = it->second;
-
-        // Apply TO
-        if (keyTo && *keyTo < mark.Border) {
-            break;
+    std::optional<TMap<TMark, ui64>::const_iterator> previousIterator;
+    for (auto&& i : pkRangesFilter) {
+        std::optional<NArrow::TReplaceKey> keyFrom = i.GetPredicateFrom().ExtractKey(GetIndexKey());
+        std::optional<NArrow::TReplaceKey> keyTo = i.GetPredicateTo().ExtractKey(GetIndexKey());
+        auto it = pathGranules.begin();
+        if (keyFrom) {
+            it = pathGranules.upper_bound(TMark(*keyFrom));
+            --it;
         }
+        if (previousIterator && (previousIterator == pathGranules.end() || it->first < (*previousIterator)->first)) {
+            it = *previousIterator;
+        }
+        for (; it != pathGranules.end(); ++it) {
+            auto& mark = it->first;
+            ui64 granule = it->second;
 
-        Y_VERIFY(Granules.contains(granule));
-        auto& spg = Granules.find(granule)->second;
-        Y_VERIFY(spg);
-        auto& portions = spg->Portions;
-        bool granuleHasDataForSnaphsot = false;
+            if (keyTo && *keyTo < mark.Border) {
+                break;
+            }
 
-        TMap<TSnapshot, TVector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
-        for (auto& [snap, vec] : orderedPortions) {
-            for (auto& portion : vec) {
-                auto& portionInfo = portions.find(portion)->second;
+            auto it = Granules.find(granule);
+            Y_VERIFY(it != Granules.end());
+            auto& spg = it->second;
+            Y_VERIFY(spg);
+            auto& portions = spg->Portions;
+            bool granuleHasDataForSnaphsot = false;
 
-                TPortionInfo outPortion;
-                outPortion.Meta = portionInfo.Meta;
-                outPortion.Records.reserve(columnIds.size());
+            TMap<TSnapshot, TVector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
+            for (auto& [snap, vec] : orderedPortions) {
+                for (auto& portion : vec) {
+                    auto& portionInfo = portions.find(portion)->second;
 
-                for (auto& rec : portionInfo.Records) {
-                    Y_VERIFY(rec.Valid());
-                    if (columnIds.contains(rec.ColumnId)) {
-                        outPortion.Records.push_back(rec);
+                    TPortionInfo outPortion;
+                    outPortion.Meta = portionInfo.Meta;
+                    outPortion.Records.reserve(columnIds.size());
+
+                    for (auto& rec : portionInfo.Records) {
+                        Y_VERIFY(rec.Valid());
+                        if (columnIds.contains(rec.ColumnId)) {
+                            outPortion.Records.push_back(rec);
+                        }
                     }
+                    Y_VERIFY(outPortion.Produced());
+                    if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portion);
+                        continue;
+                    } else {
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portion);
+                    }
+                    out->Portions.emplace_back(std::move(outPortion));
+                    granuleHasDataForSnaphsot = true;
                 }
-                Y_VERIFY(outPortion.Produced());
-                out->Portions.emplace_back(std::move(outPortion));
-                granuleHasDataForSnaphsot = true;
+            }
+
+            if (granuleHasDataForSnaphsot) {
+                out->Granules.push_back(spg->Record);
             }
         }
-
-        if (granuleHasDataForSnaphsot) {
-            out->Granules.push_back(spg->Record);
-        }
+        previousIterator = it;
     }
 
     return out;

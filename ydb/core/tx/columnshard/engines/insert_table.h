@@ -94,6 +94,9 @@ struct TCommittedBlob {
     /// So hash() and equality should depend on BlobId only.
     bool operator == (const TCommittedBlob& key) const { return BlobId == key.BlobId; }
     ui64 Hash() const noexcept { return BlobId.Hash(); }
+    TString DebugString() const {
+        return TStringBuilder() << BlobId << ";ps=" << PlanStep << ";ti=" << TxId;
+    }
 };
 
 class IDbWrapper;

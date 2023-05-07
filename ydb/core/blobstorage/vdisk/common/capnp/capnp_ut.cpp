@@ -179,5 +179,37 @@ namespace NKikimr {
             UNIT_ASSERT(vdisk->GetGroupID() == groupId);
             UNIT_ASSERT(qos->GetExtQueueId() == queueId);
         }
+
+        Y_UNIT_TEST(ExtraBufferPushBack) {
+            // create and fill the main message
+            NKikimrCapnProto::TEvVGet::Builder main;
+            main.MutableVDiskID().SetVDisk(1234);
+            main.MutableVDiskID().SetGroupID(4321);
+
+            // create and fill the extra message
+            NKikimrCapnProto::TEvVGet::Builder extra;
+            auto extraMsgQoS = extra.MutableMsgQoS();
+            extraMsgQoS.SetCost(4242);
+            extraMsgQoS.MutableCostSettings().SetMinREALHugeBlobInBytes(101);
+
+            // serialize messages to a single output
+            NActors::TAllocChunkSerializer output;
+            main.SerializeToZeroCopyStream(&output);
+            extra.SerializeToZeroCopyStream(&output);
+
+            // create input stream
+            auto data = output.Release({});
+            NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
+
+            // deserialize from the input
+            NKikimrCapnProto::TEvVGet::Builder deserialized;
+            deserialized.ParseFromZeroCopyStream(&input);
+
+            // check that all the fields are set as expected
+            Y_VERIFY(deserialized.GetVDiskID().GetVDisk() == 1234);
+            Y_VERIFY(deserialized.GetVDiskID().GetGroupID() == 4321);
+            Y_VERIFY(deserialized.GetMsgQoS().GetCost() == 4242);
+            Y_VERIFY(deserialized.GetMsgQoS().GetCostSettings().GetMinREALHugeBlobInBytes() == 101);
+        }
     };
 };

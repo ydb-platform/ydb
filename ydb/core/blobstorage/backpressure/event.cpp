@@ -72,20 +72,42 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
             return clone;
         };
         ctx.Send(remoteVDisk, Apply(callback).release(), flags, queueCookie, std::move(traceId));
-    } else {
-        // FIXME: ensure that MsgQoS has the same field identifier in all structures
-        NKikimrBlobStorage::TEvVPut record;
-        processMsgQoS(record);
-
-        // serialize that extra buffer
-        TString buf;
-        const bool status = record.SerializeToString(&buf);
-        Y_VERIFY(status);
-
-        // send it to disk
-        ctx.ExecutorThread.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
-            MakeIntrusive<TEventSerializedData>(*Buffer, std::move(buf)), queueCookie, nullptr, std::move(traceId)));
+        return;
     }
+
+    if (Type == TEvBlobStorage::TEvVGet::EventType) {
+        std::unique_ptr<TEvBlobStorage::TEvVGet> clone(dynamic_cast<TEvBlobStorage::TEvVGet*>(TEvBlobStorage::TEvVGet::Load(Buffer.Get())));
+        std::cout << "[TEventHolder::SendToVDisk] clone before processMsgQoS: " << clone->Record.ShortDebugString() << "\n\n";
+        processMsgQoS(clone->Record);
+        std::cout << "[TEventHolder::SendToVDisk] clone after processMsgQoS: " << clone->Record.ShortDebugString() << "\n\n";
+
+        Y_VERIFY(clone->Record.GetMsgQoS().GetMsgId().GetMsgId() != 18446744073699546569ull);
+        Y_VERIFY(clone->Record.GetMsgQoS().GetMsgId().GetSequenceId() != 18446744073699546569ull);
+
+        TAllocChunkSerializer serializer;
+        clone->SerializeToArcadiaStream(&serializer);
+        auto chainBuf = serializer.Release(clone->CreateSerializationInfo());
+
+        ctx.ExecutorThread.Send(
+                new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
+                                 chainBuf, queueCookie, nullptr, std::move(traceId))
+        );
+
+        return;
+    }
+
+    // FIXME: ensure that MsgQoS has the same field identifier in all structures
+    NKikimrBlobStorage::TEvVPut record;
+    processMsgQoS(record);
+
+    // serialize that extra buffer
+    TString buf;
+    const bool status = record.SerializeToString(&buf);
+    Y_VERIFY(status);
+
+    // send it to disk
+    ctx.ExecutorThread.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
+        MakeIntrusive<TEventSerializedData>(*Buffer, std::move(buf)), queueCookie, nullptr, std::move(traceId)));
 }
 
 void TEventHolder::Discard() {

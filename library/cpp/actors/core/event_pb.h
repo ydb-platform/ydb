@@ -222,6 +222,9 @@ namespace NActors {
             return result;
         }
 
+        inline static std::set<uint32_t> messageSizes;
+        inline static std::mutex messageSizesMutex;
+
         static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
@@ -261,6 +264,21 @@ namespace NActors {
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
                     Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
+                }
+
+                {
+                    std::lock_guard l(messageSizesMutex);
+
+                    messageSizes.insert(size);
+                    if (messageSizes.size() == 10000) {
+                        std::cout << "[MSG SIZE METRICS] "
+                                  << "p0 " << *messageSizes.begin() << " "
+                                  << "p25 " << *std::next(messageSizes.begin(), 2500) << " "
+                                  << "p50 " << *std::next(messageSizes.begin(), 5000) << " "
+                                  << "p75 " << *std::next(messageSizes.begin(), 7500) << " "
+                                  << "p100 " << *messageSizes.rbegin() << "\n\n";
+                        messageSizes.clear();
+                    }
                 }
             }
             ev->CachedByteSize = input->GetSize();

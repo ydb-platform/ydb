@@ -28,7 +28,8 @@ NColumnShard::IDataTasksProcessor::ITask::TPtr TBatch::AssembleTask(NColumnShard
     Y_VERIFY(WaitIndexed.empty());
     Y_VERIFY(PortionInfo->Produced());
     Y_VERIFY(!FetchedInfo.GetFilteredBatch());
-    auto batchConstructor = PortionInfo->PrepareForAssemble(readMetadata->IndexInfo, readMetadata->LoadSchema, Data, CurrentColumnIds);
+    auto loadSchema = readMetadata->GetLoadSchema(readMetadata->GetSnapshot());
+    auto batchConstructor = PortionInfo->PrepareForAssemble(readMetadata->GetIndexInfo(), loadSchema, Data, CurrentColumnIds);
     Data.clear();
     if (!FetchedInfo.GetFilter()) {
         return std::make_shared<TAssembleFilter>(std::move(batchConstructor), readMetadata,

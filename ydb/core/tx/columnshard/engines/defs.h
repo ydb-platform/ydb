@@ -16,6 +16,24 @@ struct TSnapshot {
     ui64 PlanStep{0};
     ui64 TxId{0};
 
+    ui64 GetPlanStep() const {
+        return PlanStep;
+    }
+
+    ui64 GetTxId() const {
+        return TxId;
+    }
+
+    TSnapshot& SetPlanStep(const ui64 value) {
+        PlanStep = value;
+        return *this;
+    }
+
+    TSnapshot& SetTxId(const ui64 value) {
+        TxId = value;
+        return *this;
+    }
+
     constexpr bool IsZero() const noexcept {
         return PlanStep == 0 && TxId == 0;
     }
@@ -27,7 +45,7 @@ struct TSnapshot {
     constexpr auto operator <=> (const TSnapshot&) const noexcept = default;
 
     static constexpr TSnapshot Max() noexcept {
-        return TSnapshot{(ui64)-1ll, (ui64)-1ll};
+        return TSnapshot().SetPlanStep(-1ll).SetTxId(-1ll);
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TSnapshot& s) {

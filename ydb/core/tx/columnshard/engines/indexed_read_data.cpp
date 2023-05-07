@@ -128,13 +128,11 @@ void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::
 }
 
 void TIndexedReadData::InitRead(ui32 inputBatch) {
-    Y_VERIFY(ReadMetadata->BlobSchema);
-    Y_VERIFY(ReadMetadata->LoadSchema);
-    Y_VERIFY(ReadMetadata->ResultSchema);
-    Y_VERIFY(IndexInfo().GetSortingKey());
-    Y_VERIFY(IndexInfo().GetIndexKey() && IndexInfo().GetIndexKey()->num_fields());
+    auto& indexInfo = ReadMetadata->GetIndexInfo();
+    Y_VERIFY(indexInfo.GetSortingKey());
+    Y_VERIFY(indexInfo.GetIndexKey() && indexInfo.GetIndexKey()->num_fields());
 
-    SortReplaceDescription = IndexInfo().SortReplaceDescription();
+    SortReplaceDescription = indexInfo.SortReplaceDescription();
 
     NotIndexed.resize(inputBatch);
 
@@ -156,7 +154,7 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
     stats->IndexPortions = ReadMetadata->SelectInfo->Portions.size();
     stats->IndexBatches = ReadMetadata->NumIndexedBlobs();
     stats->CommittedBatches = ReadMetadata->CommittedBlobs.size();
-    stats->SchemaColumns = ReadMetadata->LoadSchema->num_fields();
+    stats->SchemaColumns = ReadMetadata->GetSchemaColumnsCount();
     stats->FilterColumns = GranulesContext->GetEarlyFilterColumns().size();
     stats->AdditionalColumns = GranulesContext->GetPostFilterColumns().size();
     stats->PortionsBytes = portionsBytes;
@@ -190,8 +188,9 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
 
     // Extract columns (without check), filter, attach snapshot, extract columns with check
     // (do not filter snapshot columns)
+    auto loadSchema = ReadMetadata->GetLoadSchema(TSnapshot().SetPlanStep(planStep).SetTxId(txId));
 
-    auto batch = NArrow::ExtractExistedColumns(srcBatch, ReadMetadata->LoadSchema);
+    auto batch = NArrow::ExtractExistedColumns(srcBatch, loadSchema);
     Y_VERIFY(batch);
 
     auto filter = FilterNotIndexed(batch, *ReadMetadata);
@@ -203,7 +202,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, planStep, txId);
     Y_VERIFY(preparedBatch);
 
-    preparedBatch = NArrow::ExtractColumns(preparedBatch, ReadMetadata->LoadSchema);
+    preparedBatch = NArrow::ExtractColumns(preparedBatch, loadSchema);
     Y_VERIFY(preparedBatch);
 
     filter.Apply(preparedBatch);
@@ -212,6 +211,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
 
 TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {
     Y_VERIFY(SortReplaceDescription);
+    auto& indexInfo = ReadMetadata->GetIndexInfo();
 
     if (NotIndexed.size() != ReadyNotIndexed) {
         // Wait till we have all not indexed data so we could replace keys in granules
@@ -228,10 +228,10 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
 
             // committed data before the first granule would be placed in fake preceding granule
             // committed data after the last granule would be placed into the last granule
-            marksGranules.MakePrecedingMark(IndexInfo());
+            marksGranules.MakePrecedingMark(indexInfo);
             Y_VERIFY(!marksGranules.Empty());
 
-            auto outNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, IndexInfo());
+            auto outNotIndexed = marksGranules.SliceIntoGranules(mergedBatch, indexInfo);
             GranulesContext->DrainNotIndexedBatches(&outNotIndexed);
             Y_VERIFY(outNotIndexed.size() <= 1);
             if (outNotIndexed.size() == 1) {
@@ -254,7 +254,7 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
     auto out = MakeResult(ReadyToOut(), maxRowsInBatch);
     if (requireResult && out.empty()) {
         out.push_back(TPartialReadResult{
-            .ResultBatch = NArrow::MakeEmptyBatch(ReadMetadata->ResultSchema)
+            .ResultBatch = NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())
         });
     }
     return out;
@@ -265,6 +265,7 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
     Y_VERIFY(SortReplaceDescription);
     Y_VERIFY(GranulesContext);
 
+    auto& indexInfo = ReadMetadata->GetIndexInfo();
     std::vector<NIndexedReader::TGranule*> ready = GranulesContext->DetachReadyInOrder();
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> out;
     out.reserve(ready.size() + 1);
@@ -289,7 +290,7 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
                 Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortReplaceDescription->ReplaceKey));
             }
 #if 1 // optimization
-            auto deduped = SpecialMergeSorted(inGranule, IndexInfo(), SortReplaceDescription, granule->GetBatchesToDedup());
+            auto deduped = SpecialMergeSorted(inGranule, indexInfo, SortReplaceDescription, granule->GetBatchesToDedup());
             out.emplace_back(std::move(deduped));
 #else
             out.push_back({});
@@ -313,7 +314,8 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
 std::shared_ptr<arrow::RecordBatch>
 TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const {
     Y_VERIFY(ReadMetadata->IsSorted());
-    Y_VERIFY(IndexInfo().GetSortingKey());
+    auto& indexInfo = ReadMetadata->GetIndexInfo();
+    Y_VERIFY(indexInfo.GetSortingKey());
 
     {
         const auto pred = [](const std::shared_ptr<arrow::RecordBatch>& b) {
@@ -327,7 +329,6 @@ TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch
     }
 
     // We could merge data here only if backpressure limits committed data size. KIKIMR-12520
-    auto& indexInfo = IndexInfo();
     auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortReplaceDescription());
     Y_VERIFY(merged);
     Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, indexInfo.GetReplaceKey()));
@@ -380,6 +381,7 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
                              int64_t maxRowsInBatch) const {
     Y_VERIFY(ReadMetadata->IsSorted());
     Y_VERIFY(SortReplaceDescription);
+    auto& indexInfo = ReadMetadata->GetIndexInfo();
 
     TVector<TPartialReadResult> out;
 
@@ -413,7 +415,7 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
         }
 
         for (auto& batch : batches) {
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, IndexInfo().GetReplaceKey(), isDesc));
+            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey(), isDesc));
 
             if (batch->num_rows() == 0) {
                 Y_VERIFY_DEBUG(false, "Unexpected empty batch");
@@ -421,11 +423,11 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
             }
 
             // Extract the last row's PK
-            auto keyBatch = NArrow::ExtractColumns(batch, IndexInfo().GetReplaceKey());
+            auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
             auto lastKey = keyBatch->Slice(keyBatch->num_rows()-1, 1);
 
             // Leave only requested columns
-            auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->ResultSchema);
+            auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->GetResultSchema());
             out.emplace_back(TPartialReadResult{
                 .ResultBatch = std::move(resultBatch),
                 .LastReadKey = std::move(lastKey)

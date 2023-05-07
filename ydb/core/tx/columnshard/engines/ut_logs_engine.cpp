@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "column_engine_logs.h"
-#include "index_logic.h"
 #include "predicate/predicate.h"
+#include "index_logic_logs.h"
 
 
 namespace NKikimr {

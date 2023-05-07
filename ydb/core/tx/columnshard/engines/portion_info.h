@@ -9,6 +9,53 @@
 
 namespace NKikimr::NOlap {
 
+class ISnapshotSchema {
+public:
+    using TPtr = std::shared_ptr<ISnapshotSchema>;
+
+    virtual ~ISnapshotSchema() {}
+    virtual int GetFieldIndex(const ui32 columnId) const = 0;
+    virtual std::shared_ptr<arrow::Field> GetField(const int index) const = 0;
+    virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
+    virtual const TIndexInfo& GetIndexInfo() const = 0;
+    virtual const TSnapshot& GetSnapshot() const = 0;
+};
+
+class TSnapshotSchema : public ISnapshotSchema {
+    TIndexInfo IndexInfo;
+    std::shared_ptr<arrow::Schema> Schema;
+    TSnapshot Snapshot;
+public:
+    TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot)
+        : IndexInfo(std::move(indexInfo))
+        , Schema(IndexInfo.ArrowSchemaWithSpecials())
+        , Snapshot(snapshot)
+    {
+    }
+    
+    int GetFieldIndex(const ui32 columnId) const override {
+        TString columnName = IndexInfo.GetColumnName(columnId);
+        std::string name(columnName.data(), columnName.size());
+        return Schema->GetFieldIndex(name);
+    }
+
+    std::shared_ptr<arrow::Field> GetField(const int index) const override {
+        return Schema->field(index);
+    }
+
+    const std::shared_ptr<arrow::Schema>& GetSchema() const override {
+        return Schema;
+    }
+
+    const TIndexInfo& GetIndexInfo() const override {
+        return IndexInfo;
+    }
+
+    const TSnapshot& GetSnapshot() const override {
+        return Snapshot;
+    }
+};
+
 struct TPortionMeta {
     // NOTE: These values are persisted in LocalDB so they must be stable
     enum EProduced : ui32 {

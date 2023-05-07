@@ -46,9 +46,9 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     txc.DB.NoMoreReadsForTx();
 
-    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo();
     auto& record = Proto(Ev->Get());
-
+    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo(NOlap::TSnapshot().SetPlanStep(record.GetPlanStep()).SetTxId(record.GetTxId()));
+    
     ui64 metaShard = record.GetTxInitiator();
 
     NOlap::TReadDescription read(false);
@@ -80,7 +80,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
 
     bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
-        TIndexColumnResolver(Self->TablesManager.GetIndexInfo()));
+        TIndexColumnResolver(indexInfo));
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {

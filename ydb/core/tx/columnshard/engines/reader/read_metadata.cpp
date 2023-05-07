@@ -5,25 +5,145 @@
 
 namespace NKikimr::NOlap {
 
+TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
+                                const std::unique_ptr<NOlap::IColumnEngine>& index,
+                                const NColumnShard::TBatchCache& batchCache)
+    : InsertTable(insertTable)
+    , Index(index)
+    , BatchCache(batchCache)
+{}
+
+std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const {
+    if (readDescription.ReadNothing) {
+        return std::make_shared<NOlap::TSelectInfo>();
+    }
+    return Index->Select(readDescription.PathId, 
+                            {readDescription.PlanStep, readDescription.TxId},
+                            columnIds,
+                            readDescription.PKRangesFilter);
+}
+
+std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const {
+    return std::move(InsertTable->Read(readDescription.PathId, readDescription.PlanStep, readDescription.TxId));
+}
+
+std::shared_ptr<arrow::RecordBatch> TDataStorageAccessor::GetCachedBatch(const TUnifiedBlobId& blobId) const {
+    return BatchCache.Get(blobId);
+}
+
 std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TScanCounters& scanCounters) const {
     return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this(), tasksProcessor, scanCounters);
 }
 
+bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error) {
+    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
+    
+    TVector<ui32> resultColumnsIds;
+    if (readDescription.ColumnIds.size()) {
+        resultColumnsIds = readDescription.ColumnIds;
+    } else if (readDescription.ColumnNames.size()) {
+        resultColumnsIds = indexInfo.GetColumnIds(readDescription.ColumnNames);
+    } else {
+        error = "Empty column list requested";
+        return false;
+    }
+    ResultColumnsIds.swap(resultColumnsIds);
+
+    if (!GetResultSchema()) {
+        error = "Could not get ResultSchema.";
+        return false;
+    }
+
+    SetPKRangesFilter(readDescription.PKRangesFilter);
+
+    /// @note We could have column name changes between schema versions:
+    /// Add '1:foo', Drop '1:foo', Add '2:foo'. Drop should hide '1:foo' from reads.
+    /// It's expected that we have only one version on 'foo' in blob and could split them by schema {planStep:txId}.
+    /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
+    /// It's not possible for blobs with several columns. There should be a special logic for them.
+    {
+        Y_VERIFY(!ResultColumnsIds.empty(), "Empty column list");
+        THashSet<TString> requiredColumns = indexInfo.GetRequiredColumns();
+
+        // Snapshot columns
+        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
+        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_TX_ID);
+
+        for (auto&& i : readDescription.PKRangesFilter.GetColumnNames()) {
+            requiredColumns.emplace(i);
+        }
+
+        for (auto& col : ResultColumnsIds) {
+            requiredColumns.erase(indexInfo.GetColumnName(col));
+        }
+
+        TVector<ui32> auxiliaryColumns;
+        auxiliaryColumns.reserve(requiredColumns.size());
+        for (auto& reqCol : requiredColumns) {
+            auxiliaryColumns.push_back(indexInfo.GetColumnId(reqCol));
+        }
+        AllColumns.reserve(AllColumns.size() + ResultColumnsIds.size() + auxiliaryColumns.size());
+        AllColumns.insert(AllColumns.end(), ResultColumnsIds.begin(), ResultColumnsIds.end());
+        AllColumns.insert(AllColumns.end(), auxiliaryColumns.begin(), auxiliaryColumns.end());
+    }
+    
+    CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription);
+    for (auto& cmt : CommittedBlobs) {
+        if (auto batch = dataAccessor.GetCachedBatch(cmt.BlobId)) {
+            CommittedBatches.emplace(cmt.BlobId, batch);
+        }
+    }
+    
+    auto loadSchema = GetLoadSchema(Snapshot);
+    if (!loadSchema) {
+        return false;
+    }
+
+    THashSet<ui32> columnIds;
+    for (auto& field : loadSchema->fields()) {
+        TString column(field->name().data(), field->name().size());
+        columnIds.insert(indexInfo.GetColumnId(column));
+    }
+
+    Program = readDescription.Program;
+    if (Program) {
+        for (auto& [id, name] : Program->SourceColumns) {
+            columnIds.insert(id);
+        }
+    }
+
+    SelectInfo = dataAccessor.Select(readDescription, columnIds);
+    return true;
+}
+
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
-    std::set<ui32> result = GetPKRangesFilter().GetColumnIds(IndexInfo);
+    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
+    std::set<ui32> result = GetPKRangesFilter().GetColumnIds(indexInfo);
+    if (LessPredicate) {
+        for (auto&& i : LessPredicate->ColumnNames()) {
+            result.emplace(indexInfo.GetColumnId(i));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
+        }
+    }
+    if (GreaterPredicate) {
+        for (auto&& i : GreaterPredicate->ColumnNames()) {
+            result.emplace(indexInfo.GetColumnId(i));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
+        }
+    }
     if (Program) {
         for (auto&& i : Program->GetEarlyFilterColumns()) {
-            auto id = IndexInfo.GetColumnIdOptional(i);
+            auto id = indexInfo.GetColumnIdOptional(i);
             if (id) {
                 result.emplace(*id);
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
             }
         }
     }
-    if (PlanStep) {
+    if (Snapshot.GetPlanStep()) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
         for (auto&& i : snapSchema->fields()) {
-            result.emplace(IndexInfo.GetColumnId(i->name()));
+            result.emplace(indexInfo.GetColumnId(i->name()));
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i->name());
         }
     }
@@ -32,27 +152,26 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
 
 std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
-    for (auto&& i : IndexInfo.GetPrimaryKey()) {
-        Y_VERIFY(result.emplace(IndexInfo.GetColumnId(i.first)).second);
+    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
+    for (auto&& i : indexInfo.GetPrimaryKey()) {
+        Y_VERIFY(result.emplace(indexInfo.GetColumnId(i.first)).second);
     }
     return result;
 }
 
 std::set<ui32> TReadMetadata::GetUsedColumnIds() const {
     std::set<ui32> result;
-    if (PlanStep) {
+    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
+    if (Snapshot.GetPlanStep()) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
         for (auto&& i : snapSchema->fields()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("used_column", i->name());
-            result.emplace(IndexInfo.GetColumnId(i->name()));
+            result.emplace(indexInfo.GetColumnId(i->name()));
         }
     }
-    for (auto&& f : LoadSchema->fields()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("used_column", f->name());
-        result.emplace(IndexInfo.GetColumnId(f->name()));
-    }
-    for (auto&& i : IndexInfo.GetPrimaryKey()) {
-        Y_VERIFY(result.contains(IndexInfo.GetColumnId(i.first)));
+    result.insert(AllColumns.begin(), AllColumns.end());
+    for (auto&& i : indexInfo.GetPrimaryKey()) {
+        Y_VERIFY(result.contains(indexInfo.GetColumnId(i.first)));
     }
     return result;
 }
@@ -90,13 +209,14 @@ void TReadStats::PrintToLog() {
 }
 
 NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
-    if (Limit && IsSorted() && IndexInfo.IsSorted() && IndexInfo.GetSortingKey()->num_fields()) {
+    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
+    if (Limit && IsSorted() && indexInfo.IsSorted() && indexInfo.GetSortingKey()->num_fields()) {
         ui32 idx = 0;
-        for (auto&& i : IndexInfo.GetPrimaryKey()) {
-            if (idx >= IndexInfo.GetSortingKey()->fields().size()) {
+        for (auto&& i : indexInfo.GetPrimaryKey()) {
+            if (idx >= indexInfo.GetSortingKey()->fields().size()) {
                 break;
             }
-            if (IndexInfo.GetSortingKey()->fields()[idx]->name() != i.first) {
+            if (indexInfo.GetSortingKey()->fields()[idx]->name() != i.first) {
                 return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
             }
             ++idx;

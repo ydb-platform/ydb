@@ -11,12 +11,10 @@ class TSnapshotGetter {
 private:
     const arrow::UInt64Array::value_type* RawSteps;
     const arrow::UInt64Array::value_type* RawIds;
-    const ui64 PlanStep;
-    const ui64 TxId;
+    const TSnapshot Snapshot;
 public:
-    TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const ui64 planStep, const ui64 txId)
-        : PlanStep(planStep)
-        , TxId(txId)
+    TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const TSnapshot& snapshot)
+        : Snapshot(snapshot)
     {
         Y_VERIFY(steps);
         Y_VERIFY(ids);
@@ -28,20 +26,20 @@ public:
     }
 
     bool operator[](const ui32 idx) const {
-        return SnapLessOrEqual(RawSteps[idx], RawIds[idx], PlanStep, TxId);
+        return SnapLessOrEqual(RawSteps[idx], RawIds[idx], Snapshot.GetPlanStep(), Snapshot.GetTxId());
     }
 };
 
 NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
                                      const std::shared_ptr<arrow::Schema>& snapSchema,
-                                     ui64 planStep, ui64 txId) {
+                                     const TSnapshot& snapshot) {
     Y_VERIFY(batch);
     Y_VERIFY(snapSchema);
     Y_VERIFY(snapSchema->num_fields() == 2);
     auto steps = batch->GetColumnByName(snapSchema->fields()[0]->name());
     auto ids = batch->GetColumnByName(snapSchema->fields()[1]->name());
     NArrow::TColumnFilter result;
-    TSnapshotGetter getter(steps, ids, planStep, txId);
+    TSnapshotGetter getter(steps, ids, snapshot);
     result.Reset(steps->length(), std::move(getter));
     return result;
 }
@@ -82,9 +80,9 @@ NArrow::TColumnFilter MakeReplaceFilterLastWins(const std::shared_ptr<arrow::Rec
 NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata) {
     Y_VERIFY(portion);
     NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
-    if (readMetadata.PlanStep) {
+    if (readMetadata.GetSnapshot().GetPlanStep()) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
-        result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.PlanStep, readMetadata.TxId));
+        result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.GetSnapshot()));
     }
 
     return result;

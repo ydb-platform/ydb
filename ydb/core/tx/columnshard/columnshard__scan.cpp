@@ -852,12 +852,17 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE);
     read.ColumnIds.assign(record.GetColumnTags().begin(), record.GetColumnTags().end());
 
+    const NOlap::TIndexInfo* indexInfo = nullptr;
+    if (!isIndexStats) {
+        indexInfo = &(Self->TablesManager.GetIndexInfo(NOlap::TSnapshot().SetPlanStep(snapshot.GetStep()).SetTxId(snapshot.GetTxId())));
+    }
+
     // TODO: move this to CreateReadMetadata?
     if (read.ColumnIds.empty()) {
         // "SELECT COUNT(*)" requests empty column list but we need non-empty list for PrepareReadMetadata.
         // So we add first PK column to the request.
         if (!isIndexStats) {
-            read.ColumnIds.push_back(Self->TablesManager.GetIndexInfo().GetPKFirstColumnId());
+            read.ColumnIds.push_back(indexInfo->GetPKFirstColumnId());
         } else {
             read.ColumnIds.push_back(PrimaryIndexStatsSchema.KeyColumns.front());
         }
@@ -866,7 +871,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     bool parseResult;
 
     if (!isIndexStats) {
-        TIndexColumnResolver columnResolver(Self->TablesManager.GetIndexInfo());
+        TIndexColumnResolver columnResolver(*indexInfo);
         parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read, columnResolver);
     } else {
         TStatsColumnResolver columnResolver;
@@ -892,7 +897,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     auto ydbKey = isIndexStats ?
         NOlap::GetColumns(PrimaryIndexStatsSchema, PrimaryIndexStatsSchema.KeyColumns) :
-        Self->TablesManager.GetIndexInfo().GetPrimaryKey();
+        indexInfo->GetPrimaryKey();
 
     for (auto& range: record.GetRanges()) {
         if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), isIndexStats ? nullptr : &Self->TablesManager.GetIndexInfo())) {

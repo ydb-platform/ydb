@@ -270,14 +270,15 @@ private:
     mutable TString SerializedSchema;
 
     TString GetSerializedSchema(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-        Y_VERIFY(ReadMetadata->ResultSchema);
+        auto resultSchema = ReadMetadata->GetResultSchema();
+        Y_VERIFY(resultSchema);
 
         // TODO: make real ResultSchema with SSA effects
-        if (ReadMetadata->ResultSchema->Equals(batch->schema())) {
+        if (resultSchema->Equals(batch->schema())) {
             if (!SerializedSchema.empty()) {
                 return SerializedSchema;
             }
-            SerializedSchema = NArrow::SerializeSchema(*ReadMetadata->ResultSchema);
+            SerializedSchema = NArrow::SerializeSchema(*resultSchema);
             return SerializedSchema;
         }
 

@@ -173,8 +173,11 @@ public:
     TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits = {});
 
     const TIndexInfo& GetIndexInfo() const override {
-        Y_VERIFY(IndexInfo);
-        return *IndexInfo;
+        return VersionedIndex.GetLastSchema()->GetIndexInfo();
+    }
+
+    const TVersionedIndex& GetVersionedIndex() const override {
+        return VersionedIndex;
     }
 
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
@@ -234,7 +237,7 @@ private:
         bool Empty() const noexcept { return Portions.empty(); }
     };
 
-    std::optional<TIndexInfo> IndexInfo;
+    TVersionedIndex VersionedIndex;
     TCompactionLimits Limits;
     ui64 TabletId;
     std::shared_ptr<arrow::Schema> MarkSchema;

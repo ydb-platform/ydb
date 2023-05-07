@@ -335,11 +335,40 @@ struct TColumnEngineStats {
     }
 };
 
+class TVersionedIndex {
+    std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
+public:
+    ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
+        Y_UNUSED(version);
+        return GetLastSchema();
+        /*
+            for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
+                if (it->first <= version) {
+                    return it->second;
+                }
+            }
+            Y_VERIFY(false);
+            return nullptr;
+        */
+    }
+
+    ISnapshotSchema::TPtr GetLastSchema() const {
+        Y_VERIFY(!Snapshots.empty());
+        return Snapshots.rbegin()->second;
+    }
+
+    void AddIndex(const TSnapshot& version, TIndexInfo&& indexInfo) {
+        Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
+    }
+};
+
+
 class IColumnEngine {
 public:
     virtual ~IColumnEngine() = default;
 
     virtual const TIndexInfo& GetIndexInfo() const = 0;
+    virtual const TVersionedIndex& GetVersionedIndex() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetIndexInfo().GetReplaceKey(); }
     virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetIndexInfo().GetSortingKey(); }
     virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetIndexInfo().GetIndexKey(); }

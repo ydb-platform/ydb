@@ -1,6 +1,6 @@
 #include "column_engine_logs.h"
 #include "indexed_read_data.h"
-#include "index_logic.h"
+#include "index_logic_logs.h"
 
 #include "filter.h"
 
@@ -333,7 +333,6 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 }
 
 void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
-    Y_UNUSED(snapshot);
     if (!GranulesTable) {
         MarkSchema = info.GetEffectiveKey();
         ui32 indexId = info.GetId();
@@ -341,7 +340,7 @@ void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndex
         ColumnsTable = std::make_shared<TColumnsTable>(indexId);
         CountersTable = std::make_shared<TCountersTable>(indexId);
     }
-    IndexInfo = std::move(info);
+    VersionedIndex.AddIndex(snapshot, std::move(info));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop) {

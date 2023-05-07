@@ -1,6 +1,6 @@
 #include "columnshard_impl.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/index_logic.h>
+#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {

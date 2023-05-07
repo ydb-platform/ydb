@@ -109,7 +109,7 @@ std::vector<TGranule*> TPKSortingWithLimit::DoDetachReadyGranules(THashMap<ui64,
 
 TPKSortingWithLimit::TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata)
     :TBase(readMetadata)
-    , MergeStream(readMetadata->IndexInfo.GetReplaceKey(), readMetadata->IsDescSorted())
+    , MergeStream(readMetadata->GetIndexInfo(readMetadata->GetSnapshot()).GetReplaceKey(), readMetadata->IsDescSorted())
 {
     CurrentItemsLimit = ReadMetadata->Limit;
 }

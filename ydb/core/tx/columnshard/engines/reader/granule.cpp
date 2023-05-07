@@ -23,11 +23,12 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
             NonSortableBatches.emplace_back(batch);
         }
 
+        auto& indexInfo = Owner->GetReadMetadata()->GetIndexInfo();
         if (!batchInfo.IsDuplicationsAvailable()) {
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
+            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey(), false));
         } else {
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "dup_portion_on_ready");
-            Y_VERIFY_DEBUG(NArrow::IsSorted(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
+            Y_VERIFY_DEBUG(NArrow::IsSorted(batch, indexInfo.GetReplaceKey(), false));
             Y_VERIFY(IsDuplicationsAvailable());
             BatchesToDedup.insert(batch.get());
         }
@@ -67,9 +68,10 @@ std::deque<TBatch*> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata:
         batches.emplace_back(&i);
     }
     const int reverseKff = reverse ? -1 : 0;
-    const auto pred = [reverseKff, readMetadata](const TBatch* l, const TBatch* r) {
+    auto& indexInfo = readMetadata->GetIndexInfo();
+    const auto pred = [reverseKff, indexInfo](const TBatch* l, const TBatch* r) {
         if (l->IsSortableInGranule() && r->IsSortableInGranule()) {
-            return l->GetPortionInfo().CompareMinByPk(r->GetPortionInfo(), readMetadata->IndexInfo) * reverseKff < 0;
+            return l->GetPortionInfo().CompareMinByPk(r->GetPortionInfo(), indexInfo) * reverseKff < 0;
         } else if (l->IsSortableInGranule()) {
             return false;
         } else if (r->IsSortableInGranule()) {
@@ -85,7 +87,7 @@ std::deque<TBatch*> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata:
             auto& l = *batches[i];
             auto& r = *batches[i + 1];
             Y_VERIFY(r.IsSortableInGranule());
-            Y_VERIFY(l.GetPortionInfo().CompareSelfMaxItemMinByPk(r.GetPortionInfo(), readMetadata->IndexInfo) * reverseKff <= 0);
+            Y_VERIFY(l.GetPortionInfo().CompareSelfMaxItemMinByPk(r.GetPortionInfo(), indexInfo) * reverseKff <= 0);
             nonCompactedSerial = false;
         } else {
             Y_VERIFY(nonCompactedSerial);

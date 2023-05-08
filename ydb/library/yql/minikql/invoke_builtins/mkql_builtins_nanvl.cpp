@@ -38,7 +38,7 @@ struct TNanvl {
         const auto name = std::is_same<TLeft, float>() ? "MyFloatIsNan" : "MyDoubleIsNan";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool(*)(TLeft)>(&std::isnan)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
-        const auto isnan = CallInst::Create(func, {val}, "isnan", block);
+        const auto isnan = CallInst::Create(fnType, func, {val}, "isnan", block);
 
         const auto lout = std::is_same<TLeft, TOutput>() ? left : SetterFor<TOutput>(StaticCast<TLeft, TOutput>(val, context, block), context, block);
         const auto rout = std::is_same<TRight, TOutput>() ? right : SetterFor<TOutput>(StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block), context, block);

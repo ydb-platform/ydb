@@ -15,7 +15,7 @@ NUdf::TUnboxedValuePod StringWith(const NUdf::TUnboxedValuePod full, const NUdf:
 NUdf::TUnboxedValuePod StringContains(const NUdf::TUnboxedValuePod full, const NUdf::TUnboxedValuePod part) {
     const std::string_view one = full.AsStringRef();
     const std::string_view two = part.AsStringRef();
-    return NUdf::TUnboxedValuePod(std::string_view::npos != one.find(two));
+    return NUdf::TUnboxedValuePod(one.contains(two));
 }
 
 template <NUdf::TUnboxedValuePod (*StringFunc)(const NUdf::TUnboxedValuePod full, const NUdf::TUnboxedValuePod part)>
@@ -32,7 +32,7 @@ struct TStringWith {
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(string->getType(), {string->getType(), sub->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-            const auto result = CallInst::Create(funcPtr, {string, sub}, "has", block);
+            const auto result = CallInst::Create(funType, funcPtr, {string, sub}, "has", block);
             return result;
         } else {
             const auto ptrArg = new AllocaInst(string->getType(), 0U, "arg", block);
@@ -42,8 +42,8 @@ struct TStringWith {
             new StoreInst(sub, ptrSub, block);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {ptrResult->getType(), ptrArg->getType(), ptrSub->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-            CallInst::Create(funcPtr, {ptrResult, ptrArg, ptrSub}, "", block);
-            const auto result = new LoadInst(ptrResult, "has", block);
+            CallInst::Create(funType, funcPtr, {ptrResult, ptrArg, ptrSub}, "", block);
+            const auto result = new LoadInst(string->getType(), ptrResult, "has", block);
             return result;
         }
     }

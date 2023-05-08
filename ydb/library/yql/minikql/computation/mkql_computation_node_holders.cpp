@@ -672,12 +672,13 @@ public:
         const auto valType = Type::getInt128Ty(context);
         const auto idxType = Type::getInt32Ty(context);
         const auto type = ArrayType::get(valType, ValueNodes.size());
+        const auto ptrType = PointerType::getUnqual(type);
         /// TODO: how to get computation context or other workaround
         const auto itms = *Stateless || ctx.AlwaysInline ?
-            new AllocaInst(PointerType::getUnqual(type), 0U, "itms", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(PointerType::getUnqual(type), 0U, "itms", block);
+            new AllocaInst(ptrType, 0U, "itms", &ctx.Func->getEntryBlock().back()):
+            new AllocaInst(ptrType, 0U, "itms", block);
         const auto result = Cache.GenNewArray(ValueNodes.size(), itms, ctx, block);
-        const auto itemsPtr = new LoadInst(itms, "items", block);
+        const auto itemsPtr = new LoadInst(ptrType, itms, "items", block);
 
         ui32 i = 0U;
         for (const auto node : ValueNodes) {
@@ -717,14 +718,14 @@ public:
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funcPtr, {factory}, "res", block);
+            const auto res = CallInst::Create(funType, funcPtr, {factory}, "res", block);
             return res;
         } else {
             const auto retPtr = new AllocaInst(valueType, 0U, "ret_ptr", block);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funcPtr, {factory, retPtr}, "", block);
-            const auto res = new LoadInst(retPtr, "res", block);
+            CallInst::Create(funType, funcPtr, {factory, retPtr}, "", block);
+            const auto res = new LoadInst(valueType, retPtr, "res", block);
             return res;
         }
     }
@@ -4032,7 +4033,7 @@ Value* GenerateCheckNotUniqueBoxed(Value* value, LLVMContext& context, Function*
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), Type::getInt32Ty(context), Type::getInt16Ty(context)});
     const auto boxptr = CastInst::Create(Instruction::IntToPtr, half, PointerType::getUnqual(type), "boxptr", block);
     const auto cntptr = GetElementPtrInst::CreateInBounds(boxptr, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 1)}, "cntptr", block);
-    const auto refs = new LoadInst(cntptr, "refs", block);
+    const auto refs = new LoadInst(Type::getInt32Ty(context), cntptr, "refs", block);
     const auto many = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, refs, ConstantInt::get(refs->getType(), 1U), "many", block);
     result->addIncoming(many, block);
     BranchInst::Create(done, block);
@@ -4055,15 +4056,15 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
 
     const auto indexPtr = GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(idxType, Index)}, "index_ptr", block);
 
-    const auto raw = new LoadInst(indexPtr, "raw", block);
+    const auto raw = new LoadInst(valueType, indexPtr, "raw", block);
 
     const auto indb = GetterFor<bool>(raw, context, block);
-    const auto indf = new ZExtInst(indb, idxType, "indf", block);
+    const auto indf = CastInst::Create(Instruction::ZExt, indb, idxType, "indf", block);
     const auto ind_one = BinaryOperator::CreateAdd(indf, ConstantInt::get(idxType, Index + 1U), "ind_one", block);
 
     const auto tpfirst = GetElementPtrInst::CreateInBounds(values, {ind_one}, "tpfirst", block);
 
-    const auto tfirst = new LoadInst(tpfirst, "tfirst", block);
+    const auto tfirst = new LoadInst(valueType, tpfirst, "tfirst", block);
     const auto cfirst = GenerateCheckNotUniqueBoxed(tfirst, context, ctx.Func, block);
 
     const auto scnd = BasicBlock::Create(context, "scnd", ctx.Func);
@@ -4083,12 +4084,12 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
     const auto newInd = SetterFor<bool>(neg, context, block);
     new StoreInst(newInd, indexPtr, block);
 
-    const auto inds = new ZExtInst(neg, idxType, "inds", block);
+    const auto inds = CastInst::Create(Instruction::ZExt, neg, idxType, "inds", block);
 
     const auto ind_two = BinaryOperator::CreateAdd(inds, ConstantInt::get(idxType, Index + 1U), "ind_two", block);
 
     const auto tpsecond = GetElementPtrInst::CreateInBounds(values, {ind_two}, "tpsecond", block);
-    const auto tsecond = new LoadInst(tpsecond, "tsecond", block);
+    const auto tsecond = new LoadInst(valueType, tpsecond, "tsecond", block);
     const auto csecond = GenerateCheckNotUniqueBoxed(tsecond, context, ctx.Func, block);
     has->addIncoming(tsecond, block);
     BranchInst::Create(make, have, csecond, block);
@@ -4105,15 +4106,15 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto array = CallInst::Create(funcPtr, {fact, size, items}, "array", block);
+            const auto array = CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);
             AddRefBoxed(array, ctx, block);
             result->addIncoming(array, block);
             new StoreInst(array, tpsecond, block);
         } else {
             const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), tpsecond->getType(), size->getType(), items->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funcPtr, {fact, tpsecond, size, items}, "", block);
-            const auto array = new LoadInst(tpsecond, "array", block);
+            CallInst::Create(funType, funcPtr, {fact, tpsecond, size, items}, "", block);
+            const auto array = new LoadInst(valueType, tpsecond, "array", block);
             AddRefBoxed(array, ctx, block);
             result->addIncoming(array, block);
         }

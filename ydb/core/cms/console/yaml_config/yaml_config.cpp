@@ -710,6 +710,60 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     }
 }
 
+/**
+ * Parses config metadata
+ */
+TMetadata GetMetadata(const TString& config) {
+    auto doc = NFyaml::TDocument::Parse(config);
+
+    if (auto node = doc.Root().Map()["metadata"]; node) {
+        auto versionNode = node.Map()["version"];
+        auto clusterNode = node.Map()["cluster"];
+        return TMetadata{
+            .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
+            .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
+/**
+ * Replaces metadata in config
+ */
+TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
+    auto doc = NFyaml::TDocument::Parse(config);
+
+    TStringStream sstr;
+    auto serializeMetadata = [&]() {
+        sstr << "metadata:\n  version: " << *metadata.Version << "\n  cluster: " << *metadata.Cluster;
+    };
+    if (doc.Root().Style() == NFyaml::ENodeStyle::Flow) {
+        serializeMetadata();
+        sstr << "\n" << doc;
+    } else {
+        if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
+            auto begin = pair.Key().BeginMark().InputPos;
+            auto end = pair.Value().EndMark().InputPos;
+            sstr << config.substr(0, begin);
+            serializeMetadata();
+            sstr << config.substr(end, TString::npos);
+        } else {
+            if (doc.HasExplicitDocumentStart()) {
+                auto docStart = doc.BeginMark().InputPos + 4;
+                sstr << config.substr(0, docStart);
+                serializeMetadata();
+                sstr << "\n" << config.substr(docStart, TString::npos);
+            } else {
+                serializeMetadata();
+                sstr << "\n" << config;
+            }
+        }
+    }
+
+    return sstr.Str();
+}
+
 } // namespace NYamlConfig
 
 template <>

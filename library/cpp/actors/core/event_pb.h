@@ -270,7 +270,10 @@ namespace NActors {
                     std::lock_guard l(messageSizesMutex);
 
                     messageSizes.insert(size);
-                    if (messageSizes.size() == 10000) {
+                    if (messageSizes.size() % 10 == 0) {
+                        std::cout << "[MSG SIZE METRICS] messageSizes.size() = " << messageSizes.size() << "\n";
+                    }
+                    if (messageSizes.size() == 1000) {
                         std::cout << "[MSG SIZE METRICS] "
                                   << "p0 " << *messageSizes.begin() << " "
                                   << "p25 " << *std::next(messageSizes.begin(), 2500) << " "

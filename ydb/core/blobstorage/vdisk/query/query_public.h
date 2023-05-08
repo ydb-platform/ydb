@@ -80,7 +80,6 @@ namespace NKikimr {
                 return false;
             }
 
-            std::cout << "[CheckVGetQuery] ok\n";
             return true;
         }
 

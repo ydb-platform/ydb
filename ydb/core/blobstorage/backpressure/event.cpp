@@ -42,9 +42,6 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         id->SetSequenceId(sequenceId);
         clientId.Serialize(msgQoS);
 
-        std::cout << "[processMsgQoS] GetMsgId = " << id->GetMsgId() << ", GetSequenceId = " << id->GetSequenceId() << "\n";
-        std::cout << "[processMsgQoS] msgId = " << msgId << ", sequenceId = " << sequenceId << "\n";
-
         // update in sender queue duration
         TDuration inSenderQueue = TDuration::Seconds(processingTimer.Passed());
         auto execTimeStats = msgQoS->MutableExecTimeStats();
@@ -59,9 +56,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
             using T = std::remove_pointer_t<decltype(ev)>;
             processMsgQoS(ev->Record);
             auto clone = std::make_unique<T>();
-            std::cerr << "before copyFrom: " << clone->Record.ShortDebugString() << "\n\n\n";
             clone->Record.CopyFrom(ev->Record);
-            std::cerr << "after copyFrom: " << clone->Record.ShortDebugString() << "\n\n\n";
             for (ui32 i = 0, count = ev->GetPayloadCount(); i < count; ++i) {
                 clone->AddPayload(TRope(ev->GetPayload(i)));
             }
@@ -77,9 +72,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
 
     if (Type == TEvBlobStorage::TEvVGet::EventType) {
         std::unique_ptr<TEvBlobStorage::TEvVGet> clone(dynamic_cast<TEvBlobStorage::TEvVGet*>(TEvBlobStorage::TEvVGet::Load(Buffer.Get())));
-        std::cout << "[TEventHolder::SendToVDisk] clone before processMsgQoS: " << clone->Record.ShortDebugString() << "\n\n";
         processMsgQoS(clone->Record);
-        std::cout << "[TEventHolder::SendToVDisk] clone after processMsgQoS: " << clone->Record.ShortDebugString() << "\n\n";
 
         Y_VERIFY(clone->Record.GetMsgQoS().GetMsgId().GetMsgId() != 18446744073699546569ull);
         Y_VERIFY(clone->Record.GetMsgQoS().GetMsgId().GetSequenceId() != 18446744073699546569ull);

@@ -188,10 +188,8 @@ public:
         BlockedGeneration = Max(BlockedGeneration, record.GetBlockedGeneration());
 
         Y_VERIFY(record.ResultSize() > 0, "ev# %s vdisk# %s", ev.ToString().data(), vdisk.ToString().data());
-        std::cout << "[OnVGetResult] result size: " << (ui32)record.ResultSize() << "\n";
         for (ui32 i = 0, e = (ui32)record.ResultSize(); i != e; ++i) {
             const NKikimrBlobStorage::TQueryResult &result = record.GetResult(i);
-            std::cout << "[OnVGetResult] result[" << i << "]: " << result.ShortDebugString().data() << "\n";
             Y_VERIFY(result.HasStatus());
             const NKikimrProto::EReplyStatus replyStatus = result.GetStatus();
             Y_VERIFY(result.HasCookie());

@@ -84,10 +84,6 @@ namespace NKikimr {
     }
 
     ui64 TCostModel::ReadCostBySize(ui64 size) const {
-        std::cout << "[ReadCostBySize] " << "size = " << size << ", "
-                  << "ReadBlockSize = " << ReadBlockSize << ", "
-                  << "SeekTimeUs = " << SeekTimeUs << "\n";
-
         ui64 seekCost;
         if (ReadBlockSize == 0) {
             seekCost = (size / 65536 + 1) * SeekTimeUs;

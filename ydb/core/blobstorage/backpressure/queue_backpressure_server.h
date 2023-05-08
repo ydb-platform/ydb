@@ -193,8 +193,6 @@ namespace NKikimr {
                         ExpectedMsgId.SequenceId = Max(ExpectedMsgId.SequenceId, msgId.SequenceId + 1);
                         SetStatus(opStatus, NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId, true, msgId);
                         GlobalStatPtr->IncIncorrectMsgId();
-
-                        std::cout << "[TWindow::Push] IncorrectMsgId: " << msgId.ToString() << "\n";
                     }
                 }
 

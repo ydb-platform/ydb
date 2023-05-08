@@ -401,12 +401,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             << " NodeId# " << Info->GetActorId(vdisk).NodeId()
             << " ev# " << ev->Get()->ToString());
 
-        std::cout << "BSD07 " <<  " Handle TEvVGetResult"
-            << " Status# " << NKikimrProto::EReplyStatus_Name(status)
-            << " vdisk# " << vdisk.ToString()
-            << " NodeId# " << Info->GetActorId(vdisk).NodeId()
-            << " ev# " << ev->Get()->ToString() << "\n\n";
-
         vDiskData.IsResponsive = true;
 
         NKikimrProto::EReplyStatus replyStatus = status;

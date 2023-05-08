@@ -1168,8 +1168,6 @@ namespace NKikimr {
             // set up reception time
             TInstant now = TAppData::TimeProvider->Now();
 
-            std::cout << "[HandleRequestWithQoS] msgId: " << msgQoS->GetMsgId().ShortDebugString() << "  , reader: " << record.GetMsgQoS().GetMsgId().ShortDebugString() << "\n\n";
-
             Y_VERIFY(record.GetMsgQoS().GetMsgId().GetMsgId() != 18446744073699546569ull);
             Y_VERIFY(record.GetMsgQoS().GetMsgId().GetSequenceId() != 18446744073699546569ull);
             Y_VERIFY(msgQoS->GetMsgId().GetMsgId() != 18446744073699546569ull);
@@ -1449,8 +1447,6 @@ namespace NKikimr {
         void Reply(TPtr& ev, const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason,
                 TInstant now, const TWindowStatus& wstatus) {
             auto window = ev->Get()->Record.MutableMsgQoS()->MutableWindow();
-
-            std::cout << "[Reply] errorReason:   " << errorReason.data() << "\n";
 
             wstatus.Serialize(*window);
             Reply(ev, ctx, status, errorReason, now);

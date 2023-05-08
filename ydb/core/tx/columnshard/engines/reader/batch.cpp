@@ -163,12 +163,4 @@ ui64 TBatch::GetUsefulBytes(const ui64 bytes) const {
     return bytes * FetchedInfo.GetUsefulDataKff();
 }
 
-std::optional<ui32> TBatch::GetMergePoolId() const {
-    if (IsSortableInGranule()) {
-        return Granule;
-    } else {
-        return {};
-    }
-}
-
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 #include "granule.h"
-#include "order_controller.h"
+#include "order_control/abstract.h"
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {

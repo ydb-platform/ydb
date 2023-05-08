@@ -1,5 +1,6 @@
 #include "read_metadata.h"
-#include "order_controller.h"
+#include "order_control/default.h"
+#include "order_control/pk_with_limit.h"
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 

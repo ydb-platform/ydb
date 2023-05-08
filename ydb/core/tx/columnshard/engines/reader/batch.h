@@ -96,7 +96,6 @@ public:
     const TBatchAddress& GetBatchAddress() const {
         return BatchAddress;
     }
-    std::optional<ui32> GetMergePoolId() const;
 
     ui64 GetUsefulWaitingBytes() const {
         return GetUsefulBytes(WaitingBytes);

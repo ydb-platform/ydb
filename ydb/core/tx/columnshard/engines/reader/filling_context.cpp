@@ -1,5 +1,6 @@
 #include "filling_context.h"
 #include "filling_context.h"
+#include "order_control/not_sorted.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
 namespace NKikimr::NOlap::NIndexedReader {

@@ -853,7 +853,7 @@ namespace NKikimrCapnProto {
                     interviews.setWithCaveats(i, GetExtremeQueries(i).GetCapnpBase());
                 }
 
-                std::cerr << "\n\nserializing record: " << ShortDebugString() << "\n\n";
+                std::cout << "[MSG SIZE METRICS] extreme queries cnt: " << elements.size() << "\n";
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);

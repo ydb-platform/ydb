@@ -266,7 +266,7 @@ namespace NActors {
                     Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
                 }
 
-                {
+                if (ev->Record.GetTypeName() == "TEvVGet") {
                     std::lock_guard l(messageSizesMutex);
 
                     messageSizes.insert(size);

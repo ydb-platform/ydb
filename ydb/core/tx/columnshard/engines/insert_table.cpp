@@ -187,7 +187,7 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
     return true;
 }
 
-std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId) const {
+std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot) const {
     const auto* committed = CommittedByPathId.FindPtr(pathId);
     if (!committed) {
         return {};
@@ -197,8 +197,8 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId
     ret.reserve(committed->size());
 
     for (const auto& data : *committed) {
-        if (SnapLessOrEqual(data.ShardOrPlan, data.WriteTxId, plan, txId)) {
-            ret.emplace_back(TCommittedBlob{data.BlobId, data.ShardOrPlan, data.WriteTxId});
+        if (std::less_equal<TSnapshot>()(data.GetSnapshot(), snapshot)) {
+            ret.emplace_back(TCommittedBlob{data.BlobId, data.GetSnapshot()});
         }
     }
 

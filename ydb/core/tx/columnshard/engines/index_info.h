@@ -40,8 +40,7 @@ public:
     /// Appends the special columns to the batch.
     static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(
         const std::shared_ptr<arrow::RecordBatch>& batch,
-        const ui64 platStep,
-        const ui64 txId);
+        const TSnapshot& snapshot);
 
     /// Makes schema as set of the special columns.
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot();

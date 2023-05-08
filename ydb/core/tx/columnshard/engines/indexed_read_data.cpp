@@ -183,12 +183,12 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& da
 }
 
 std::shared_ptr<arrow::RecordBatch>
-TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>& srcBatch, ui64 planStep, ui64 txId) const {
+TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>& srcBatch, const TSnapshot& snapshot) const {
     Y_VERIFY(srcBatch);
 
     // Extract columns (without check), filter, attach snapshot, extract columns with check
     // (do not filter snapshot columns)
-    auto loadSchema = ReadMetadata->GetLoadSchema(TSnapshot().SetPlanStep(planStep).SetTxId(txId));
+    auto loadSchema = ReadMetadata->GetLoadSchema(snapshot);
 
     auto batch = NArrow::ExtractExistedColumns(srcBatch, loadSchema);
     Y_VERIFY(batch);
@@ -199,9 +199,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     }
     auto preparedBatch = batch;
 
-    preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, planStep, txId);
-    Y_VERIFY(preparedBatch);
-
+    preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, snapshot);
     preparedBatch = NArrow::ExtractColumns(preparedBatch, loadSchema);
     Y_VERIFY(preparedBatch);
 

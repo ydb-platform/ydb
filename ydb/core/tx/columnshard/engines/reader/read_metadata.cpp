@@ -19,13 +19,13 @@ std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TR
         return std::make_shared<NOlap::TSelectInfo>();
     }
     return Index->Select(readDescription.PathId, 
-                            {readDescription.PlanStep, readDescription.TxId},
+                            readDescription.GetSnapshot(),
                             columnIds,
                             readDescription.PKRangesFilter);
 }
 
 std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const {
-    return std::move(InsertTable->Read(readDescription.PathId, readDescription.PlanStep, readDescription.TxId));
+    return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot()));
 }
 
 std::shared_ptr<arrow::RecordBatch> TDataStorageAccessor::GetCachedBatch(const TUnifiedBlobId& blobId) const {
@@ -90,8 +90,8 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription);
     for (auto& cmt : CommittedBlobs) {
-        if (auto batch = dataAccessor.GetCachedBatch(cmt.BlobId)) {
-            CommittedBatches.emplace(cmt.BlobId, batch);
+        if (auto batch = dataAccessor.GetCachedBatch(cmt.GetBlobId())) {
+            CommittedBatches.emplace(cmt.GetBlobId(), batch);
         }
     }
     

@@ -292,7 +292,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 bool Insert(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap,
             TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
     TColumnEngineForLogs engine(0, TestLimits());
-    engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+    engine.UpdateDefaultSchema(snap, TIndexInfo(tableInfo));
     THashSet<TUnifiedBlobId> lostBlobs;
     engine.Load(db, lostBlobs);
 
@@ -312,7 +312,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT_VALUES_EQUAL(compactionInfo->Granules.size(), 1);
     UNIT_ASSERT(!compactionInfo->InGranule);
 
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), {0, 0});
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TSnapshot::Zero());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 
@@ -330,7 +330,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
 bool Compact(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange,
              TString>&& blobs, ui32& step, const TExpected& expected) {
     TColumnEngineForLogs engine(0, TestLimits());
-    engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+    engine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
     THashSet<TUnifiedBlobId> lostBlobs;
     engine.Load(db, lostBlobs);
     return Compact(engine, db, snap, std::move(blobs), step, expected);
@@ -400,12 +400,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         THashMap<TBlobRange, TString> blobs;
         blobs[blobRanges[0]] = testBlob;
         blobs[blobRanges[1]] = testBlob;
-        Insert(tableInfo, db, {1, 2}, std::move(dataToIndex), blobs, step);
+        Insert(tableInfo, db, TSnapshot(1, 2), std::move(dataToIndex), blobs, step);
 
         // load
 
         TColumnEngineForLogs engine(0);
-        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+        engine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select from snap before insert
             ui64 planStep = 1;
             ui64 txId = 0;
-            auto selectInfo = engine.Select(paths[0], {planStep, txId}, columnIds, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), columnIds, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 0);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select from snap after insert (greater txId)
             ui64 planStep = 1;
             ui64 txId = 2;
-            auto selectInfo = engine.Select(paths[0], {planStep, txId}, columnIds, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), columnIds, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions[0].NumRecords(), columnIds.size());
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select from snap after insert (greater planStep)
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[0], {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions[0].NumRecords(), 1);
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select another pathId
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[1], {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 0);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
-            bool ok = Insert(tableInfo, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
+            bool ok = Insert(tableInfo, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
         }
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
 
         TColumnEngineForLogs engine(0, TestLimits());
-        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+        engine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 4);
         }
@@ -535,7 +535,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_VERIFY(pkFilter.Add(gt10k, nullptr, nullptr));
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, pkFilter);
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
         }
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_VERIFY(pkFilter.Add(nullptr, lt10k, nullptr));
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, pkFilter);
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
         }
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
 
         TColumnEngineForLogs engine(0, TestLimits());
-        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+        engine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
-            bool ok = Insert(engine, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
+            bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             // first overload returns ok: it's a postcondition
             if (!overload) {
                 UNIT_ASSERT(ok);
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits());
-            tmpEngine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+            tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
             UNIT_ASSERT(tmpEngine.GetOverloadedGranules(pathId));
         }
@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
-            bool ok = Insert(engine, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
+            bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             bool overload = engine.GetOverloadedGranules(pathId);
             UNIT_ASSERT(ok);
             UNIT_ASSERT(!overload);
@@ -644,7 +644,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits());
-            tmpEngine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+            tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
             UNIT_ASSERT(!tmpEngine.GetOverloadedGranules(pathId));
         }
@@ -673,7 +673,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
-            bool ok = Insert(tableInfo, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
+            bool ok = Insert(tableInfo, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
         }
 
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
 
         TColumnEngineForLogs engine(0, TestLimits());
-        engine.UpdateDefaultSchema(TSnapshot(), TIndexInfo(tableInfo));
+        engine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
@@ -698,7 +698,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 4);
         }
@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 4);
         }
@@ -725,7 +725,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 2);
         }
@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, {planStep, txId}, oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 2);
         }

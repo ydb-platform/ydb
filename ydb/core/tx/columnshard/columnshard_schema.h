@@ -505,8 +505,8 @@ struct Schema : NIceDb::Schema {
                                     const TGranuleRecord& row) {
         db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
             NIceDb::TUpdate<IndexGranules::Granule>(row.Granule),
-            NIceDb::TUpdate<IndexGranules::PlanStep>(row.CreatedAt.PlanStep),
-            NIceDb::TUpdate<IndexGranules::TxId>(row.CreatedAt.TxId)
+            NIceDb::TUpdate<IndexGranules::PlanStep>(row.GetCreatedAt().GetPlanStep()),
+            NIceDb::TUpdate<IndexGranules::TxId>(row.GetCreatedAt().GetTxId())
         );
     }
 
@@ -528,7 +528,7 @@ struct Schema : NIceDb::Schema {
             ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
             ui64 txId = rowset.GetValue<IndexGranules::TxId>();
 
-            callback(TGranuleRecord(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey)));
+            callback(TGranuleRecord(pathId, granule, NOlap::TSnapshot(planStep, txId), engine.DeserializeMark(indexKey)));
 
             if (!rowset.Next())
                 return false;

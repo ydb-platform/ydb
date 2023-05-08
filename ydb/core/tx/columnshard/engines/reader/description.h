@@ -15,6 +15,9 @@ public:
 
 // Describes read/scan request
 struct TReadDescription {
+private:
+    TSnapshot Snapshot;
+public:
     // Table
     ui64 PathId = 0;
     TString TableName;
@@ -31,15 +34,17 @@ struct TReadDescription {
     // List of columns
     TVector<ui32> ColumnIds;
     TVector<TString> ColumnNames;
-    // Snapshot
-    ui64 PlanStep = 0;
-    ui64 TxId = 0;
-
+    
     std::shared_ptr<NSsa::TProgram> AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
-    TReadDescription(const bool isReverse)
-        : PKRangesFilter(isReverse) {
+    TReadDescription(const TSnapshot& snapshot, const bool isReverse)
+        : Snapshot(snapshot) 
+        , PKRangesFilter(isReverse) {
 
     }
+
+    const TSnapshot& GetSnapshot() const {
+        return Snapshot;
+    } 
 };
 
 }

@@ -67,9 +67,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT(!ok);
 
         // read nothing
-        auto blobs = insertTable.Read(tableId, 0, 0);
+        auto blobs = insertTable.Read(tableId, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId+1, 0, 0);
+        blobs = insertTable.Read(tableId+1, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
@@ -82,15 +82,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT_EQUAL(committed.begin()->second.size(), 1);
 
         // read old snapshot
-        blobs = insertTable.Read(tableId, 0, 0);
+        blobs = insertTable.Read(tableId, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId+1, 0, 0);
+        blobs = insertTable.Read(tableId+1, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
-        blobs = insertTable.Read(tableId, planStep, txId);
+        blobs = insertTable.Read(tableId, TSnapshot(planStep, txId));
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId+1, 0, 0);
+        blobs = insertTable.Read(tableId+1, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }

@@ -64,13 +64,13 @@ public:
             WaitIndexed.erase(event.BlobRange);
             IndexedData.AddIndexed(event.BlobRange, event.Data);
         } else if (CommittedBlobs.contains(blobId)) {
-            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
+            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, NOlap::TSnapshot::Zero()});
             if (cmt.empty()) {
                 return; // ignore duplicates
             }
             const NOlap::TCommittedBlob& cmtBlob = cmt.key();
             ui32 batchNo = cmt.mapped();
-            IndexedData.AddNotIndexed(batchNo, event.Data, cmtBlob.PlanStep, cmtBlob.TxId);
+            IndexedData.AddNotIndexed(batchNo, event.Data, cmtBlob.GetSnapshot());
         } else {
             LOG_S_ERROR("TEvReadBlobRangeResult returned unexpected blob at tablet "
                 << TabletId << " (read)");
@@ -167,7 +167,7 @@ public:
         for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++notIndexed) {
             const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
 
-            CommittedBlobs.emplace(cmtBlob.BlobId);
+            CommittedBlobs.emplace(cmtBlob.GetBlobId());
             WaitCommitted.emplace(cmtBlob, notIndexed);
         }
 
@@ -180,12 +180,12 @@ public:
 
         // Add cached batches without read
         for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
-            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
+            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, NOlap::TSnapshot::Zero()});
             Y_VERIFY(!cmt.empty());
 
             const NOlap::TCommittedBlob& cmtBlob = cmt.key();
             ui32 batchNo = cmt.mapped();
-            IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.PlanStep, cmtBlob.TxId);
+            IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.GetSnapshot());
         }
 
         LOG_S_DEBUG("Starting read (" << WaitIndexed.size() << " indexed, "
@@ -209,7 +209,7 @@ public:
         } else {
             // TODO: Keep inflight
             for (auto& [cmtBlob, batchNo] : WaitCommitted) {
-                auto& blobId = cmtBlob.BlobId;
+                auto& blobId = cmtBlob.GetBlobId();
                 SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
             }
             for (auto&& blobRange : IndexedBlobs) {

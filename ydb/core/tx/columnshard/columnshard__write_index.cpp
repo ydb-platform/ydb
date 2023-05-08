@@ -61,7 +61,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     if (Ev->Get()->PutStatus == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot = changes->ApplySnapshot;
         if (snapshot.IsZero()) {
-            snapshot = {Self->LastPlannedStep, Self->LastPlannedTxId};
+            snapshot = NOlap::TSnapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
         }
 
         TBlobGroupSelector dsGroupSelector(Self->Info());

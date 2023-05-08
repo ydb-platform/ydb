@@ -26,7 +26,7 @@ public:
     }
 
     bool operator[](const ui32 idx) const {
-        return SnapLessOrEqual(RawSteps[idx], RawIds[idx], Snapshot.GetPlanStep(), Snapshot.GetTxId());
+        return std::less_equal<TSnapshot>()(TSnapshot(RawSteps[idx], RawIds[idx]), Snapshot);
     }
 };
 

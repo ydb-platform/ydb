@@ -257,7 +257,7 @@ private:
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
-    TSnapshot LastSnapshot;
+    TSnapshot LastSnapshot = TSnapshot::Zero();
 
     void ClearIndex() {
         Granules.clear();
@@ -272,7 +272,7 @@ private:
 
         LastPortion = 0;
         LastGranule = 0;
-        LastSnapshot = {};
+        LastSnapshot = TSnapshot::Zero();
     }
 
     bool LoadGranules(IDbWrapper& db);

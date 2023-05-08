@@ -19,16 +19,16 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
     IndexedData.InitRead(batchNo);
     // Add cached batches without read
     for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
-        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
+        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, NOlap::TSnapshot::Zero() });
         Y_VERIFY(!cmt.empty());
 
         const NOlap::TCommittedBlob& cmtBlob = cmt.key();
         ui32 batchNo = cmt.mapped();
-        IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.PlanStep, cmtBlob.TxId);
+        IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.GetSnapshot());
     }
     // Read all remained committed blobs
     for (const auto& [cmtBlob, _] : WaitCommitted) {
-        auto& blobId = cmtBlob.BlobId;
+        auto& blobId = cmtBlob.GetBlobId();
         FetchBlobsQueue.emplace_front(TBlobRange(blobId, 0, blobId.BlobSize()));
     }
 
@@ -44,11 +44,11 @@ void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data
     if (IndexedData.IsIndexedBlob(blobRange)) {
         IndexedData.AddIndexed(blobRange, data);
     } else {
-        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
+        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, NOlap::TSnapshot::Zero() });
         Y_VERIFY(!cmt.empty());
         const NOlap::TCommittedBlob& cmtBlob = cmt.key();
         ui32 batchNo = cmt.mapped();
-        IndexedData.AddNotIndexed(batchNo, data, cmtBlob.PlanStep, cmtBlob.TxId);
+        IndexedData.AddNotIndexed(batchNo, data, cmtBlob.GetSnapshot());
     }
 }
 

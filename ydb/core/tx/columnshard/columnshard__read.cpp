@@ -47,13 +47,11 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     txc.DB.NoMoreReadsForTx();
 
     auto& record = Proto(Ev->Get());
-    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo(NOlap::TSnapshot().SetPlanStep(record.GetPlanStep()).SetTxId(record.GetTxId()));
+    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo(NOlap::TSnapshot(record.GetPlanStep(), record.GetTxId()));
     
     ui64 metaShard = record.GetTxInitiator();
 
-    NOlap::TReadDescription read(false);
-    read.PlanStep = record.GetPlanStep();
-    read.TxId = record.GetTxId();
+    NOlap::TReadDescription read(NOlap::TSnapshot(record.GetPlanStep(), record.GetTxId()), false);
     read.PathId = record.GetTableId();
     read.ReadNothing = !(Self->TablesManager.HasTable(read.PathId));
     read.ColumnIds = ProtoToVector<ui32>(record.GetColumnIds());
@@ -97,7 +95,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     }
 
     Result = std::make_unique<TEvColumnShard::TEvReadResult>(
-        Self->TabletID(), metaShard, read.PlanStep, read.TxId, read.PathId, 0, true, status);
+        Self->TabletID(), metaShard, read.GetSnapshot().GetPlanStep(), read.GetSnapshot().GetTxId(), read.PathId, 0, true, status);
 
     if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
         Self->IncCounter(COUNTER_READ_SUCCESS);

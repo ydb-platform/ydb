@@ -842,9 +842,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
 
-    NOlap::TReadDescription read(record.GetReverse());
-    read.PlanStep = snapshot.GetStep();
-    read.TxId = snapshot.GetTxId();
+    NOlap::TReadDescription read(NOlap::TSnapshot(snapshot.GetStep(), snapshot.GetTxId()), record.GetReverse());
     read.PathId = record.GetLocalPathId();
     read.ReadNothing = !(Self->TablesManager.HasTable(read.PathId));
     read.TableName = record.GetTablePath();
@@ -854,7 +852,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     const NOlap::TIndexInfo* indexInfo = nullptr;
     if (!isIndexStats) {
-        indexInfo = &(Self->TablesManager.GetIndexInfo(NOlap::TSnapshot().SetPlanStep(snapshot.GetStep()).SetTxId(snapshot.GetTxId())));
+        indexInfo = &(Self->TablesManager.GetIndexInfo(NOlap::TSnapshot(snapshot.GetStep(), snapshot.GetTxId())));
     }
 
     // TODO: move this to CreateReadMetadata?

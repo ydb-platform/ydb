@@ -26,20 +26,16 @@ TIndexInfo::TIndexInfo(const TString& name, ui32 id)
     , Name(name)
 {}
 
-std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(
-    const std::shared_ptr<arrow::RecordBatch>& batch,
-    const ui64 planStep,
-    const ui64 txId)
-{
+std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
     Y_VERIFY(batch);
     i64 numColumns = batch->num_columns();
     i64 numRows = batch->num_rows();
 
     auto res = batch->AddColumn(numColumns, arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
-                                NArrow::MakeUI64Array(planStep, numRows));
+                                NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows));
     Y_VERIFY(res.ok());
     res = (*res)->AddColumn(numColumns + 1, arrow::field(SPEC_COL_TX_ID, arrow::uint64()),
-                            NArrow::MakeUI64Array(txId, numRows));
+                            NArrow::MakeUI64Array(snapshot.GetTxId(), numRows));
     Y_VERIFY(res.ok());
     Y_VERIFY((*res)->num_columns() == numColumns + 2);
     return *res;

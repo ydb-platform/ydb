@@ -65,16 +65,16 @@ public:
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     TVector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddNotIndexed(ui32 batchNo, TString blob, ui64 planStep, ui64 txId) {
-        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(TSnapshot().SetPlanStep(planStep).SetTxId(txId)));
-        AddNotIndexed(batchNo, batch, planStep, txId);
+    void AddNotIndexed(ui32 batchNo, TString blob, const TSnapshot& snapshot) {
+        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(snapshot));
+        AddNotIndexed(batchNo, batch, snapshot);
     }
 
-    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) {
+    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
         Y_VERIFY(batchNo < NotIndexed.size());
         Y_VERIFY(!NotIndexed[batchNo]);
         ++ReadyNotIndexed;
-        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, planStep, txId);
+        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, snapshot);
     }
 
     void AddIndexed(const TBlobRange& blobRange, const TString& column);
@@ -94,7 +94,7 @@ public:
 
 private:
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(
-        const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) const;
+        const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) const;
 
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;

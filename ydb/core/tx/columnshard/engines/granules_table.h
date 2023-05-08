@@ -5,18 +5,24 @@
 namespace NKikimr::NOlap {
 
 struct TGranuleRecord {
+private:
+    TSnapshot CreatedAt;
+public:
     ui64 PathId;
     ui64 Granule;
-    TSnapshot CreatedAt;
     NArrow::TReplaceKey Mark;
 
     TGranuleRecord(ui64 pathId, ui64 granule, const TSnapshot& createdAt, const NArrow::TReplaceKey& mark)
-        : PathId(pathId)
+        : CreatedAt(createdAt)
+        , PathId(pathId)
         , Granule(granule)
-        , CreatedAt(createdAt)
         , Mark(mark)
     {
         Y_VERIFY(Mark.Size());
+    }
+
+    const TSnapshot& GetCreatedAt() const {
+        return CreatedAt;
     }
 
     bool operator == (const TGranuleRecord& rec) const {
@@ -27,7 +33,7 @@ struct TGranuleRecord {
         out << '{';
         auto& snap = rec.CreatedAt;
         out << rec.PathId << '#' << rec.Granule << ' '
-            << snap.PlanStep << ':' << (snap.TxId == Max<ui64>() ? "max" : ToString(snap.TxId));
+            << snap;
         out << '}';
         return out;
     }

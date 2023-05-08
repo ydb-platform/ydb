@@ -15,7 +15,7 @@ namespace {
 
 bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portions, const TCompactionLimits& limits,
                         const TSnapshot& snap, TColumnEngineForLogs::TMarksGranules& marksGranules) {
-    ui64 oldTimePlanStep = snap.PlanStep - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
+    ui64 oldTimePlanStep = snap.GetPlanStep() - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
     ui32 insertedCount = 0;
     ui32 insertedNew = 0;
 
@@ -28,7 +28,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
         for (const auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
                 ++insertedCount;
-                if (portionInfo.Snapshot().PlanStep > oldTimePlanStep) {
+                if (portionInfo.Snapshot().GetPlanStep() > oldTimePlanStep) {
                     ++insertedNew;
                 }
             } else if (portionInfo.BlobsSizes().second >= limits.GoodBlobSize) {
@@ -453,10 +453,10 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
             LastGranule = value;
             break;
         case LAST_PLAN_STEP:
-            LastSnapshot.PlanStep = value;
+            LastSnapshot = TSnapshot(value, LastSnapshot.GetTxId());
             break;
         case LAST_TX_ID:
-            LastSnapshot.TxId = value;
+            LastSnapshot = TSnapshot(LastSnapshot.GetPlanStep(), value);
             break;
         }
     };
@@ -649,7 +649,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
         return {};
     }
 
-    TSnapshot fakeSnapshot = {1, 1}; // TODO: better snapshot
+    TSnapshot fakeSnapshot(1, 1); // TODO: better snapshot
     auto changes = std::make_shared<TChanges>(*this, TColumnEngineChanges::TTL, fakeSnapshot);
     ui64 evicttionSize = 0;
     bool allowEviction = true;
@@ -1082,8 +1082,8 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
 
         if (LastSnapshot < snapshot) {
             LastSnapshot = snapshot;
-            CountersTable->Write(db, LAST_PLAN_STEP, LastSnapshot.PlanStep);
-            CountersTable->Write(db, LAST_TX_ID, LastSnapshot.TxId);
+            CountersTable->Write(db, LAST_PLAN_STEP, LastSnapshot.GetPlanStep());
+            CountersTable->Write(db, LAST_TX_ID, LastSnapshot.GetTxId());
         }
     }
     return true;
@@ -1222,7 +1222,7 @@ TMap<TSnapshot, TVector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 gra
         TSnapshot recXSnapshot = portionInfo.XSnapshot();
 
         bool visible = (recSnapshot <= snapshot);
-        if (recXSnapshot.PlanStep) {
+        if (recXSnapshot.GetPlanStep()) {
             visible = visible && snapshot < recXSnapshot;
         }
 

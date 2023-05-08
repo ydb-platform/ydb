@@ -36,7 +36,7 @@ arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
 
 std::shared_ptr<arrow::RecordBatch> TIndexationLogic::AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                 const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
-    auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.PlanStep(), inserted.TxId());
+    auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot());
     Y_VERIFY(batch);
 
     return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
@@ -229,7 +229,7 @@ TVector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChanges> i
     TSnapshot& minSnapshot = changes->ApplySnapshot;
     THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> pathBatches;
     for (auto& inserted : changes->DataToIndex) {
-        TSnapshot insertSnap{inserted.PlanStep(), inserted.TxId()};
+        TSnapshot insertSnap = inserted.GetSnapshot();
         Y_VERIFY(insertSnap.Valid());
         if (minSnapshot.IsZero() || insertSnap <= minSnapshot) {
             minSnapshot = insertSnap;
@@ -325,13 +325,13 @@ TVector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnEngin
             if (!slice || slice->num_rows() == 0) {
                 continue;
             }
-            auto tmp = MakeAppendedPortions(pathId, slice, granule, TSnapshot{}, blobs);
+            auto tmp = MakeAppendedPortions(pathId, slice, granule, TSnapshot::Zero(), blobs);
             for (auto&& portionInfo : tmp) {
                 portions.emplace_back(std::move(portionInfo));
             }
         }
     } else {
-        portions = MakeAppendedPortions(pathId, batch, granule, TSnapshot{}, blobs);
+        portions = MakeAppendedPortions(pathId, batch, granule, TSnapshot::Zero(), blobs);
     }
 
     Y_VERIFY(portions.size() > 0);
@@ -664,7 +664,7 @@ TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCo
 
             for (const auto& batch : idBatches[id]) {
                 // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-                auto newPortions = MakeAppendedPortions(pathId, batch, tmpGranule, TSnapshot{}, blobs);
+                auto newPortions = MakeAppendedPortions(pathId, batch, tmpGranule, TSnapshot::Zero(), blobs);
                 Y_VERIFY(newPortions.size() > 0);
                 for (auto& portion : newPortions) {
                     changes->AppendedPortions.emplace_back(std::move(portion));
@@ -680,7 +680,7 @@ TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCo
             ui64 tmpGranule = changes->SetTmpGranule(pathId, ts);
 
             // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-            auto portions = MakeAppendedPortions(pathId, batch, tmpGranule, TSnapshot{}, blobs);
+            auto portions = MakeAppendedPortions(pathId, batch, tmpGranule, TSnapshot::Zero(), blobs);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 changes->AppendedPortions.emplace_back(std::move(portion));

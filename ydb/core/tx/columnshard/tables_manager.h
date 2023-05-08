@@ -173,7 +173,7 @@ public:
         return *PrimaryIndex;
     }
 
-    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version = {}) const {
+    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version = NOlap::TSnapshot::Zero()) const {
         Y_UNUSED(version);
         Y_VERIFY(!!PrimaryIndex);
         return PrimaryIndex->GetIndexInfo();

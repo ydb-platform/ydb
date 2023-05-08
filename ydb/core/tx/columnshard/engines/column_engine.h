@@ -132,8 +132,8 @@ public:
 
     EType Type{UNSPECIFIED};
     TCompactionLimits Limits;
-    TSnapshot InitSnapshot;
-    TSnapshot ApplySnapshot;
+    TSnapshot InitSnapshot = TSnapshot::Zero();
+    TSnapshot ApplySnapshot = TSnapshot::Zero();
     std::unique_ptr<TCompactionInfo> CompactionInfo;
     TVector<NOlap::TInsertedData> DataToIndex;
     TVector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
@@ -399,7 +399,7 @@ public:
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
-    virtual TSnapshot LastUpdate() const { return {}; }
+    virtual TSnapshot LastUpdate() const { return TSnapshot::Zero(); }
 };
 
 }

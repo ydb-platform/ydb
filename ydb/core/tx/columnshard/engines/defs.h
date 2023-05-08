@@ -12,9 +12,15 @@ enum class TWriteId : ui64 {};
 
 inline TWriteId operator ++(TWriteId& w) noexcept { w = TWriteId{ui64(w) + 1}; return w; }
 
-struct TSnapshot {
-    ui64 PlanStep{0};
-    ui64 TxId{0};
+class TSnapshot {
+private:
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
+public:
+    constexpr explicit TSnapshot(const ui64 planStep, const ui64 txId)
+        : PlanStep(planStep)
+        , TxId(txId)
+    {}
 
     ui64 GetPlanStep() const {
         return PlanStep;
@@ -24,42 +30,28 @@ struct TSnapshot {
         return TxId;
     }
 
-    TSnapshot& SetPlanStep(const ui64 value) {
-        PlanStep = value;
-        return *this;
-    }
-
-    TSnapshot& SetTxId(const ui64 value) {
-        TxId = value;
-        return *this;
-    }
-
-    constexpr bool IsZero() const noexcept {
+    bool IsZero() const noexcept {
         return PlanStep == 0 && TxId == 0;
     }
 
-    constexpr bool Valid() const noexcept {
+    bool Valid() const noexcept {
         return PlanStep && TxId;
     }
 
-    constexpr auto operator <=> (const TSnapshot&) const noexcept = default;
+    auto operator <=> (const TSnapshot&) const noexcept = default;
 
+    static constexpr TSnapshot Zero() noexcept {
+        return TSnapshot(0, 0);
+    }
+    
     static constexpr TSnapshot Max() noexcept {
-        return TSnapshot().SetPlanStep(-1ll).SetTxId(-1ll);
+        return TSnapshot(-1ll, -1ll);
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TSnapshot& s) {
-        return out << "{" << s.PlanStep << "," << s.TxId << "}";
+        return out << "{" << s.PlanStep << ':' << (s.TxId == std::numeric_limits<ui64>::max() ? "max" : ToString(s.TxId)) << "}";
     }
 };
-
-inline constexpr bool SnapLess(ui64 planStep1, ui64 txId1, ui64 planStep2, ui64 txId2) noexcept {
-    return std::less<TSnapshot>()(TSnapshot{planStep1, txId1}, TSnapshot{planStep2, txId2});
-}
-
-inline constexpr bool SnapLessOrEqual(ui64 planStep1, ui64 txId1, ui64 planStep2, ui64 txId2) noexcept {
-    return std::less_equal<TSnapshot>()(TSnapshot{planStep1, txId1}, TSnapshot{planStep2, txId2});
-}
 
 
 class IBlobGroupSelector {

@@ -15,20 +15,19 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const NOlap::TReadDes
     Y_UNUSED(ctx);
 
     if (!insertTable || !index) {
-        return {};
+        return nullptr;
     }
 
-    if (read.PlanStep < Self->GetMinReadStep()) {
-        error = Sprintf("Snapshot %" PRIu64 ":%" PRIu64 " too old", read.PlanStep, read.TxId);
-        return {};
+    if (read.GetSnapshot().GetPlanStep() < Self->GetMinReadStep()) {
+        error = TStringBuilder() << "Snapshot too old: " << read.GetSnapshot();
+        return nullptr;
     }
 
     NOlap::TDataStorageAccessor dataAccessor(insertTable, index, batchCache);
-    auto readSnapshot = NOlap::TSnapshot().SetPlanStep(read.PlanStep).SetTxId(read.TxId);
-    auto readMetadata = std::make_shared<NOlap::TReadMetadata>(index->GetVersionedIndex(), readSnapshot, isReverse ? NOlap::TReadMetadata::ESorting::DESC : NOlap::TReadMetadata::ESorting::ASC);
+    auto readMetadata = std::make_shared<NOlap::TReadMetadata>(index->GetVersionedIndex(), read.GetSnapshot(), isReverse ? NOlap::TReadMetadata::ESorting::DESC : NOlap::TReadMetadata::ESorting::ASC);
     
     if (!readMetadata->Init(read, dataAccessor, error)) {
-        return {};
+        return nullptr;
     }
     return readMetadata;
 }

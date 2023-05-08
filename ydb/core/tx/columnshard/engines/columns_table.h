@@ -50,22 +50,22 @@ struct TColumnRecord {
 
     void SetSnapshot(const TSnapshot& snap) {
         Y_VERIFY(snap.Valid());
-        PlanStep = snap.PlanStep;
-        TxId = snap.TxId;
+        PlanStep = snap.GetPlanStep();
+        TxId = snap.GetTxId();
     }
 
     void SetXSnapshot(const TSnapshot& snap) {
         Y_VERIFY(snap.Valid());
-        XPlanStep = snap.PlanStep;
-        XTxId = snap.TxId;
+        XPlanStep = snap.GetPlanStep();
+        XTxId = snap.GetTxId();
     }
 
     static TColumnRecord Make(ui64 granule, ui32 columnId, const TSnapshot& minSnapshot, ui64 portion, ui16 chunk = 0) {
         TColumnRecord row;
         row.Granule = granule;
         row.ColumnId = columnId;
-        row.PlanStep = minSnapshot.PlanStep;
-        row.TxId = minSnapshot.TxId;
+        row.PlanStep = minSnapshot.GetPlanStep();
+        row.TxId = minSnapshot.GetTxId();
         row.Portion = portion;
         row.Chunk = chunk;
         //row.BlobId

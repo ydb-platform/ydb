@@ -80,22 +80,37 @@ struct TInsertedData {
         DedupId.clear();
     }
 
-    ui64 PlanStep() const { return ShardOrPlan; }
-    ui64 TxId() const { return WriteTxId; }
+    TSnapshot GetSnapshot() const {
+        return TSnapshot(ShardOrPlan, WriteTxId);
+    }
+
     ui32 BlobSize() const { return BlobId.BlobSize(); }
 };
 
-struct TCommittedBlob {
+class TCommittedBlob {
+private:
     TUnifiedBlobId BlobId;
-    ui64 PlanStep{0};
-    ui64 TxId{0};
+    TSnapshot Snapshot;
+public:
+    TCommittedBlob(const TUnifiedBlobId& blobId, const TSnapshot& snapshot)
+        : BlobId(blobId)
+        , Snapshot(snapshot)
+    {}
 
     /// It uses trick then we place key wtih planStep:txId in container and find them later by BlobId only.
     /// So hash() and equality should depend on BlobId only.
     bool operator == (const TCommittedBlob& key) const { return BlobId == key.BlobId; }
     ui64 Hash() const noexcept { return BlobId.Hash(); }
     TString DebugString() const {
-        return TStringBuilder() << BlobId << ";ps=" << PlanStep << ";ti=" << TxId;
+        return TStringBuilder() << BlobId << ";ps=" << Snapshot.GetPlanStep() << ";ti=" << Snapshot.GetTxId();
+    }
+
+    const TSnapshot& GetSnapshot() const {
+        return Snapshot;
+    }
+
+    const TUnifiedBlobId& GetBlobId() const {
+        return BlobId;
     }
 };
 
@@ -123,7 +138,7 @@ public:
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
     void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
-    std::vector<TCommittedBlob> Read(ui64 pathId, ui64 plan, ui64 txId) const;
+    std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot) const;
     bool Load(IDbWrapper& dbTable, const TInstant& loadTime);
     const TCounters& GetCountersPrepared() const { return StatsPrepared; }
     const TCounters& GetCountersCommitted() const { return StatsCommitted; }

@@ -50,27 +50,27 @@ void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetad
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.TxId, txBody);
+        NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, snap.GetTxId(), txBody);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.TxId);
+    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
     return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap) {
-    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.PlanStep, 0, TTestTxConfig::TxTablet0);
+    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
     auto tx = plan->Record.AddTransactions();
-    tx->SetTxId(snap.TxId);
+    tx->SetTxId(snap.GetTxId());
     ActorIdToProto(sender, tx->MutableAckTo());
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.TxId);
+    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
     UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
 }
@@ -120,7 +120,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<
     auto scan = std::make_unique<TEvColumnShard::TEvScan>();
     auto& record = scan->Record;
 
-    record.SetTxId(snap.PlanStep);
+    record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
     // record.SetLocalPathId(0);
     record.SetTablePath(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE);
@@ -146,8 +146,8 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<
         range.Serialize(*newRange);
     }
 
-    record.MutableSnapshot()->SetStep(snap.PlanStep);
-    record.MutableSnapshot()->SetTxId(snap.TxId);
+    record.MutableSnapshot()->SetStep(snap.GetPlanStep());
+    record.MutableSnapshot()->SetTxId(snap.GetTxId());
     record.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());

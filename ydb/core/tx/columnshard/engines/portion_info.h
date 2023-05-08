@@ -146,13 +146,13 @@ struct TPortionInfo {
     TSnapshot Snapshot() const {
         Y_VERIFY(!Empty());
         auto& rec = Records[0];
-        return {rec.PlanStep, rec.TxId};
+        return TSnapshot(rec.PlanStep, rec.TxId);
     }
 
     TSnapshot XSnapshot() const {
         Y_VERIFY(!Empty());
         auto& rec = Records[0];
-        return {rec.XPlanStep, rec.XTxId};
+        return TSnapshot(rec.XPlanStep, rec.XTxId);
     }
 
     bool IsActive() const {

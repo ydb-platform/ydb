@@ -24,9 +24,9 @@
 #define PP1 <boost/preprocessor/iterate.hpp>
 #define PP2 <boost/preprocessor/enum_params.hpp>
 #define PP3 <boost/preprocessor/comma_if.hpp>
-#include PP1
-#include PP2
-#include PP3
+#error #include PP1
+#error #include PP2
+#error #include PP3
 #undef PP1
 #undef PP2
 #undef PP3

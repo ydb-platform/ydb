@@ -548,6 +548,7 @@ namespace NKikimr {
                 Y_VERIFY(queryRecord->HasMsgQoS());
                 Y_VERIFY(!TBase::Record.HasMsgQoS());
 
+                // TODO(stetsyuk): disown MsgQoS in queryRecord and then adopt in Base::Record (for this you need to migrate TEvVGetResult to capnproto)
                 CopyFrom(queryRecord->GetMsgQoS(), TBase::Record.MutableMsgQoS());
                 queryRecord->ClearMsgQoS();
 

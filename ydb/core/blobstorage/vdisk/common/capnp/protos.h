@@ -657,9 +657,6 @@ namespace NKikimrCapnProto {
 
             bool HasExtremeQueries() const { return !elements.empty(); }
             TExtremeQuery::Reader GetExtremeQueries(uint32_t idx) const { return elements[idx].getReader(); }
-            std::vector<TExtremeQuery::Reader> GetExtremeQueries() const {
-                return {};
-            }
             size_t ExtremeQueriesSize() const { return elements.size(); }
 
             bool GetNotifyIfNotReady() const { return getNotifyIfNotReady(); }
@@ -767,59 +764,7 @@ namespace NKikimrCapnProto {
             }
 
             void CopyFrom(const Reader& other) {
-                // set the repeated field
-                for (auto from : other.GetExtremeQueries()) {
-                    auto to = AddExtremeQueries();
-
-                    to.SetId(from.GetId());
-                    to.SetCookie(from.GetCookie());
-                    to.SetSize(from.GetSize());
-                    to.SetShift(from.GetShift());
-                }
-
-                // set the primitive fields
-                SetNotifyIfNotReady(other.GetNotifyIfNotReady());
-                SetShowInternals(other.GetShowInternals());
-                SetCookie(other.GetCookie());
-                SetIndexOnly(other.GetIndexOnly());
-                SetSuppressBarrierCheck(other.GetSuppressBarrierCheck());
-                SetTabletId(other.GetTabletId());
-                SetForceBlockedGeneration(other.GetForceBlockedGeneration());
-                SetAcquireBlockedGeneration(other.GetAcquireBlockedGeneration());
-
-                // set enum
-                if (other.HasHandleClass()) {
-                    SetHandleClass(other.GetHandleClass());
-                }
-
-                // set all other fields
-                if (other.HasRangeQuery()) {
-                    SetRangeQuery(other.GetRangeQuery());
-                }
-
-                if (other.HasVDiskID()) {
-                    SetVDiskID(other.GetVDiskID());
-                }
-
-                if (other.HasSnapshotId()) {
-                    SetSnapshotId(other.GetSnapshotId());
-                }
-
-                if (other.HasMsgQoS()) {
-                    SetMsgQoS(other.GetMsgQoS());
-                }
-
-                if (other.HasTimestamps()) {
-                    SetTimestamps(other.GetTimestamps());
-                }
-
-                if (other.HasReaderTabletData()) {
-                    SetReaderTabletData(other.GetReaderTabletData());
-                }
-
-                if (other.HasForceBlockTabletData()) {
-                    SetForceBlockTabletData(other.GetForceBlockTabletData());
-                }
+                message->setRoot(other.GetCapnpBase());
             }
 
             int ByteSize() const {
@@ -845,6 +790,9 @@ namespace NKikimrCapnProto {
                         AddExtremeQueries().CopyFrom(extremeQuery);
                     }
                 }
+
+                // set bool checkMessage to true
+                // and add a Y_VERIFY(!extremeQueriesInMessage) to AddExtremeQueries method
 
                 return true;
             }

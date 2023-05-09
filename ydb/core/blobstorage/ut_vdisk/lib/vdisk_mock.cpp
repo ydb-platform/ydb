@@ -305,7 +305,10 @@ public:
         }
 
         // process extreme queries
-        for (const auto& query : record.GetExtremeQueries()) {
+        ui32 extremeQueriesCnt = record.ExtremeQueriesSize();
+        for (ui32 i = 0; i != extremeQueriesCnt; ++i) {
+            const auto &query = record.GetExtremeQueries(i);
+
             const TLogoBlobID id{LogoBlobIDFromLogoBlobID(query.GetId())};
             ui64 queryCookie = query.GetCookie();
             bool found = false;

@@ -111,7 +111,9 @@ namespace NKikimr {
         }
 
         // extreme queries
-        for (const auto &x : record.GetExtremeQueries()) {
+        ui32 extremeQueriesCnt = record.ExtremeQueriesSize();
+        for (ui32 i = 0; i != extremeQueriesCnt; ++i) {
+            const auto &x = record.GetExtremeQueries(i);
             ui64 size = 0;
             if (x.HasSize())
                 size = x.GetSize();

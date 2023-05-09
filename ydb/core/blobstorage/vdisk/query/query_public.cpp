@@ -48,17 +48,21 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////
     // CreateLevelIndexQueryActor
     //////////////////////////////////////////////////////////////////////////////////////
-    template <typename ExtremeQueriesType>
+    template <typename Record>
     static void ValidateReadQuery(
             TReadQueryKeepChecker &&keepChecker,
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorContext& ctx,
-            const ExtremeQueriesType &extremeQueries,
+            const Record &record,
             const TLogoBlobsSnapshot *snapshot,
             bool suppressBarrierCheck)
     {
         TLogoBlobsSnapshot::TIndexForwardIterator it(hullCtx, snapshot);
-        for (const auto& item : extremeQueries) {
+
+        ui32 extremeQueriesCnt = record.ExtremeQueriesSize();
+        for (ui32 i = 0; i != extremeQueriesCnt; ++i) {
+            const auto &item = record.GetExtremeQueries(i);
+
             Y_VERIFY(item.HasId());
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(item.GetId());
             const TLogoBlobID& full = id.FullID();
@@ -91,7 +95,7 @@ namespace NKikimr {
 
         const auto& record = ev->Get()->Record;
         if (queryCtx->HullCtx->BarrierValidation) {
-            ValidateReadQuery(std::move(keepChecker), fullSnap.HullCtx, ctx, record.GetExtremeQueries(),
+            ValidateReadQuery(std::move(keepChecker), fullSnap.HullCtx, ctx, record,
                 &fullSnap.LogoBlobsSnap, record.GetSuppressBarrierCheck());
         }
 

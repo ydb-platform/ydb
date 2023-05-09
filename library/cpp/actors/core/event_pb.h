@@ -271,16 +271,10 @@ namespace NActors {
 
                     messageSizes.insert(size);
 
-                    if (messageSizes.size() % 5 == 0) {
-                        std::cerr << "[MSG SIZE METRICS] set size reached " << messageSizes.size() << "\n";
-                    }
-
-                    if (messageSizes.size() == 25) {
-                        std::cerr << "[MSG SIZE METRICS] "
-                                  << "p0 " << *messageSizes.begin() << " "
-                                  << "p25 " << *std::next(messageSizes.begin(), 6) << " "
-                                  << "p50 " << *std::next(messageSizes.begin(), 12) << " "
-                                  << "p75 " << *std::next(messageSizes.begin(), 18) << " "
+                    if (messageSizes.size() == 10) {
+                        std::cerr << "[MSG SIZE METRICS] window size 10: "
+                                  << "p0 " << *messageSizes.begin() << " | "
+                                  << "p50 " << *std::next(messageSizes.begin(), 5) << " | "
                                   << "p100 " << *messageSizes.rbegin() << "\n\n";
                         messageSizes.clear();
                     }

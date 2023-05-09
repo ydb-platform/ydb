@@ -264,6 +264,9 @@ public:
 
     static const TUniqueConstraintNodeBase* Merge(const TUniqueConstraintNodeBase* one, const TUniqueConstraintNodeBase* two, TExprContext& ctx);
 
+    const TUniqueConstraintNodeBase* GetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const;
+    const TUniqueConstraintNodeBase* GetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const;
+
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:

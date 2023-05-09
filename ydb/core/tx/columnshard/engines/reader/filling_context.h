@@ -12,6 +12,7 @@ namespace NKikimr::NOlap::NIndexedReader {
 
 class TGranulesFillingContext {
 private:
+    YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
     bool AbortedFlag = false;
     TReadMetadata::TConstPtr ReadMetadata;
     const bool InternalReading = false;

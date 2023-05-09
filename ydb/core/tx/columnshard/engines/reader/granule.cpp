@@ -17,11 +17,7 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
     Y_VERIFY(!ReadyFlag);
     Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchAddress().GetBatchGranuleIdx()));
     if (batch && batch->num_rows()) {
-        if (batchInfo.IsSortableInGranule()) {
-            SortableBatches.emplace_back(batch);
-        } else {
-            NonSortableBatches.emplace_back(batch);
-        }
+        RecordBatches.emplace_back(batch);
 
         auto& indexInfo = Owner->GetReadMetadata()->GetIndexInfo();
         if (!batchInfo.IsDuplicationsAvailable()) {
@@ -62,35 +58,40 @@ bool TGranule::OnFilterReady(TBatch& batchInfo) {
     return Owner->GetSortingPolicy()->OnFilterReady(batchInfo, *this, *Owner);
 }
 
-std::deque<TBatch*> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata) {
-    std::deque<TBatch*> batches;
+std::deque<TGranule::TBatchForMerge> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata) {
+    std::deque<TBatchForMerge> batches;
     for (auto&& i : Batches) {
-        batches.emplace_back(&i);
+        std::shared_ptr<TSortableBatchPosition> from;
+        std::shared_ptr<TSortableBatchPosition> to;
+        i.GetPKBorders(reverse, readMetadata->GetIndexInfo(), from, to);
+        batches.emplace_back(TBatchForMerge(&i, from, to));
     }
-    const int reverseKff = reverse ? -1 : 0;
-    auto& indexInfo = readMetadata->GetIndexInfo();
-    const auto pred = [reverseKff, indexInfo](const TBatch* l, const TBatch* r) {
-        if (l->IsSortableInGranule() && r->IsSortableInGranule()) {
-            return l->GetPortionInfo().CompareMinByPk(r->GetPortionInfo(), indexInfo) * reverseKff < 0;
-        } else if (l->IsSortableInGranule()) {
-            return false;
-        } else if (r->IsSortableInGranule()) {
-            return true;
-        } else {
-            return false;
+    std::sort(batches.begin(), batches.end());
+    ui32 currentPoolId = 0;
+    std::map<TSortableBatchPosition, ui32> poolIds;
+    for (auto&& i : batches) {
+        if (!i.GetFrom() && !i.GetTo()) {
+            continue;
         }
-    };
-    std::sort(batches.begin(), batches.end(), pred);
-    bool nonCompactedSerial = true;
-    for (ui32 i = 0; i + 1 < batches.size(); ++i) {
-        if (batches[i]->IsSortableInGranule()) {
-            auto& l = *batches[i];
-            auto& r = *batches[i + 1];
-            Y_VERIFY(r.IsSortableInGranule());
-            Y_VERIFY(l.GetPortionInfo().CompareSelfMaxItemMinByPk(r.GetPortionInfo(), indexInfo) * reverseKff <= 0);
-            nonCompactedSerial = false;
-        } else {
-            Y_VERIFY(nonCompactedSerial);
+        if (i.GetFrom()) {
+            auto it = poolIds.rbegin();
+            for (; it != poolIds.rend(); ++it) {
+                if (it->first.Compare(*i.GetFrom()) < 0) {
+                    break;
+                }
+            }
+            if (it != poolIds.rend()) {
+                i.SetPoolId(it->second);
+                if (i.GetTo()) {
+                    poolIds.erase(it->first);
+                    poolIds.emplace(*i.GetTo(), *i.GetPoolId());
+                } else {
+                    poolIds.erase(it->first);
+                }
+            } else if (i.GetTo()) {
+                i.SetPoolId(++currentPoolId);
+                poolIds.emplace(*i.GetTo(), *i.GetPoolId());
+            }
         }
     }
     return batches;
@@ -107,6 +108,9 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
     if (batch && batch->num_rows()) {
         Y_VERIFY(!NotIndexedBatch);
         NotIndexedBatch = batch;
+        if (NotIndexedBatch) {
+            RecordBatches.emplace_back(NotIndexedBatch);
+        }
         if (Owner->GetReadMetadata()->Program) {
             NotIndexedBatchFutureFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Owner->GetReadMetadata()->Program));
         }

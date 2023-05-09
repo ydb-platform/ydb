@@ -20,39 +20,58 @@ private:
     bool DefaultFilterValue = true;
     bool CurrentValue = true;
     ui32 Count = 0;
-    std::deque<ui32> Filter;
+    std::vector<ui32> Filter;
+    mutable std::optional<std::vector<bool>> FilterPlain;
     TColumnFilter(const bool defaultFilterValue)
         : DefaultFilterValue(defaultFilterValue)
     {
 
     }
 
-    bool GetStartValue() const {
+    bool GetStartValue(const bool reverse = false) const {
         if (Filter.empty()) {
             return DefaultFilterValue;
         }
-        bool value = CurrentValue;
-        if (Filter.size() % 2 == 0) {
-            value = !value;
+        if (reverse) {
+            return CurrentValue;
+        } else {
+            if (Filter.size() % 2 == 0) {
+                return !CurrentValue;
+            } else {
+                return CurrentValue;
+            }
         }
-        return value;
     }
 
-    template <class TIterator>
-    class TIteratorImpl {
+    static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
+    class TMergerImpl;
+    void Add(const bool value, const ui32 count = 1);
+    void Reset(const ui32 count);
+public:
+
+    class TIterator {
     private:
         ui32 InternalPosition = 0;
         ui32 CurrentRemainVolume = 0;
-        TIterator It;
-        TIterator ItEnd;
+        const std::vector<ui32>& Filter;
+        i32 Position = 0;
         bool CurrentValue;
+        const i32 FinishPosition;
+        const i32 DeltaPosition;
     public:
-        TIteratorImpl(TIterator itBegin, TIterator itEnd, const bool startValue)
-            : It(itBegin)
-            , ItEnd(itEnd)
-            , CurrentValue(startValue) {
-            if (It != ItEnd) {
-                CurrentRemainVolume = *It;
+        TIterator(const bool reverse, const std::vector<ui32>& filter, const bool startValue)
+            : Filter(filter)
+            , CurrentValue(startValue)
+            , FinishPosition(reverse ? -1 : Filter.size())
+            , DeltaPosition(reverse ? -1 : 1)
+        {
+            if (!Filter.size()) {
+                Position = FinishPosition;
+            } else {
+                if (reverse) {
+                    Position = Filter.size() - 1;
+                }
+                CurrentRemainVolume = Filter[Position];
             }
         }
 
@@ -67,22 +86,24 @@ private:
         }
 
         bool Next(const ui32 size) {
+            Y_VERIFY(size);
             if (CurrentRemainVolume > size) {
                 InternalPosition += size;
                 CurrentRemainVolume -= size;
                 return true;
             }
             ui32 sizeRemain = size;
-            while (It != ItEnd) {
-                if (*It - InternalPosition > sizeRemain) {
+            while (Position != FinishPosition) {
+                const ui32 currentVolume = Filter[Position];
+                if (currentVolume - InternalPosition > sizeRemain) {
                     InternalPosition = sizeRemain;
-                    CurrentRemainVolume = *It - InternalPosition - sizeRemain;
+                    CurrentRemainVolume = currentVolume - InternalPosition - sizeRemain;
                     return true;
                 } else {
-                    sizeRemain -= *It - InternalPosition;
+                    sizeRemain -= currentVolume - InternalPosition;
                     InternalPosition = 0;
                     CurrentValue = !CurrentValue;
-                    ++It;
+                    Position += DeltaPosition;
                 }
             }
             CurrentRemainVolume = 0;
@@ -90,44 +111,22 @@ private:
         }
     };
 
-    static ui32 CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const ui32 f2);
-public:
-
-    using TIterator = TIteratorImpl<std::deque<ui32>::const_iterator>;
-    using TReverseIterator = TIteratorImpl<std::deque<ui32>::const_reverse_iterator>;
-
-    template <bool ForReverse>
-    class TIteratorSelector {
-
-    };
-
-    template <>
-    class TIteratorSelector<true> {
-    public:
-        using TIterator = TReverseIterator;
-    };
-
-    template <>
-    class TIteratorSelector<false> {
-    public:
-        using TIterator = TIterator;
-    };
-
-    TIterator GetIterator() const {
-        return TIterator(Filter.cbegin(), Filter.cend(), GetStartValue());
+    TIterator GetIterator(const bool reverse) const {
+        return TIterator(reverse, Filter, GetStartValue(reverse));
     }
 
-    TReverseIterator GetReverseIterator() const {
-        return TReverseIterator(Filter.crbegin(), Filter.crend(), CurrentValue);
+    bool empty() const {
+        return Filter.empty();
     }
 
     TColumnFilter(std::vector<bool>&& values) {
         const ui32 count = values.size();
-        Reset(count, std::move(values));
+        Reset(count, values);
+        FilterPlain = std::move(values);
     }
 
     template <class TGetter>
-    void Reset(const ui32 count, TGetter&& getter) {
+    void Reset(const ui32 count, const TGetter& getter) {
         Reset(count);
         if (!count) {
             return;
@@ -149,11 +148,11 @@ public:
         return Count;
     }
 
-    std::vector<bool> BuildSimpleFilter() const;
+    const std::vector<bool>& BuildSimpleFilter(const ui32 expectedSize) const;
 
     TColumnFilter() = default;
 
-    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter() const;
+    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize) const;
 
     bool IsTotalAllowFilter() const;
 
@@ -167,83 +166,8 @@ public:
         return TColumnFilter(true);
     }
 
-    void Reset(const ui32 count);
-
-    void Add(const bool value, const ui32 count = 1);
-
-    template <class TCalcer>
-    void Merge(const TColumnFilter& extFilter, const TCalcer actor) {
-        if (Filter.empty() && extFilter.Filter.empty()) {
-            DefaultFilterValue = (extFilter.DefaultFilterValue && DefaultFilterValue);
-        } else if (Filter.empty()) {
-            if (DefaultFilterValue) {
-                Filter = extFilter.Filter;
-                Count = extFilter.Count;
-                CurrentValue = extFilter.CurrentValue;
-            }
-        } else if (extFilter.Filter.empty()) {
-            if (!extFilter.DefaultFilterValue) {
-                DefaultFilterValue = false;
-                Filter.clear();
-                Count = 0;
-            }
-        } else {
-            Y_VERIFY(extFilter.Count == Count);
-            auto itSelf = Filter.begin();
-            auto itExt = extFilter.Filter.cbegin();
-
-            std::deque<ui32> result;
-            ui32 selfPos = 0;
-            ui32 extPos = 0;
-            bool curSelf = GetStartValue();
-            bool curExt = extFilter.GetStartValue();
-            bool curCurrent = false;
-            ui32 count = 0;
-
-            while (itSelf != Filter.end() && itExt != extFilter.Filter.cend()) {
-                const ui32 delta = CrossSize(extPos, extPos + *itExt, selfPos, selfPos + *itSelf);
-                if (delta) {
-                    if (!count || curCurrent != actor(curSelf, curExt)) {
-                        result.emplace_back(delta);
-                        curCurrent = actor(curSelf, curExt);
-                    } else {
-                        result.back() += delta;
-                    }
-                    count += delta;
-                }
-                if (selfPos + *itSelf < extPos + *itExt) {
-                    selfPos += *itSelf;
-                    curSelf = !curSelf;
-                    ++itSelf;
-                } else if (selfPos + *itSelf > extPos + *itExt) {
-                    extPos += *itExt;
-                    curExt = !curExt;
-                    ++itExt;
-                } else {
-                    curExt = !curExt;
-                    curSelf = !curSelf;
-                    ++itSelf;
-                    ++itExt;
-                }
-            }
-            Y_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
-            std::swap(result, Filter);
-            std::swap(curCurrent, CurrentValue);
-            std::swap(count, Count);
-        }
-    }
-
-
-    void And(const TColumnFilter& extFilter) {
-        return Merge(extFilter, [](const bool selfBool, const bool extBool) {
-            return selfBool && extBool;
-            });
-    }
-    void Or(const TColumnFilter& extFilter) {
-        return Merge(extFilter, [](const bool selfBool, const bool extBool) {
-            return selfBool || extBool;
-            });
-    }
+    TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
+    TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
 
     // It makes a filter using composite predicate
     static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border,
@@ -251,7 +175,8 @@ public:
 
     bool Apply(std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void CombineSequential(const TColumnFilter& extFilter);
+    // Combines filters by 'and' operator (extFilter count is true positions count in self, thought extFitler patch exactly that positions)
+    TColumnFilter CombineSequentialAnd(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
 };
 
 }

@@ -109,10 +109,6 @@ struct TPortionInfo {
     bool CanIntersectOthers() const { return !Valid() || IsInserted(); }
     size_t NumRecords() const { return Records.size(); }
 
-    bool IsSortableInGranule() const {
-        return !CanIntersectOthers();
-    }
-
     bool AllowEarlyFilter() const {
         return Meta.Produced == TPortionMeta::COMPACTED
             || Meta.Produced == TPortionMeta::SPLIT_COMPACTED;

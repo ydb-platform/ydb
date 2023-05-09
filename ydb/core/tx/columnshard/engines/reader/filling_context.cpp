@@ -16,6 +16,7 @@ TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMe
     UsedColumns = ReadMetadata->GetUsedColumnIds();
     EarlyFilterColumns = ReadMetadata->GetEarlyFilterColumnIds();
     FilterStageColumns = SortingPolicy->GetFilterStageColumns();
+    PKColumnNames = ReadMetadata->GetReplaceKey()->field_names();
 
     PostFilterColumns = ReadMetadata->GetUsedColumnIds();
     for (auto&& i : FilterStageColumns) {

@@ -23,7 +23,7 @@ bool TAssembleFilter::DoExecuteImpl() {
     if (ReadMetadata->Program) {
         if (AllowEarlyFilter) {
             auto earlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
-            Filter->CombineSequential(*earlyFilter);
+            Filter = std::make_shared<NArrow::TColumnFilter>(Filter->CombineSequentialAnd(*earlyFilter));
             if (!earlyFilter->Apply(batch)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
                 FilteredBatch = nullptr;

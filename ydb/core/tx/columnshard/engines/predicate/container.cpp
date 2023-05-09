@@ -2,7 +2,7 @@
 #include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NOlap {
-int TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
+std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
     Y_VERIFY(l.Batch);
     Y_VERIFY(r.Batch);
     Y_VERIFY(l.Batch->num_columns());
@@ -99,10 +99,10 @@ bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) {
         if (IsForwardInterval() == ext.IsForwardInterval()) {
             return true;
         }
-        const int result = ComparePredicatesSamePrefix(*Object, *ext.Object);
-        if (result < 0) {
+        const std::partial_ordering result = ComparePredicatesSamePrefix(*Object, *ext.Object);
+        if (result == std::partial_ordering::less) {
             return IsForwardInterval();
-        } else if (result > 0) {
+        } else if (result == std::partial_ordering::greater) {
             return ext.IsForwardInterval();
         } else if (Object->Batch->num_columns() == ext.Object->Batch->num_columns()) {
             return IsInclude() && ext.IsInclude();

@@ -20,8 +20,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> NotIndexedBatch;
     std::shared_ptr<NArrow::TColumnFilter> NotIndexedBatchFutureFilter;
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> NonSortableBatches;
-    std::vector<std::shared_ptr<arrow::RecordBatch>> SortableBatches;
+    std::vector<std::shared_ptr<arrow::RecordBatch>> RecordBatches;
     bool DuplicationsAvailableFlag = false;
     bool ReadyFlag = false;
     std::deque<TBatch> Batches;
@@ -71,14 +70,7 @@ public:
     }
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> GetReadyBatches() const {
-        std::vector<std::shared_ptr<arrow::RecordBatch>> result;
-        result.reserve(SortableBatches.size() + NonSortableBatches.size() + 1);
-        if (NotIndexedBatch) {
-            result.emplace_back(NotIndexedBatch);
-        }
-        result.insert(result.end(), NonSortableBatches.begin(), NonSortableBatches.end());
-        result.insert(result.end(), SortableBatches.begin(), SortableBatches.end());
-        return result;
+        return RecordBatches;
     }
 
     TBatch& GetBatchInfo(const ui32 batchIdx) {
@@ -91,7 +83,44 @@ public:
     const TGranulesFillingContext& GetOwner() const {
         return *Owner;
     }
-    std::deque<TBatch*> SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata);
+
+    class TBatchForMerge {
+    private:
+        TBatch* Batch = nullptr;
+        YDB_ACCESSOR_DEF(std::optional<ui32>, PoolId);
+        YDB_ACCESSOR_DEF(std::shared_ptr<TSortableBatchPosition>, From);
+        YDB_ACCESSOR_DEF(std::shared_ptr<TSortableBatchPosition>, To);
+    public:
+        TBatch* operator->() {
+            return Batch;
+        }
+
+        TBatch& operator*() {
+            return *Batch;
+        }
+
+        TBatchForMerge(TBatch* batch, std::shared_ptr<TSortableBatchPosition> from, std::shared_ptr<TSortableBatchPosition> to)
+            : Batch(batch)
+            , From(from)
+            , To(to)
+        {
+            Y_VERIFY(Batch);
+        }
+
+        bool operator<(const TBatchForMerge& item) const {
+            if (!From && !item.From) {
+                return false;
+            } else if (From && item.From) {
+                return From->Compare(*item.From) < 0;
+            } else if (!From) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    };
+
+    std::deque<TBatchForMerge> SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata);
 
     const std::set<ui32>& GetEarlyFilterColumns() const;
     void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);

@@ -113,7 +113,7 @@ void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
 
     for (auto&& columnInfo : orderedObjects) {
         ui32 expected = 0;
-        auto it = FetchedInfo.GetFilter()->GetIterator();
+        auto it = FetchedInfo.GetFilter()->GetIterator(false);
         bool undefinedShift = false;
         bool itFinished = false;
         for (auto&& [chunk, rec] : columnInfo.second) {
@@ -161,6 +161,65 @@ bool TBatch::AddIndexedReady(const TBlobRange& bRange, const TString& blobData) 
 
 ui64 TBatch::GetUsefulBytes(const ui64 bytes) const {
     return bytes * FetchedInfo.GetUsefulDataKff();
+}
+
+std::shared_ptr<TSortableBatchPosition> TBatch::GetFirstPK(const bool reverse, const TIndexInfo& indexInfo) const {
+    if (!FirstPK || !LastPK) {
+        std::shared_ptr<TSortableBatchPosition> from;
+        std::shared_ptr<TSortableBatchPosition> to;
+        GetPKBorders(reverse, indexInfo, from, to);
+    }
+    if (reverse) {
+        return *ReverseFirstPK;
+    } else {
+        return *FirstPK;
+    }
+}
+
+void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::shared_ptr<TSortableBatchPosition>& from, std::shared_ptr<TSortableBatchPosition>& to) const {
+    from = nullptr;
+    to = nullptr;
+    if (!FirstPK || !LastPK) {
+        std::vector<std::shared_ptr<arrow::Scalar>> minRecord;
+        std::vector<std::shared_ptr<arrow::Scalar>> maxRecord;
+        for (auto&& i : indexInfo.GetReplaceKey()->fields()) {
+            const ui32 columnId = indexInfo.GetColumnId(i->name());
+            std::shared_ptr<arrow::Scalar> minScalar;
+            std::shared_ptr<arrow::Scalar> maxScalar;
+            PortionInfo->MinMaxValue(columnId, minScalar, maxScalar);
+            if (!FirstPK && !minScalar) {
+                FirstPK = nullptr;
+                ReverseLastPK = nullptr;
+            } else {
+                minRecord.emplace_back(minScalar);
+            }
+            if (!LastPK && !maxScalar) {
+                LastPK = nullptr;
+                ReverseFirstPK = nullptr;
+            } else {
+                maxRecord.emplace_back(maxScalar);
+            }
+        }
+        if (!FirstPK) {
+            auto batch = NArrow::BuildSingleRecordBatch(indexInfo.GetReplaceKey(), minRecord);
+            Y_VERIFY(batch);
+            FirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), false);
+            ReverseLastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), true);
+        }
+        if (!LastPK) {
+            auto batch = NArrow::BuildSingleRecordBatch(indexInfo.GetReplaceKey(), maxRecord);
+            Y_VERIFY(batch);
+            LastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), false);
+            ReverseFirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), true);
+        }
+    }
+    if (reverse) {
+        from = *ReverseFirstPK;
+        to = *ReverseLastPK;
+    } else {
+        from = *FirstPK;
+        to = *LastPK;
+    }
 }
 
 }

@@ -26,25 +26,34 @@ bool TPKSortingWithLimit::DoWakeup(const TGranule& granule, TGranulesFillingCont
         }
         auto& batches = g.GetOrderedBatches();
         while (batches.size() && batches.front()->GetFetchedInfo().IsFiltered() && CurrentItemsLimit) {
-            TBatch* b = batches.front();
-            std::optional<ui32> batchPoolId;
-            if (b->IsSortableInGranule()) {
-                ++CountSorted;
-                batchPoolId = 0;
+            TGranule::TBatchForMerge& b = batches.front();
+            if (!b.GetPoolId()) {
+                ++CountNotSortedPortions;
             } else {
-                ++CountNotSorted;
+                ++CountBatchesByPools[*b.GetPoolId()];
             }
-            MergeStream.AddPoolSource(batchPoolId, b->GetFetchedInfo().GetFilterBatch(), b->GetFetchedInfo().GetNotAppliedEarlyFilter());
+            ++CountProcessedBatches;
+            MergeStream.AddPoolSource(b.GetPoolId(), b->GetFetchedInfo().GetFilterBatch(), b->GetFetchedInfo().GetNotAppliedEarlyFilter());
             OnBatchFilterInitialized(*b, context);
             batches.pop_front();
-            while ((batches.empty() || MergeStream.HasRecordsInPool(0)) && CurrentItemsLimit && MergeStream.DrainCurrent()) {
-                if (!--CurrentItemsLimit) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "stop_on_limit")
-                        ("limit", ReadMetadata->Limit)("sorted_count", CountSorted)("unsorted_count", CountNotSorted)("granules_count", CountProcessedGranules);
+            if (batches.size()) {
+                auto nextBatchControlPoint = batches.front()->GetFirstPK(ReadMetadata->IsDescSorted(), ReadMetadata->GetIndexInfo());
+                if (!nextBatchControlPoint) {
+                    continue;
                 }
+                MergeStream.PutControlPoint(nextBatchControlPoint);
+            }
+            while (CurrentItemsLimit && MergeStream.DrainCurrent()) {
+                --CurrentItemsLimit;
+            }
+            if (MergeStream.ControlPointEnriched()) {
+                MergeStream.RemoveControlPoint();
+            } else if (batches.size()) {
+                Y_VERIFY(!CurrentItemsLimit);
             }
         }
         if (batches.empty()) {
+            Y_VERIFY(MergeStream.IsEmpty() || !CurrentItemsLimit);
             GranulesOutOrderForPortions.pop_front();
         } else {
             break;
@@ -57,10 +66,22 @@ bool TPKSortingWithLimit::DoWakeup(const TGranule& granule, TGranulesFillingCont
         while (batches.size()) {
             auto b = batches.front();
             context.GetCounters().SkippedBytes->Add(b->GetFetchBytes(context.GetPostFilterColumns()));
+            ++CountSkippedBatches;
             b->InitBatch(nullptr);
             batches.pop_front();
         }
+        ++CountSkippedGranules;
         GranulesOutOrderForPortions.pop_front();
+    }
+    if (GranulesOutOrderForPortions.empty()) {
+        if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN)) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "stop_on_limit")
+                ("limit", ReadMetadata->Limit)("limit_reached", !CurrentItemsLimit)
+                ("processed_batches", CountProcessedBatches)("processed_granules", CountProcessedGranules)
+                ("skipped_batches", CountSkippedBatches)("skipped_granules", CountSkippedGranules)
+                ("pools_count", CountBatchesByPools.size())("bad_pool_size", CountNotSortedPortions)
+                ;
+        }
     }
     return true;
 }

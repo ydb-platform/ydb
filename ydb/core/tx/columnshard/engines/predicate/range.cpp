@@ -36,8 +36,7 @@ std::set<std::string> TPKRangeFilter::GetColumnNames() const {
 
 NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const {
     NArrow::TColumnFilter result = PredicateTo.BuildFilter(data);
-    result.And(PredicateFrom.BuildFilter(data));
-    return result;
+    return result.And(PredicateFrom.BuildFilter(data));
 }
 
 bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {

@@ -132,16 +132,10 @@ void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatc
 }
 }
 
-std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter() const {
+std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(const ui32 expectedSize) const {
     arrow::BooleanBuilder builder;
-    auto res = builder.Reserve(Count);
-    Y_VERIFY_OK(res);
-    bool currentFilter = GetStartValue();
-    for (auto&& i : Filter) {
-        Y_VERIFY_OK(builder.AppendValues(i, currentFilter));
-        currentFilter = !currentFilter;
-    }
-
+    auto res = builder.Reserve(expectedSize);
+    Y_VERIFY_OK(builder.AppendValues(BuildSimpleFilter(expectedSize)));
     std::shared_ptr<arrow::BooleanArray> out;
     res = builder.Finish(&out);
     Y_VERIFY_OK(res);
@@ -168,9 +162,11 @@ bool TColumnFilter::IsTotalDenyFilter() const {
     return false;
 }
 
-void TColumnFilter::Reset(const ui32 /*count*/) {
+void TColumnFilter::Reset(const ui32 count) {
     Count = 0;
+    FilterPlain.reset();
     Filter.clear();
+    Filter.reserve(count / 4);
 }
 
 void TColumnFilter::Add(const bool value, const ui32 count) {
@@ -218,33 +214,33 @@ NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(const arrow::D
             break;
     }
 
-    NArrow::TColumnFilter result;
-    result.Reset(cmps.size());
+    std::vector<bool> bits;
+    bits.reserve(cmps.size());
 
     switch (compareType) {
         case ECompareType::LESS:
             for (size_t i = 0; i < cmps.size(); ++i) {
-                result.Add(cmps[i] < ECompareResult::BORDER);
+                bits.emplace_back(cmps[i] < ECompareResult::BORDER);
             }
             break;
         case ECompareType::LESS_OR_EQUAL:
             for (size_t i = 0; i < cmps.size(); ++i) {
-                result.Add(cmps[i] <= ECompareResult::BORDER);
+                bits.emplace_back(cmps[i] <= ECompareResult::BORDER);
             }
             break;
         case ECompareType::GREATER:
             for (size_t i = 0; i < cmps.size(); ++i) {
-                result.Add(cmps[i] > ECompareResult::BORDER);
+                bits.emplace_back(cmps[i] > ECompareResult::BORDER);
             }
             break;
         case ECompareType::GREATER_OR_EQUAL:
             for (size_t i = 0; i < cmps.size(); ++i) {
-                result.Add(cmps[i] >= ECompareResult::BORDER);
+                bits.emplace_back(cmps[i] >= ECompareResult::BORDER);
             }
             break;
     }
 
-    return result;
+    return NArrow::TColumnFilter(std::move(bits));
 }
 
 bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -259,29 +255,159 @@ bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch) {
     if (IsTotalAllowFilter()) {
         return true;
     }
-    auto res = arrow::compute::Filter(batch, BuildArrowFilter());
+    auto res = arrow::compute::Filter(batch, BuildArrowFilter(batch->num_rows()));
     Y_VERIFY_S(res.ok(), res.status().message());
     Y_VERIFY((*res).kind() == arrow::Datum::RECORD_BATCH);
     batch = (*res).record_batch();
     return batch->num_rows();
 }
 
-void TColumnFilter::CombineSequential(const TColumnFilter& extFilter) {
-    if (Filter.empty()) {
-        DefaultFilterValue = DefaultFilterValue && extFilter.DefaultFilterValue;
-        Filter = extFilter.Filter;
-        Count = extFilter.Count;
-    } else if (extFilter.Filter.empty()) {
-        if (!extFilter.DefaultFilterValue) {
-            DefaultFilterValue = DefaultFilterValue && extFilter.DefaultFilterValue;
-            Filter.clear();
-            Count = 0;
+const std::vector<bool>& TColumnFilter::BuildSimpleFilter(const ui32 expectedSize) const {
+    if (!FilterPlain) {
+        Y_VERIFY(expectedSize == Count || !Count);
+        std::vector<bool> result;
+        if (Count) {
+            result.resize(Count, true);
+            bool currentValue = GetStartValue();
+            ui32 currentPosition = 0;
+            for (auto&& i : Filter) {
+                if (!currentValue) {
+                    memset(&result[currentPosition], 0, sizeof(bool) * i);
+                }
+                currentPosition += i;
+                currentValue = !currentValue;
+            }
+        } else {
+            result.resize(expectedSize, DefaultFilterValue);
         }
+        FilterPlain = std::move(result);
+    }
+    Y_VERIFY(FilterPlain->size() == expectedSize);
+    return *FilterPlain;
+}
+
+class TMergePolicyAnd {
+private:
+public:
+    static bool Calc(const bool a, const bool b) {
+        return a && b;
+    }
+    static TColumnFilter MergeWithSimple(const TColumnFilter& filter, const bool simpleValue) {
+        if (simpleValue) {
+            return filter;
+        } else {
+            return TColumnFilter::BuildStopFilter();
+        }
+    }
+};
+
+class TMergePolicyOr {
+private:
+public:
+    static bool Calc(const bool a, const bool b) {
+        return a || b;
+    }
+    static TColumnFilter MergeWithSimple(const TColumnFilter& filter, const bool simpleValue) {
+        if (simpleValue) {
+            return TColumnFilter::BuildAllowFilter();
+        } else {
+            return filter;
+        }
+    }
+};
+
+class TColumnFilter::TMergerImpl {
+private:
+    const TColumnFilter& Filter1;
+    const TColumnFilter& Filter2;
+public:
+    TMergerImpl(const TColumnFilter& filter1, const TColumnFilter& filter2)
+        : Filter1(filter1)
+        , Filter2(filter2)
+    {
+
+    }
+
+    template <class TMergePolicy>
+    TColumnFilter Merge() const {
+        if (Filter1.empty() && Filter2.empty()) {
+            return TColumnFilter(TMergePolicy::Calc(Filter1.DefaultFilterValue, Filter2.DefaultFilterValue));
+        } else if (Filter1.empty()) {
+            return TMergePolicy::MergeWithSimple(Filter2, Filter1.DefaultFilterValue);
+        } else if (Filter2.empty()) {
+            return TMergePolicy::MergeWithSimple(Filter1, Filter2.DefaultFilterValue);
+        } else {
+            Y_VERIFY(Filter1.Count == Filter2.Count);
+            auto it1 = Filter1.Filter.cbegin();
+            auto it2 = Filter2.Filter.cbegin();
+
+            std::vector<ui32> resultFilter;
+            resultFilter.reserve(Filter1.Filter.size() + Filter2.Filter.size());
+            ui32 pos1 = 0;
+            ui32 pos2 = 0;
+            bool curValue1 = Filter1.GetStartValue();
+            bool curValue2 = Filter2.GetStartValue();
+            bool curCurrent = false;
+            ui32 count = 0;
+
+            while (it1 != Filter1.Filter.end() && it2 != Filter2.Filter.cend()) {
+                const ui32 delta = TColumnFilter::CrossSize(pos2, pos2 + *it2, pos1, pos1 + *it1);
+                if (delta) {
+                    if (!count || curCurrent != TMergePolicy::Calc(curValue1, curValue2)) {
+                        resultFilter.emplace_back(delta);
+                        curCurrent = TMergePolicy::Calc(curValue1, curValue2);
+                    } else {
+                        resultFilter.back() += delta;
+                    }
+                    count += delta;
+                }
+                if (pos1 + *it1 < pos2 + *it2) {
+                    pos1 += *it1;
+                    curValue1 = !curValue1;
+                    ++it1;
+                } else if (pos1 + *it1 > pos2 + *it2) {
+                    pos2 += *it2;
+                    curValue2 = !curValue2;
+                    ++it2;
+                } else {
+                    curValue2 = !curValue2;
+                    curValue1 = !curValue1;
+                    ++it1;
+                    ++it2;
+                }
+            }
+            Y_VERIFY(it1 == Filter1.Filter.end() && it2 == Filter2.Filter.cend());
+            TColumnFilter result = TColumnFilter::BuildAllowFilter();
+            std::swap(resultFilter, result.Filter);
+            std::swap(curCurrent, result.CurrentValue);
+            std::swap(count, result.Count);
+            return result;
+        }
+    }
+
+};
+
+TColumnFilter TColumnFilter::And(const TColumnFilter& extFilter) const {
+    FilterPlain.reset();
+    return TMergerImpl(*this, extFilter).Merge<TMergePolicyAnd>();
+}
+
+TColumnFilter TColumnFilter::Or(const TColumnFilter& extFilter) const {
+    FilterPlain.reset();
+    return TMergerImpl(*this, extFilter).Merge<TMergePolicyOr>();
+}
+
+TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter) const {
+    if (Filter.empty()) {
+        return TMergePolicyAnd::MergeWithSimple(extFilter, DefaultFilterValue);
+    } else if (extFilter.Filter.empty()) {
+        return TMergePolicyAnd::MergeWithSimple(*this, extFilter.DefaultFilterValue);
     } else {
         auto itSelf = Filter.begin();
         auto itExt = extFilter.Filter.cbegin();
 
-        std::deque<ui32> result;
+        std::vector<ui32> resultFilter;
+        resultFilter.reserve(Filter.size() + extFilter.Filter.size());
         ui32 selfPos = 0;
         ui32 extPos = 0;
         bool curSelf = GetStartValue();
@@ -294,10 +420,10 @@ void TColumnFilter::CombineSequential(const TColumnFilter& extFilter) {
             const ui32 delta = curSelf ? CrossSize(extPos, extPos + *itExt, selfPos, selfPos + *itSelf) : *itSelf;
             if (delta) {
                 if (!count || curCurrent != (curSelf && curExt)) {
-                    result.emplace_back(delta);
+                    resultFilter.emplace_back(delta);
                     curCurrent = curSelf && curExt;
                 } else {
-                    result.back() += delta;
+                    resultFilter.back() += delta;
                 }
                 count += delta;
             }
@@ -322,23 +448,12 @@ void TColumnFilter::CombineSequential(const TColumnFilter& extFilter) {
             }
         }
         Y_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
-        std::swap(result, Filter);
-        std::swap(curCurrent, CurrentValue);
-        std::swap(count, Count);
+        TColumnFilter result = TColumnFilter::BuildAllowFilter();
+        std::swap(resultFilter, result.Filter);
+        std::swap(curCurrent, result.CurrentValue);
+        std::swap(count, result.Count);
+        return result;
     }
-}
-
-std::vector<bool> TColumnFilter::BuildSimpleFilter() const {
-    std::vector<bool> result;
-    result.reserve(Count);
-    bool currentValue = GetStartValue();
-    for (auto&& i : Filter) {
-        for (ui32 idx = 0; idx < i; ++idx) {
-            result.emplace_back(currentValue);
-        }
-        currentValue = !currentValue;
-    }
-    return result;
 }
 
 }

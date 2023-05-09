@@ -659,7 +659,7 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
             }
         }
 
-        auto filter = bits.BuildArrowFilter();
+        auto filter = bits.BuildArrowFilter(batch.Rows);
         for (int64_t i = 0; i < batch.Schema->num_fields(); ++i) {
             bool needed = (allColumns || neededColumns.contains(batch.Schema->field(i)->name()));
             if (batch.Datums[i].is_array() && needed) {

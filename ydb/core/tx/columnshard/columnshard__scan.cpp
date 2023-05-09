@@ -435,13 +435,11 @@ private:
 
     void NextReadMetadata() {
         auto g = Stats.MakeGuard("NextReadMetadata");
-        ScanIterator.reset();
-        ++ReadMetadataIndex;
-
-        if (ReadMetadataIndex == ReadMetadataRanges.size()) {
+        if (++ReadMetadataIndex == ReadMetadataRanges.size()) {
             // Send empty batch with "finished" flag
             MakeResult();
             SendResult(false, true);
+            ScanIterator.reset();
             return Finish();
         }
 

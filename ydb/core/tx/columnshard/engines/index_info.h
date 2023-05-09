@@ -146,7 +146,14 @@ public:
 
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }
-
+    static const std::vector<std::string>& GetSpecialColumnNames() {
+        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID) };
+        return result;
+    }
+    static const std::vector<ui32>& GetSpecialColumnIds() {
+        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        return result;
+    }
 private:
     ui32 Id;
     TString Name;

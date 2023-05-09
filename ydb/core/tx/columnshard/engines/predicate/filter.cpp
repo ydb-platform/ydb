@@ -9,7 +9,7 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(std::shared_ptr<arro
     }
     NArrow::TColumnFilter result = SortedRanges.front().BuildFilter(data);
     for (ui32 i = 1; i < SortedRanges.size(); ++i) {
-        result.Or(SortedRanges[i].BuildFilter(data));
+        result = result.Or(SortedRanges[i].BuildFilter(data));
     }
     return result;
 }

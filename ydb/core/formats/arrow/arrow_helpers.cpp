@@ -917,15 +917,21 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
     return true;
 }
 
-int ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {
-    auto result = TRawReplaceKey(&x, xRow).CompareNotNull(TRawReplaceKey(&y, yRow));
-    if (result == std::partial_ordering::greater) {
-        return 1;
-    } else if (result == std::partial_ordering::less) {
-        return -1;
-    } else {
-        return 0;
+std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {
+    return TRawReplaceKey(&x, xRow).CompareNotNull(TRawReplaceKey(&y, yRow));
+}
+
+std::shared_ptr<arrow::RecordBatch> BuildSingleRecordBatch(const std::shared_ptr<arrow::Schema> schema, const std::vector<std::shared_ptr<arrow::Scalar>>& recordData) {
+    std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders = MakeBuilders(schema, 1);
+    Y_VERIFY(builders.size() == recordData.size());
+    for (ui32 i = 0; i < recordData.size(); ++i) {
+        Y_VERIFY(recordData[i]);
+        Y_VERIFY_OK(builders[i]->AppendScalar(*recordData[i]));
     }
+
+    auto arrays = NArrow::Finish(std::move(builders));
+    Y_VERIFY(arrays.size() == builders.size());
+    return arrow::RecordBatch::Make(schema, 1, arrays);
 }
 
 }

@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NIndexedReader {
 class TGranuleOrdered {
 private:
     bool StartedFlag = false;
-    std::deque<TBatch*> OrderedBatches;
+    std::deque<TGranule::TBatchForMerge> OrderedBatches;
     TGranule* Granule = nullptr;
 public:
     bool Start() {
@@ -20,13 +20,13 @@ public:
 
     }
 
-    TGranuleOrdered(std::deque<TBatch*>&& orderedBatches, TGranule* granule)
+    TGranuleOrdered(std::deque<TGranule::TBatchForMerge>&& orderedBatches, TGranule* granule)
         : OrderedBatches(std::move(orderedBatches))
         , Granule(granule)
     {
     }
 
-    std::deque<TBatch*>& GetOrderedBatches() noexcept {
+    std::deque<TGranule::TBatchForMerge>& GetOrderedBatches() noexcept {
         return OrderedBatches;
     }
 
@@ -41,9 +41,12 @@ private:
     std::deque<TGranule*> GranulesOutOrder;
     std::deque<TGranuleOrdered> GranulesOutOrderForPortions;
     ui32 CurrentItemsLimit = 0;
+    THashMap<ui32, ui32> CountBatchesByPools;
     ui32 CountProcessedGranules = 0;
-    ui32 CountNotSorted = 0;
-    ui32 CountSorted = 0;
+    ui32 CountSkippedBatches = 0;
+    ui32 CountProcessedBatches = 0;
+    ui32 CountNotSortedPortions = 0;
+    ui32 CountSkippedGranules = 0;
     TMergePartialStream MergeStream;
 protected:
     virtual bool DoWakeup(const TGranule& granule, TGranulesFillingContext& context) override;

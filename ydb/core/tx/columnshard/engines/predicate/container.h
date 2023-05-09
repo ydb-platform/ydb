@@ -23,7 +23,7 @@ private:
         : CompareType(compareType) {
     }
 
-    static int ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
+    static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
 
 public:
 

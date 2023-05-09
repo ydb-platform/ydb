@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "conveyor_task.h"
+#include "read_filter_merger.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -77,7 +78,11 @@ private:
     YDB_READONLY(ui64, FetchedBytes, 0);
 
     THashSet<TBlobRange> WaitIndexed;
-    
+    mutable std::optional<std::shared_ptr<TSortableBatchPosition>> FirstPK;
+    mutable std::optional<std::shared_ptr<TSortableBatchPosition>> LastPK;
+    mutable std::optional<std::shared_ptr<TSortableBatchPosition>> ReverseFirstPK;
+    mutable std::optional<std::shared_ptr<TSortableBatchPosition>> ReverseLastPK;
+
     YDB_READONLY_FLAG(DuplicationsAvailable, false);
     YDB_READONLY_DEF(TBatchFetchedInfo, FetchedInfo);
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
@@ -90,6 +95,9 @@ private:
     ui64 GetUsefulBytes(const ui64 bytes) const;
 
 public:
+    std::shared_ptr<TSortableBatchPosition> GetFirstPK(const bool reverse, const TIndexInfo& indexInfo) const;
+    void GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::shared_ptr<TSortableBatchPosition>& from, std::shared_ptr<TSortableBatchPosition>& to) const;
+
     bool AllowEarlyFilter() const {
         return PortionInfo->AllowEarlyFilter();
     }
@@ -105,9 +113,6 @@ public:
         return GetUsefulBytes(FetchedBytes);
     }
 
-    bool IsSortableInGranule() const {
-        return PortionInfo->IsSortableInGranule();
-    }
     TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo);
     bool AddIndexedReady(const TBlobRange& bRange, const TString& blobData);
     bool AskedColumnsAlready(const std::set<ui32>& columnIds) const;

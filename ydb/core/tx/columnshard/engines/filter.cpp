@@ -44,45 +44,12 @@ NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatc
     return result;
 }
 
-NArrow::TColumnFilter MakeReplaceFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                    THashSet<NArrow::TReplaceKey>& keys) {
-    NArrow::TColumnFilter bits;
-    bits.Reset(batch->num_rows());
-
-    auto columns = std::make_shared<NArrow::TArrayVec>(batch->columns());
-
-    for (int i = 0; i < batch->num_rows(); ++i) {
-        NArrow::TReplaceKey key(columns, i);
-        bits.Add(keys.emplace(key).second);
-    }
-    return bits;
-}
-
-NArrow::TColumnFilter MakeReplaceFilterLastWins(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                            THashSet<NArrow::TReplaceKey>& keys) {
-    if (!batch->num_rows()) {
-        return {};
-    }
-
-    NArrow::TColumnFilter result;
-    result.Reset(batch->num_rows());
-
-    auto columns = std::make_shared<NArrow::TArrayVec>(batch->columns());
-
-    for (int i = batch->num_rows() - 1; i >= 0; --i) {
-        NArrow::TReplaceKey key(columns, i);
-        result.Add(keys.emplace(key).second);
-    }
-
-    return result;
-}
-
 NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata) {
     Y_VERIFY(portion);
     NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
     if (readMetadata.GetSnapshot().GetPlanStep()) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
-        result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.GetSnapshot()));
+        result = result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.GetSnapshot()));
     }
 
     return result;
@@ -94,21 +61,6 @@ NArrow::TColumnFilter FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>
 
 NArrow::TColumnFilter EarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch, std::shared_ptr<NSsa::TProgram> ssa) {
     return ssa->MakeEarlyFilter(batch, NArrow::GetCustomExecContext());
-}
-
-void ReplaceDupKeys(std::shared_ptr<arrow::RecordBatch>& batch,
-                    const std::shared_ptr<arrow::Schema>& replaceSchema, bool lastWins) {
-    THashSet<NArrow::TReplaceKey> replaces;
-
-    auto keyBatch = NArrow::ExtractColumns(batch, replaceSchema);
-
-    NArrow::TColumnFilter bits;
-    if (lastWins) {
-        bits = MakeReplaceFilterLastWins(keyBatch, replaces);
-    } else {
-        bits = MakeReplaceFilter(keyBatch, replaces);
-    }
-    Y_VERIFY(bits.Apply(batch));
 }
 
 }

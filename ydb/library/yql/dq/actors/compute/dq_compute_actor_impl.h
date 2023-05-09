@@ -389,7 +389,7 @@ protected:
                 ProcessOutputsState.ChannelsReady = false;
                 ProcessOutputsState.HasDataToSend = true;
                 ProcessOutputsState.AllOutputsFinished = false;
-                CA_LOG_D("Can not drain channelId: " << channelId << ", no dst actor id");
+                CA_LOG_T("Can not drain channelId: " << channelId << ", no dst actor id");
                 if (Y_UNLIKELY(outputChannel.Stats)) {
                     outputChannel.Stats->NoDstActorId++;
                 }
@@ -404,7 +404,7 @@ protected:
                     ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
                 }
             } else {
-                CA_LOG_D("Do not drain channelId: " << channelId << ", finished");
+                CA_LOG_T("Do not drain channelId: " << channelId << ", finished");
                 ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
             }
         }
@@ -1333,7 +1333,7 @@ private:
         bool hasCheckpoint = channel->Pop(checkpoint);
         if (!hasData && !hasWatermark && !hasCheckpoint) {
             if (!channel->IsFinished()) {
-                CA_LOG_D("output channelId: " << channel->GetChannelId() << ", nothing to send and is not finished");
+                CA_LOG_T("output channelId: " << channel->GetChannelId() << ", nothing to send and is not finished");
                 return 0; // channel is empty and not finished yet
             }
         }

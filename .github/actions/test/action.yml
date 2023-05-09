@@ -88,7 +88,7 @@ runs:
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
-    if: always()
+    if: inputs.AWS_KEY_ID
     with:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}

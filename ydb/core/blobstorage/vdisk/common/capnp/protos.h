@@ -769,6 +769,9 @@ namespace NKikimrCapnProto {
 
             void CopyFrom(const Builder& other) {
                 message->setRoot(other.GetCapnpBase().asReader());
+                builder = message->getRoot<NKikimrCapnProto_::TEvVGet>();
+                static_cast<Reader&>(*this) = builder.asReader();
+
                 if (other.extremeQueriesInBuffer) {
                     elements.clear();
                     for (const auto& extreme : other.elements) {

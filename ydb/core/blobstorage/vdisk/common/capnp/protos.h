@@ -767,11 +767,24 @@ namespace NKikimrCapnProto {
                 return elements.back().get();
             }
 
-//            void CopyFrom(const Reader& other) {
-//                Y_VERIFY(!extremeQueriesInBuffer);
-//
-//                message->setRoot(other.GetCapnpBase());
-//            }
+            void CopyFrom(const Builder& other) {
+                message->setRoot(other.GetCapnpBase().asReader());
+                if (other.extremeQueriesInBuffer) {
+                    elements.clear();
+                    for (const auto& extreme : other.elements) {
+                        auto from = extreme.getReader();
+                        auto to = AddExtremeQueries();
+
+                        to.SetShift(from.getShift());
+                        to.SetSize(from.getSize());
+                        to.SetCookie(from.getCookie());
+
+                        if (from.hasId()) {
+                            to.SetId(from.getId());
+                        }
+                    }
+                }
+            }
 
             int ByteSize() const {
                 return builder.totalSize().wordCount * 8;

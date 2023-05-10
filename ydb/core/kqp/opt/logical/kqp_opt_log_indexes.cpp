@@ -158,19 +158,19 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
         TVector<TExprBase> structMembers;
         structMembers.reserve(keyColumnsList.Size());
 
-        for (const auto& c : keyColumnsList) {
+        for (const auto& keyColumn : keyColumnsList) {
             auto member = Build<TCoNameValueTuple>(ctx, read.Pos())
-                .Name().Build(c.Value())
+                .Name().Build(keyColumn.Value())
                 .Value<TCoMember>()
                     .Struct(arg)
-                    .Name().Build(c.Value())
+                    .Name().Build(keyColumn.Value())
                     .Build()
                 .Done();
 
             structMembers.push_back(member);
         }
 
-        readIndexTable= Build<TCoMap>(ctx, read.Pos())
+        readIndexTable = Build<TCoMap>(ctx, read.Pos())
             .Input(readIndexTable)
             .Lambda()
                 .Args({arg})
@@ -288,9 +288,50 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     return node;
 }
 
+/// Can push filter node to read from table using only columns available in table description
+bool CanPushFilter(const TCoFlatMap& node, const TKikimrTableDescription& tableDesc, TVector<TString> & extraColumns) {
+    if (node.Lambda().Args().Size() != 1)
+        return false;
+
+    THashSet<TString> extraColumnsSet;
+    bool canPushFilter = true;
+
+    const auto * filterLambdaArgument = node.Lambda().Args().Arg(0).Raw();
+
+    VisitExpr(node.Ptr(), [&](const TExprNode::TPtr& exprNode) {
+        if (!canPushFilter)
+            return false;
+
+        if (!TCoMember::Match(exprNode.Get()))
+            return true;
+
+        TCoMember member(exprNode);
+        if (member.Struct().Raw() != filterLambdaArgument) {
+            canPushFilter = false;
+            return false;
+        }
+
+        auto column = member.Name().StringValue();
+        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
+        if (!columnIndex) {
+            canPushFilter = false;
+            return false;
+        }
+
+        extraColumnsSet.insert(column);
+        return true;
+    });
+
+    extraColumns.insert(extraColumns.end(), extraColumnsSet.begin(), extraColumnsSet.end());
+
+    return canPushFilter;
+}
+
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake
 // through TKqlLookupTable.
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
+// Additionally if there is TopSort or Take over filter, and filter depends only on columns available in index,
+// we also push copy of filter through TKqlLookupTable.
 TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoTopBase>()) {
         return node;
@@ -298,43 +339,64 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
 
     const auto topBase = node.Maybe<TCoTopBase>().Cast();
 
-    if (auto maybeReadTableIndex = topBase.Input().Maybe<TKqlReadTableIndex>()) {
-        auto readTableIndex = maybeReadTableIndex.Cast();
+    TMaybeNode<TKqlReadTableIndex> maybeReadTableIndex;
 
-        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
-        const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
-        const auto& indexDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexMeta->Name);
+    auto maybeFlatMap = topBase.Input().Maybe<TCoFlatMap>();
+    if (maybeFlatMap)
+        maybeReadTableIndex = maybeFlatMap.Input().Maybe<TKqlReadTableIndex>();
+    else
+        maybeReadTableIndex = topBase.Input().Maybe<TKqlReadTableIndex>();
 
-        TVector<TString> sortByColumns;
+    if (!maybeReadTableIndex)
+        return node;
 
-        if (!CanPushTopSort(topBase, indexDesc, &sortByColumns)) {
-            return node;
+    auto readTableIndex = maybeReadTableIndex.Cast();
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
+    const auto& indexDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexMeta->Name);
+
+    TVector<TString> extraColumns;
+
+    if (maybeFlatMap && !CanPushFilter(maybeFlatMap.Cast(), indexDesc, extraColumns))
+        return node;
+
+    if (!CanPushTopSort(topBase, indexDesc, &extraColumns)) {
+        return node;
+    }
+
+    auto filter = [&](const TExprBase& in) mutable {
+        auto sortInput = in;
+
+        if (maybeFlatMap)
+        {
+            sortInput = Build<TCoFlatMap>(ctx, node.Pos())
+                .Input(in)
+                .Lambda(maybeFlatMap.Lambda().Cast())
+                .Done();
         }
 
-        auto filter = [&ctx, &node, &topBase](const TExprBase& in) mutable {
-            auto newTop = Build<TCoTopBase>(ctx, node.Pos())
-                .CallableName(node.Ref().Content())
-                .Input(in)
-                .KeySelectorLambda(ctx.DeepCopyLambda(topBase.KeySelectorLambda().Ref()))
-                .SortDirections(topBase.SortDirections())
-                .Count(topBase.Count())
-                .Done();
-            return TExprBase(newTop);
-        };
-
-        auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta,
-            kqpCtx.IsScanQuery(), sortByColumns, filter);
-
-        return Build<TCoTopBase>(ctx, node.Pos())
+        auto newTop = Build<TCoTopBase>(ctx, node.Pos())
             .CallableName(node.Ref().Content())
-            .Input(lookup)
+            .Input(sortInput)
             .KeySelectorLambda(ctx.DeepCopyLambda(topBase.KeySelectorLambda().Ref()))
             .SortDirections(topBase.SortDirections())
             .Count(topBase.Count())
             .Done();
-    }
 
-    return node;
+        return TExprBase(newTop);
+    };
+
+    auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta,
+        kqpCtx.IsScanQuery(), extraColumns, filter);
+
+    return Build<TCoTopBase>(ctx, node.Pos())
+        .CallableName(node.Ref().Content())
+        .Input(lookup)
+        .KeySelectorLambda(ctx.DeepCopyLambda(topBase.KeySelectorLambda().Ref()))
+        .SortDirections(topBase.SortDirections())
+        .Count(topBase.Count())
+        .Done();
 }
 
 TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -344,21 +406,43 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
     auto take = node.Maybe<TCoTake>().Cast();
 
-    if (auto maybeReadTableIndex = take.Input().Maybe<TKqlReadTableIndex>()) {
-        auto readTableIndex = maybeReadTableIndex.Cast();
+    TMaybeNode<TKqlReadTableIndex> maybeReadTableIndex;
 
-        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
-        const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
+    auto maybeFlatMap = take.Input().Maybe<TCoFlatMap>();
+    if (maybeFlatMap)
+        maybeReadTableIndex = maybeFlatMap.Input().Maybe<TKqlReadTableIndex>();
+    else
+        maybeReadTableIndex = take.Input().Maybe<TKqlReadTableIndex>();
 
-        auto filter = [&ctx, &node](const TExprBase& in) mutable {
-            // Change input for TCoTake. New input is result of TKqlReadTable.
-            return TExprBase(ctx.ChangeChild(*node.Ptr(), 0, in.Ptr()));
-        };
+    if (!maybeReadTableIndex)
+        return node;
 
-        return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta, kqpCtx.IsScanQuery(), {}, filter);
-    }
+    auto readTableIndex = maybeReadTableIndex.Cast();
 
-    return node;
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
+    const auto& indexDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexMeta->Name);
+
+    TVector<TString> extraColumns;
+    if (maybeFlatMap && !CanPushFilter(maybeFlatMap.Cast(), indexDesc, extraColumns))
+        return node;
+
+    auto filter = [&](const TExprBase& in) mutable {
+        auto takeChild = in;
+
+        if (maybeFlatMap)
+        {
+            takeChild = Build<TCoFlatMap>(ctx, node.Pos())
+                .Input(in)
+                .Lambda(maybeFlatMap.Lambda().Cast())
+                .Done();
+        }
+
+        // Change input for TCoTake. New input is result of TKqlReadTable.
+        return TExprBase(ctx.ChangeChild(*node.Ptr(), 0, takeChild.Ptr()));
+    };
+
+    return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta, kqpCtx.IsScanQuery(), extraColumns, filter);
 }
 
 } // namespace NKikimr::NKqp::NOpt

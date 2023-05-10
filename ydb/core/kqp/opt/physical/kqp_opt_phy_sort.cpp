@@ -51,9 +51,10 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
     if (!isReadTable && !isReadTableRanges) {
         return node;
     }
+
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(input, isReadTableRanges));
 
-    if(tableDesc.Metadata->Kind == EKikimrTableKind::Olap) {
+    if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap) {
         // OLAP tables are read in parallel, so we need to keep the out sort.
         return node;
     }

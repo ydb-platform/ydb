@@ -651,13 +651,15 @@ namespace NKikimrCapnProto {
         private:
         protected:
             mutable std::vector<capnp::Orphan<NKikimrCapnProto_::TExtremeQuery>> elements;
+            mutable bool extremeQueriesInBuffer = true;
+
         public:
             Reader(NKikimrCapnProto_::TEvVGet::Reader r) : NKikimrCapnProto_::TEvVGet::Reader(r) {}
             Reader() = default;
 
-            bool HasExtremeQueries() const { return !elements.empty(); }
-            TExtremeQuery::Reader GetExtremeQueries(uint32_t idx) const { return elements[idx].getReader(); }
-            size_t ExtremeQueriesSize() const { return elements.size(); }
+            bool HasExtremeQueries() const { return ExtremeQueriesSize() != 0; }
+            TExtremeQuery::Reader GetExtremeQueries(uint32_t idx) const { return extremeQueriesInBuffer ? elements[idx].getReader() : getExtremeQueries()[idx]; }
+            size_t ExtremeQueriesSize() const { return extremeQueriesInBuffer ? elements.size() : getExtremeQueries().size(); }
 
             bool GetNotifyIfNotReady() const { return getNotifyIfNotReady(); }
             bool GetShowInternals() const { return getShowInternals(); }
@@ -758,14 +760,18 @@ namespace NKikimrCapnProto {
             }
 
             TExtremeQuery::Builder AddExtremeQueries() {
+                Y_VERIFY(extremeQueriesInBuffer);
+
                 auto orphan = message->getOrphanage().newOrphan<NKikimrCapnProto_::TExtremeQuery>();
                 elements.push_back(std::move(orphan));
                 return elements.back().get();
             }
 
-            void CopyFrom(const Reader& other) {
-                message->setRoot(other.GetCapnpBase());
-            }
+//            void CopyFrom(const Reader& other) {
+//                Y_VERIFY(!extremeQueriesInBuffer);
+//
+//                message->setRoot(other.GetCapnpBase());
+//            }
 
             int ByteSize() const {
                 return builder.totalSize().wordCount * 8;
@@ -779,38 +785,30 @@ namespace NKikimrCapnProto {
                 NKikimrCapnProtoUtil::TRopeStream stream(input);
                 kj::BufferedInputStreamWrapper buffered(stream);
 
-                Y_VERIFY(message != nullptr);
                 message->setRoot(capnp::PackedMessageReader{buffered}.getRoot<NKikimrCapnProto_::TEvVGet>());
                 builder = message->getRoot<NKikimrCapnProto_::TEvVGet>();
                 static_cast<Reader&>(*this) = builder.asReader();
 
-                if (builder.hasExtremeQueries()) {
-                    elements.reserve(builder.getExtremeQueries().size());
-                    for (TExtremeQuery::Reader extremeQuery: builder.asReader().getExtremeQueries()) {
-                        AddExtremeQueries().CopyFrom(extremeQuery);
-                    }
-                }
-
-                // set bool checkMessage to true
-                // and add a Y_VERIFY(!extremeQueriesInMessage) to AddExtremeQueries method
+                extremeQueriesInBuffer = false;
 
                 return true;
             }
 
             bool SerializeToZeroCopyStream(NActors::TChunkSerializer *output) const {
                 NKikimrCapnProto_::TEvVGet::Builder b(builder);
-                auto interviews = b.initExtremeQueries(elements.size());
-                for (size_t i = 0; i != elements.size(); ++i) {
-                    interviews.adoptWithCaveats(i, std::move(elements[i]));
+                if (extremeQueriesInBuffer && !elements.empty()) {
+                    auto extremeQueries = b.initExtremeQueries(elements.size());
+                    for (size_t i = 0; i != elements.size(); ++i) {
+                        extremeQueries.adoptWithCaveats(i, std::move(elements[i]));
+                    }
+                    elements.clear();
+                    extremeQueriesInBuffer = false;
                 }
-                elements.clear();
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);
                 const TString s((const char *) stream.getArray().begin(), stream.getArray().size());
                 output->WriteString(&s);
-
-                std::cout << interviews.size() << ": " << stream.getArray().size() << "\n\n";
 
                 return true;
             }

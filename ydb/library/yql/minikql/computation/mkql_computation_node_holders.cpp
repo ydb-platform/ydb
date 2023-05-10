@@ -682,7 +682,7 @@ public:
 
         ui32 i = 0U;
         for (const auto node : ValueNodes) {
-            const auto itemPtr = GetElementPtrInst::CreateInBounds(itemsPtr, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i++)}, "item", block);
+            const auto itemPtr = GetElementPtrInst::CreateInBounds(type, itemsPtr, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i++)}, "item", block);
             GetNodeValue(itemPtr, node, ctx, block);
         }
         return result;
@@ -4032,7 +4032,7 @@ Value* GenerateCheckNotUniqueBoxed(Value* value, LLVMContext& context, Function*
     const auto half = CastInst::Create(Instruction::Trunc, value, Type::getInt64Ty(context), "half", block);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), Type::getInt32Ty(context), Type::getInt16Ty(context)});
     const auto boxptr = CastInst::Create(Instruction::IntToPtr, half, PointerType::getUnqual(type), "boxptr", block);
-    const auto cntptr = GetElementPtrInst::CreateInBounds(boxptr, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 1)}, "cntptr", block);
+    const auto cntptr = GetElementPtrInst::CreateInBounds(type, boxptr, {ConstantInt::get(Type::getInt32Ty(context), 0), ConstantInt::get(Type::getInt32Ty(context), 1)}, "cntptr", block);
     const auto refs = new LoadInst(Type::getInt32Ty(context), cntptr, "refs", block);
     const auto many = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, refs, ConstantInt::get(refs->getType(), 1U), "many", block);
     result->addIncoming(many, block);
@@ -4054,7 +4054,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
 
     const auto values = ctx.GetMutables();
 
-    const auto indexPtr = GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(idxType, Index)}, "index_ptr", block);
+    const auto indexPtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(idxType, Index)}, "index_ptr", block);
 
     const auto raw = new LoadInst(valueType, indexPtr, "raw", block);
 
@@ -4062,7 +4062,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
     const auto indf = CastInst::Create(Instruction::ZExt, indb, idxType, "indf", block);
     const auto ind_one = BinaryOperator::CreateAdd(indf, ConstantInt::get(idxType, Index + 1U), "ind_one", block);
 
-    const auto tpfirst = GetElementPtrInst::CreateInBounds(values, {ind_one}, "tpfirst", block);
+    const auto tpfirst = GetElementPtrInst::CreateInBounds(valueType, values, {ind_one}, "tpfirst", block);
 
     const auto tfirst = new LoadInst(valueType, tpfirst, "tfirst", block);
     const auto cfirst = GenerateCheckNotUniqueBoxed(tfirst, context, ctx.Func, block);
@@ -4088,7 +4088,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
 
     const auto ind_two = BinaryOperator::CreateAdd(inds, ConstantInt::get(idxType, Index + 1U), "ind_two", block);
 
-    const auto tpsecond = GetElementPtrInst::CreateInBounds(values, {ind_two}, "tpsecond", block);
+    const auto tpsecond = GetElementPtrInst::CreateInBounds(valueType, values, {ind_two}, "tpsecond", block);
     const auto tsecond = new LoadInst(valueType, tpsecond, "tsecond", block);
     const auto csecond = GenerateCheckNotUniqueBoxed(tsecond, context, ctx.Func, block);
     has->addIncoming(tsecond, block);
@@ -4132,7 +4132,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
         const auto itemsPtr = CastInst::Create(Instruction::IntToPtr, offs, pointerType, "items_ptr", block);
 
         for (ui64 i = 0; i < sz; ++i) {
-            const auto itemp = GetElementPtrInst::CreateInBounds(itemsPtr, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i)}, "itemp", block);
+            const auto itemp = GetElementPtrInst::CreateInBounds(arrayType, itemsPtr, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i)}, "itemp", block);
             ValueUnRef(EValueRepresentation::Any, itemp, ctx, block);
         }
 

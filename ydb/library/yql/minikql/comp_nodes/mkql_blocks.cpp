@@ -10,6 +10,8 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
+
 #include <arrow/scalar.h>
 #include <arrow/array.h>
 #include <arrow/datum.h>
@@ -427,6 +429,10 @@ private:
             default:
                 MKQL_ENSURE(false, "Unsupported data slot");
             }
+        }
+
+        if (type->IsPg()) {
+            return NYql::MakePgScalar(AS_TYPE(TPgType, type), value, ctx.ArrowMemoryPool);
         }
 
         MKQL_ENSURE(false, "Unsupported type");

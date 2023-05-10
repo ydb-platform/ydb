@@ -62,6 +62,8 @@ extern "C" {
 #undef locale_t
 }
 
+#include "arrow.h"
+
 namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
@@ -1804,6 +1806,39 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     return kernel;
 }
 
+std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId) {
+    std::shared_ptr<arrow::DataType> returnArrowType;
+    MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
+    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [execFunc](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        return execFunc(ctx, batch, res);
+    });
+
+    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->init = [procId](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+        auto state = std::make_unique<TPgKernelState>();
+        Zero(state->flinfo);
+        fmgr_info(procId, &state->flinfo);
+        YQL_ENSURE(state->flinfo.fn_addr);
+        state->resultinfo = nullptr;
+        state->context = nullptr;
+        state->fncollation = DEFAULT_COLLATION_OID;
+        const auto& procDesc = NPg::LookupProc(procId);
+        const auto& retTypeDesc = NPg::LookupType(procDesc.ResultType);
+        state->Name = procDesc.Name;
+        state->IsFixedResult = retTypeDesc.PassByValue;
+        state->IsCStringResult = procDesc.ResultType == CSTRINGOID;
+        for (const auto& argTypeId : procDesc.ArgTypes) {
+            const auto& argTypeDesc = NPg::LookupType(argTypeId);
+            state->IsFixedArg.push_back(argTypeDesc.PassByValue);
+        }
+
+        return arrow::Result(std::move(state));
+    };
+
+    return kernel;
+}
+
 TComputationNodeFactory GetPgFactory() {
     return [] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             TStringBuf name = callable.GetType()->GetName();
@@ -1849,6 +1884,25 @@ TComputationNodeFactory GetPgFactory() {
                         return new TPgResolvedCall<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
                     }
                 }
+            }
+
+            if (name == "BlockPgResolvedCall") {
+                const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
+                const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(1));
+                auto name = nameData->AsValue().AsStringRef();
+                auto id = idData->AsValue().Get<ui32>();
+                TVector<IComputationNode*> argNodes;
+                TVector<TType*> argTypes;
+                for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
+                    argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
+                    argTypes.emplace_back(callable.GetInput(i).GetStaticType());
+                }
+
+                auto returnType = callable.GetType()->GetReturnType();
+                auto execFunc = FindExec(id);
+                YQL_ENSURE(execFunc);
+                auto kernel = MakePgKernel(argTypes, returnType, execFunc, id);
+                return new TBlockFuncNode(ctx.Mutables, std::move(argNodes), argTypes, *kernel, kernel);
             }
 
             if (name == "PgCast") {
@@ -2555,6 +2609,26 @@ extern "C" void WriteSkiffPgValue(TPgType* type, const NUdf::TUnboxedValuePod& v
 }
 
 } // namespace NCommon
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    const auto& desc = NPg::LookupType(type->GetTypeId());
+    if (desc.PassByValue) {
+        return arrow::MakeScalar((uint64_t)ScalarDatumFromPod(value));
+    } else {
+        auto ptr = (const char*)PointerDatumFromPod(value);        
+        ui32 size;
+        if (desc.TypeLen == -1) {
+            auto ptr = (const text*)PointerDatumFromPod(value);
+            size = GetCleanVarSize((const text*)ptr) + VARHDRSZ;
+        } else {
+            size = strlen(ptr) + 1;
+        }
+
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(size, &pool)));
+        std::memcpy(buffer->mutable_data(), ptr, size);
+        return arrow::Datum(std::make_shared<arrow::BinaryScalar>(buffer));
+    }
+}
 
 TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
     switch (slot) {

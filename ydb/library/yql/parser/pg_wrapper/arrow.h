@@ -18,10 +18,11 @@ extern "C" {
 namespace NYql {
 
 struct TPgKernelState : arrow::compute::KernelState {
-	FmgrInfo   *flinfo;			/* ptr to lookup info used for this call */
+	FmgrInfo    flinfo;			/* ptr to lookup info used for this call */
 	fmNodePtr	context;		/* pass info about context of call */
 	fmNodePtr	resultinfo;		/* pass or return extra info about result */
 	Oid			fncollation;	/* collation for function to use */
+    TString     Name;
     std::vector<bool> IsFixedArg;
     bool IsFixedResult;
     bool IsCStringResult;
@@ -126,6 +127,7 @@ struct TDefaultArgsPolicy {
 };
 
 extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
+extern "C" void WithPgTry(const TString& funcName, const std::function<void()>& func);
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
 struct TGenericExec {
@@ -134,7 +136,7 @@ struct TGenericExec {
     {}
 
     Y_NO_INLINE arrow::Status operator()(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        const auto& state = GetPGKernelState(ctx);
+        auto& state = GetPGKernelState(ctx);
         if constexpr (!TArgsPolicy::VarArgs) {
             Y_ENSURE(batch.values.size() == TArgsPolicy::IsFixedArg.size());
             Y_ENSURE(state.IsFixedArg.size() == TArgsPolicy::IsFixedArg.size());
@@ -164,15 +166,18 @@ struct TGenericExec {
         }
 
         Y_ENSURE(hasArrays);
-        Y_ENSURE(state.flinfo->fn_strict == IsStrict);
+        Y_ENSURE(state.flinfo.fn_strict == IsStrict);
         Y_ENSURE(state.IsFixedResult == IsFixedResult);
         TArenaMemoryContext arena;
-        Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
+        WithPgTry(state.Name, [&]() {
+            Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
+        });
+
         return arrow::Status::OK();
     }
 
     Y_NO_INLINE void Dispatch1(bool hasScalars, bool hasNulls, arrow::compute::KernelContext* ctx,
-        const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, arrow::Datum* res) const {
+        const arrow::compute::ExecBatch& batch, size_t length, TPgKernelState& state, arrow::Datum* res) const {
         if (hasScalars) {
             if (hasNulls) {
                 if constexpr (IsFixedResult) {
@@ -213,7 +218,7 @@ struct TGenericExec {
     }
 
     template <bool HasScalars, bool HasNulls, typename TBuilder>
-    Y_NO_INLINE arrow::Datum Dispatch2(const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, TBuilder& builder) const {
+    Y_NO_INLINE arrow::Datum Dispatch2(const arrow::compute::ExecBatch& batch, size_t length, TPgKernelState& state, TBuilder& builder) const {
         if constexpr (!TArgsPolicy::VarArgs) {
             if (TArgsPolicy::IsFixedArg.size() == 2) {
                 if (batch.values[0].is_scalar()) {
@@ -230,9 +235,9 @@ struct TGenericExec {
     }
 
     template <bool HasScalars, bool HasNulls, EScalarArgBinary ScalarArgBinary, typename TBuilder>
-    Y_NO_INLINE arrow::Datum Dispatch3(const arrow::compute::ExecBatch& batch, size_t length, const TPgKernelState& state, TBuilder& builder) const {
-        LOCAL_FCINFO(fcinfo, FUNC_MAX_ARGS);    
-        fcinfo->flinfo = state.flinfo;
+    Y_NO_INLINE arrow::Datum Dispatch3(const arrow::compute::ExecBatch& batch, size_t length, TPgKernelState& state, TBuilder& builder) const {
+        LOCAL_FCINFO(fcinfo, FUNC_MAX_ARGS);
+        fcinfo->flinfo = &state.flinfo;
         fcinfo->context = state.context;
         fcinfo->resultinfo = state.resultinfo;
         fcinfo->fncollation = state.fncollation;
@@ -376,7 +381,7 @@ struct TGenericExec {
     SkipCall:;
         }
 
-        return builder.Build(true);    
+        return builder.Build(true);
     }
 
     TFunc Func;

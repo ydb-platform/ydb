@@ -4952,9 +4952,30 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth", "ToPg", "FromPg"}))
+        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
-            for (auto& child : node->ChildrenList()) {
+            ui32 startIndex = 0;
+            if (node->IsCallable("PgResolvedCall")) {
+                if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
+                    return true;
+                }
+
+                startIndex = 3;
+            } else if (node->IsCallable("PgResolvedOp")) {
+                if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
+                    return true;
+                }
+
+                startIndex = 2;
+            }
+
+            for (ui32 index = 0; index < startIndex; ++index) {
+                auto child = node->ChildPtr(index);
+                funcArgs.push_back(child);
+            }
+
+            for (ui32 index = startIndex; index < node->ChildrenSize(); ++index) {
+                auto child = node->ChildPtr(index);
                 if (!child->GetTypeAnn()->IsComputable()) {
                     funcArgs.push_back(child);
                 } else  if (child->IsComplete()) {

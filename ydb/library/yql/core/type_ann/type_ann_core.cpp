@@ -11939,6 +11939,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockNth"] = &BlockNthWrapper;
         Functions["BlockToPg"] = &BlockToPgWrapper;
         Functions["BlockFromPg"] = &BlockFromPgWrapper;
+        Functions["BlockPgResolvedOp"] = &BlockPgOpWrapper;
+        Functions["BlockPgResolvedCall"] = &BlockPgCallWrapper;
         ExtFunctions["BlockFunc"] = &BlockFuncWrapper;
         ExtFunctions["BlockBitCast"] = &BlockBitCastWrapper;
 

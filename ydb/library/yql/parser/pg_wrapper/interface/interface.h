@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arrow.h"
 #include "codec.h"
 #include "compare.h"
 #include "comp_factory.h"

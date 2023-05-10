@@ -5400,6 +5400,21 @@ TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockPgResolvedCall(const std::string_view& name, ui32 id,
+    const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
+    if constexpr (RuntimeVersion < 30U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+    callableBuilder.Add(NewDataLiteral(id));
+    for (const auto& arg : args) {
+        callableBuilder.Add(arg);
+    }
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
     if constexpr (RuntimeVersion < 30U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;

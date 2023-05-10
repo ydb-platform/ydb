@@ -1158,7 +1158,7 @@ namespace NActors {
                             }
                             TABLER() {
                                 TABLED() { str << "Frame version/Checksum"; }
-                                TABLED() { str << (Params.Encryption ? "v2/none" : "v2/crc32c"); }
+                                TABLED() { str << (Params.Encryption ? "v2/none" : Params.UseXxhash ? "v2/xxhash" : "v2/crc32c"); }
                             }
 #define MON_VAR(NAME)     \
     TABLER() {            \

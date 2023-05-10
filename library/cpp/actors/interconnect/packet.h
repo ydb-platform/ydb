@@ -13,6 +13,9 @@
 #include <util/generic/string.h>
 #include <util/generic/list.h>
 
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
 #include "types.h"
 #include "outgoing_stream.h"
 
@@ -158,7 +161,7 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     // Preallocate some space to fill it later.
     NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {
-        if (Checksumming()) {
+        if (ChecksummingCrc32c()) {
             Y_VERIFY_DEBUG(!InsideBookmark);
             InsideBookmark = true;
             PreBookmarkChecksum = std::exchange(InternalChecksum, 0);
@@ -171,7 +174,7 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     // Write previously bookmarked space.
     void WriteBookmark(NInterconnect::TOutgoingStream::TBookmark&& bookmark, const void *buffer, size_t len) {
-        if (Checksumming()) {
+        if (ChecksummingCrc32c()) {
             Y_VERIFY_DEBUG(InsideBookmark);
             InsideBookmark = false;
             const ui32 bookmarkChecksum = Crc32cExtendMSanCompatible(PreBookmarkChecksum, buffer, len);
@@ -210,7 +213,7 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     template<bool External>
     void ProcessChecksum(const void *buffer, size_t len) {
-        if (Checksumming()) {
+        if (ChecksummingCrc32c()) {
             if (External) {
                 ExternalChecksum = Crc32cExtendMSanCompatible(ExternalChecksum, buffer, len);
             } else {
@@ -230,7 +233,19 @@ struct TTcpPacketOutTask : TNonCopyable {
             static_cast<ui16>(InternalSize)
         };
 
-        if (Checksumming()) {
+        if (ChecksummingXxhash()) {
+            // write header with zero checksum to calculate whole packet checksum correctly
+            OutgoingStream.WriteBookmark(NInterconnect::TOutgoingStream::TBookmark(HeaderBookmark),
+                {reinterpret_cast<const char*>(&header), sizeof(header)});
+
+            // calculate packet checksum
+            XXH3_state_t state;
+            XXH3_64bits_reset(&state);
+            OutgoingStream.ScanLastBytes(GetPacketSize(), [&state](TContiguousSpan span) {
+                XXH3_64bits_update(&state, span.data(), span.size());
+            });
+            header.Checksum = XXH3_64bits_digest(&state);
+        } else if (ChecksummingCrc32c()) {
             Y_VERIFY_DEBUG(!InsideBookmark);
             const ui32 headerChecksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header));
             header.Checksum = Crc32cCombine(headerChecksum, InternalChecksum, InternalSize);
@@ -240,8 +255,12 @@ struct TTcpPacketOutTask : TNonCopyable {
             sizeof(header)});
     }
 
-    bool Checksumming() const {
-        return !Params.Encryption;
+    bool ChecksummingCrc32c() const {
+        return !Params.Encryption && !Params.UseXxhash;
+    }
+
+    bool ChecksummingXxhash() const {
+        return !Params.Encryption && Params.UseXxhash;
     }
 
     bool IsEmpty() const { return GetDataSize() == 0; }

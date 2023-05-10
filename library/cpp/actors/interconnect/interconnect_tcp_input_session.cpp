@@ -131,6 +131,8 @@ namespace NActors {
         }
 
         UsageHisto.fill(0);
+
+        XXH3_64bits_reset(&XxhashXdcState);
     }
 
     void TInputSessionTCP::Bootstrap() {
@@ -320,7 +322,15 @@ namespace NActors {
         const ui64 confirm = header.Confirm;
         if (!Params.Encryption) {
             ChecksumExpected = std::exchange(header.Checksum, 0);
-            Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
+            if (Params.UseXxhash) {
+                XXH3_64bits_reset(&XxhashState);
+                XXH3_64bits_update(&XxhashState, &header, sizeof(header));
+                if (!PayloadSize) {
+                    Checksum = XXH3_64bits_digest(&XxhashState);
+                }
+            } else {
+                Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
+            }
             if (!PayloadSize && Checksum != ChecksumExpected) {
                 LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
@@ -388,7 +398,14 @@ namespace NActors {
         State = EState::HEADER;
         if (!Params.Encryption) { // see if we are checksumming packet body
             for (const auto&& [data, size] : Payload) {
-                Checksum = Crc32cExtendMSanCompatible(Checksum, data, size);
+                if (Params.UseXxhash) {
+                    XXH3_64bits_update(&XxhashState, data, size);
+                } else {
+                    Checksum = Crc32cExtendMSanCompatible(Checksum, data, size);
+                }
+            }
+            if (Params.UseXxhash) {
+                Checksum = XXH3_64bits_digest(&XxhashState);
             }
             if (Checksum != ChecksumExpected) { // validate payload checksum
                 LOG_ERROR_IC_SESSION("ICIS04", "payload checksum error");
@@ -910,10 +927,18 @@ namespace NActors {
             Y_VERIFY_DEBUG(!XdcChecksumQ.empty());
             auto& [size, expected] = XdcChecksumQ.front();
             const size_t n = Min<size_t>(size, span.size());
-            XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            if (Params.UseXxhash) {
+                XXH3_64bits_update(&XxhashXdcState, span.data(), n);
+            } else {
+                XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            }
             span = span.SubSpan(n, Max<size_t>());
             size -= n;
             if (!size) {
+                if (Params.UseXxhash) {
+                    XdcCurrentChecksum = XXH3_64bits_digest(&XxhashXdcState);
+                    XXH3_64bits_reset(&XxhashXdcState);
+                }
                 if (XdcCurrentChecksum != expected) {
                     LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};

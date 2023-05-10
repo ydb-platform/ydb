@@ -12,6 +12,9 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
 #include <util/datetime/cputimer.h>
@@ -251,6 +254,8 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
+        XXH3_state_t XxhashState;
+        XXH3_state_t XxhashXdcState;
 
         size_t PayloadSize;
         ui32 ChecksumExpected, Checksum;

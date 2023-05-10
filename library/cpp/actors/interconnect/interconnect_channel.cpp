@@ -277,7 +277,14 @@ namespace NActors {
         *ptr++ = static_cast<ui8>(EXdcCommand::PUSH_DATA);
         *reinterpret_cast<ui16*>(ptr) = bytesSerialized;
         ptr += sizeof(ui16);
-        if (task.Checksumming()) {
+        if (task.ChecksummingXxhash()) {
+            XXH3_state_t state;
+            XXH3_64bits_reset(&state);
+            task.XdcStream.ScanLastBytes(bytesSerialized, [&state](TContiguousSpan span) {
+                XXH3_64bits_update(&state, span.data(), span.size());
+            });
+            *reinterpret_cast<ui32*>(ptr) = XXH3_64bits_digest(&state);
+        } else if (task.ChecksummingCrc32c()) {
             *reinterpret_cast<ui32*>(ptr) = task.ExternalChecksum;
         }
 

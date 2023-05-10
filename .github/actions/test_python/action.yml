@@ -31,12 +31,8 @@ runs:
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
-      export suite=''
-      if [[ "${{inputs.test_label_regexp}}" != "" ]]; then
-        suite="--suite ${{inputs.test_label_regexp}}"
-      fi
-      python ${source_root}/ydb/tests/oss/launch/launch.py --test-dir ${source_root}/ydb/tests/functional \
-      --xml-dir ${source_root}/ydb/tests/functional/test-results/xml ${suite} | \
+      pytest -n 32 -o junit_logging=log -o junit_log_passing_tests=False \
+      -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml ${suite} | \
       sed -e 's/\x1b\[[0-9;]*m//g' | \
       tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-stdout.gz) | \
       tee -a $GITHUB_STEP_SUMMARY

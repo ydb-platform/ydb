@@ -298,6 +298,13 @@ protected:
         SendStream(errorResponse);
     }
 
+    void BecomeReadyForQuery() {
+        SendReadyForQuery();
+        ++OutgoingSequenceNumber;
+        ReplayPostponedEvents();
+        FlushAndPoll();
+    }
+
     void FinishHandshake() {
         for (const auto& [name, value] : ServerParams) {
             SendParameterStatus(name, value);
@@ -356,17 +363,37 @@ protected:
         return;
     }
 
+    inline static bool IsWhitespaceASCII(char c)
+    {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+    }
+
+    static bool IsWhitespace(TStringBuf query) {
+        for (char c : query) {
+            if (!IsWhitespaceASCII(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool IsQueryEmpty(TStringBuf query) {
+        return IsWhitespace(query);
+    }
+
     void HandleMessage(const TPGQuery* message) {
-        if (message->GetQuery().empty()) {
+        if (IsQueryEmpty(message->GetQuery())) {
             SendMessage(TPGEmptyQueryResponse());
+            BecomeReadyForQuery();
         } else {
             Send(DatabaseProxy, new TEvPGEvents::TEvQuery(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
         }
     }
 
     void HandleMessage(const TPGParse* message) {
-        if (message->GetQueryData().Query.empty()) {
+        if (IsQueryEmpty(message->GetQueryData().Query)) {
             SendMessage(TPGEmptyQueryResponse());
+            BecomeReadyForQuery();
         } else {
             Send(DatabaseProxy, new TEvPGEvents::TEvParse(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
         }
@@ -523,10 +550,7 @@ protected:
                 errorResponse << '\0';
                 SendStream(errorResponse);
             }
-            SendReadyForQuery();
-            ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -587,10 +611,7 @@ protected:
                 errorResponse << '\0';
                 SendStream(errorResponse);
             }
-            SendReadyForQuery();
-            ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -600,10 +621,7 @@ protected:
         if (IsEventExpected(ev)) {
             TPGStreamOutput<TPGParseComplete> parseComplete;
             SendStream(parseComplete);
-            SendReadyForQuery();
-            ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }

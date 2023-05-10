@@ -739,7 +739,7 @@ public:
                 case EKikimrQueryType::YqlScriptStreaming:
                     if (useScanQuery) {
                         future = Gateway->StreamExecScanQueryAst(Cluster, queryAstStr, CollectParameters(query),
-                            querySettings, SessionCtx->Query().ReplyTarget);
+                            querySettings, SessionCtx->Query().ReplyTarget, SessionCtx->Query().RpcCtx);
                     } else {
                         Ydb::Table::TransactionSettings txSettings;
                         txSettings.mutable_serializable_read_write();
@@ -1388,6 +1388,7 @@ private:
         SetupYqlTransformer(EKikimrQueryType::YqlScriptStreaming);
 
         SessionCtx->Query().Deadlines = settings.Deadlines;
+        SessionCtx->Query().RpcCtx = settings.RpcCtx;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().ReplyTarget = target;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();

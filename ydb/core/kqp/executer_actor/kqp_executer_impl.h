@@ -47,13 +47,13 @@ LWTRACE_USING(KQP_PROVIDER);
 namespace NKikimr {
 namespace NKqp {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
+#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << stream)
 
 enum class EExecType {
     Data,
@@ -139,6 +139,10 @@ public:
         LOG_T("Bootstrap done, become ReadyState");
         this->Become(&TKqpExecuterBase::ReadyState);
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterReadyState, ExecuterSpan.GetTraceId(), "ReadyState", NWilson::EFlags::AUTO_END);
+    }
+
+    TActorId SelfId() {
+       return TActorBootstrapped<TDerived>::SelfId();
     }
 
     void ReportEventElapsedTime() {
@@ -905,7 +909,8 @@ protected:
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
 
-        LOG_T("ReplyErrorAndDie. " << response.DebugString());
+        LOG_T("ReplyErrorAndDie. Response: " << response.DebugString()
+            << ", to ActorId: " << Target);
 
         if constexpr (ExecType == EExecType::Data) {
             if (status != Ydb::StatusIds::SUCCESS) {

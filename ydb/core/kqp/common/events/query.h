@@ -45,6 +45,10 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
+    const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
+        return RequestCtx;
+    }
+
     bool HasYdbStatus() const {
         return RequestCtx ? false : Record.HasYdbStatus();
     }
@@ -256,11 +260,11 @@ public:
         }
     }
 
-    void PrepareRemote() const;
-
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
+    void PrepareRemote() const;
+
     mutable ui64 ParametersSize = 0;
     mutable std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RequestCtx;
     mutable TString TraceId;

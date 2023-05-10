@@ -29,6 +29,7 @@ public:
     struct TExecScriptSettings {
         NYql::TKikimrQueryDeadlines Deadlines;
         NYql::EKikimrStatsMode StatsMode = NYql::EKikimrStatsMode::None;
+        std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RpcCtx;
     };
 
     virtual ~IKqpHost() {}

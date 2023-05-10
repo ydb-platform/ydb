@@ -1940,27 +1940,31 @@ public:
     }
 
     TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
-        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target) override
+        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target,
+        std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx) override
     {
         YQL_ENSURE(cluster == Cluster);
+        YQL_ENSURE(ctx);
 
-        using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
-        if (UserToken) {
-            ev->Record.SetUserToken(UserToken->GetSerializedToken());
-        }
+        auto q = query;
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            NKikimrKqp::QUERY_ACTION_EXECUTE,
+            NKikimrKqp::QUERY_TYPE_AST_SCAN,
+            target,
+            ctx,
+            TString(), //sessionId
+            std::move(q),
+            TString(), //queryId
+            nullptr, //tx_control
+            nullptr,
+            settings.CollectStats,
+            nullptr, // query_cache_policy
+            nullptr
+        );
 
-        ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
-        ev->Record.MutableRequest()->SetQuery(query);
-        ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
-
-        ActorIdToProto(target, ev->Record.MutableCancelationActor());
-
+        // TODO: Rewrite CollectParameters at kqp_host
         FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,

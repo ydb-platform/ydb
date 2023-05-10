@@ -68,9 +68,12 @@ public:
     {}
 };
 
-std::unique_ptr<TEvKqp::TEvQueryResponse> AllocQueryResponse(const std::shared_ptr<TKqpQueryState>& state) {
+std::unique_ptr<TEvKqp::TEvQueryResponse> AllocQueryResponse(const std::shared_ptr<TKqpQueryState>& state,
+    bool disableReqArena)
+{
     auto resEv = std::make_unique<TEvKqp::TEvQueryResponse>();
-    if (auto reqArena = state->GetArena()) {
+    auto reqArena = state->GetArena();
+    if (!disableReqArena && reqArena) {
         resEv->Record.ReallocRef(reqArena);
     } else {
         auto arena = std::make_shared<google::protobuf::Arena>();
@@ -197,8 +200,6 @@ public:
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!ConvertParameters())
             return;
-
-        QueryState->RequestEv->PrepareRemote();
 
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
@@ -346,6 +347,8 @@ public:
             << " action: " << action
             << " type: " << QueryState->GetType()
             << " text: " << QueryState->GetQuery()
+            << " rpcActor: " << QueryState->RequestActorId
+            << " database: " << QueryState->GetDatabase()
         );
 
         switch (action) {
@@ -1263,7 +1266,7 @@ public:
 
     void ReplySuccess() {
         YQL_ENSURE(QueryState);
-        auto resEv = AllocQueryResponse(QueryState);
+        auto resEv = AllocQueryResponse(QueryState, QueryState->IsStreamResult());
         auto *record = &resEv->Record.GetRef();
         auto *response = record->MutableResponse();
 

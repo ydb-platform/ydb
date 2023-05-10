@@ -104,6 +104,17 @@ public:
     }
 
 private:
+    TString CurrentStateFuncName() const override {
+        const auto& func = CurrentStateFunc();
+        if (func == &TThis::ExecuteState) {
+            return "ExecuteState";
+        } else if (func == &TThis::WaitResolveState) {
+            return "WaitResolveState";
+        } else {
+            return TBase::CurrentStateFuncName();
+        }
+    }
+
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {

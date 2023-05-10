@@ -18,7 +18,7 @@ extern "C" {
 namespace NYql {
 
 struct TPgKernelState : arrow::compute::KernelState {
-	FmgrInfo    flinfo;			/* ptr to lookup info used for this call */
+	FmgrInfo    flinfo;			/* lookup info used for this call */
 	fmNodePtr	context;		/* pass info about context of call */
 	fmNodePtr	resultinfo;		/* pass or return extra info about result */
 	Oid			fncollation;	/* collation for function to use */

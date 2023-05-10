@@ -121,7 +121,7 @@ public:
 
     virtual ~TColumnEngineChanges() = default;
 
-    TColumnEngineChanges(EType type)
+    explicit TColumnEngineChanges(EType type)
         : Type(type)
     {}
 

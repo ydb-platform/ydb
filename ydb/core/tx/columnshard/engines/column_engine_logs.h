@@ -60,37 +60,38 @@ public:
             {}
         };
 
-        TChanges(const TColumnEngineForLogs& engine,
+        TChanges(const TMark& defaultMark,
                  TVector<NOlap::TInsertedData>&& blobsToIndex, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::INSERT)
-            , DefaultMark(engine.GetDefaultMark())
+            , DefaultMark(defaultMark)
         {
             Limits = limits;
             DataToIndex = std::move(blobsToIndex);
         }
 
-        TChanges(const TColumnEngineForLogs& engine,
-                 std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits)
+        TChanges(const TMark& defaultMark,
+                 std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits, const TSnapshot& snapshot)
             : TColumnEngineChanges(TColumnEngineChanges::COMPACTION)
-            , DefaultMark(engine.GetDefaultMark())
+            , DefaultMark(defaultMark)
         {
             Limits = limits;
             CompactionInfo = std::move(info);
+            InitSnapshot = snapshot;
         }
 
-        TChanges(const TColumnEngineForLogs& engine,
+        TChanges(const TMark& defaultMark,
                  const TSnapshot& snapshot, const TCompactionLimits& limits)
             : TColumnEngineChanges(TColumnEngineChanges::CLEANUP)
-            , DefaultMark(engine.GetDefaultMark())
+            , DefaultMark(defaultMark)
         {
             Limits = limits;
             InitSnapshot = snapshot;
         }
 
-        TChanges(const TColumnEngineForLogs& engine,
+        TChanges(const TMark& defaultMark,
                  TColumnEngineChanges::EType type, const TSnapshot& applySnapshot)
             : TColumnEngineChanges(type)
-            , DefaultMark(engine.GetDefaultMark())
+            , DefaultMark(defaultMark)
         {
             ApplySnapshot = applySnapshot;
         }
@@ -142,7 +143,7 @@ public:
             return std::max<ui32>(2, numSplitInto);
         }
 
-        TMark DefaultMark;
+        const TMark DefaultMark;
         THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
         std::optional<TSrcGranule> SrcGranule;
         THashMap<ui64, std::pair<ui64, TMark>> NewGranules; // granule -> {pathId, key}
@@ -197,11 +198,14 @@ public:
         return TMark::Deserialize(key, MarkSchema);
     }
 
-    TMark GetDefaultMark() const {
-        return TMark(MarkSchema);
-    }
+    const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
+    const TColumnEngineStats& GetTotalStats() override;
+    ui64 MemoryUsage() const override;
+    TSnapshot LastUpdate() const override { return LastSnapshot; }
 
+public:
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
+
     std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                           const TSnapshot& outdatedSnapshot) override;
@@ -209,15 +213,16 @@ public:
                                                        ui32 maxRecords) override;
     std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
+
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) override;
+
     void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) override;
+
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
     void UpdateCompactionLimits(const TCompactionLimits& limits) override { Limits = limits; }
-    const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
-    const TColumnEngineStats& GetTotalStats() override;
-    ui64 MemoryUsage() const override;
-    TSnapshot LastUpdate() const override { return LastSnapshot; }
+
+
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
@@ -259,6 +264,7 @@ private:
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
 
+private:
     void ClearIndex() {
         Granules.clear();
         PathGranules.clear();
@@ -298,4 +304,4 @@ private:
     TVector<TVector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;
 };
 
-}
+} // namespace NKikimr::NOlap

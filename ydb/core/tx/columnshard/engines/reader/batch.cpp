@@ -184,9 +184,7 @@ void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::
         std::vector<std::shared_ptr<arrow::Scalar>> maxRecord;
         for (auto&& i : indexInfo.GetReplaceKey()->fields()) {
             const ui32 columnId = indexInfo.GetColumnId(i->name());
-            std::shared_ptr<arrow::Scalar> minScalar;
-            std::shared_ptr<arrow::Scalar> maxScalar;
-            PortionInfo->MinMaxValue(columnId, minScalar, maxScalar);
+            const auto& [minScalar, maxScalar] = PortionInfo->MinMaxValue(columnId);
             if (!FirstPK && !minScalar) {
                 FirstPK = nullptr;
                 ReverseLastPK = nullptr;

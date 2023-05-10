@@ -44,9 +44,7 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
     bool matchFrom = false;
     bool matchTo = false;
     for (auto&& c : indexInfo.GetReplaceKey()->field_names()) {
-        std::shared_ptr<arrow::Scalar> minValue;
-        std::shared_ptr<arrow::Scalar> maxValue;
-        info.MinMaxValue(indexInfo.GetColumnId(c), minValue, maxValue);
+        const auto& [minValue, maxValue ] = info.MinMaxValue(indexInfo.GetColumnId(c));
         if (!matchFrom) {
             const int result = PredicateFrom.MatchScalar(idx, maxValue);
             if (result < 0) {

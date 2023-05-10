@@ -112,6 +112,10 @@ public:
 
     TFutureStatus DiscoverAsync(const TString& username);
 
+    TStatus Lineage(const TString& username, IOutputStream* traceOut = nullptr, IOutputStream* exprOut = nullptr, bool withTypes = false);
+
+    TFutureStatus LineageAsync(const TString& username, IOutputStream* traceOut = nullptr, IOutputStream* exprOut = nullptr, bool withTypes = false);
+
     TStatus Validate(const TString& username, IOutputStream* exprOut = nullptr, bool withTypes = false);
 
     TFutureStatus ValidateAsync(const TString& username, IOutputStream* exprOut = nullptr, bool withTypes = false);
@@ -143,6 +147,14 @@ public:
             IOutputStream* tracePlan = nullptr,
             IOutputStream* exprOut = nullptr,
             bool withTypes = false);
+
+    TStatus LineageWithConfig(
+            const TString& username,
+            const IPipelineConfigurator& pipelineConf);
+
+    TFutureStatus LineageAsyncWithConfig(
+            const TString& username,
+            const IPipelineConfigurator& pipelineConf);
 
     TStatus OptimizeWithConfig(
             const TString& username,
@@ -227,6 +239,8 @@ public:
     TMaybe<TString> GetStatistics(bool totalOnly = false, THashMap<TString, TStringBuf> extraYsons = {});
 
     TMaybe<TString> GetDiscoveredData();
+
+    TMaybe<TString> GetLineage();
 
     TString ResultsAsString() const;
     void ConfigureYsonResultFormat(NYson::EYsonFormat format);
@@ -405,6 +419,7 @@ private:
     i64 FallbackCounter_ = 0;
     const EHiddenMode HiddenMode_ = EHiddenMode::Disable;
     THiddenQueryAborter AbortHidden_ = [](){};
+    TMaybe<TString> LineageStr_;
 };
 
 } // namspace NYql

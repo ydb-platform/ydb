@@ -590,7 +590,7 @@ private:
         Send(executer, ev.Release());
     }
 
-    NRm::IKqpResourceManager* ResourceManager() {
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager() {
         if (Y_LIKELY(ResourceManager_)) {
             return ResourceManager_;
         }
@@ -606,7 +606,7 @@ private:
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
     TIntrusivePtr<TKqpCounters> Counters;
     IKqpNodeComputeActorFactory* CaFactory;
-    NRm::IKqpResourceManager* ResourceManager_ = nullptr;
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     //state sharded by TxId

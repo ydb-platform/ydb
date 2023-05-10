@@ -148,7 +148,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("InFlyTasks")->Val(), infly);
     }
 
-    void AssertResourceManagerStats(const NRm::IKqpResourceManager* rm, ui64 scanQueryMemory, ui32 executionUnits) {
+    void AssertResourceManagerStats(std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         auto stats = rm->GetLocalResources();
         UNIT_ASSERT_VALUES_EQUAL(scanQueryMemory, stats.Memory[NRm::EKqpMemoryPool::ScanQuery]);
         UNIT_ASSERT_VALUES_EQUAL(executionUnits, stats.ExecutionUnits);
@@ -184,7 +184,7 @@ void KqpRm::SingleTask() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -206,7 +206,7 @@ void KqpRm::ManyTasks() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -244,7 +244,7 @@ void KqpRm::NotEnoughMemory() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -262,7 +262,7 @@ void KqpRm::NotEnoughExecutionUnits() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 1000;
@@ -282,7 +282,7 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     CreateKqpResourceManager(config);
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -305,7 +305,7 @@ void KqpRm::Snapshot() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;

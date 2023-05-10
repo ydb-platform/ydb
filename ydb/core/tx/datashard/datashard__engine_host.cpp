@@ -1055,7 +1055,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
     KqpExecCtx.Alloc = KqpAlloc.Get();
     KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
-    if (auto* rm = NKqp::TryGetKqpResourceManager()) {
+    if (auto rm = NKqp::TryGetKqpResourceManager()) {
         KqpExecCtx.PatternCache = rm->GetPatternCache();
     }
 }

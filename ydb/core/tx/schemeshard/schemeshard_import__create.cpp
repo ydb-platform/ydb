@@ -74,6 +74,14 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
             }
+
+            if (!request.HasUserSID() || !Self->SystemBackupSIDs.contains(request.GetUserSID())) {
+                checks.ImportsLimit();
+            }
+
+            if (!checks) {
+                return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, checks.GetError());
+            }
         }
 
         TImportInfo::TPtr importInfo = nullptr;

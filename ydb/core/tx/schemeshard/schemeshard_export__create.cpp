@@ -72,6 +72,14 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
             }
+
+            if (!request.HasUserSID() || !Self->SystemBackupSIDs.contains(request.GetUserSID())) {
+                checks.ExportsLimit();
+            }
+
+            if (!checks) {
+                return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, checks.GetError());
+            }
         }
 
         TExportInfo::TPtr exportInfo = nullptr;

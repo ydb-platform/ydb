@@ -24,6 +24,9 @@ AWS_IO_API struct aws_channel_handler *aws_socket_handler_new(
     struct aws_channel_slot *slot,
     size_t max_read_size);
 
+/* Get aws_socket from socket channel handler */
+AWS_IO_API const struct aws_socket *aws_socket_handler_get_socket(const struct aws_channel_handler *handler);
+
 AWS_EXTERN_C_END
 
 #endif /* AWS_IO_SOCKET_CHANNEL_HANDLER_H */

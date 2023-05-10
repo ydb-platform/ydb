@@ -70,6 +70,7 @@ struct aws_host_resolution_config {
     aws_resolve_host_implementation_fn *impl;
     size_t max_ttl;
     void *impl_data;
+    uint64_t resolve_frequency_ns; /* 0 defaults to 1 second interval */
 };
 
 struct aws_host_listener;
@@ -125,13 +126,6 @@ struct aws_host_resolver_vtable {
         struct aws_host_resolver *resolver,
         const struct aws_string *host_name,
         uint32_t flags);
-
-    /** creates and adds a listener to the host resolver. */
-    struct aws_host_listener *(
-        *add_host_listener)(struct aws_host_resolver *resolver, const struct aws_host_listener_options *options);
-
-    /** removes a host listener from the host resolver and frees it. */
-    int (*remove_host_listener)(struct aws_host_resolver *resolver, struct aws_host_listener *listener);
 };
 
 struct aws_host_resolver {
@@ -270,72 +264,12 @@ AWS_IO_API size_t aws_host_resolver_get_host_address_count(
     const struct aws_string *host_name,
     uint32_t flags);
 
-/* Callback for receiving new host addresses from a listener. Memory for the new address list is only guaranteed to
- * exist during the callback, and must be copied if the caller needs it to persist after. */
-typedef void(aws_host_listener_resolved_address_fn)(
-    /* Listener that owns this callback. */
-    struct aws_host_listener *listener,
-
-    /* Array list of aws_host_address structures.  To get an item:
-     *
-     * struct aws_host_address *host_address = NULL;
-     * aws_array_list_get_at_ptr(new_address_list, (void **)&host_address, address_index);
-     * */
-    const struct aws_array_list *new_address_list,
-
-    /* User data that was specified when adding the listener. */
-    void *user_data);
-
-/* Callback for learning of an expired address from a listener. Memory for the expired address list is only guaranteed
- * to exist during the callback, and must be copied if the caller needs it to persist after. */
-typedef void(aws_host_listener_expired_address_fn)(
-    /* Listener that owns this callback. */
-    struct aws_host_listener *listener,
-
-    /* Array list of aws_host_address structures.  To get an item:
-     *
-     * struct aws_host_address *host_address = NULL;
-     * aws_array_list_get_at_ptr(new_address_list, (void **)&host_address, address_index);
-     * */
-    const struct aws_array_list *expired_address_list,
-
-    /* User data that was specified when adding the listener. */
-    void *user_data);
-
-/* Callback for when the listener has completed its clean up. */
-typedef void(aws_host_listener_shutdown_fn)(void *user_data);
-
-struct aws_host_listener_options {
-
-    /* Name of the host to listen for notifications from. */
-    struct aws_byte_cursor host_name;
-
-    /* Callback for when an address is resolved for the specified host. */
-    aws_host_listener_resolved_address_fn *resolved_address_callback;
-
-    /* Callback for when a resolved address expires for the specified host. */
-    aws_host_listener_expired_address_fn *expired_address_callback;
-
-    /* Callback for when a listener has completely shutdown. */
-    aws_host_listener_shutdown_fn *shutdown_callback;
-
-    /* User data to be passed into each callback. */
-    void *user_data;
-
-    /* Lets the resolver know to keep the resolution thread alive for as long as this listener is attached */
-    bool pin_host_entry;
-};
-
-/* Create and add a listener to the host resolver using the specified options. */
-AWS_IO_API struct aws_host_listener *aws_host_resolver_add_host_listener(
-    struct aws_host_resolver *resolver,
-    const struct aws_host_listener_options *options);
-
-/* Remove the specified listener from the host resolver, triggering clean up of the listener. Note: this may not happen
- * synchronously, and it is necessary to wait for the listener's shutdown callback to trigger. */
-AWS_IO_API int aws_host_resolver_remove_host_listener(
-    struct aws_host_resolver *resolver,
-    struct aws_host_listener *listener);
+/**
+ * Returns the default host resolution config used internally if none specified.
+ *
+ * @return default host resolution config
+ */
+AWS_IO_API struct aws_host_resolution_config aws_host_resolver_init_default_resolution_config(void);
 
 AWS_EXTERN_C_END
 

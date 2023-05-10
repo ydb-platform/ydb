@@ -680,7 +680,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     ui32 ignored = 0;
     ui64 size = 0;
     ui64 bytesToIndex = 0;
-    TVector<const NOlap::TInsertedData*> dataToIndex;
+    std::vector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     THashMap<ui64, ui64> overloadedPathGranules;
     for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
@@ -728,7 +728,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         << size << " bytes in " << blobs << " blobs ignored " << ignored
         << " at tablet " << TabletID());
 
-    TVector<NOlap::TInsertedData> data;
+    std::vector<NOlap::TInsertedData> data;
     THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> cachedBlobs;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
@@ -790,7 +790,7 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         Settings.CacheDataAfterCompaction);
     if (Tiers) {
         ev->SetTiering(Tiers->GetTiering());
-    }    
+    }
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);
 }
 
@@ -871,7 +871,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     Y_VERIFY(changes->AppendedPortions.empty());
 
     // Filter PortionsToDrop
-    TVector<NOlap::TPortionInfo> portionsCanBedropped;
+    std::vector<NOlap::TPortionInfo> portionsCanBedropped;
     THashSet<ui64> excludedPortions;
     for (const auto& portionInfo : changes->PortionsToDrop) {
         ui64 portionId = portionInfo.Records.front().Portion;

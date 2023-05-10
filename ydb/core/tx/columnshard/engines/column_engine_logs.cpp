@@ -12,7 +12,7 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portions, const TCompactionLimits& limits,
+bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& portions, const TCompactionLimits& limits,
                         const TSnapshot& snap, TColumnEngineForLogs::TMarksGranules& marksGranules) {
     ui64 oldTimePlanStep = snap.GetPlanStep() - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
     ui32 insertedCount = 0;
@@ -22,7 +22,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
     THashSet<ui64> goodCompacted;
     THashSet<ui64> nextToGood;
     {
-        TMap<NArrow::TReplaceKey, TVector<const TPortionInfo*>> points;
+        TMap<NArrow::TReplaceKey, std::vector<const TPortionInfo*>> points;
 
         for (const auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
@@ -96,7 +96,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
     std::vector<TMark> borders;
     borders.push_back(granuleMark);
 
-    TVector<TPortionInfo> tmp;
+    std::vector<TPortionInfo> tmp;
     tmp.reserve(portions.size());
     for (const auto& portionInfo : portions) {
         ui64 curPortion = portionInfo.Portion();
@@ -127,8 +127,8 @@ bool InitInGranuleMerge(const TMark& granuleMark, TVector<TPortionInfo>& portion
     return true;
 }
 
-TVector<const TPortionInfo*> GetActualPortions(const THashMap<ui64, TPortionInfo>& portions) {
-    TVector<const TPortionInfo*> out;
+std::vector<const TPortionInfo*> GetActualPortions(const THashMap<ui64, TPortionInfo>& portions) {
+    std::vector<const TPortionInfo*> out;
     out.reserve(portions.size());
     for (auto& [portion, portionInfo] : portions) {
         if (portionInfo.IsActive()) {
@@ -463,7 +463,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return CountersTable->Load(db, callback);
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<TInsertedData>&& dataToIndex) {
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
     auto changes = std::make_shared<TChanges>(TMark(MarkSchema), std::move(dataToIndex), Limits);
@@ -712,11 +712,11 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     return changes;
 }
 
-TVector<TVector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks(ui64 pathId) const {
+std::vector<std::vector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks(ui64 pathId) const {
     Y_VERIFY(PathGranules.contains(pathId));
     const auto& pathGranules = PathGranules.find(pathId)->second;
 
-    TVector<TVector<std::pair<TMark, ui64>>> emptyGranules;
+    std::vector<std::vector<std::pair<TMark, ui64>>> emptyGranules;
     ui64 emptyStart = 0;
     for (const auto& [mark, granule]: pathGranules) {
         Y_VERIFY(Granules.contains(granule));
@@ -861,7 +861,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
 }
 
 bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes, const TSnapshot& snapshot, bool apply) {
-    const TVector<TPortionInfo>* switchedPortions = nullptr;
+    const std::vector<TPortionInfo>* switchedPortions = nullptr;
     if (changes.IsCompaction()) {
         Y_VERIFY(changes.CompactionInfo);
         switchedPortions = &changes.SwitchedPortions;
@@ -1193,12 +1193,12 @@ bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& c
     return true;
 }
 
-TMap<TSnapshot, TVector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 granule, const TSnapshot& snapshot) const {
+TMap<TSnapshot, std::vector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 granule, const TSnapshot& snapshot) const {
     Y_VERIFY(Granules.contains(granule));
     auto& spg = Granules.find(granule)->second;
     Y_VERIFY(spg);
 
-    TMap<TSnapshot, TVector<ui64>> out;
+    TMap<TSnapshot, std::vector<ui64>> out;
     for (const auto& [portion, portionInfo] : spg->Portions) {
         if (portionInfo.Empty()) {
             continue;
@@ -1261,7 +1261,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             auto& portions = spg->Portions;
             bool granuleHasDataForSnaphsot = false;
 
-            TMap<TSnapshot, TVector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
+            TMap<TSnapshot, std::vector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
             for (auto& [snap, vec] : orderedPortions) {
                 for (auto& portion : vec) {
                     auto& portionInfo = portions.find(portion)->second;
@@ -1298,7 +1298,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     return out;
 }
 
-static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompactionLimits& limits, bool& inserted) {
+static bool NeedSplit(const std::vector<const TPortionInfo*>& actual, const TCompactionLimits& limits, bool& inserted) {
     if (actual.size() < 2) {
         return false;
     }

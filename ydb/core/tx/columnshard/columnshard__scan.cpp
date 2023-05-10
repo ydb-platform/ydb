@@ -41,7 +41,7 @@ private:
 
 private:
     TEvColumnShard::TEvScan::TPtr Ev;
-    TVector<TReadMetadataPtr> ReadMetadataRanges;
+    std::vector<TReadMetadataPtr> ReadMetadataRanges;
 };
 
 
@@ -73,7 +73,7 @@ public:
 public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
-                     ui64 tabletId, TDuration timeout, TVector<TTxScan::TReadMetadataPtr>&& readMetadataList,
+                     ui64 tabletId, TDuration timeout, std::vector<TTxScan::TReadMetadataPtr>&& readMetadataList,
                      NKikimrTxDataShard::EScanDataFormat dataFormat, const TScanCounters& scanCountersPool)
         : ColumnShardActorId(columnShardActorId)
         , ScanComputeActorId(scanComputeActorId)
@@ -577,12 +577,12 @@ private:
     const NKikimrTxDataShard::EScanDataFormat DataFormat;
     const ui64 TabletId;
 
-    TVector<NOlap::TReadMetadataBase::TConstPtr> ReadMetadataRanges;
+    std::vector<NOlap::TReadMetadataBase::TConstPtr> ReadMetadataRanges;
     ui32 ReadMetadataIndex;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
 
-    TVector<std::pair<TString, NScheme::TTypeInfo>> ResultYqlSchema;
-    TVector<std::pair<TString, NScheme::TTypeInfo>> KeyYqlSchema;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> ResultYqlSchema;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> KeyYqlSchema;
     const TSerializedTableRange TableRange;
     const TSmallVec<bool> SkipNullKeys;
     const TInstant Deadline;
@@ -743,7 +743,7 @@ private:
 };
 
 static bool FillPredicatesFromRange(NOlap::TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange,
-                                    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbPk, ui64 tabletId, const NOlap::TIndexInfo* indexInfo) {
+                                    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbPk, ui64 tabletId, const NOlap::TIndexInfo* indexInfo) {
     TSerializedTableRange range(keyRange);
     auto fromPredicate = std::make_shared<NOlap::TPredicate>();
     auto toPredicate = std::make_shared<NOlap::TPredicate>();
@@ -951,7 +951,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (IS_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
         detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
     }
-    TVector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
+    std::vector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
 
     if (ReadMetadataRanges.empty()) {
         LOG_S_DEBUG("TTxScan failed "

@@ -11,8 +11,8 @@ namespace NKikimr::NOlap {
 const TString TIndexInfo::STORE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexStatsName;
 const TString TIndexInfo::TABLE_INDEX_STATS_TABLE = TString("/") + NSysView::SysPathName + "/" + NSysView::TablePrimaryIndexStatsName;
 
-static TVector<TString> NamesOnly(const TVector<TNameTypeInfo>& columns) {
-    TVector<TString> out;
+static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns) {
+    std::vector<TString> out;
     out.reserve(columns.size());
     for (const auto& [name, _] : columns) {
         out.push_back(name);
@@ -100,8 +100,8 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
     }
 }
 
-TVector<TString> TIndexInfo::GetColumnNames(const TVector<ui32>& ids) const {
-    TVector<TString> out;
+std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) const {
+    std::vector<TString> out;
     out.reserve(ids.size());
     for (ui32 id : ids) {
         const auto ci = Columns.find(id);
@@ -111,7 +111,7 @@ TVector<TString> TIndexInfo::GetColumnNames(const TVector<ui32>& ids) const {
     return out;
 }
 
-TVector<TNameTypeInfo> TIndexInfo::GetColumns(const TVector<ui32>& ids) const {
+std::vector<TNameTypeInfo> TIndexInfo::GetColumns(const std::vector<ui32>& ids) const {
     return NOlap::GetColumns(*this, ids);
 }
 
@@ -181,7 +181,7 @@ std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema() const {
         return Schema;
     }
 
-    TVector<ui32> ids;
+    std::vector<ui32> ids;
     ids.reserve(Columns.size());
     for (const auto& [id, _] : Columns) {
         ids.push_back(id);
@@ -215,7 +215,7 @@ std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaWithSpecials() const {
 
 std::shared_ptr<arrow::Schema> TIndexInfo::AddColumns(
     const std::shared_ptr<arrow::Schema>& src,
-    const TVector<TString>& columns) const
+    const std::vector<TString>& columns) const
 {
     std::shared_ptr<arrow::Schema> all = ArrowSchemaWithSpecials();
     auto fields = src->fields();
@@ -233,12 +233,12 @@ std::shared_ptr<arrow::Schema> TIndexInfo::AddColumns(
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const TVector<ui32>& columnIds, bool withSpecials) const {
+std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const std::vector<ui32>& columnIds, bool withSpecials) const {
     return MakeArrowSchema(Columns, columnIds, withSpecials);
 }
 
-TVector<ui32> TIndexInfo::GetColumnIds(const TVector<TString>& columnNames) const {
-    TVector<ui32> ids;
+std::vector<ui32> TIndexInfo::GetColumnIds(const std::vector<TString>& columnNames) const {
+    std::vector<ui32> ids;
     ids.reserve(columnNames.size());
     for (auto& name : columnNames) {
         auto columnId = GetColumnIdOptional(name);
@@ -250,7 +250,7 @@ TVector<ui32> TIndexInfo::GetColumnIds(const TVector<TString>& columnNames) cons
     return ids;
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const TVector<TString>& names) const {
+std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const std::vector<TString>& names) const {
     auto columnIds = GetColumnIds(names);
     if (columnIds.empty()) {
         return {};
@@ -326,7 +326,7 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
     return MinMaxIdxColumnsIds.contains(it->second);
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const TVector<ui32>& ids, bool withSpecials) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(withSpecials ? ids.size() + 2 : ids.size());
 
@@ -346,12 +346,12 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
         std::string colName(column.Name.data(), column.Name.size());
         fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType)));
     }
-    
+
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-TVector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>& ids) {
-    TVector<std::pair<TString, NScheme::TTypeInfo>> out;
+std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const std::vector<ui32>& ids) {
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> out;
     out.reserve(ids.size());
     for (const ui32 id : ids) {
         const auto ci = tableSchema.Columns.find(id);

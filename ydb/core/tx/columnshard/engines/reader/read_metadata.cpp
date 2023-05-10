@@ -18,7 +18,7 @@ std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TR
     if (readDescription.ReadNothing) {
         return std::make_shared<NOlap::TSelectInfo>();
     }
-    return Index->Select(readDescription.PathId, 
+    return Index->Select(readDescription.PathId,
                             readDescription.GetSnapshot(),
                             columnIds,
                             readDescription.PKRangesFilter);
@@ -38,8 +38,8 @@ std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(NColum
 
 bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error) {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    
-    TVector<ui32> resultColumnsIds;
+
+    std::vector<ui32> resultColumnsIds;
     if (readDescription.ColumnIds.size()) {
         resultColumnsIds = readDescription.ColumnIds;
     } else if (readDescription.ColumnNames.size()) {
@@ -78,7 +78,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
             requiredColumns.erase(indexInfo.GetColumnName(col));
         }
 
-        TVector<ui32> auxiliaryColumns;
+        std::vector<ui32> auxiliaryColumns;
         auxiliaryColumns.reserve(requiredColumns.size());
         for (auto& reqCol : requiredColumns) {
             auxiliaryColumns.push_back(indexInfo.GetColumnId(reqCol));
@@ -87,14 +87,14 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
         AllColumns.insert(AllColumns.end(), ResultColumnsIds.begin(), ResultColumnsIds.end());
         AllColumns.insert(AllColumns.end(), auxiliaryColumns.begin(), auxiliaryColumns.end());
     }
-    
+
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription);
     for (auto& cmt : CommittedBlobs) {
         if (auto batch = dataAccessor.GetCachedBatch(cmt.GetBlobId())) {
             CommittedBatches.emplace(cmt.GetBlobId(), batch);
         }
     }
-    
+
     auto loadSchema = GetLoadSchema(Snapshot);
     if (!loadSchema) {
         return false;
@@ -177,11 +177,11 @@ std::set<ui32> TReadMetadata::GetUsedColumnIds() const {
     return result;
 }
 
-TVector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetResultYqlSchema() const {
+std::vector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetResultYqlSchema() const {
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, ResultColumnIds);
 }
 
-TVector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYqlSchema() const {
+std::vector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYqlSchema() const {
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, NColumnShard::PrimaryIndexStatsSchema.KeyColumns);
 }
 
@@ -229,7 +229,7 @@ NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
                 }
             }
         }
-        
+
         return std::make_shared<NIndexedReader::TPKSortingWithLimit>(this->shared_from_this());
     } else {
         return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());

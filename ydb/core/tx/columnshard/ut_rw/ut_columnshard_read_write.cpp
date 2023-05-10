@@ -303,8 +303,8 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
 }
 
 struct TestTableDescription {
-    TVector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
-    TVector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
+    std::vector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
+    std::vector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
     bool InStore = true;
 };
 
@@ -327,8 +327,8 @@ void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
 }
 
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TVector<std::pair<TString, TTypeInfo>>& schema = TTestSchema::YdbSchema(),
-                 const TVector<std::pair<TString, TTypeInfo>>& pk = TTestSchema::YdbPkSchema(),
+                 const std::vector<std::pair<TString, TTypeInfo>>& schema = TTestSchema::YdbSchema(),
+                 const std::vector<std::pair<TString, TTypeInfo>>& pk = TTestSchema::YdbPkSchema(),
                  TString codec = "none") {
     TestTableDescription table{schema, pk, true};
     SetupSchema(runtime, sender, pathId, table, codec);
@@ -385,12 +385,12 @@ void TestWrite(const TestTableDescription& table) {
 
     SetupSchema(runtime, sender, tableId, table);
 
-    const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+    const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
 
     bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
     UNIT_ASSERT(ok);
 
-    TVector<std::pair<TString, TTypeInfo>> schema = ydbSchema;
+    std::vector<std::pair<TString, TTypeInfo>> schema = ydbSchema;
 
     // no data
 
@@ -581,8 +581,8 @@ void TestWriteReadLongTxDup() {
         auto data = resRead.GetData();
         auto meta = resRead.GetMeta();
         UNIT_ASSERT(CheckColumns(data, meta, TTestSchema::ExtractNames(ydbSchema), numRows));
-        UNIT_ASSERT(DataHas(TVector<TString>{data}, meta.GetSchema(), portion, true));
-        UNIT_ASSERT(DataHasOnly(TVector<TString>{data}, meta.GetSchema(), portion));
+        UNIT_ASSERT(DataHas(std::vector<TString>{data}, meta.GetSchema(), portion, true));
+        UNIT_ASSERT(DataHasOnly(std::vector<TString>{data}, meta.GetSchema(), portion));
     }
 }
 
@@ -609,7 +609,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     };
 
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId,
-                             const TVector<ui64>& writeIds) {
+                             const std::vector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, metaShard, txId, writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -631,14 +631,14 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     SetupSchema(runtime, sender, tableId, table, codec);
 
-    const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
-    const TVector<std::pair<TString, TTypeInfo>>& testYdbPk = table.Pk;
+    const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+    const std::vector<std::pair<TString, TTypeInfo>>& testYdbPk = table.Pk;
 
     // ----xx
     // -----xx..
     // xx----
     // -xxxxx
-    TVector<std::pair<ui64, ui64>> portion = {
+    std::vector<std::pair<ui64, ui64>> portion = {
         {200, 300},
         {250, 250 + 80 * 1000}, // committed -> index
         {0, 100},
@@ -704,7 +704,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(resRead3.GetData().size() > 0);
     UNIT_ASSERT(CheckColumns(resRead3.GetData(), resRead3.GetMeta(), TTestSchema::ExtractNames(ydbSchema)));
     {
-        TVector<TString> readData;
+        std::vector<TString> readData;
         readData.push_back(resRead3.GetData());
         auto& schema = resRead3.GetMeta().GetSchema();
         UNIT_ASSERT(DataHas(readData, schema, portion[0]));
@@ -804,7 +804,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(resRead7.GetData().size() > 0);
 
     {
-        TVector<TString> readData;
+        std::vector<TString> readData;
         readData.push_back(resRead7.GetData());
         auto& schema = resRead7.GetMeta().GetSchema();
         UNIT_ASSERT(DataHas(readData, schema, portion[0])); // checks no checks REPLACE (indexed vs indexed)
@@ -829,7 +829,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(resRead8.GetData().size() > 0);
 
     {
-        TVector<TString> readData;
+        std::vector<TString> readData;
         readData.push_back(resRead8.GetData());
         auto& schema = resRead8.GetMeta().GetSchema();
         UNIT_ASSERT(DataHas(readData, schema, portion[0], true)); // checks REPLACE (indexed vs indexed)
@@ -1015,8 +1015,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 }
 
 void TestCompactionInGranuleImpl(bool reboots,
-                                 const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                                 const TVector<std::pair<TString, TTypeInfo>>& ydbPk) {
+                                 const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                                 const std::vector<std::pair<TString, TTypeInfo>>& ydbPk) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -1037,7 +1037,7 @@ void TestCompactionInGranuleImpl(bool reboots,
     };
 
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId,
-                             const TVector<ui64>& writeIds) {
+                             const std::vector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, metaShard, txId, writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -1077,7 +1077,7 @@ void TestCompactionInGranuleImpl(bool reboots,
     // inserts triggered by count
     ui32 pos = triggerPortionSize;
     for (ui32 i = 0; i < 1; ++i, ++planStep, ++txId) {
-        TVector<ui64> ids;
+        std::vector<ui64> ids;
         ids.reserve(numWrites);
         for (ui32 w = 0; w < numWrites; ++w, ++writeId, pos += portionSize) {
             std::pair<ui64, ui64> portion = {pos, pos + portionSize};
@@ -1425,7 +1425,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
 
-            TVector<TString> readData;
+            std::vector<TString> readData;
             readData.push_back(resRead.GetData());
 
             switch (i) {
@@ -1618,7 +1618,7 @@ struct TReadAggregateResult {
     std::vector<int64_t> Counts = {100};
 };
 
-void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, const TString& testDataBlob,
+void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, const TString& testDataBlob,
                        bool addProjection, const std::vector<ui32>& aggKeys = {},
                        const TReadAggregateResult& expectedResult = {},
                        const TReadAggregateResult& expectedFiltered = {1, {1}, {1}, {1}}) {
@@ -1999,9 +1999,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TTestBasicRuntime& Runtime;
         const ui64 PlanStep;
         const ui64 TxId;
-        const TVector<std::pair<TString, TTypeInfo>> YdbPk;
+        const std::vector<std::pair<TString, TTypeInfo>> YdbPk;
     public:
-        TTabletReadPredicateTest(TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const TVector<std::pair<TString, TTypeInfo>>& ydbPk)
+        TTabletReadPredicateTest(TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const std::vector<std::pair<TString, TTypeInfo>>& ydbPk)
             : Runtime(runtime)
             , PlanStep(planStep)
             , TxId(txId)
@@ -2131,8 +2131,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     };
 
-    void TestCompactionSplitGranule(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                                    const TVector<std::pair<TString, TTypeInfo>>& ydbPk) {
+    void TestCompactionSplitGranule(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                                    const std::vector<std::pair<TString, TTypeInfo>>& ydbPk) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 

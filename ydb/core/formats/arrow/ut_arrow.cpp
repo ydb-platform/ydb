@@ -118,8 +118,8 @@ struct TDataRow {
         return std::make_shared<arrow::Schema>(std::move(fields));
     }
 
-    static TVector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {
-        TVector<std::pair<TString, TTypeInfo>> columns = {
+    static std::vector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {
+        std::vector<std::pair<TString, TTypeInfo>> columns = {
             {"bool", TTypeInfo(NTypeIds::Bool) },
             {"i8", TTypeInfo(NTypeIds::Int8) },
             {"i16", TTypeInfo(NTypeIds::Int16) },
@@ -174,7 +174,7 @@ struct TDataRow {
 
     TOwnedCellVec SerializedCells() const {
         NKikimr::TDbTupleRef value = ToDbTupleRef();
-        TVector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
+        std::vector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
 
         auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
         UNIT_ASSERT(binaryJson.Defined());
@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     Y_UNIT_TEST(ArrowToYdbConverter) {
         std::vector<TDataRow> rows = TestRows();
 
-        TVector<TOwnedCellVec> cellRows;
+        std::vector<TOwnedCellVec> cellRows;
         for (const TDataRow& row : rows) {
             cellRows.push_back(TOwnedCellVec(row.SerializedCells()));
         }
@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_EQUAL(expectedSchema->Equals(*batch->schema()), true);
 
         struct TRowWriter : public NArrow::IRowWriter {
-            TVector<TOwnedCellVec> Rows;
+            std::vector<TOwnedCellVec> Rows;
 
             void AddRow(const TConstArrayRef<TCell> &cells) override {
                 Rows.push_back(TOwnedCellVec(cells));
@@ -662,7 +662,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         batches.push_back(batch->Slice(0, 100));    // 0..100
         batches.push_back(batch->Slice(100, 200));  // 100..300
         batches.push_back(batch->Slice(200, 400));  // 200..600
@@ -672,9 +672,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         auto descr = std::make_shared<NArrow::TSortDescription>(batch->schema());
         descr->NotNull = true;
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> sorted;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
         {   // maxBatchSize = 500, no limit
-            TVector<NArrow::IInputStream::TPtr> streams;
+            std::vector<NArrow::IInputStream::TPtr> streams;
             for (auto& batch : batches) {
                 streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
             }
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         batches.push_back(batch->Slice(0, 100));    // 0..100
         batches.push_back(batch->Slice(100, 200));  // 100..300
         batches.push_back(batch->Slice(200, 400));  // 200..600
@@ -712,9 +712,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         descr->NotNull = true;
         descr->Inverse();
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> sorted;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
         {   // maxBatchSize = 500, no limit
-            TVector<NArrow::IInputStream::TPtr> streams;
+            std::vector<NArrow::IInputStream::TPtr> streams;
             for (auto& batch : batches) {
                 streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
             }
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batch->Slice(0, 400), 0));
         batches.push_back(AddSnapColumn(batch->Slice(200, 400), 1));
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
@@ -754,9 +754,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         descr->Directions.back() = -1; // greater snapshot first
         descr->NotNull = true;
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> sorted;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
         {
-            TVector<NArrow::IInputStream::TPtr> streams;
+            std::vector<NArrow::IInputStream::TPtr> streams;
             for (auto& batch : batches) {
                 streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
             }
@@ -785,7 +785,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batch->Slice(0, 400), 0));
         batches.push_back(AddSnapColumn(batch->Slice(200, 400), 1));
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
@@ -799,9 +799,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         descr->NotNull = true;
         descr->Inverse();
 
-        TVector<std::shared_ptr<arrow::RecordBatch>> sorted;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> sorted;
         {
-            TVector<NArrow::IInputStream::TPtr> streams;
+            std::vector<NArrow::IInputStream::TPtr> streams;
             for (auto& batch : batches) {
                 streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
             }

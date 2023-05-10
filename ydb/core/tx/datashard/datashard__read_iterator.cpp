@@ -20,7 +20,7 @@ constexpr ui64 MinRowsPerCheck = 1000;
 
 class TRowCountBlockBuilder : public IBlockBuilder {
 public:
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
     {
         return true;
     }
@@ -47,7 +47,7 @@ private:
 class TCellBlockBuilder : public IBlockBuilder {
 public:
     bool Start(
-        const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
         ui64 maxRowsInBlock,
         ui64 maxBytesInBlock,
         TString& err) override
@@ -76,7 +76,7 @@ public:
     TVector<TOwnedCellVec> FlushBatch() { return std::move(Rows); }
 
 private:
-    TVector<std::pair<TString, NScheme::TTypeInfo>> Columns;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
     TVector<TOwnedCellVec> Rows;
     ui64 BytesCount = 0;

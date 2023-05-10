@@ -207,7 +207,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     return preparedBatch;
 }
 
-TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {
+std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {
     Y_VERIFY(SortReplaceDescription);
     auto& indexInfo = ReadMetadata->GetIndexInfo();
 
@@ -334,7 +334,7 @@ TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch
 }
 
 // TODO: better implementation
-static void MergeTooSmallBatches(TVector<TPartialReadResult>& out) {
+static void MergeTooSmallBatches(std::vector<TPartialReadResult>& out) {
     if (out.size() < 10) {
         return;
     }
@@ -366,7 +366,7 @@ static void MergeTooSmallBatches(TVector<TPartialReadResult>& out) {
     }
     auto batch = NArrow::ToBatch(*res);
 
-    TVector<TPartialReadResult> merged;
+    std::vector<TPartialReadResult> merged;
     merged.emplace_back(TPartialReadResult{
         .ResultBatch = std::move(batch),
         .LastReadKey = std::move(out.back().LastReadKey)
@@ -374,14 +374,14 @@ static void MergeTooSmallBatches(TVector<TPartialReadResult>& out) {
     out.swap(merged);
 }
 
-TVector<TPartialReadResult>
+std::vector<TPartialReadResult>
 TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules,
                              int64_t maxRowsInBatch) const {
     Y_VERIFY(ReadMetadata->IsSorted());
     Y_VERIFY(SortReplaceDescription);
     auto& indexInfo = ReadMetadata->GetIndexInfo();
 
-    TVector<TPartialReadResult> out;
+    std::vector<TPartialReadResult> out;
 
     bool isDesc = ReadMetadata->IsDescSorted();
 

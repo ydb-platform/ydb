@@ -15,7 +15,7 @@ using IColumnResolver = NOlap::IColumnResolver;
 using NOlap::TWriteId;
 
 std::pair<NOlap::TPredicate, NOlap::TPredicate>
-RangePredicates(const TSerializedTableRange& range, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+RangePredicates(const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
 class TBatchCache {
 public:

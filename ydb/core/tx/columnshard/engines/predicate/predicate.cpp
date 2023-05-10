@@ -22,8 +22,8 @@ TPredicate::TPredicate(EOperation op, const TString& serializedBatch, const std:
     }
 }
 
-TVector<TString> TPredicate::ColumnNames() const {
-    TVector<TString> out;
+std::vector<TString> TPredicate::ColumnNames() const {
+    std::vector<TString> out;
     out.reserve(Batch->num_columns());
     for (const auto& field : Batch->schema()->fields()) {
         out.emplace_back(field->name());

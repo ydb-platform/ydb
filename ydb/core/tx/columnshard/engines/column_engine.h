@@ -135,13 +135,13 @@ public:
     TSnapshot InitSnapshot = TSnapshot::Zero();
     TSnapshot ApplySnapshot = TSnapshot::Zero();
     std::unique_ptr<TCompactionInfo> CompactionInfo;
-    TVector<NOlap::TInsertedData> DataToIndex;
-    TVector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
-    TVector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
-    TVector<TPortionInfo> PortionsToDrop;
-    TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
-    TVector<TColumnRecord> EvictedRecords;
-    TVector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
+    std::vector<NOlap::TInsertedData> DataToIndex;
+    std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
+    std::vector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
+    std::vector<TPortionInfo> PortionsToDrop;
+    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
+    std::vector<TColumnRecord> EvictedRecords;
+    std::vector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
     THashMap<TBlobRange, TString> Blobs;
     THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
     bool NeedRepeat{false};
@@ -177,7 +177,7 @@ public:
 
     /// Returns blob-ranges grouped by blob-id.
     static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
-    GroupedBlobRanges(const TVector<TPortionInfo>& portions) {
+    GroupedBlobRanges(const std::vector<TPortionInfo>& portions) {
         Y_VERIFY(portions.size());
 
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
@@ -193,7 +193,7 @@ public:
 
     /// Returns blob-ranges grouped by blob-id.
     static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
-    GroupedBlobRanges(const TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>>& portions) {
+    GroupedBlobRanges(const std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>>& portions) {
         Y_VERIFY(portions.size());
 
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
@@ -228,12 +228,12 @@ struct TSelectInfo {
         }
     };
 
-    TVector<TGranuleRecord> Granules; // ordered by key (ascending)
-    TVector<TPortionInfo> Portions;
+    std::vector<TGranuleRecord> Granules; // ordered by key (ascending)
+    std::vector<TPortionInfo> Portions;
 
-    TVector<ui64> GranulesOrder(bool rev = false) const {
+    std::vector<ui64> GranulesOrder(bool rev = false) const {
         size_t size = Granules.size();
-        TVector<ui64> order(size);
+        std::vector<ui64> order(size);
         if (rev) {
             size_t pos = size - 1;
             for (size_t i = 0; i < size; ++i, --pos) {
@@ -384,7 +384,7 @@ public:
                                                 const THashSet<ui32>& columnIds,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
     virtual std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                                   const TSnapshot& outdatedSnapshot) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,

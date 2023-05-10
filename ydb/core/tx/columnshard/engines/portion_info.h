@@ -96,7 +96,7 @@ struct TPortionMeta {
 struct TPortionInfo {
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
-    TVector<TColumnRecord> Records;
+    std::vector<TColumnRecord> Records;
     TPortionMeta Meta;
     ui32 FirstPkColumn = 0;
     TString TierName;
@@ -266,7 +266,7 @@ private:
     };
 
     template <class TSelfGetter, class TItemGetter = TSelfGetter>
-    int CompareByColumnIdsImpl(const TPortionInfo& item, const TVector<ui32>& columnIds) const {
+    int CompareByColumnIdsImpl(const TPortionInfo& item, const std::vector<ui32>& columnIds) const {
         for (auto&& i : columnIds) {
             std::shared_ptr<arrow::Scalar> valueSelf = TSelfGetter::Get(*this, i);
             std::shared_ptr<arrow::Scalar> valueItem = TItemGetter::Get(item, i);
@@ -292,7 +292,7 @@ public:
         return CompareMinByColumnIds(item, info.KeyColumns);
     }
 
-    int CompareMinByColumnIds(const TPortionInfo& item, const TVector<ui32>& columnIds) const {
+    int CompareMinByColumnIds(const TPortionInfo& item, const std::vector<ui32>& columnIds) const {
         return CompareByColumnIdsImpl<TMinGetter>(item, columnIds);
     }
 
@@ -444,7 +444,7 @@ public:
 
         for (auto& [pos, orderedChunks] : columnChunks) {
             auto field = schema->field(pos);
-            TVector<TAssembleBlobInfo> blobs;
+            std::vector<TAssembleBlobInfo> blobs;
             blobs.reserve(orderedChunks.size());
             ui32 expected = 0;
             for (auto& [chunk, blobRange] : orderedChunks) {

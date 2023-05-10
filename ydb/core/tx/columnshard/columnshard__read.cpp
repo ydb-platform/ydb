@@ -12,8 +12,8 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 template <typename T, typename U>
-TVector<T> ProtoToVector(const U& cont) {
-    return TVector<T>(cont.begin(), cont.end());
+std::vector<T> ProtoToVector(const U& cont) {
+    return std::vector<T>(cont.begin(), cont.end());
 }
 
 }

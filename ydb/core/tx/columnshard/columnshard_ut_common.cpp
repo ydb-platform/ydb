@@ -25,12 +25,12 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                       "dc-1", domainId, FAKE_SCHEMESHARD_TABLET_ID,
-                      domainId, domainId, TVector<ui32>{domainId},
-                      domainId, TVector<ui32>{domainId},
+                      domainId, domainId, std::vector<ui32>{domainId},
+                      domainId, std::vector<ui32>{domainId},
                       planResolution,
-                      TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
-                      TVector<ui64>{},
-                      TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)});
+                      std::vector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
+                      std::vector<ui64>{},
+                      std::vector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)});
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());
@@ -115,7 +115,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
     return {};
 }
 
-void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<ui64>& pathIds,
+void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                   NOlap::TSnapshot snap, ui64 scanId) {
     auto scan = std::make_unique<TEvColumnShard::TEvScan>();
     auto& record = scan->Record;
@@ -140,7 +140,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<
     }
 
     for (ui64 pathId : pathIds) {
-        TVector<TCell> pk{TCell::Make<ui64>(pathId)};
+        std::vector<TCell> pk{TCell::Make<ui64>(pathId)};
         TSerializedTableRange range(TConstArrayRef<TCell>(pk), true, TConstArrayRef<TCell>(pk), true);
         auto newRange = record.MutableRanges()->Add();
         range.Serialize(*newRange);
@@ -153,7 +153,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const TVector<
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const TVector<ui64>& writeIds) {
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const std::vector<ui64>& writeIds) {
     NKikimrTxColumnShard::ETransactionKind txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
     TString txBody = TTestSchema::CommitTxBody(metaShard, writeIds);
 
@@ -169,7 +169,7 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard,
     UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::PREPARED);
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const TVector<ui64>& writeIds) {
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
     ProposeCommit(runtime, sender, 0, txId, writeIds);
 }
 
@@ -194,8 +194,8 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, con
     }
 }
 
-TVector<TCell> MakeTestCells(const TVector<TTypeInfo>& types, ui32 value, TVector<TString>& mem) {
-    TVector<TCell> cells;
+std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value, std::vector<TString>& mem) {
+    std::vector<TCell> cells;
     cells.reserve(types.size());
 
     for (auto& typeInfo : types) {
@@ -237,24 +237,24 @@ TVector<TCell> MakeTestCells(const TVector<TTypeInfo>& types, ui32 value, TVecto
     return cells;
 }
 
-TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TString, TTypeInfo>>& columns,
+TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, TTypeInfo>>& columns,
                      const THashSet<TString>& nullColumns) {
     TString err;
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME);
     batchBuilder.Start(columns, 0, 0, err);
 
-    TVector<ui32> nullPositions;
+    std::vector<ui32> nullPositions;
     for (size_t i = 0; i < columns.size(); ++i) {
         if (nullColumns.contains(columns[i].first)) {
             nullPositions.push_back(i);
         }
     }
 
-    TVector<TString> mem;
-    TVector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
+    std::vector<TString> mem;
+    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
     // insert, not ordered
     for (size_t i = range.first; i < range.second; i += 2) {
-        TVector<TCell> cells = MakeTestCells(types, i, mem);
+        std::vector<TCell> cells = MakeTestCells(types, i, mem);
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
         }
@@ -262,7 +262,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TStrin
         batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
     }
     for (size_t i = range.first + 1; i < range.second; i += 2) {
-        TVector<TCell> cells = MakeTestCells(types, i, mem);
+        std::vector<TCell> cells = MakeTestCells(types, i, mem);
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
         }
@@ -281,11 +281,11 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const TVector<std::pair<TStrin
 }
 
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
-                                    const TVector<std::pair<TString, TTypeInfo>>& columns) {
-    TVector<TString> mem;
-    TVector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
-    TVector<TCell> cellsFrom = MakeTestCells(types, range.first, mem);
-    TVector<TCell> cellsTo = MakeTestCells(types, range.second, mem);
+                                    const std::vector<std::pair<TString, TTypeInfo>>& columns) {
+    std::vector<TString> mem;
+    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
+    std::vector<TCell> cellsFrom = MakeTestCells(types, range.first, mem);
+    std::vector<TCell> cellsTo = MakeTestCells(types, range.second, mem);
 
     return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), inclusiveFrom,
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);

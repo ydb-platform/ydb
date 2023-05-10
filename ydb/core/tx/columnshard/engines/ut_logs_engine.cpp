@@ -16,8 +16,8 @@ namespace {
 class TTestDbWrapper : public IDbWrapper {
 public:
     struct TIndex {
-        THashMap<ui64, TVector<TGranuleRecord>> Granules; // pathId -> granule
-        THashMap<ui64, TVector<TColumnRecord>> Columns; // granule -> columns
+        THashMap<ui64, std::vector<TGranuleRecord>> Granules; // pathId -> granule
+        THashMap<ui64, std::vector<TColumnRecord>> Columns; // granule -> columns
         THashMap<ui32, ui64> Counters;
     };
 
@@ -74,7 +74,7 @@ public:
     void EraseGranule(ui32 index, const IColumnEngine&, const TGranuleRecord& row) override {
         auto& pathGranules = Indices[index].Granules[row.PathId];
 
-        TVector<TGranuleRecord> filtered;
+        std::vector<TGranuleRecord> filtered;
         filtered.reserve(pathGranules.size());
         for (const TGranuleRecord& rec : pathGranules) {
             if (rec.Granule != row.Granule) {
@@ -113,7 +113,7 @@ public:
     void EraseColumn(ui32 index, const TColumnRecord& row) override {
         auto& columns = Indices[index].Columns[row.Granule];
 
-        TVector<TColumnRecord> filtered;
+        std::vector<TColumnRecord> filtered;
         filtered.reserve(columns.size());
         for (auto& rec : columns) {
             if (rec != row) {
@@ -153,7 +153,7 @@ private:
     THashMap<ui32, TIndex> Indices;
 };
 
-static const TVector<std::pair<TString, TTypeInfo>> testColumns = {
+static const std::vector<std::pair<TString, TTypeInfo>> testColumns = {
     // PK
     {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
     {"resource_type", TTypeInfo(NTypeIds::Utf8) },
@@ -163,15 +163,15 @@ static const TVector<std::pair<TString, TTypeInfo>> testColumns = {
     {"message", TTypeInfo(NTypeIds::Utf8) }
 };
 
-static const TVector<std::pair<TString, TTypeInfo>> testKey = {
+static const std::vector<std::pair<TString, TTypeInfo>> testKey = {
     {"timestamp", TTypeInfo(NTypeIds::Timestamp) },
     {"resource_type", TTypeInfo(NTypeIds::Utf8) },
     {"resource_id", TTypeInfo(NTypeIds::Utf8) },
     {"uid", TTypeInfo(NTypeIds::Utf8) }
 };
 
-TIndexInfo TestTableInfo(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testColumns,
-                         const TVector<std::pair<TString, TTypeInfo>>& key = testKey) {
+TIndexInfo TestTableInfo(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testColumns,
+                         const std::vector<std::pair<TString, TTypeInfo>>& key = testKey) {
     TIndexInfo indexInfo("", 0);
 
     for (ui32 i = 0; i < ydbSchema.size(); ++i) {
@@ -250,7 +250,7 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100) {
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
-void AddIdsToBlobs(const TVector<TString>& srcBlobs, TVector<TPortionInfo>& portions,
+void AddIdsToBlobs(const std::vector<TString>& srcBlobs, std::vector<TPortionInfo>& portions,
                    THashMap<TBlobRange, TString>& blobs, ui32& step) {
     ui32 pos = 0;
     for (auto& portion : portions) {
@@ -272,7 +272,7 @@ TCompactionLimits TestLimits() {
 }
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
-            TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
+            std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
     std::shared_ptr<TColumnEngineChanges> changes = engine.StartInsert(std::move(dataToIndex));
     if (!changes) {
         return false;
@@ -281,7 +281,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     changes->Blobs.insert(blobs.begin(), blobs.end());
 
     TIndexationLogic logic(engine.GetIndexInfo());
-    TVector<TString> newBlobs = logic.Apply(changes);
+    std::vector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
 
@@ -290,7 +290,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 }
 
 bool Insert(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap,
-            TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
+            std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
     TColumnEngineForLogs engine(0, TestLimits());
     engine.UpdateDefaultSchema(snap, TIndexInfo(tableInfo));
     THashSet<TUnifiedBlobId> lostBlobs;
@@ -317,7 +317,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     changes->SetBlobs(std::move(blobs));
 
     TCompactionLogic logic(engine.GetIndexInfo());
-    TVector<TString> newBlobs = logic.Apply(changes);
+    std::vector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
 
@@ -374,22 +374,22 @@ std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOp
 
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
-    void WriteLoadRead(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                       const TVector<std::pair<TString, TTypeInfo>>& key) {
+    void WriteLoadRead(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                       const std::vector<std::pair<TString, TTypeInfo>>& key) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = TestTableInfo(ydbSchema, key);
 
-        TVector<ui64> paths = {1, 2};
+        std::vector<ui64> paths = {1, 2};
 
         TString testBlob = MakeTestBlob();
 
-        TVector<TBlobRange> blobRanges;
+        std::vector<TBlobRange> blobRanges;
         blobRanges.push_back(MakeBlobRange(1, testBlob.size()));
         blobRanges.push_back(MakeBlobRange(2, testBlob.size()));
 
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         TInstant writeTime = TInstant::Now();
-        TVector<TInsertedData> dataToIndex = {
+        std::vector<TInsertedData> dataToIndex = {
             {1, 2, paths[0], "", blobRanges[0].BlobId, "", writeTime},
             {2, 1, paths[0], "", blobRanges[1].BlobId, "", writeTime}
         };
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 
     Y_UNIT_TEST(IndexWriteLoadReadStrPK) {
-        TVector<std::pair<TString, TTypeInfo>> key = {
+        std::vector<std::pair<TString, TTypeInfo>> key = {
             {"resource_type", TTypeInfo(NTypeIds::Utf8) },
             {"resource_id", TTypeInfo(NTypeIds::Utf8) },
             {"uid", TTypeInfo(NTypeIds::Utf8) },
@@ -468,8 +468,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         WriteLoadRead(testColumns, key);
     }
 
-    void ReadWithPredicates(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                            const TVector<std::pair<TString, TTypeInfo>>& key) {
+    void ReadWithPredicates(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                            const std::vector<std::pair<TString, TTypeInfo>>& key) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = TestTableInfo(ydbSchema, key);
 
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
-            TVector<TInsertedData> dataToIndex;
+            std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 
     Y_UNIT_TEST(IndexReadWithPredicatesStrPK) {
-        TVector<std::pair<TString, TTypeInfo>> key = {
+        std::vector<std::pair<TString, TTypeInfo>> key = {
             {"resource_type", TTypeInfo(NTypeIds::Utf8) },
             {"resource_id", TTypeInfo(NTypeIds::Utf8) },
             {"uid", TTypeInfo(NTypeIds::Utf8) },
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
-            TVector<TInsertedData> dataToIndex;
+            std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
@@ -632,7 +632,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
-            TVector<TInsertedData> dataToIndex;
+            std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
-            TVector<TInsertedData> dataToIndex;
+            std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
 

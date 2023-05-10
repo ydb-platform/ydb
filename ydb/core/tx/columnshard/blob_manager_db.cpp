@@ -23,7 +23,7 @@ void TBlobManagerDb::SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) {
     Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, std::get<1>(lastCollectedGenStep));
 }
 
-bool TBlobManagerDb::LoadLists(TVector<TUnifiedBlobId>& blobsToKeep, TVector<TUnifiedBlobId>& blobsToDelete,
+bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::vector<TUnifiedBlobId>& blobsToDelete,
     const NOlap::IBlobGroupSelector* dsGroupSelector)
 {
     blobsToKeep.clear();

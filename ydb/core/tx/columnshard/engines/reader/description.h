@@ -32,19 +32,19 @@ public:
     std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
 
     // List of columns
-    TVector<ui32> ColumnIds;
-    TVector<TString> ColumnNames;
-    
+    std::vector<ui32> ColumnIds;
+    std::vector<TString> ColumnNames;
+
     std::shared_ptr<NSsa::TProgram> AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
     TReadDescription(const TSnapshot& snapshot, const bool isReverse)
-        : Snapshot(snapshot) 
+        : Snapshot(snapshot)
         , PKRangesFilter(isReverse) {
 
     }
 
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
-    } 
+    }
 };
 
 }

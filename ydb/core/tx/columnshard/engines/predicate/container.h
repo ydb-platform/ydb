@@ -12,7 +12,7 @@ class TPredicateContainer {
 private:
     std::shared_ptr<NOlap::TPredicate> Object;
     NArrow::ECompareType CompareType;
-    mutable std::optional<TVector<TString>> ColumnNames;
+    mutable std::optional<std::vector<TString>> ColumnNames;
 
     TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object)
         : Object(object)
@@ -41,7 +41,7 @@ public:
 
     int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const;
 
-    const TVector<TString>& GetColumnNames() const;
+    const std::vector<TString>& GetColumnNames() const;
 
     bool IsForwardInterval() const;
 

@@ -60,8 +60,8 @@ inline bool ArrayEqualView(const std::shared_ptr<arrow::Array>& x, const std::sh
 
 struct TSortDescription;
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
 TString SerializeSchema(const arrow::Schema& schema);
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
@@ -107,7 +107,7 @@ std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<ar
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
 std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse = false);
-TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
+std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
 size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset = 0);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);

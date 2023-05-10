@@ -109,7 +109,7 @@ std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId) {
     }
 }
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
     for (auto& [name, ydbType] : columns) {
@@ -119,7 +119,7 @@ std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pa
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns));
 }
 
@@ -338,7 +338,7 @@ std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>&
 
 std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                          const std::shared_ptr<TSortDescription>& description) {
-    TVector<NArrow::IInputStream::TPtr> streams;
+    std::vector<NArrow::IInputStream::TPtr> streams;
     for (auto& batch : batches) {
         streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
     }
@@ -589,8 +589,8 @@ std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<ar
     return out;
 }
 
-TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
-    TVector<TString> out;
+std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
+    std::vector<TString> out;
     out.reserve(schema->num_fields());
     for (int i = 0; i < schema->num_fields(); ++i) {
         auto& name = schema->field(i)->name();

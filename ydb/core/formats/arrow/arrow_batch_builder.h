@@ -151,7 +151,7 @@ public:
     TArrowBatchBuilder(arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED);
     ~TArrowBatchBuilder() = default;
 
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
                ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override {
         Y_UNUSED(maxRowsInBlock);
         Y_UNUSED(maxBytesInBlock);
@@ -174,20 +174,20 @@ public:
         return NumBytes;
     }
 
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
     std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 
 protected:
     void AppendCell(const TCell& cell, ui32 colNum);
 
-    const TVector<std::pair<TString, NScheme::TTypeInfo>>& GetYdbSchema() const {
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& GetYdbSchema() const {
         return YdbSchema;
     }
 
 private:
     arrow::ipc::IpcWriteOptions WriteOptions;
-    TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
     std::shared_ptr<arrow::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};

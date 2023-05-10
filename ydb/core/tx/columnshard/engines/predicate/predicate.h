@@ -50,7 +50,7 @@ public:
         return Operation == EOperation::GreaterEqual || Operation == EOperation::LessEqual;
     }
 
-    TVector<TString> ColumnNames() const;
+    std::vector<TString> ColumnNames() const;
 
     std::string ToString() const {
         return Empty() ? "()" : Batch->schema()->ToString();

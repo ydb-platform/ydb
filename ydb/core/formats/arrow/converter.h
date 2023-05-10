@@ -20,7 +20,7 @@ public:
 // Converts an arrow batch into YDB rows feeding them IRowWriter one by one
 class TArrowToYdbConverter {
 private:
-    TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema_; // Destination schema (allow shrink and reorder)
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema_; // Destination schema (allow shrink and reorder)
     IRowWriter& RowWriter_;
 
     template <typename TArray>
@@ -63,7 +63,7 @@ public:
 
     static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
-    TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
+    TArrowToYdbConverter(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema_(ydbSchema)
         , RowWriter_(rowWriter)
     {}

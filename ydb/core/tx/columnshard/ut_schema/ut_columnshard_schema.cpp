@@ -25,8 +25,8 @@ enum class EInitialEviction {
 
 namespace {
 
-static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
-static const TVector<std::pair<TString, TTypeInfo>> testYdbPk = TTestSchema::YdbPkSchema();
+static const std::vector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
+static const std::vector<std::pair<TString, TTypeInfo>> testYdbPk = TTestSchema::YdbPkSchema();
 
 std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
     std::string name(columnName.c_str(), columnName.size());
@@ -66,7 +66,7 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
-bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const TVector<ui64>& pathIds,
+bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const std::vector<ui64>& pathIds,
                 ui64 tsSeconds, const TString& ttlColumnName) {
     TString txBody = TTestSchema::TtlTxBody(pathIds, ttlColumnName, tsSeconds);
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
@@ -130,7 +130,7 @@ bool CheckSame(const TString& blob, const TString& strSchema, ui32 expectedSize,
 }
 
 std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
-                              const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
     UNIT_ASSERT(ts.size() == 2);
 
     TString data1 = MakeTestBlob({0, portionSize}, ydbSchema);
@@ -189,7 +189,7 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
-             const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
+             const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
 {
     std::vector<ui64> ts = {1600000000, 1620000000};
 
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(CreateTable) {
         ui64 tableId = 1;
 
-        TVector<TTypeId> intTypes = {
+        std::vector<TTypeId> intTypes = {
             NTypeIds::Timestamp,
             NTypeIds::Int8,
             NTypeIds::Int16,
@@ -992,7 +992,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
 
         // TODO: support float types
-        TVector<TTypeId> floatTypes = {
+        std::vector<TTypeId> floatTypes = {
             NTypeIds::Float,
             NTypeIds::Double
         };
@@ -1005,7 +1005,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             UNIT_ASSERT(!ok);
         }
 
-        TVector<TTypeId> strTypes = {
+        std::vector<TTypeId> strTypes = {
             NTypeIds::String,
             NTypeIds::Utf8
         };
@@ -1018,7 +1018,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             UNIT_ASSERT(ok);
         }
 
-        TVector<TTypeId> xsonTypes = {
+        std::vector<TTypeId> xsonTypes = {
             NTypeIds::Yson,
             NTypeIds::Json,
             NTypeIds::JsonDocument

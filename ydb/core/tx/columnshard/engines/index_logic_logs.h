@@ -25,18 +25,18 @@ public:
 
     virtual ~TIndexLogicBase() {
     }
-    virtual TVector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const = 0;
+    virtual std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const = 0;
 
     static THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                                                 const std::vector<std::pair<TMark, ui64>>& granules,
                                                                                 const TIndexInfo& indexInfo);
 
 protected:
-    TVector<TPortionInfo> MakeAppendedPortions(const ui64 pathId,
+    std::vector<TPortionInfo> MakeAppendedPortions(const ui64 pathId,
                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                             const ui64 granule,
                                             const TSnapshot& minSnapshot,
-                                            TVector<TString>& blobs) const;
+                                            std::vector<TString>& blobs) const;
 
     static std::shared_ptr<arrow::RecordBatch> GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                             const TIndexInfo& indexInfo);
@@ -53,7 +53,7 @@ class TIndexationLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
 
-    TVector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
+    std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
 
 private:
     // Although source batches are ordered only by PK (sorting key) resulting pathBatches are ordered by extended key.
@@ -66,16 +66,16 @@ class TCompactionLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
 
-    TVector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
+    std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
 
 private:
-    TVector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;
-    TVector<TString> CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const;
-    std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(ui64 granule, const TVector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
+    std::vector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;
+    std::vector<TString> CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const;
+    std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(ui64 granule, const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
 
     /// @return vec({ts, batch}). ts0 <= ts1 <= ... <= tsN
     /// @note We use ts from PK for split but there could be lots PK with the same ts.
-    TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
+    std::vector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
     SliceGranuleBatches(const TIndexInfo& indexInfo,
                         const TColumnEngineForLogs::TChanges& changes,
                         const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
@@ -85,11 +85,11 @@ private:
     /// @param[in,out] tsIds    unchanged or marks from compacted portions ordered by mark
     /// @param[in,out] toMove   unchanged or compacted portions ordered by primary key
     ui64 TryMovePortions(const TMark& ts0,
-                        TVector<TPortionInfo>& portions,
+                        std::vector<TPortionInfo>& portions,
                         std::vector<std::pair<TMark, ui64>>& tsIds,
-                        TVector<std::pair<TPortionInfo, ui64>>& toMove) const;
+                        std::vector<std::pair<TPortionInfo, ui64>>& toMove) const;
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> PortionsToBatches(const TVector<TPortionInfo>& portions,
+    std::vector<std::shared_ptr<arrow::RecordBatch>> PortionsToBatches(const std::vector<TPortionInfo>& portions,
                                                                     const THashMap<TBlobRange, TString>& blobs,
                                                                     bool insertedOnly = false) const;
 };
@@ -98,12 +98,12 @@ class TEvictionLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
 
-    TVector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
+    std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
 
 private:
     bool UpdateEvictedPortion(TPortionInfo& portionInfo,
                             TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
-                            TVector<TColumnRecord>& evictedRecords, TVector<TString>& newBlobs) const;
+                            std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs) const;
 };
 
 }

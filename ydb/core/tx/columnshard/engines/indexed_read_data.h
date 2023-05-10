@@ -63,7 +63,7 @@ public:
     }
 
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
-    TVector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
+    std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
     void AddNotIndexed(ui32 batchNo, TString blob, const TSnapshot& snapshot) {
         auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(snapshot));
@@ -99,7 +99,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
-    TVector<TPartialReadResult> MakeResult(
+    std::vector<TPartialReadResult> MakeResult(
         std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules, int64_t maxRowsInBatch) const;
 };
 

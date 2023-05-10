@@ -24,11 +24,11 @@ struct TBlobBatch::TBatchInfo : TNonCopyable {
     const ui32 Step;
     const ui32 Channel;
 
-    TVector<ui32> BlobSizes;
-    TVector<bool> InFlight;
+    std::vector<ui32> BlobSizes;
+    std::vector<bool> InFlight;
     i32 InFlightCount;
     ui64 TotalSizeBytes;
-    TVector<TString> SmallBlobs;
+    std::vector<TString> SmallBlobs;
 
     TBatchInfo(TIntrusivePtr<TTabletStorageInfo> tabletInfo, TAllocatedGenStepConstPtr genStep, ui32 channel)
         : TabletInfo(tabletInfo)
@@ -155,8 +155,8 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     }
 
     // Load the keep and delete queues
-    TVector<TUnifiedBlobId> blobsToKeep;
-    TVector<TUnifiedBlobId> blobsToDelete;
+    std::vector<TUnifiedBlobId> blobsToKeep;
+    std::vector<TUnifiedBlobId> blobsToDelete;
     TBlobGroupSelector dsGroupSelector(TabletInfo);
     if (!db.LoadLists(blobsToKeep, blobsToDelete, &dsGroupSelector)) {
         return false;

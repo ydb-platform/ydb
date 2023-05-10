@@ -44,7 +44,7 @@ std::shared_ptr<arrow::RecordBatch> TIndexationLogic::AddSpecials(const std::sha
 
 bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
                                             TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
-                                            TVector<TColumnRecord>& evictedRecords, TVector<TString>& newBlobs) const {
+                                            std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs) const {
     Y_VERIFY(portionInfo.TierName != evictFeatures.TargetTierName);
 
     auto* tiering = GetTieringMap().FindPtr(evictFeatures.PathId);
@@ -89,14 +89,14 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
     return true;
 }
 
-TVector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathId,
+std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathId,
                                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                                             const ui64 granule,
                                                             const TSnapshot& minSnapshot,
-                                                            TVector<TString>& blobs) const {
+                                                            std::vector<TString>& blobs) const {
     Y_VERIFY(batch->num_rows());
     const auto schema = IndexInfo.ArrowSchemaWithSpecials();
-    TVector<TPortionInfo> out;
+    std::vector<TPortionInfo> out;
 
     TString tierName;
     TCompression compression = IndexInfo.GetDefaultCompression();
@@ -116,7 +116,7 @@ TVector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathId,
 
         TPortionInfo portionInfo;
         portionInfo.Records.reserve(schema->num_fields());
-        TVector<TString> portionBlobs;
+        std::vector<TString> portionBlobs;
         portionBlobs.reserve(schema->num_fields());
 
         // Serialize portion's columns into blobs
@@ -159,7 +159,7 @@ TVector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathId,
     return out;
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> TCompactionLogic::PortionsToBatches(const TVector<TPortionInfo>& portions,
+std::vector<std::shared_ptr<arrow::RecordBatch>> TCompactionLogic::PortionsToBatches(const std::vector<TPortionInfo>& portions,
                                                                                         const THashMap<TBlobRange, TString>& blobs,
                                                                                         bool insertedOnly) const {
     // TODO: schema changes
@@ -220,7 +220,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TIndexLogicBase::SliceIntoGr
     return out;
 }
 
-TVector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const {
+std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const {
     auto changes = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(indexChanges);
     Y_VERIFY(!changes->DataToIndex.empty());
     Y_VERIFY(changes->AppendedPortions.empty());
@@ -254,7 +254,7 @@ TVector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChanges> i
     }
     Y_VERIFY(minSnapshot.Valid());
 
-    TVector<TString> blobs;
+    std::vector<TString> blobs;
 
     for (auto& [pathId, batches] : pathBatches) {
         changes->AddPathIfNotExists(pathId);
@@ -286,7 +286,7 @@ TVector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChanges> i
 }
 
 std::shared_ptr<arrow::RecordBatch> TCompactionLogic::CompactInOneGranule(ui64 granule,
-                                                                            const TVector<TPortionInfo>& portions,
+                                                                            const std::vector<TPortionInfo>& portions,
                                                                             const THashMap<TBlobRange, TString>& blobs) const {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(portions.size());
@@ -306,16 +306,16 @@ std::shared_ptr<arrow::RecordBatch> TCompactionLogic::CompactInOneGranule(ui64 g
     return sortedBatch;
 }
 
-TVector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const {
+std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const {
     const ui64 pathId = changes->SrcGranule->PathId;
-    TVector<TString> blobs;
+    std::vector<TString> blobs;
     auto& switchedProtions = changes->SwitchedPortions;
     Y_VERIFY(switchedProtions.size());
 
     ui64 granule = switchedProtions[0].Granule();
     auto batch = CompactInOneGranule(granule, switchedProtions, changes->Blobs);
 
-    TVector<TPortionInfo> portions;
+    std::vector<TPortionInfo> portions;
     if (!changes->MergeBorders.Empty()) {
         Y_VERIFY(changes->MergeBorders.GetOrderedMarks().size() > 1);
         auto slices = changes->MergeBorders.SliceIntoGranules(batch, IndexInfo);
@@ -342,12 +342,12 @@ TVector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnEngin
     return blobs;
 }
 
-TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
+std::vector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
 TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
                                         const TColumnEngineForLogs::TChanges& changes,
                                         const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                         const TMark& ts0) const {
-    TVector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>> out;
+    std::vector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>> out;
 
     // Extract unique effective keys and their counts
     i64 numRows = 0;
@@ -391,7 +391,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
     }
 
     // Make split borders from uniq keys
-    TVector<NArrow::TReplaceKey> borders;
+    std::vector<NArrow::TReplaceKey> borders;
     borders.reserve(numRows / rowsInGranule);
     {
         ui32 sumRows = 0;
@@ -409,7 +409,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
     }
 
     // Find offsets in source batches
-    TVector<TVector<int>> offsets(batches.size()); // vec[batch][border] = offset
+    std::vector<std::vector<int>> offsets(batches.size()); // vec[batch][border] = offset
     for (size_t i = 0; i < batches.size(); ++i) {
         const auto& batch = batches[i];
         auto& batchOffsets = offsets[i];
@@ -506,9 +506,9 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
 }
 
 ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
-                                        TVector<TPortionInfo>& portions,
+                                        std::vector<TPortionInfo>& portions,
                                         std::vector<std::pair<TMark, ui64>>& tsIds,
-                                        TVector<std::pair<TPortionInfo, ui64>>& toMove) const {
+                                        std::vector<std::pair<TPortionInfo, ui64>>& toMove) const {
     std::vector<TPortionInfo*> partitioned(portions.size());
     // Split portions by putting the inserted portions in the original order
     // at the beginning of the buffer and the compacted portions at the end.
@@ -565,17 +565,17 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
     return numRows;
 }
 
-TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const {
+std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const {
     const ui64 pathId = changes->SrcGranule->PathId;
     const TMark ts0 = changes->SrcGranule->Mark;
-    TVector<TPortionInfo>& portions = changes->SwitchedPortions;
+    std::vector<TPortionInfo>& portions = changes->SwitchedPortions;
 
     std::vector<std::pair<TMark, ui64>> tsIds;
     ui64 movedRows = TryMovePortions(ts0, portions, tsIds, changes->PortionsToMove);
     const auto& srcBatches = PortionsToBatches(portions, changes->Blobs, movedRows != 0);
     Y_VERIFY(srcBatches.size() == portions.size());
 
-    TVector<TString> blobs;
+    std::vector<TString> blobs;
 
     if (movedRows) {
         Y_VERIFY(changes->PortionsToMove.size() >= 2);
@@ -594,7 +594,7 @@ TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCo
             const ui32 rowsInGranule = numRows / numSplitInto;
             Y_VERIFY(rowsInGranule);
 
-            TVector<std::pair<TMark, ui64>> newTsIds;
+            std::vector<std::pair<TMark, ui64>> newTsIds;
             ui32 tmpGranule = 0;
             ui32 sumRows = 0;
             // Always insert mark of the source granule at the beginning.
@@ -623,7 +623,7 @@ TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCo
 
         // Slice inserted portions with granules' borders
         THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> idBatches;
-        TVector<TPortionInfo*> toSwitch;
+        std::vector<TPortionInfo*> toSwitch;
         toSwitch.reserve(portions.size());
         for (size_t i = 0; i < portions.size(); ++i) {
             auto& portion = portions[i];
@@ -651,7 +651,7 @@ TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCo
 
         // Update switchedPortions if we have moves
         if (toSwitch.size() != portions.size()) {
-            TVector<TPortionInfo> tmp;
+            std::vector<TPortionInfo> tmp;
             tmp.reserve(toSwitch.size());
             for (auto* portionInfo : toSwitch) {
                 tmp.emplace_back(std::move(*portionInfo));
@@ -691,7 +691,7 @@ TVector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCo
     return blobs;
 }
 
-TVector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
+std::vector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
     Y_VERIFY(changes);
     Y_VERIFY(changes->CompactionInfo);
     Y_VERIFY(changes->DataToIndex.empty());       // not used
@@ -706,14 +706,14 @@ TVector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChanges> c
     return CompactSplitGranule(castedChanges);
 }
 
-TVector<TString> TEvictionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
+std::vector<TString> TEvictionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
     Y_VERIFY(changes);
     Y_VERIFY(!changes->Blobs.empty());           // src data
     Y_VERIFY(!changes->PortionsToEvict.empty()); // src meta
     Y_VERIFY(changes->EvictedRecords.empty());   // dst meta
 
-    TVector<TString> newBlobs;
-    TVector<std::pair<TPortionInfo, TPortionEvictionFeatures>> evicted;
+    std::vector<TString> newBlobs;
+    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> evicted;
     evicted.reserve(changes->PortionsToEvict.size());
 
     for (auto& [portionInfo, evictFeatures] : changes->PortionsToEvict) {

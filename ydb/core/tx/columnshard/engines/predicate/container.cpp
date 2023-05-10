@@ -75,12 +75,12 @@ int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr
     }
 }
 
-const TVector<TString>& TPredicateContainer::GetColumnNames() const {
+const std::vector<TString>& TPredicateContainer::GetColumnNames() const {
     if (!ColumnNames) {
         if (Object) {
             ColumnNames = Object->ColumnNames();
         } else {
-            ColumnNames = TVector<TString>();
+            ColumnNames = std::vector<TString>();
         }
     }
     return *ColumnNames;

@@ -113,8 +113,8 @@ public:
     bool IsDescSorted() const { return Sorting == ESorting::DESC; }
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
 
-    virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
-    virtual TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
+    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
+    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TScanCounters& scanCounters) const = 0;
 
     // TODO:  can this only be done for base class?
@@ -131,8 +131,8 @@ private:
     TVersionedIndex IndexVersions;
     TSnapshot Snapshot;
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
-    TVector<ui32> AllColumns;
-    TVector<ui32> ResultColumnsIds;
+    std::vector<ui32> AllColumns;
+    std::vector<ui32> ResultColumnsIds;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
@@ -144,7 +144,7 @@ public:
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
     }
-    
+
     std::shared_ptr<NIndexedReader::IOrderPolicy> BuildSortingPolicy() const;
 
     TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting)
@@ -161,7 +161,7 @@ public:
     ui64 GetSchemaColumnsCount() const {
         return AllColumns.size();
     }
-    
+
     std::shared_ptr<arrow::Schema> GetLoadSchema(const TSnapshot& version) const {
         const auto& indexInfo = IndexVersions.GetSchema(version)->GetIndexInfo();
         return indexInfo.ArrowSchema(AllColumns, true);
@@ -179,7 +179,7 @@ public:
         if (version && version < Snapshot) {
             return IndexVersions.GetSchema(*version)->GetIndexInfo();
         }
-        return ResultIndexSchema->GetIndexInfo();   
+        return ResultIndexSchema->GetIndexInfo();
     }
 
     std::vector<std::string> GetColumnsOrder() const {
@@ -208,11 +208,11 @@ public:
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 
-    TVector<TNameTypeInfo> GetResultYqlSchema() const override {
+    std::vector<TNameTypeInfo> GetResultYqlSchema() const override {
         auto& indexInfo = ResultIndexSchema->GetIndexInfo();
         auto resultSchema = GetResultSchema();
         Y_VERIFY(resultSchema);
-        TVector<NTable::TTag> columnIds;
+        std::vector<NTable::TTag> columnIds;
         columnIds.reserve(resultSchema->num_fields());
         for (const auto& field: resultSchema->fields()) {
             TString name = TStringBuilder() << field->name();
@@ -221,7 +221,7 @@ public:
         return indexInfo.GetColumns(columnIds);
     }
 
-    TVector<TNameTypeInfo> GetKeyYqlSchema() const override {
+    std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
     }
 
@@ -263,8 +263,8 @@ public:
     using TConstPtr = std::shared_ptr<const TReadStatsMetadata>;
 
     const ui64 TabletId;
-    TVector<ui32> ReadColumnIds;
-    TVector<ui32> ResultColumnIds;
+    std::vector<ui32> ReadColumnIds;
+    std::vector<ui32> ResultColumnIds;
     THashMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
 
     explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting)
@@ -272,9 +272,9 @@ public:
         , TabletId(tabletId)
     {}
 
-    TVector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;
 
-    TVector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
     std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TScanCounters& scanCounters) const override;
 };

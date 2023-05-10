@@ -196,7 +196,7 @@ TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec)
     WriteOptions.use_threads = false;
 }
 
-bool TArrowBatchBuilder::Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
+bool TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     YdbSchema = ydbColumns;
     auto schema = MakeArrowSchema(ydbColumns);
     auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), RowsToReserve, &BatchBuilder);

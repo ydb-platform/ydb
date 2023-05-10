@@ -31,7 +31,7 @@ struct TEvPrivate {
         THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
-        TVector<TString> Blobs;
+        std::vector<TString> Blobs;
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
         TUsage ResourceUsage;

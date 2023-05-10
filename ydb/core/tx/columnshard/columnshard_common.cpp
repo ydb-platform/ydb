@@ -10,8 +10,8 @@ using EAggregate = NArrow::EAggregate;
 using TAssign = NSsa::TAssign;
 using TAggregateAssign = NSsa::TAggregateAssign;
 
-TVector<NScheme::TTypeInfo> ExtractTypes(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-    TVector<NScheme::TTypeInfo> types;
+std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    std::vector<NScheme::TTypeInfo> types;
     types.reserve(columns.size());
     for (auto& [name, type] : columns) {
         types.push_back(type);
@@ -19,13 +19,13 @@ TVector<NScheme::TTypeInfo> ExtractTypes(const TVector<std::pair<TString, NSchem
     return types;
 }
 
-TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     Y_VERIFY(cells.size() == columns.size());
     if (cells.empty()) {
         return {};
     }
 
-    TVector<NScheme::TTypeInfo> types = ExtractTypes(columns);
+    std::vector<NScheme::TTypeInfo> types = ExtractTypes(columns);
 
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Reserve(1);
@@ -46,9 +46,9 @@ using EOperation = NArrow::EOperation;
 using TPredicate = NOlap::TPredicate;
 
 std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& range,
-                                                  const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-    TVector<TCell> leftCells;
-    TVector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
+                                                  const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    std::vector<TCell> leftCells;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
     bool leftTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
@@ -67,8 +67,8 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
         }
     }
 
-    TVector<TCell> rightCells;
-    TVector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
+    std::vector<TCell> rightCells;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
     bool rightTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();

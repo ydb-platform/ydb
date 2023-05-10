@@ -25,7 +25,7 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const NOlap::TReadDes
 
     NOlap::TDataStorageAccessor dataAccessor(insertTable, index, batchCache);
     auto readMetadata = std::make_shared<NOlap::TReadMetadata>(index->GetVersionedIndex(), read.GetSnapshot(), isReverse ? NOlap::TReadMetadata::ESorting::DESC : NOlap::TReadMetadata::ESorting::ASC);
-    
+
     if (!readMetadata->Init(read, dataAccessor, error)) {
         return nullptr;
     }

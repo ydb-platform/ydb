@@ -16,7 +16,7 @@ public:
     virtual bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) = 0;
     virtual void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) = 0;
 
-    virtual bool LoadLists(TVector<TUnifiedBlobId>& blobsToKeep, TVector<TUnifiedBlobId>& blobsToDelete,
+    virtual bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::vector<TUnifiedBlobId>& blobsToDelete,
         const NOlap::IBlobGroupSelector* dsGroupSelector) = 0;
     virtual void AddBlobToKeep(const TUnifiedBlobId& blobId) = 0;
     virtual void EraseBlobToKeep(const TUnifiedBlobId& blobId) = 0;
@@ -43,7 +43,7 @@ public:
     bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) override;
     void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) override;
 
-    bool LoadLists(TVector<TUnifiedBlobId>& blobsToKeep, TVector<TUnifiedBlobId>& blobsToDelete,
+    bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::vector<TUnifiedBlobId>& blobsToDelete,
         const NOlap::IBlobGroupSelector* dsGroupSelector) override;
     void AddBlobToKeep(const TUnifiedBlobId& blobId) override;
     void EraseBlobToKeep(const TUnifiedBlobId& blobId) override;

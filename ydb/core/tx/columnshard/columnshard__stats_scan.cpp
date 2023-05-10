@@ -33,7 +33,7 @@ std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {
     ui64 numRows = 0;
     numRows += NUM_KINDS * IndexStats.size();
 
-    TVector<ui32> allColumnIds;
+    std::vector<ui32> allColumnIds;
     for (const auto& c : PrimaryIndexStatsSchema.Columns) {
         allColumnIds.push_back(c.second.Id);
     }

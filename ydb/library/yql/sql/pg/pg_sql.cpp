@@ -209,6 +209,10 @@ public:
             }
         }
 
+        if (Settings.PathPrefix) {
+            TablePathPrefix = Settings.PathPrefix + "/";
+        }
+
         for (const auto& [cluster, provider] : Settings.ClusterMapping) {
             Provider = provider;
             break;

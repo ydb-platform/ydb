@@ -1,21 +1,21 @@
-# File structure of data export
+# File structure of an export
 
-The file structure described below is used for exporting data both to the file system and S3-compatible object storage. When using S3, file path is written to the object key, while export directory is a key prefix.
+The file structure outlined below is used to export data both to the file system and an S3-compatible object storage. When working with S3, the file path is added to the object key, and the key's prefix specifies the export directory.
 
 ## Directories {#dir}
 
-Each directory in a database corresponds to a directory in the file structure. The directory hierarchy in the file structure corresponds the directory hierarchy in the database. If some DB directory contains no objects (neither tables nor subdirectories), this directory's file structure contains a single zero size file named `empty_dir`.
+Each database directory has a counterpart directory in the file structure. The directory hierarchy in the file structure matches the directory hierarchy in the database. If a certain database directory includes no items (neither tables nor subdirectories), the first structure of such a directory includes one file of zero size named `empty_dir`.
 
 ## Tables {#tables}
 
-Each DB table also has a corresponding same-name directory in the file structure directory hierarchy, which contains:
+For each table in the database, there's a same-name directory in the file structure's directory hierarchy that includes:
 
-- The `scheme.pb` file with information about the table structure and its parameters in [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format.
-- One or more `data_XX.csv` files with data in `CSV` format, where `XX` is the file sequence number. Data export starts with the `data_00.csv` file. Each subsequent file is created once the size of the current file exceeds 100 MB.
+- The `scheme.pb` file describing the table structure and parameters in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
+- One or more `data_XX.csv` files with the table data in `csv` format, where `XX` is the file's sequence number. The export starts with the `data_00.csv` file, with a next file created whenever the current file exceeds 100 MB.
 
-## Data files {#datafiles}
+## Files with data {#datafiles}
 
-Data is stored in `.csv` files, one file line per table entry, without a row with column headers. URL-encoded format is used for string representation. For example, a file line for a table with uint64 and utf8 columns containing the number 1 and the string "Привет" ("Hello" in Russian), respectively, looks like this:
+The format of data files is `.csv`, where each row corresponds to a record in the table (except the row with column headings). The urlencoded format is used for rows. For example, the file row for the table with the uint64 and utf8 columns that includes the number 1 and the Russian string "Привет" (translates to English as "Hi"), would look like this:
 
 ```
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
@@ -23,7 +23,7 @@ Data is stored in `.csv` files, one file line per table entry, without a row wit
 
 ## Example {#example}
 
-When exporting tables created within a tutorial when [Getting started with YQL](../../../../getting_started/yql.md#create-table) in the "Getting started" section, the following file structure is created:
+When you export the tables created under [{#T}]({{ quickstart-path }}) in Getting started, the system will create the following file structure:
 
 ```
 ├── episodes
@@ -37,9 +37,9 @@ When exporting tables created within a tutorial when [Getting started with YQL](
     └── scheme.pb
 ```
 
-File `series/scheme.pb` contents:
+Contents of the `series/scheme.pb` file:
 
-``` 
+```
 columns {
   name: "series_id"
   type {

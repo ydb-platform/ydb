@@ -1,6 +1,6 @@
-# Obtaining the status of long running operations
+# Obtaining the status of long-running operations
 
-Use the `ydb operation get` subcommand to obtain the status of the specified long running operation.
+Use the `ydb operation get` subcommand to obtain the status of the specified long-running operation.
 
 General format of the command:
 
@@ -10,9 +10,9 @@ General format of the command:
 
 * `global options`: [Global parameters](commands/global-options.md).
 * `options`: [Parameters of the subcommand](#options).
-* `id`: The ID of the long running operation. The ID contains characters that can be interpreted by your command shell. If necessary, use shielding, for example, `'<id>'` for bash.
+* `id`: The ID of the long-running operation. The ID contains characters that can be interpreted by your command shell. If necessary, use shielding, for example, `'<id>'` for bash.
 
-View a description of the command to obtain the status of a long running operation:
+View a description of the command to obtain the status of a long-running operation:
 
 ```bash
 {{ ydb-cli }} operation get --help
@@ -28,10 +28,10 @@ View a description of the command to obtain the status of a long running operati
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Obtain the status of the long running operation with the `ydb://buildindex/7?id=281489389055514` ID:
+Obtain the status of the long-running operation with the `ydb://buildindex/7?id=281489389055514` ID:
 
 ```bash
-ydb -p db1 operation get \
+ydb -p quickstart operation get \
   'ydb://buildindex/7?id=281489389055514'
 ```
 

@@ -31,19 +31,19 @@ View a description of the command to copy a table:
 Create the `backup` folder in the DB:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme mkdir backup
+{{ ydb-cli }} -p quickstart scheme mkdir backup
 ```
 
 Copy the `series` table to a table called `series-v1`, the `seasons` table to a table called `seasons-v1`, and `episodes` to `episodes-v1` in the `backup` folder:
 
 ```bash
-{{ ydb-cli }} -p db1 tools copy --item destination=backup/series-v1,source=series --item destination=backup/seasons-v1,source=seasons --item destination=backup/episodes-v1,source=episodes
+{{ ydb-cli }} -p quickstart tools copy --item destination=backup/series-v1,source=series --item destination=backup/seasons-v1,source=seasons --item destination=backup/episodes-v1,source=episodes
 ```
 
 View the listing of objects in the `backup` folder:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme ls backup
+{{ ydb-cli }} -p quickstart scheme ls backup
 ```
 
 Result:

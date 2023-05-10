@@ -3,8 +3,10 @@ items:
 - name: Contents
   href: index.yaml
 - name: Getting started
-  include: { mode: link, path: getting_started/toc_p.yaml }
-
+  href: administration/quickstart.md
+# - name: Getting started
+#   hidden: true
+#   include: { mode: link, path: getting_started/toc_p.yaml }
 # Main
 - { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Tutorials,                              include: { mode: link, path: operations/toc_p.yaml } }

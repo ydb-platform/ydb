@@ -49,22 +49,22 @@ All the examples given below use a topic named `topic1`.
 
 * Writing a terminal input to a single message Once the command is run, you can type any multi-line text and press `Ctrl+D` to input it.
    ```bash
-   {{ ydb-cli }} -p db1 topic write topic1
+   {{ ydb-cli }} -p quickstart topic write topic1
    ```
 
 * Writing the contents of the `message.bin` file to a single message compressed with the GZIP codec
    ```bash
-   {{ ydb-cli }} -p db1 topic write topic1 -f message.bin --codec GZIP
+   {{ ydb-cli }} -p quickstart topic write topic1 -f message.bin --codec GZIP
    ```
 
 * Writing the contents of the `example.txt` file delimited into messages line by line
    ```bash
-   {{ ydb-cli }} -p db1 topic write topic1 -f example.txt --format newline-delimited
+   {{ ydb-cli }} -p quickstart topic write topic1 -f example.txt --format newline-delimited
    ```
 
 * Writing a resource downloaded via HTTP and delimited into messages with tab characters
    ```bash
-   curl http://example.com/resource | {{ ydb-cli }} -p db1 topic write topic1 --delimiter "\t"
+   curl http://example.com/resource | {{ ydb-cli }} -p quickstart topic write topic1 --delimiter "\t"
    ```
 
 * [Examples of YDB CLI command integration](topic-pipeline.md)

@@ -32,7 +32,7 @@ View the description of the add consumer command:
 Create a consumer with the `my-consumer` name for the [previously created](topic-create.md) `my-topic` topic. Consumption will start as soon as the first message is received after August 15, 2022 13:00:00 GMT:
 
 ```bash
-{{ ydb-cli }} -p db1 topic consumer add \
+{{ ydb-cli }} -p quickstart topic consumer add \
   --consumer my-consumer \
   --starting-message-timestamp 1660568400 \
   my-topic
@@ -41,7 +41,7 @@ Create a consumer with the `my-consumer` name for the [previously created](topic
 Make sure the consumer was created:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme describe my-topic
+{{ ydb-cli }} -p quickstart scheme describe my-topic
 ```
 
 Result:

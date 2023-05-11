@@ -943,9 +943,9 @@ void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TS
                                TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const {
     Y_VERIFY(blobsInfo.size());
 
-    TString strBlobs;
+    TStringBuilder strBlobs;
     for (auto& [blobId, _] : blobsInfo) {
-        strBlobs += "'" + blobId.ToStringNew() + "' ";
+        strBlobs << "'" << blobId.ToStringNew() << "' ";
     }
     LOG_S_NOTICE("Export blobs " << strBlobs << "at tablet " << TabletID());
 
@@ -967,14 +967,14 @@ void TColumnShard::ForgetTierBlobs(const TActorContext& ctx, const TString& tier
 void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::TEvictedBlob>& evictedBlobs) {
     THashMap<TString, std::vector<NOlap::TEvictedBlob>> tierBlobs;
 
-    TString strBlobs;
-    TString strBlobsDelayed;
+    TStringBuilder strBlobs;
+    TStringBuilder strBlobsDelayed;
 
     for (const auto& ev : evictedBlobs) {
         auto& blobId = ev.Blob;
         if (BlobManager->BlobInUse(blobId)) {
             LOG_S_DEBUG("Blob '" << blobId.ToStringNew() << "' in use at tablet " << TabletID());
-            strBlobsDelayed += "'" + blobId.ToStringNew() + "' ";
+            strBlobsDelayed << "'" << blobId.ToStringNew() << "' ";
             continue;
         }
 
@@ -985,11 +985,11 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
             LOG_S_ERROR("Forget unknown blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
         } else if (NOlap::CouldBeExported(evict.State)) {
             Y_VERIFY(evict.Blob == blobId);
-            strBlobs += "'" + blobId.ToStringNew() + "' ";
+            strBlobs << "'" << blobId.ToStringNew() << "' ";
             tierBlobs[meta.GetTierName()].emplace_back(std::move(evict));
         } else {
             Y_VERIFY(evict.Blob == blobId);
-            strBlobsDelayed += "'" + blobId.ToStringNew() + "' ";
+            strBlobsDelayed << "'"<< blobId.ToStringNew() << "' ";
         }
     }
 

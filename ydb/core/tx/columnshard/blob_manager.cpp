@@ -657,10 +657,10 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
 }
 
 void TBlobManager::GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const {
-    TString strBlobs;
+    TStringBuilder strBlobs;
     for (auto& [evict, _] : DroppedEvictedBlobs) {
         if (evict.State != EEvictState::EVICTING) {
-            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
+            strBlobs << "'" << evict.Blob.ToStringNew() << "' ";
             cleanup.insert(evict);
         }
     }

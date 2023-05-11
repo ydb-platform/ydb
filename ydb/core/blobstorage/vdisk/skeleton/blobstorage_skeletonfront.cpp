@@ -679,6 +679,8 @@ namespace NKikimr {
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         TVDiskID SelfVDiskId;
         TActorId SkeletonId;
+        std::vector<std::pair<TString, TString>> CountersChain;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCountersBase;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> SkeletonFrontGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr AccessDeniedMessages;
@@ -1992,31 +1994,32 @@ namespace NKikimr {
         static TIntrusivePtr<::NMonitoring::TDynamicCounters> CreateVDiskCounters(
                 TIntrusivePtr<TVDiskConfig> cfg,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-
-            // create 'vdisks' service counters
-            auto vdiskCounters = GetServiceCounters(counters, "vdisks");
-
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                std::vector<std::pair<TString, TString>>& chain) {
             // add 'storagePool' label
-            vdiskCounters = vdiskCounters->GetSubgroup("storagePool", cfg->BaseInfo.StoragePoolName);
+            chain.emplace_back("storagePool", cfg->BaseInfo.StoragePoolName);
 
             // add 'group' label
             const ui32 blobstorageGroupId = info->GroupID;
-            vdiskCounters = vdiskCounters->GetSubgroup("group", Sprintf("%09" PRIu32, blobstorageGroupId));
+            chain.emplace_back("group", Sprintf("%09" PRIu32, blobstorageGroupId));
 
             // add 'orderNumber' label (VDisk order number in the group)
             const ui32 vdiskOrderNumber = info->GetOrderNumber(cfg->BaseInfo.VDiskIdShort);
-            vdiskCounters = vdiskCounters->GetSubgroup("orderNumber", Sprintf("%02" PRIu32, vdiskOrderNumber));
+            chain.emplace_back("orderNumber", Sprintf("%02" PRIu32, vdiskOrderNumber));
 
             // add 'pdisk' label as a local id of pdisk
             const ui32 pdiskId = cfg->BaseInfo.PDiskId;
-            vdiskCounters = vdiskCounters->GetSubgroup("pdisk", Sprintf("%09" PRIu32, pdiskId));
+            chain.emplace_back("pdisk", Sprintf("%09" PRIu32, pdiskId));
 
             // add 'media'
             const auto media = cfg->BaseInfo.DeviceType;
-            vdiskCounters = vdiskCounters->GetSubgroup("media", to_lower(NPDisk::DeviceTypeStr(media, true)));
+            chain.emplace_back("media", to_lower(NPDisk::DeviceTypeStr(media, true)));
 
-            return vdiskCounters;
+            for (const auto& [name, value] : chain) {
+                counters = counters->GetSubgroup(name, value);
+            }
+
+            return counters;
         }
 
         TSkeletonFront(TIntrusivePtr<TVDiskConfig> cfg, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -2028,7 +2031,8 @@ namespace NKikimr {
             , Top(GInfo->PickTopology())
             , SelfVDiskId(GInfo->GetVDiskId(Config->BaseInfo.VDiskIdShort))
             , SkeletonId()
-            , VDiskCounters(CreateVDiskCounters(cfg, info, counters))
+            , VDiskCountersBase(GetServiceCounters(counters, "vdisks"))
+            , VDiskCounters(CreateVDiskCounters(Config, GInfo, VDiskCountersBase, CountersChain))
             , SkeletonFrontGroup(VDiskCounters->GetSubgroup("subsystem", "skeletonfront"))
             , AccessDeniedMessages(SkeletonFrontGroup->GetCounter("AccessDeniedMessages", true))
 
@@ -2081,6 +2085,11 @@ namespace NKikimr {
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);
+        }
+
+        void PassAway() override {
+            VDiskCountersBase->RemoveSubgroupChain(CountersChain);
+            TActorBootstrapped::PassAway();
         }
     };
 

@@ -106,11 +106,24 @@ void TDynamicCounters::RemoveCounter(const TString &value) {
     RemoveNamedCounter("sensor", value);
 }
 
-void TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &value) {
+bool TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &value) {
     auto g = LockForUpdate("RemoveNamedCounter", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsCounter(it->second)) {
         Counters.erase(it);
     }
+    return Counters.empty();
+}
+
+void TDynamicCounters::RemoveSubgroupChain(const std::vector<std::pair<TString, TString>>& chain) {
+    std::vector<TIntrusivePtr<TDynamicCounters>> basePointers;
+    basePointers.push_back(this);
+    for (size_t i = 0; i < chain.size() - 1; ++i) {
+        const auto& [name, value] = chain[i];
+        auto& base = basePointers.back();
+        basePointers.push_back(base->GetSubgroup(name, value));
+        Y_VERIFY(basePointers.back());
+    }
+    for (size_t i = chain.size(); i-- && basePointers[i]->RemoveSubgroup(chain[i].first, chain[i].second); ) {}
 }
 
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& name, const TString& value) {
@@ -134,11 +147,12 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& na
     return it != Counters.end() ? AsDynamicCounters(it->second) : nullptr;
 }
 
-void TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value) {
+bool TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value) {
     auto g = LockForUpdate("RemoveSubgroup", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsDynamicCounters(it->second)) {
         Counters.erase(it);
     }
+    return Counters.empty();
 }
 
 void TDynamicCounters::ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {

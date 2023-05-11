@@ -47,6 +47,21 @@ bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status)
     return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM }, status);
 }
 
+bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode) {
+    switch(status) {
+    case FederatedQuery::QueryMeta::ABORTED_BY_USER:
+        return statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED;
+    case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
+        return false;
+    case FederatedQuery::QueryMeta::COMPLETED:
+        return true;
+    case FederatedQuery::QueryMeta::FAILED:
+        return IsIn({NYql::NDqProto::StatusIds::BAD_REQUEST, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED}, statusCode);
+    default:
+        return false;
+    }
+}
+
 TDuration GetDuration(const TString& value, const TDuration& defaultValue)
 {
     TDuration result = defaultValue;

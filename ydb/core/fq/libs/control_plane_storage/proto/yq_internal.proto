@@ -6,6 +6,7 @@ option java_package = "com.yandex.query.internal";
 option java_outer_classname = "YandexQueryInternalProtos";
 
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/core/fq/libs/protos/fq_private.proto";
@@ -40,6 +41,7 @@ message QueryInternal {
     repeated Fq.Private.CompressedData dq_graph_compressed = 20;
     Fq.Private.TaskResources resources = 21;
     repeated Ydb.Issue.IssueMessage internal_issue = 22;
+    NYql.NDqProto.StatusIds.StatusCode status_code = 23;    
 }
 
 message JobInternal {

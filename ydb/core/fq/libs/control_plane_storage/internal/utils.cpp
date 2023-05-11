@@ -110,61 +110,48 @@ NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, 
     return issues;
 }
 
-std::vector<TString> GetMeteringRecords(const TString& statistics, const TString& queryId, const TString& scope, const TString& sourceId) {
+std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId) {
 
     std::vector<TString> result;
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
 
-    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
-        ui64 ingress = 0;
-        ui64 egress = 0;
-        for (const auto& p : stat.GetMap()) {
-            if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
-                if (auto* ingressNode = p.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.count")) {
-                    ingress += ingressNode->GetInteger();
-                }
-                if (auto* egressNode = p.second.GetValueByPath("TaskRunner.Stage=Total.EgressS3SinkBytes.count")) {
-                    egress += egressNode->GetInteger();
+    ui64 ingress = 0;
+
+    if (billable) {
+        if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+            for (const auto& p : stat.GetMap()) {
+                if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
+                    if (auto* ingressNode = p.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.count")) {
+                        ingress += ingressNode->GetInteger();
+                    }
                 }
             }
         }
-        if (ingress) {
-            auto now = Now();
-            result.emplace_back(TBillRecord()
-                .Id(queryId + "_osi")
-                .Schema("yq.object_storage.ingress")
-                .FolderId(TScope(scope).ParseFolder())
-                .SourceWt(now)
-                .SourceId(sourceId)
-                .Usage(TBillRecord::TUsage()
-                    .Type(TBillRecord::TUsage::EType::Delta)
-                    .Unit(TBillRecord::TUsage::EUnit::Byte)
-                    .Quantity(ingress)
-                    .Start(now)
-                    .Finish(now)
-                )
-                .ToString()
-            );
+    }
+
+    if (ingress) {
+        auto ingressMBytes = (ingress + 1_MB - 1) >> 20; // round up to 1 MB boundary
+        if (ingressMBytes < 10) {
+            ingressMBytes = 10;
         }
-        if (egress) {
-            auto now = Now();
-            result.emplace_back(TBillRecord()
-                .Id(queryId + "_ose")
-                .Schema("yq.object_storage.egress")
-                .FolderId(TScope(scope).ParseFolder())
-                .SourceWt(now)
-                .SourceId(sourceId)
-                .Usage(TBillRecord::TUsage()
-                    .Type(TBillRecord::TUsage::EType::Delta)
-                    .Unit(TBillRecord::TUsage::EUnit::Byte)
-                    .Quantity(egress)
-                    .Start(now)
-                    .Finish(now)
-                )
-                .ToString()
-            );
-        }
+
+        auto now = Now();
+        result.emplace_back(TBillRecord()
+            .Id(jobId + "_i")
+            .Schema("yq.ingress.mbytes")
+            .FolderId(TScope(scope).ParseFolder())
+            .SourceWt(now)
+            .SourceId(sourceId)
+            .Usage(TBillRecord::TUsage()
+                .Type(TBillRecord::TUsage::EType::Delta)
+                .Unit(TBillRecord::TUsage::EUnit::MByte)
+                .Quantity(ingressMBytes)
+                .Start(now)
+                .Finish(now)
+            )
+            .ToString()
+        );
     }
 
     return result;

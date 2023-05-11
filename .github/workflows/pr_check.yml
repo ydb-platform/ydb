@@ -5,11 +5,32 @@ on:
       - 'main'
     paths-ignore:
       - 'ydb/docs/**'
+    types:
+      - 'opened'
+      - 'synchronize'
+      - 'reopened'
+      - 'labeled'
       
 jobs:
+  comment-if-waiting-on-ok:
+    if: |
+      (github.event.action == 'opened') &&
+       !contains(fromJSON('["MEMBER", "COLLABORATOR", "CONTRIBUTOR"]'),
+          github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - name: comment-if-waiting-on-ok
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
+            })
   build_and_test:
     uses: ./.github/workflows/build_and_test_ondemand.yml
-    if: github.event.review.state == 'approved'
     with:
       test_label_regexp: '(SMALL|MEDIUM)'
     secrets: inherit

@@ -114,6 +114,17 @@ public:
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
+    std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+        Y_VERIFY(Size() && Size() == schema->num_fields());
+        const auto& columns = *Columns;
+        i64 numRows = columns[0]->length();
+        Y_VERIFY(Position < numRows);
+
+        auto batch = arrow::RecordBatch::Make(schema, numRows, columns);
+        return batch->Slice(Position, 1);
+    }
+
+    template<typename T = TArrayVecPtr> requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                        const std::shared_ptr<arrow::Schema>& key, int row) {
         Y_VERIFY(key->num_fields() <= batch->num_columns());
@@ -144,9 +155,9 @@ public:
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
-    static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key) {
-        Y_VERIFY_DEBUG(key.Size() == 1);
-        auto& column = key.Column(0);
+    static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
+        Y_VERIFY_DEBUG(colNumber < key.Size());
+        auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
         Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
         Y_VERIFY_DEBUG(IsGoodScalar(*res));

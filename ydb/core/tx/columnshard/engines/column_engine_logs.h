@@ -191,11 +191,19 @@ public:
     bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
 
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
-        return TMark::Serialize(key, MarkSchema);
+        if (UseCompositeMarks) {
+            return TMark::SerializeComposite(key, MarkSchema);
+        } else {
+            return TMark::SerializeScalar(key, MarkSchema);
+        }
     }
 
     NArrow::TReplaceKey DeserializeMark(const TString& key) const override {
-        return TMark::Deserialize(key, MarkSchema);
+        if (UseCompositeMarks) {
+            return TMark::DeserializeComposite(key, MarkSchema);
+        } else {
+            return TMark::DeserializeScalar(key, MarkSchema);
+        }
     }
 
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
@@ -263,6 +271,7 @@ private:
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
+    bool UseCompositeMarks = false;
 
 private:
     void ClearIndex() {

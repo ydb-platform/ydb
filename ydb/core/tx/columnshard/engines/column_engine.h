@@ -44,10 +44,6 @@ struct TMark {
         : Border(MinBorder(schema))
     {}
 
-    TMark(const TString& key, const std::shared_ptr<arrow::Schema>& schema)
-        : Border(Deserialize(key, schema))
-    {}
-
     TMark(const TMark& m) = default;
     TMark& operator = (const TMark& m) = default;
 
@@ -69,8 +65,12 @@ struct TMark {
 
     operator bool () const = delete;
 
-    static TString Serialize(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
-    static NArrow::TReplaceKey Deserialize(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
+    static TString SerializeScalar(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
+    static NArrow::TReplaceKey DeserializeScalar(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
+
+    static TString SerializeComposite(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
+    static NArrow::TReplaceKey DeserializeComposite(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
+
     std::string ToString() const;
 
 private:

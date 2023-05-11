@@ -30,6 +30,11 @@ jobs:
               body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
             })
   build_and_test:
+    if: |
+      (contains(fromJSON('["opened","synchronize"]'), github.event.action) &&
+       contains(fromJSON('["MEMBER", "COLLABORATOR", "CONTRIBUTOR"]'),
+         github.event.pull_request.author_association)) ||
+       contains(github.event.pull_request.labels.*.name, 'ok-to-test')
     uses: ./.github/workflows/build_and_test_ondemand.yml
     with:
       test_label_regexp: '(SMALL|MEDIUM)'

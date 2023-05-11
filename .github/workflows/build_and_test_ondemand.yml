@@ -119,7 +119,7 @@ jobs:
       - provide-runner # required to get output from the start-runner job
       - main # required to wait when the main job is done
     runs-on: ubuntu-latest
-    if: ${{ needs.provide-runner.result != 'skipped' }}
+    if: always()
     steps:
       - name: Stop YC runner
         uses: yc-actions/yc-github-runner@v1

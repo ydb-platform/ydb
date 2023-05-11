@@ -11965,6 +11965,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;
+        Functions["PgClone"] = &PgCloneWrapper;
         ExtFunctions["PgAgg"] = &PgAggWrapper;
         ExtFunctions["PgAggWindowCall"] = &PgAggWrapper;
         ExtFunctions["PgCall"] = &PgCallWrapper;

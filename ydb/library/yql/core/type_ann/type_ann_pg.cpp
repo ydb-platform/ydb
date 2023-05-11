@@ -284,6 +284,33 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureDependsOnTail(*input, ctx.Expr, 1)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsNull(input->Head())) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto type = input->Head().GetTypeAnn();
+    ui32 argType;
+    bool convertToPg;
+    if (!ExtractPgType(type, argType, convertToPg, input->Head().Pos(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (convertToPg) {
+        input->ChildRef(0) = ctx.Expr.NewCallable(input->Head().Pos(), "ToPg", { input->ChildPtr(0) });
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(argType);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     bool isResolved = input->IsCallable("PgResolvedOp");
     if (!EnsureMinArgsCount(*input, isResolved ? 3 : 2, ctx.Expr)) {
@@ -1150,12 +1177,18 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
         initLambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("row")
+                .Param("parent")
                 .Callable("PgResolvedCallCtx")
                     .Atom(0, transFuncDesc.Name)
                     .Atom(1, ToString(aggDesc.TransFuncId))
                     .List(2)
                     .Seal()
-                    .Add(3, initValue)
+                    .Callable(3, "PgClone")
+                        .Add(0, initValue)
+                        .Callable(1, "DependsOn")
+                            .Arg(0, "parent")
+                        .Seal()
+                    .Seal()
                     .Apply(4, lambda)
                         .With(0, "row")
                     .Seal()
@@ -1167,6 +1200,7 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
             .Lambda()
                 .Param("row")
                 .Param("state")
+                .Param("parent")
                 .Callable("Coalesce")
                     .Callable(0, "PgResolvedCallCtx")
                         .Atom(0, transFuncDesc.Name)
@@ -1175,7 +1209,12 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                         .Seal()
                         .Callable(3, "Coalesce")
                             .Arg(0, "state")
-                            .Add(1, initValue)
+                            .Callable(1, "PgClone")
+                                .Add(0, initValue)
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
+                                .Seal()
+                            .Seal()
                         .Seal()
                         .Apply(4, lambda)
                             .With(0, "row")

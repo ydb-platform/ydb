@@ -29,7 +29,7 @@ jobs:
             //});
             //// How to interpret status code: 
             //// https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
-            return 'true'
+            return true
       - name: comment-if-waiting-on-ok
         if: steps.check-if-org-member.outputs.result == 'false'
         uses: actions/github-script@v6

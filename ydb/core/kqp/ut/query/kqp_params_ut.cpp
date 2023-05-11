@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -99,6 +100,103 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ImplicitParameterTypes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$name")
+                .String("Sergey")
+                .Build()
+            .AddParam("$group")
+                .Int32(1)
+                .Build()
+            .Build();
+
+        // don't DECLARE parameter types in text query
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExplicitSameParameterTypesQueryCacheCheck) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // enable query cache
+        NYdb::NTable::TExecDataQuerySettings execSettings{};
+        execSettings.KeepInQueryCache(true);
+        // enable extraction of cache status from the reply 
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        for (int i = 0; i < 2; ++i) {
+            auto params = db.GetParamsBuilder().AddParam("$group").Int32(1).Build().Build();
+            auto result = session.ExecuteDataQuery(Q1_(R"(
+                DECLARE $group AS Int32;
+                SELECT * FROM `/Root/Test` WHERE Group = $group;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStats().Defined(), true);
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ImplicitSameParameterTypesQueryCacheCheck) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // enable query cache
+        NYdb::NTable::TExecDataQuerySettings execSettings{};
+        execSettings.KeepInQueryCache(true);
+        // enable extraction of cache status from the reply
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        for (int i = 0; i < 2; ++i) {
+            auto params = db.GetParamsBuilder().AddParam("$group").Int32(1).Build().Build();
+            // don't DECLARE parameter type in text query
+            auto result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = $group;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStats().Defined(), true);
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), i);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ImplicitDifferentParameterTypesQueryCacheCheck) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // enable query cache
+        NYdb::NTable::TExecDataQuerySettings execSettings{};
+        execSettings.KeepInQueryCache(true);
+        // enable extraction of cache status from the reply
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        // two queries differ only by parameter type
+        for (const auto& params : { db.GetParamsBuilder().AddParam("$group").Int32(1).Build().Build(), db.GetParamsBuilder().AddParam("$group").Uint32(1).Build().Build() }) {
+            // don't DECLARE parameter type in text query
+            auto result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = $group;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStats().Defined(), true);
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(DefaultParameterValue) {

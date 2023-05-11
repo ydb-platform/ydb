@@ -3,6 +3,7 @@
 #include "kqp_event_ids.h"
 #include "simple/helpers.h"
 #include "simple/query_id.h"
+#include "simple/query_ref.h"
 #include "simple/settings.h"
 #include "simple/services.h"
 #include "events/events.h"
@@ -19,10 +20,16 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/draft/ydb_query.pb.h>
+
+#include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>
+#include <util/generic/string.h>
+
+#include <map>
 
 namespace NKikimr::NKqp {
 

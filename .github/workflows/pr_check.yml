@@ -10,7 +10,6 @@ on:
       - 'synchronize'
       - 'reopened'
       - 'labeled'
-
       
 jobs:
   comment-if-waiting-on-ok:

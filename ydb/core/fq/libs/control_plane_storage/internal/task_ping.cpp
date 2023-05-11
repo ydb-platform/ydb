@@ -126,7 +126,7 @@ TPingTaskParams ConstructHardPingTask(
             if (retryLimiter.UpdateOnRetry(Now(), policy)) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
-                backoff = policy.BackoffPeriod * retryLimiter.RetryRate;
+                backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);
                 owner = "";
                 if (!transientIssues) {
                     transientIssues.ConstructInPlace();

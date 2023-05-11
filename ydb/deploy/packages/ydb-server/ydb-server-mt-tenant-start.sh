@@ -16,7 +16,7 @@ read_config_value() {
       --arg tenant $YDBD_SERVICE_TENANT \
       --arg field $field \
       -r \
-      '.[$key][$field]' "$ydbd_service_tenants_config"
+      '.[$tenant][$field]' "$ydbd_service_tenants_config"
   )
 
   if [ "$value" == "null" ]; then

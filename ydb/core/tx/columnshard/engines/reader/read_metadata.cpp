@@ -94,16 +94,10 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
             CommittedBatches.emplace(cmt.GetBlobId(), batch);
         }
     }
-
-    auto loadSchema = GetLoadSchema(Snapshot);
-    if (!loadSchema) {
-        return false;
-    }
-
+    
     THashSet<ui32> columnIds;
-    for (auto& field : loadSchema->fields()) {
-        TString column(field->name().data(), field->name().size());
-        columnIds.insert(indexInfo.GetColumnId(column));
+    for (auto& columnId : AllColumns) {
+        columnIds.insert(columnId);
     }
 
     Program = readDescription.Program;

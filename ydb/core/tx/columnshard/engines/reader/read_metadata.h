@@ -162,9 +162,18 @@ public:
         return AllColumns.size();
     }
 
-    std::shared_ptr<arrow::Schema> GetLoadSchema(const TSnapshot& version) const {
-        const auto& indexInfo = IndexVersions.GetSchema(version)->GetIndexInfo();
-        return indexInfo.ArrowSchema(AllColumns, true);
+    ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
+        if (version >=Snapshot){
+            return ResultIndexSchema;
+        }
+        return IndexVersions.GetSchema(version);
+    }
+    
+    ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
+        if (!version) {
+            return make_shared<TFilteredSnapshotSchema>(ResultIndexSchema, AllColumns);
+        }
+        return make_shared<TFilteredSnapshotSchema>(IndexVersions.GetSchema(*version), AllColumns);
     }
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const TSnapshot& version) const {
@@ -185,7 +194,7 @@ public:
     std::vector<std::string> GetColumnsOrder() const {
         auto loadSchema = GetLoadSchema(Snapshot);
         std::vector<std::string> result;
-        for (auto&& i : loadSchema->fields()) {
+        for (auto&& i : loadSchema->GetSchema()->fields()) {
             result.emplace_back(i->name());
         }
         return result;

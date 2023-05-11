@@ -339,17 +339,14 @@ class TVersionedIndex {
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
 public:
     ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
-        Y_UNUSED(version);
-        return GetLastSchema();
-        /*
-            for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
-                if (it->first <= version) {
-                    return it->second;
-                }
+        for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
+            if (it->first <= version) {
+                return it->second;
             }
-            Y_VERIFY(false);
-            return nullptr;
-        */
+        }
+        Y_VERIFY(!Snapshots.empty());
+        Y_VERIFY(version.IsZero());
+        return Snapshots.begin()->second; // For old compaction logic compatibility
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {

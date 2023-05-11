@@ -190,7 +190,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     // (do not filter snapshot columns)
     auto loadSchema = ReadMetadata->GetLoadSchema(snapshot);
 
-    auto batch = NArrow::ExtractExistedColumns(srcBatch, loadSchema);
+    auto batch = NArrow::ExtractExistedColumns(srcBatch, loadSchema->GetSchema());
     Y_VERIFY(batch);
 
     auto filter = FilterNotIndexed(batch, *ReadMetadata);
@@ -200,7 +200,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     auto preparedBatch = batch;
 
     preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, snapshot);
-    preparedBatch = NArrow::ExtractColumns(preparedBatch, loadSchema);
+    preparedBatch = NArrow::ExtractColumns(preparedBatch, loadSchema->GetSchema());
     Y_VERIFY(preparedBatch);
 
     filter.Apply(preparedBatch);

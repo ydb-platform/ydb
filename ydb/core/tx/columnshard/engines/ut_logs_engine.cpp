@@ -280,7 +280,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
     changes->Blobs.insert(blobs.begin(), blobs.end());
 
-    TIndexationLogic logic(engine.GetIndexInfo());
+    TIndexationLogic logic(engine.GetVersionedIndex());
     std::vector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
@@ -316,7 +316,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 
-    TCompactionLogic logic(engine.GetIndexInfo());
+    TCompactionLogic logic(engine.GetVersionedIndex());
     std::vector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // compact
         planStep = 2;
 
-        bool ok = Compact(tableInfo, db, TSnapshot{planStep, 1}, std::move(blobs), step, {20, 4, 4});
+        bool ok = Compact(tableInfo, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
         UNIT_ASSERT(ok);
 
         // load
@@ -620,7 +620,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // compact
         planStep = 2;
 
-        bool ok = Compact(engine, db, TSnapshot{planStep, 1}, std::move(blobs), step, {23, 5, 5});
+        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {23, 5, 5});
         UNIT_ASSERT(ok);
 
         // success write after compaction
@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // compact
         planStep = 2;
 
-        bool ok = Compact(tableInfo, db, TSnapshot{planStep, 1}, std::move(blobs), step, {20, 4, 4});
+        bool ok = Compact(tableInfo, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
         UNIT_ASSERT(ok);
 
         // load
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         // Cleanup
-        Cleanup(engine, db, TSnapshot{planStep, 1}, 20);
+        Cleanup(engine, db, TSnapshot(planStep, 1), 20);
 
         { // full scan
             ui64 txId = 1;

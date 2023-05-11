@@ -47,8 +47,6 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     txc.DB.NoMoreReadsForTx();
 
     auto& record = Proto(Ev->Get());
-    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo(NOlap::TSnapshot(record.GetPlanStep(), record.GetTxId()));
-    
     ui64 metaShard = record.GetTxInitiator();
 
     NOlap::TReadDescription read(NOlap::TSnapshot(record.GetPlanStep(), record.GetTxId()), false);
@@ -56,6 +54,8 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     read.ReadNothing = !(Self->TablesManager.HasTable(read.PathId));
     read.ColumnIds = ProtoToVector<ui32>(record.GetColumnIds());
     read.ColumnNames = ProtoToVector<TString>(record.GetColumnNames());
+
+    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo(read.GetSnapshot());
     if (read.ColumnIds.empty() && read.ColumnNames.empty()) {
         auto allColumnNames = indexInfo.ArrowSchema()->field_names();
         read.ColumnNames.assign(allColumnNames.begin(), allColumnNames.end());

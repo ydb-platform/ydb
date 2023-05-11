@@ -8,19 +8,20 @@ namespace NKikimr::NOlap {
 
 class TIndexLogicBase {
 protected:
-    const TIndexInfo& IndexInfo;
+    const TVersionedIndex& IndexInfo;
 private:
     const THashMap<ui64, NKikimr::NOlap::TTiering>* TieringMap = nullptr;
 
 public:
-    TIndexLogicBase(const TIndexInfo& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap)
+    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap)
         : IndexInfo(indexInfo)
         , TieringMap(&tieringMap)
     {
     }
 
-    TIndexLogicBase(const TIndexInfo& indexInfo)
-        : IndexInfo(indexInfo)        {
+    TIndexLogicBase(const TVersionedIndex& indexInfo)
+        : IndexInfo(indexInfo)
+    {
     }
 
     virtual ~TIndexLogicBase() {

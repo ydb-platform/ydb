@@ -36,6 +36,7 @@ public:
     std::vector<TString> ColumnNames;
 
     std::shared_ptr<NSsa::TProgram> AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
+    
     TReadDescription(const TSnapshot& snapshot, const bool isReverse)
         : Snapshot(snapshot)
         , PKRangesFilter(isReverse) {

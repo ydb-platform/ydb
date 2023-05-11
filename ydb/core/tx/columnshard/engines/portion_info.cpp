@@ -44,11 +44,12 @@ void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>&
     Meta.ColumnMeta[columnId].Max = NArrow::GetScalar(column, minMaxPos.second);
 }
 
-void TPortionInfo::AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch,
+void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                                const TString& tierName) {
     TierName = tierName;
     Meta = {};
 
+    auto& indexInfo = snapshotSchema.GetIndexInfo();
     /// @note It does not add RawBytes info for snapshot columns, only for user ones.
     for (auto& [columnId, col] : indexInfo.Columns) {
         auto column = batch->GetColumnByName(col.Name);

@@ -746,7 +746,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
@@ -784,7 +784,7 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterCompaction);
@@ -828,9 +828,9 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.ArrowSchema());
+    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
 
     if (!indexChanges) {
         LOG_S_DEBUG("Cannot prepare TTL at tablet " << TabletID());
@@ -893,7 +893,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
 #if 0 // No need for now
     if (Tiers) {
         ...

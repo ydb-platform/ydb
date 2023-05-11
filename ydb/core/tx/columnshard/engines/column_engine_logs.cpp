@@ -27,7 +27,7 @@ bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& por
         for (const auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
                 ++insertedCount;
-                if (portionInfo.Snapshot().GetPlanStep() > oldTimePlanStep) {
+                if (portionInfo.GetSnapshot().GetPlanStep() > oldTimePlanStep) {
                     ++insertedNew;
                 }
             } else if (portionInfo.BlobsSizes().second >= limits.GoodBlobSize) {
@@ -602,7 +602,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
             }
 
             isClean = false;
-            if (info.XSnapshot() < snapshot) {
+            if (info.GetXSnapshot() < snapshot) {
                 affectedRecords += info.NumRecords();
                 changes->PortionsToDrop.push_back(info);
             }
@@ -1204,8 +1204,8 @@ TMap<TSnapshot, std::vector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64
             continue;
         }
 
-        TSnapshot recSnapshot = portionInfo.Snapshot();
-        TSnapshot recXSnapshot = portionInfo.XSnapshot();
+        TSnapshot recSnapshot = portionInfo.GetSnapshot();
+        TSnapshot recXSnapshot = portionInfo.GetXSnapshot();
 
         bool visible = (recSnapshot <= snapshot);
         if (recXSnapshot.GetPlanStep()) {

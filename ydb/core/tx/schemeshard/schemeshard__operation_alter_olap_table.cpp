@@ -38,7 +38,7 @@ public:
             return false;
         }
 
-        if (AlterRequest.HasAlterSchema() || AlterRequest.HasAlterSchemaPresetName()) {
+        if (AlterRequest.HasAlterSchemaPresetName()) {
             errors.AddError(NKikimrScheme::StatusSchemeError, "Changing table schema is not supported");
             return false;
         }

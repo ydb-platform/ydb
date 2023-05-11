@@ -59,19 +59,21 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
 
     Y_VERIFY(!evictFeatures.NeedExport);
 
-    auto schema = IndexInfo.ArrowSchemaWithSpecials();
-    auto batch = portionInfo.AssembleInBatch(IndexInfo, schema, srcBlobs);
+    TPortionInfo undo = portionInfo;
+
+    auto blobSchema = IndexInfo.GetSchema(undo.GetSnapshot());
+    auto resultSchema = IndexInfo.GetLastSchema();
+    auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, srcBlobs);
     auto writeOptions = WriteOptions(*compression);
 
-    TPortionInfo undo = portionInfo;
     size_t undoSize = newBlobs.size();
 
     for (auto& rec : portionInfo.Records) {
-        auto colName = IndexInfo.GetColumnName(rec.ColumnId);
-        std::string name(colName.data(), colName.size());
-        auto field = schema->GetFieldByName(name);
+        auto pos = resultSchema->GetFieldIndex(rec.ColumnId);
+        Y_VERIFY(pos >= 0);
+        auto field = resultSchema->GetField(pos);
 
-        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(name), field, writeOptions);
+        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(field->name()), field, writeOptions);
         if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
             portionInfo = undo;
             newBlobs.resize(undoSize);
@@ -85,7 +87,7 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
         evictedRecords.emplace_back(std::move(rec));
     }
 
-    portionInfo.AddMetadata(IndexInfo, batch, evictFeatures.TargetTierName);
+    portionInfo.AddMetadata(*resultSchema, batch, evictFeatures.TargetTierName);
     return true;
 }
 
@@ -95,11 +97,12 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
                                                             const TSnapshot& minSnapshot,
                                                             std::vector<TString>& blobs) const {
     Y_VERIFY(batch->num_rows());
-    const auto schema = IndexInfo.ArrowSchemaWithSpecials();
+
+    auto resultSchema = IndexInfo.GetSchema(minSnapshot);
     std::vector<TPortionInfo> out;
 
     TString tierName;
-    TCompression compression = IndexInfo.GetDefaultCompression();
+    TCompression compression = resultSchema->GetIndexInfo().GetDefaultCompression();
     if (pathId) {
         if (auto* tiering = GetTieringMap().FindPtr(pathId)) {
             tierName = tiering->GetHottestTierName();
@@ -115,16 +118,16 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
         Y_VERIFY(portionBatch->num_rows());
 
         TPortionInfo portionInfo;
-        portionInfo.Records.reserve(schema->num_fields());
+        portionInfo.Records.reserve(resultSchema->GetSchema()->num_fields());
         std::vector<TString> portionBlobs;
-        portionBlobs.reserve(schema->num_fields());
+        portionBlobs.reserve(resultSchema->GetSchema()->num_fields());
 
         // Serialize portion's columns into blobs
 
         bool ok = true;
-        for (const auto& field : schema->fields()) {
+        for (const auto& field : resultSchema->GetSchema()->fields()) {
             const auto& name = field->name();
-            ui32 columnId = IndexInfo.GetColumnId(TString(name.data(), name.size()));
+            ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(TString(name.data(), name.size()));
 
             /// @warnign records are not valid cause of empty BlobId and zero Portion
             TColumnRecord record = TColumnRecord::Make(granule, columnId, minSnapshot, 0);
@@ -140,7 +143,7 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
         }
 
         if (ok) {
-            portionInfo.AddMetadata(IndexInfo, portionBatch, tierName);
+            portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
             out.emplace_back(std::move(portionInfo));
             for (auto& blob : portionBlobs) {
                 blobs.push_back(blob);
@@ -162,14 +165,12 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
 std::vector<std::shared_ptr<arrow::RecordBatch>> TCompactionLogic::PortionsToBatches(const std::vector<TPortionInfo>& portions,
                                                                                         const THashMap<TBlobRange, TString>& blobs,
                                                                                         bool insertedOnly) const {
-    // TODO: schema changes
-    const std::shared_ptr<arrow::Schema> schema = IndexInfo.ArrowSchemaWithSpecials();
-
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(portions.size());
-
+    auto resultSchema = IndexInfo.GetLastSchema();
     for (auto& portionInfo : portions) {
-        auto batch = portionInfo.AssembleInBatch(IndexInfo, schema, blobs);
+        auto blobSchema = IndexInfo.GetSchema(portionInfo.GetSnapshot());
+        auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs);
         if (!insertedOnly || portionInfo.IsInserted()) {
             batches.push_back(batch);
         }
@@ -224,17 +225,22 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
     auto changes = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(indexChanges);
     Y_VERIFY(!changes->DataToIndex.empty());
     Y_VERIFY(changes->AppendedPortions.empty());
-    Y_VERIFY(IndexInfo.IsSorted());
 
-    TSnapshot& minSnapshot = changes->ApplySnapshot;
-    THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> pathBatches;
+
+    TSnapshot minSnapshot = changes->ApplySnapshot;    
     for (auto& inserted : changes->DataToIndex) {
         TSnapshot insertSnap = inserted.GetSnapshot();
         Y_VERIFY(insertSnap.Valid());
         if (minSnapshot.IsZero() || insertSnap <= minSnapshot) {
             minSnapshot = insertSnap;
         }
-
+    }
+    Y_VERIFY(minSnapshot.Valid());
+    auto& indexInfo = IndexInfo.GetSchema(minSnapshot)->GetIndexInfo();
+    Y_VERIFY(indexInfo.IsSorted());
+    
+    THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> pathBatches;
+    for (auto& inserted : changes->DataToIndex) {
         TBlobRange blobRange(inserted.BlobId, 0, inserted.BlobId.BlobSize());
 
         std::shared_ptr<arrow::RecordBatch> batch;
@@ -242,18 +248,16 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
             batch = it->second;
         } else if (auto* blobData = changes->Blobs.FindPtr(blobRange)) {
             Y_VERIFY(!blobData->empty(), "Blob data not present");
-            batch = NArrow::DeserializeBatch(*blobData, IndexInfo.ArrowSchema());
+            batch = NArrow::DeserializeBatch(*blobData, indexInfo.ArrowSchema());
         } else {
             Y_VERIFY(blobData, "Data for range %s has not been read", blobRange.ToString().c_str());
         }
         Y_VERIFY(batch);
 
-        batch = AddSpecials(batch, IndexInfo, inserted);
+        batch = AddSpecials(batch, indexInfo, inserted);
         pathBatches[inserted.PathId].push_back(batch);
-        Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), IndexInfo.GetReplaceKey()));
+        Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), indexInfo.GetReplaceKey()));
     }
-    Y_VERIFY(minSnapshot.Valid());
-
     std::vector<TString> blobs;
 
     for (auto& [pathId, batches] : pathBatches) {
@@ -265,13 +269,13 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
     Y_VERIFY(merged);
     Y_VERIFY_DEBUG(NArrow::IsSorted(merged, indexInfo.GetReplaceKey()));
 #else
-        auto merged = NArrow::CombineSortedBatches(batches, IndexInfo.SortReplaceDescription());
+        auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortReplaceDescription());
         Y_VERIFY(merged);
-        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, IndexInfo.GetReplaceKey()));
+        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, indexInfo.GetReplaceKey()));
 
 #endif
 
-        auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], IndexInfo);
+        auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], indexInfo);
         for (auto& [granule, batch] : granuleBatches) {
             auto portions = MakeAppendedPortions(pathId, batch, granule, minSnapshot, blobs);
             Y_VERIFY(portions.size() > 0);
@@ -291,17 +295,17 @@ std::shared_ptr<arrow::RecordBatch> TCompactionLogic::CompactInOneGranule(ui64 g
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(portions.size());
 
-    auto schema = IndexInfo.ArrowSchemaWithSpecials();
+    auto resultSchema = IndexInfo.GetLastSchema();
     for (auto& portionInfo : portions) {
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(portionInfo.Granule() == granule);
-
-        auto batch = portionInfo.AssembleInBatch(IndexInfo, schema, blobs);
+        auto blobSchema = IndexInfo.GetSchema(portionInfo.GetSnapshot());
+        auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs);
         batches.push_back(batch);
     }
 
-    auto sortedBatch = NArrow::CombineSortedBatches(batches, IndexInfo.SortReplaceDescription());
-    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(sortedBatch, IndexInfo.GetReplaceKey()));
+    auto sortedBatch = NArrow::CombineSortedBatches(batches, resultSchema->GetIndexInfo().SortReplaceDescription());
+    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(sortedBatch, resultSchema->GetIndexInfo().GetReplaceKey()));
 
     return sortedBatch;
 }
@@ -315,10 +319,11 @@ std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnE
     ui64 granule = switchedProtions[0].Granule();
     auto batch = CompactInOneGranule(granule, switchedProtions, changes->Blobs);
 
+    auto resultSchema = IndexInfo.GetLastSchema();
     std::vector<TPortionInfo> portions;
     if (!changes->MergeBorders.Empty()) {
         Y_VERIFY(changes->MergeBorders.GetOrderedMarks().size() > 1);
-        auto slices = changes->MergeBorders.SliceIntoGranules(batch, IndexInfo);
+        auto slices = changes->MergeBorders.SliceIntoGranules(batch, resultSchema->GetIndexInfo());
         portions.reserve(slices.size());
 
         for (auto& [_, slice] : slices) {
@@ -577,6 +582,8 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
 
     std::vector<TString> blobs;
 
+    auto resultSchema = IndexInfo.GetLastSchema();
+
     if (movedRows) {
         Y_VERIFY(changes->PortionsToMove.size() >= 2);
         Y_VERIFY(changes->PortionsToMove.size() == tsIds.size());
@@ -628,7 +635,7 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
         for (size_t i = 0; i < portions.size(); ++i) {
             auto& portion = portions[i];
             auto& batch = srcBatches[i];
-            auto slices = marksGranules.SliceIntoGranules(batch, IndexInfo);
+            auto slices = marksGranules.SliceIntoGranules(batch, resultSchema->GetIndexInfo());
 
             THashSet<ui64> ids;
             for (auto& [id, slice] : slices) {
@@ -672,7 +679,7 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
             }
         }
     } else {
-        auto batches = SliceGranuleBatches(IndexInfo, *changes, srcBatches, ts0);
+        auto batches = SliceGranuleBatches(resultSchema->GetIndexInfo(), *changes, srcBatches, ts0);
 
         changes->SetTmpGranule(pathId, ts0);
         for (auto& [ts, batch] : batches) {

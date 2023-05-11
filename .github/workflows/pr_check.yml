@@ -10,9 +10,9 @@ on:
       - 'synchronize'
       - 'reopened'
       - 'labeled'
-
       
 jobs:
+
   check-running-allowed:
     runs-on: ubuntu-latest
     outputs:
@@ -23,12 +23,12 @@ jobs:
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
-            # const response = await github.rest.orgs.checkMembershipForUser({
-            #   org: context.payload.organization.login,
-            #   username: context.payload.pull_request.user.login
-            # });
-            # // How to interpret status code: 
-            # // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
+            //const response = await github.rest.orgs.checkMembershipForUser({
+            //  org: context.payload.organization.login,
+            //  username: context.payload.pull_request.user.login
+            //});
+            //// How to interpret status code: 
+            //// https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
             return 'true'
       - name: comment-if-waiting-on-ok
         if: steps.check-if-org-member.outputs.result == 'false'
@@ -41,7 +41,6 @@ jobs:
               repo: context.repo.repo,
               body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
             });
-
   build_and_test:
     needs:
       - check-running-allowed

@@ -30,6 +30,13 @@ using namespace NResourceBroker;
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 
+#define LOG_AS_C(stream) LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_D(stream) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_I(stream) LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_E(stream) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_W(stream) LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_N(stream) LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+
 namespace {
 
 template <typename T>
@@ -162,7 +169,7 @@ public:
 
         with_lock (Lock) {
             if (Y_UNLIKELY(!ResourceBroker)) {
-                LOG_E("AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId);
+                LOG_AS_E("AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId);
                 if (details) {
                     details->SetNotReady();
                 }
@@ -181,7 +188,7 @@ public:
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
-            LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory);
+            LOG_AS_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory);
             if (details) {
                 details->SetScanQueryMemory();
             }
@@ -190,7 +197,7 @@ public:
 
         if (!hasExecutionUnits) {
             Counters->RmNotEnoughComputeActors->Inc();
-            LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ExecutionUnits, requested: " << resources.ExecutionUnits);
+            LOG_AS_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ExecutionUnits, requested: " << resources.ExecutionUnits);
             if (details) {
                 details->SetExecutionUnits();
             }
@@ -213,7 +220,7 @@ public:
                     } // with_lock (Lock)
 
                     Counters->RmNotEnoughMemory->Inc();
-                    LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
+                    LOG_AS_N("TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
                         << "requested " << (it->second.TxScanQueryMemory + resources.Memory));
                     if (details) {
                         details->SetQueryMemoryLimit();
@@ -235,7 +242,7 @@ public:
                 } // with_lock (Lock)
 
                 Counters->RmNotEnoughMemory->Inc();
-                LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory: "
+                LOG_AS_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory: "
                     << "requested " << resources.Memory);
                 if (details) {
                     details->SetScanQueryMemory();
@@ -267,7 +274,7 @@ public:
             }
         } // with_lock (txBucket.Lock)
 
-        LOG_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
+        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
 
         Counters->RmComputeActors->Add(resources.ExecutionUnits);
         Counters->RmMemory->Add(resources.Memory);
@@ -336,7 +343,7 @@ public:
             ExecutionUnitsResource.Release(releaseExecutionUnits);
         } // with_lock (Lock)
 
-        LOG_D("TxId: " << txId << ", taskId: " << taskId << ". Released resources, "
+        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Released resources, "
             << "ScanQueryMemory: " << releaseScanQueryMemory << ", ExecutionUnits: " << releaseExecutionUnits << ". "
             << "Remains " << remainsTasks << " tasks in this tx.");
 
@@ -385,7 +392,7 @@ public:
             ExecutionUnitsResource.Release(releaseExecutionUnits);
         } // with_lock (Lock)
 
-        LOG_D("TxId: " << txId << ". Released resources, "
+        LOG_AS_D("TxId: " << txId << ". Released resources, "
             << "ScanQueryMemory: " << releaseScanQueryMemory << ", ExecutionUnits: " << releaseExecutionUnits << ". "
             << "Tx completed.");
 
@@ -399,7 +406,7 @@ public:
     }
 
     void NotifyExternalResourcesAllocated(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
-        LOG_D("TxId: " << txId << ", taskId: " << taskId << ". External allocation: " << resources.ToString());
+        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". External allocation: " << resources.ToString());
 
         // we don't register data execution units for now
         //YQL_ENSURE(resources.ExecutionUnits == 0);
@@ -425,7 +432,7 @@ public:
     }
 
     void NotifyExternalResourcesFreed(ui64 txId, ui64 taskId) override {
-        LOG_D("TxId: " << txId << ", taskId: " << taskId << ". External free.");
+        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". External free.");
 
         ui64 releaseMemory = 0;
 
@@ -463,7 +470,7 @@ public:
     }
 
     void NotifyExternalResourcesFreed(ui64 txId) {
-        LOG_D("TxId: " << txId << ". External free.");
+        LOG_AS_D("TxId: " << txId << ". External free.");
 
         ui64 releaseMemory = 0;
 
@@ -492,7 +499,7 @@ public:
     }
 
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
-        LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, "Schedule Snapshot request");
+        LOG_AS_D("Schedule Snapshot request");
         auto ev = MakeHolder<TEvPrivate::TEvTakeResourcesSnapshot>();
         ev->Callback = std::move(callback);
         TAutoPtr<IEventHandle> handle = new IEventHandle(SelfId, SelfId, ev.Release());

@@ -12,6 +12,13 @@ on:
       - 'labeled'
       
 jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: logging
+        run: |
+          echo '${{ toJSON(github.event.pull_request) }}'
+          echo '${{ toJSON(github.event.action) }}'
   comment-if-waiting-on-ok:
     if: |
       (github.event.action == 'opened') &&
@@ -22,6 +29,7 @@ jobs:
       - name: comment-if-waiting-on-ok
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             github.rest.issues.createComment({
               issue_number: context.issue.number,

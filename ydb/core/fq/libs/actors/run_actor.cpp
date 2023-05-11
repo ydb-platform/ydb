@@ -1922,10 +1922,7 @@ private:
             }
             PrepareGraphs(); // will compress and seal graphs
         } else {
-            Issues.AddIssues(issues);
-            if (message) {
-                Issues.AddIssue(TIssue(message));
-            }
+            AddIssueWithSubIssues(message ? message : TStringBuilder() << "Run query failed: " << ToString(status), issues);
             ResignQuery(
                 QueryEvalStatusCode != NYql::NDqProto::StatusIds::UNSPECIFIED ? QueryEvalStatusCode : NYql::NDqProto::StatusIds::ABORTED
             );

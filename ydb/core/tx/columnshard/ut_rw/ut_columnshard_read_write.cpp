@@ -399,7 +399,9 @@ void TestWrite(const TestTableDescription& table) {
 
     // null column in PK
 
-    ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema, {"timestamp"}));
+    TTestBlobOptions optsNulls;
+    optsNulls.NullColumns.emplace("timestamp");
+    ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema, optsNulls));
     UNIT_ASSERT(!ok);
 
     // missing columns
@@ -2132,7 +2134,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     };
 
     void TestCompactionSplitGranule(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                                    const std::vector<std::pair<TString, TTypeInfo>>& ydbPk) {
+                                    const std::vector<std::pair<TString, TTypeInfo>>& ydbPk,
+                                    const TTestBlobOptions& testBlobOptions = {}) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
@@ -2164,7 +2167,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
                 ui64 start = i * (triggerPortionSize - overlapSize);
                 std::pair<ui64, ui64> triggerPortion = { start, start + triggerPortionSize };
-                TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
+                TString triggerData = MakeTestBlob(triggerPortion, ydbSchema, testBlobOptions);
                 UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
                 UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
@@ -2331,6 +2334,27 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             schema[0].second = TTypeInfo(type);
             pk[0].second = TTypeInfo(type);
             TestCompactionSplitGranule(schema, pk);
+        }
+    }
+
+    Y_UNIT_TEST(CompactionSplitGranuleSameStrKey) {
+        // TODO: KIKIMR-17862
+        return;
+
+        std::vector<TTypeId> types = {
+            NTypeIds::String,
+            NTypeIds::Utf8
+        };
+
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+        TTestBlobOptions opts;
+        opts.SameValueColumns.emplace(pk[0].first);
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestCompactionSplitGranule(schema, pk, opts);
         }
     }
 

@@ -194,59 +194,69 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, con
     }
 }
 
+TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem) {
+    auto type = typeInfo.GetTypeId();
+
+    if (type == NTypeIds::Utf8 ||
+        type == NTypeIds::String ||
+        type == NTypeIds::String4k ||
+        type == NTypeIds::String2m) {
+        mem.push_back(ToString(value));
+        const TString& str = mem.back();
+        return TCell(str.data(), str.size());
+    } else if (type == NTypeIds::JsonDocument || type == NTypeIds::Json) {
+        mem.push_back("{}");
+        const TString& str = mem.back();
+        return TCell(str.data(), str.size());
+    } else if (type == NTypeIds::Yson) {
+        mem.push_back("{ \"a\" = [ { \"b\" = 1; } ]; }");
+        const TString& str = mem.back();
+        return TCell(str.data(), str.size());
+    } else if (type == NTypeIds::Timestamp || type == NTypeIds::Interval ||
+                type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
+        return TCell::Make<ui64>(value);
+    } else if (type == NTypeIds::Uint32 || type == NTypeIds::Int32 || type == NTypeIds::Datetime) {
+        return TCell::Make<ui32>(value);
+    } else if (type == NTypeIds::Uint16 || type == NTypeIds::Int16 || type == NTypeIds::Date) {
+        return TCell::Make<ui16>(value);
+    } else if (type == NTypeIds::Uint8 || type == NTypeIds::Int8 || type == NTypeIds::Byte ||
+                type == NTypeIds::Bool) {
+        return TCell::Make<ui8>(value);
+    } else if (type == NTypeIds::Float) {
+        return TCell::Make<float>(value);
+    } else if (type == NTypeIds::Double) {
+        return TCell::Make<double>(value);
+    }
+
+    UNIT_ASSERT(false);
+    return {};
+}
+
 std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value, std::vector<TString>& mem) {
     std::vector<TCell> cells;
     cells.reserve(types.size());
 
-    for (auto& typeInfo : types) {
-        auto type = typeInfo.GetTypeId();
-        if (type == NTypeIds::Utf8 ||
-            type == NTypeIds::String ||
-            type == NTypeIds::String4k ||
-            type == NTypeIds::String2m) {
-            mem.push_back(ToString(value));
-            const TString& str = mem.back();
-            cells.push_back(TCell(str.data(), str.size()));
-        } else if (type == NTypeIds::JsonDocument || type == NTypeIds::Json) {
-            mem.push_back("{}");
-            const TString& str = mem.back();
-            cells.push_back(TCell(str.data(), str.size()));
-        } else if (type == NTypeIds::Yson) {
-            mem.push_back("{ \"a\" = [ { \"b\" = 1; } ]; }");
-            const TString& str = mem.back();
-            cells.push_back(TCell(str.data(), str.size()));
-        } else if (type == NTypeIds::Timestamp || type == NTypeIds::Interval ||
-                    type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
-            cells.push_back(TCell::Make<ui64>(value));
-        } else if (type == NTypeIds::Uint32 || type == NTypeIds::Int32 || type == NTypeIds::Datetime) {
-            cells.push_back(TCell::Make<ui32>(value));
-        } else if (type == NTypeIds::Uint16 || type == NTypeIds::Int16 || type == NTypeIds::Date) {
-            cells.push_back(TCell::Make<ui16>(value));
-        } else if (type == NTypeIds::Uint8 || type == NTypeIds::Int8 || type == NTypeIds::Byte ||
-                    type == NTypeIds::Bool) {
-            cells.push_back(TCell::Make<ui8>(value));
-        } else if (type == NTypeIds::Float) {
-            cells.push_back(TCell::Make<float>(value));
-        } else if (type == NTypeIds::Double) {
-            cells.push_back(TCell::Make<double>(value));
-        } else {
-            UNIT_ASSERT(false);
-        }
+    for (const auto& typeInfo : types) {
+        cells.push_back(MakeTestCell(typeInfo, value, mem));
     }
 
     return cells;
 }
 
+
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, TTypeInfo>>& columns,
-                     const THashSet<TString>& nullColumns) {
+                     const TTestBlobOptions& options) {
     TString err;
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME);
     batchBuilder.Start(columns, 0, 0, err);
 
     std::vector<ui32> nullPositions;
+    std::vector<ui32> samePositions;
     for (size_t i = 0; i < columns.size(); ++i) {
-        if (nullColumns.contains(columns[i].first)) {
+        if (options.NullColumns.contains(columns[i].first)) {
             nullPositions.push_back(i);
+        } else if (options.SameValueColumns.contains(columns[i].first)) {
+            samePositions.push_back(i);
         }
     }
 
@@ -258,6 +268,9 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TS
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
         }
+        for (auto& pos : samePositions) {
+            cells[pos] = MakeTestCell(types[pos], options.SameValue, mem);
+        }
         NKikimr::TDbTupleRef unused;
         batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
     }
@@ -265,6 +278,9 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TS
         std::vector<TCell> cells = MakeTestCells(types, i, mem);
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
+        }
+        for (auto& pos : samePositions) {
+            cells[pos] = MakeTestCell(types[pos], options.SameValue, mem);
         }
         NKikimr::TDbTupleRef unused;
         batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));

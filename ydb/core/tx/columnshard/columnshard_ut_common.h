@@ -394,8 +394,14 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planSt
     PlanCommit(runtime, sender, planStep, ids);
 }
 
+struct TTestBlobOptions {
+    THashSet<TString> NullColumns;
+    THashSet<TString> SameValueColumns;
+    ui32 SameValue = 42;
+};
+
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
-                     const THashSet<TString>& nullColumns = {});
+                     const TTestBlobOptions& options = {});
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
                                     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 

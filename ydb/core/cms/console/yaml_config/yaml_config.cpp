@@ -629,12 +629,8 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
 }
 
 ui64 GetVersion(const TString& config) {
-    auto parser = NFyaml::TParser::Create(config);
-    auto header = parser.NextDocument();
-    auto str = header ? header->Root().Map().at("version").Scalar() : "";
-    ui64 version = 0;
-    TryFromString<ui64>(str, version);
-    return version;
+    auto metadata = GetMetadata(config);
+    return metadata.Version.value_or(0);
 }
 
 /**
@@ -659,13 +655,11 @@ void ResolveAndParseYamlConfig(
     TString* resolvedYamlConfig,
     TString* resolvedJsonConfig) {
 
-    auto parser = NFyaml::TParser::Create(yamlConfig);
-    parser.NextDocument();
-    auto tree = parser.NextDocument();
+    auto tree = NFyaml::TDocument::Parse(yamlConfig);
 
     for (auto& [_, config] : volatileYamlConfigs) {
         auto d = NFyaml::TDocument::Parse(config);
-        NYamlConfig::AppendVolatileConfigs(tree.value(), d);
+        NYamlConfig::AppendVolatileConfigs(tree, d);
     }
 
     TSet<NYamlConfig::TNamedLabel> namedLabels;
@@ -673,7 +667,7 @@ void ResolveAndParseYamlConfig(
         namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
     }
 
-    auto config = NYamlConfig::Resolve(tree.value(), namedLabels);
+    auto config = NYamlConfig::Resolve(tree, namedLabels);
 
     if (resolvedYamlConfig) {
         TStringStream resolvedYamlConfigStream;
@@ -714,6 +708,10 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
  * Parses config metadata
  */
 TMetadata GetMetadata(const TString& config) {
+    if (config.empty()) {
+        return {};
+    }
+
     auto doc = NFyaml::TDocument::Parse(config);
 
     if (auto node = doc.Root().Map()["metadata"]; node) {

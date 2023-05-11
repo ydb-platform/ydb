@@ -486,9 +486,10 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         TString yamlConfig1 = R"(
 ---
-cluster: ""
-version: 1
----
+metadata:
+  cluster: ""
+  version: 0
+
 config:
   log_config:
     cluster_name: cluster2
@@ -529,9 +530,10 @@ selector_config: []
 
         TString yamlConfig2 = R"(
 ---
-cluster: ""
-version: 2
----
+metadata:
+  cluster: ""
+  version: 1
+
 config: {yaml_config_enabled: false}
 allowed_labels: {}
 selector_config: []
@@ -555,9 +557,10 @@ selector_config: []
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TString yamlConfig = R"(
 ---
-cluster: ""
-version: 1
----
+metadata:
+  cluster: ""
+  version: 0
+
 config:
   log_config:
     cluster_name: cluster1
@@ -618,9 +621,10 @@ selector_config: []
 
         TString yamlConfig1 = R"(
 ---
-cluster: ""
-version: 1
----
+metadata:
+  cluster: ""
+  version: 0
+
 config:
   log_config:
     cluster_name: cluster1
@@ -637,9 +641,10 @@ selector_config: []
 
         TString yamlConfig2 = R"(
 ---
-cluster: ""
-version: 2
----
+metadata:
+  cluster: ""
+  version: 1
+
 config:
   log_config:
     cluster_name: cluster1
@@ -664,9 +669,10 @@ selector_config: []
 
         TString yamlConfig3 = R"(
 ---
-cluster: ""
-version: 3
----
+metadata:
+  cluster: ""
+  version: 2
+
 config:
   log_config:
     cluster_name: cluster3
@@ -693,9 +699,10 @@ selector_config: []
 
         TString yamlConfig4 = R"(
 ---
-cluster: ""
-version: 4
----
+metadata:
+  cluster: ""
+  version: 3
+
 config:
   log_config:
     cluster_name: cluster3
@@ -718,9 +725,10 @@ selector_config: []
 
         TString yamlConfig5 = R"(
 ---
-cluster: ""
-version: 5
----
+metadata:
+  cluster: ""
+  version: 4
+
 config:
   log_config:
     cluster_name: cluster3
@@ -772,9 +780,10 @@ selector_config:
 
         TString yamlConfig6 = R"(
 ---
-cluster: ""
-version: 6
----
+metadata:
+  cluster: ""
+  version: 5
+
 config:
   log_config:
     cluster_name: cluster3
@@ -815,9 +824,9 @@ selector_config:
 
         TString yamlConfig7 = R"(
 ---
-cluster: ""
-version: 7
----
+metadata:
+  cluster: ""
+  version: 6
 config:
   log_config:
     cluster_name: cluster3
@@ -857,9 +866,10 @@ selector_config:
 
         TString yamlConfig8 = R"(
 ---
-cluster: ""
-version: 8
----
+metadata:
+  cluster: ""
+  version: 7
+
 config:
   log_config:
     cluster_name: cluster3

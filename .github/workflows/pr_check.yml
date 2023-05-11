@@ -17,12 +17,11 @@ jobs:
     steps:
       - name: logging
         run: |
-          echo '${{ toJSON(github.event.pull_request) }}'
-          echo '${{ toJSON(github.event.action) }}'
+          echo '${{ toJSON(github) }}'
   comment-if-waiting-on-ok:
     if: |
       (github.event.action == 'opened') &&
-       !contains(fromJSON('["MEMBER", "COLLABORATOR", "CONTRIBUTOR"]'),
+       !contains(fromJSON('["MEMBER", "COLLABORATOR", "CONTRIBUTOR", "OWNER"]'),
           github.event.pull_request.author_association)
     runs-on: ubuntu-latest
     steps:

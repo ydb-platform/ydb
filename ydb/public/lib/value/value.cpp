@@ -8,6 +8,7 @@
 #include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 namespace NKikimr {
 namespace NClient {
@@ -421,7 +422,13 @@ TString TValue::GetDataText() const {
         return ToString(Value.GetInt64());
     case NScheme::NTypeIds::JsonDocument:
         return "\"<JsonDocument>\"";
+    case NScheme::NTypeIds::Uuid:
+        {
+            NYdb::TUuidValue val(Value.GetLow128(), Value.GetHi128());
+            return val.ToString();
+        }
     }
+
     return TStringBuilder() << "\"<unknown type "  << Type.GetData().GetScheme() << ">\"";
 }
 

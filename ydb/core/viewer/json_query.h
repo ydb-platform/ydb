@@ -192,7 +192,7 @@ private:
             case NYdb::EPrimitiveType::DyNumber:
                 return valueParser.GetDyNumber();
             case NYdb::EPrimitiveType::Uuid:
-                return "<uuid not implemented>";
+                return valueParser.GetUuid().ToString();
         }
     }
 

@@ -139,7 +139,7 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
         auto now = Now();
         result.emplace_back(TBillRecord()
             .Id(jobId + "_i")
-            .Schema("yq.ingress.mbytes")
+            .Schema("yq.ingress.v1")
             .FolderId(TScope(scope).ParseFolder())
             .SourceWt(now)
             .SourceId(sourceId)

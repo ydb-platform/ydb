@@ -16,7 +16,7 @@ jobs:
   check-running-allowed:
     runs-on: ubuntu-latest
     outputs:
-      result: steps.check-ownership-membership.outputs.result
+      result: ${{ steps.check-ownership-membership.outputs.result }}
     steps:
       - id: check-ownership-membership
         uses: actions/github-script@v6

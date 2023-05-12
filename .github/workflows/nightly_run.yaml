@@ -20,8 +20,6 @@ jobs:
     with:
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
-      run_unit_tests: true
-      run_functional_tests: false
     secrets: inherit
 
   build_provisioned:
@@ -35,6 +33,4 @@ jobs:
       runner_label: ARM64
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
-      run_unit_tests: true
-      run_functional_tests: false
     secrets: inherit

@@ -1,5 +1,7 @@
 #include "yql_opt_peephole_physical.h"
 
+#include <ydb/library/yql/core/peephole_opt/yql_opt_json_peephole_physical.h>
+#include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_expr_constraint.h>
@@ -7158,6 +7160,8 @@ struct TPeepHoleRules {
         {"CheckedDiv", &ExpandCheckedDiv},
         {"CheckedMod", &ExpandCheckedMod},
         {"CheckedMinus", &ExpandCheckedMinus},
+        {"JsonValue", &ExpandJsonValue},
+        {"JsonExists", &ExpandJsonExists}
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {
@@ -7168,6 +7172,7 @@ struct TPeepHoleRules {
         {"AggregateMergeFinalize", &ExpandAggregatePeephole},
         {"AggregateMergeManyFinalize", &ExpandAggregatePeephole},
         {"AggregateFinalize", &ExpandAggregatePeephole},
+        {"JsonQuery", &ExpandJsonQuery},
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

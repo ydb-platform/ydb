@@ -4438,6 +4438,44 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestTableWithNulls({ testCase });
     }
 
+    Y_UNIT_TEST(Json_GetValue) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .SetExpectedReply(R"([[1;["val1"];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Exists) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .SetExpectedReply(R"([[1;[%true];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Query) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_QUERY(jsonval, "$.col1" WITH UNCONDITIONAL WRAPPER),
+                    JSON_QUERY(jsondoc, "$.col1" WITH UNCONDITIONAL WRAPPER)
+                FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
     Y_UNIT_TEST(Olap_InsertFails) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)

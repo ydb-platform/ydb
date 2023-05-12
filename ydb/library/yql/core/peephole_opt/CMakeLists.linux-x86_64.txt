@@ -20,5 +20,6 @@ target_link_libraries(yql-core-peephole_opt PUBLIC
   yql-core-type_ann
 )
 target_sources(yql-core-peephole_opt PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/peephole_opt/yql_opt_json_peephole_physical.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.cpp
 )

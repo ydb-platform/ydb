@@ -320,7 +320,6 @@ private:
                             EStatsUpdateType updateType) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
-    TMap<TSnapshot, std::vector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;
     void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules);
 
     /// Return lists of adjacent empty granules for the path.

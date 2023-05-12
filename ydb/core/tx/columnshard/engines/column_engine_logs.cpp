@@ -1181,13 +1181,9 @@ bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& c
     return true;
 }
 
-TMap<TSnapshot, std::vector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 granule, const TSnapshot& snapshot) const {
-    Y_VERIFY(Granules.contains(granule));
-    auto& spg = Granules.find(granule)->second;
-    Y_VERIFY(spg);
-
-    TMap<TSnapshot, std::vector<ui64>> out;
-    for (const auto& [portion, portionInfo] : spg->Portions) {
+static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot(const THashMap<ui64, TPortionInfo>& portions, const TSnapshot& snapshot) {
+    TMap<TSnapshot, std::vector<const TPortionInfo*>> out;
+    for (const auto& [portion, portionInfo] : portions) {
         if (portionInfo.Empty()) {
             continue;
         }
@@ -1201,7 +1197,7 @@ TMap<TSnapshot, std::vector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64
         }
 
         if (visible) {
-            out[recSnapshot].push_back(portion);
+            out[recSnapshot].push_back(&portionInfo);
         }
     }
     return out;
@@ -1249,16 +1245,14 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             auto& portions = spg->Portions;
             bool granuleHasDataForSnaphsot = false;
 
-            TMap<TSnapshot, std::vector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
+            TMap<TSnapshot, std::vector<const TPortionInfo*>> orderedPortions = GroupPortionsBySnapshot(portions, snapshot);
             for (auto& [snap, vec] : orderedPortions) {
-                for (auto& portion : vec) {
-                    auto& portionInfo = portions.find(portion)->second;
-
+                for (const auto* portionInfo : vec) {
                     TPortionInfo outPortion;
-                    outPortion.Meta = portionInfo.Meta;
+                    outPortion.Meta = portionInfo->Meta;
                     outPortion.Records.reserve(columnIds.size());
 
-                    for (auto& rec : portionInfo.Records) {
+                    for (auto& rec : portionInfo->Records) {
                         Y_VERIFY(rec.Valid());
                         if (columnIds.contains(rec.ColumnId)) {
                             outPortion.Records.push_back(rec);
@@ -1266,10 +1260,10 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                     }
                     Y_VERIFY(outPortion.Produced());
                     if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portion);
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portionInfo->Portion());
                         continue;
                     } else {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portion);
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portionInfo->Portion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));
                     granuleHasDataForSnaphsot = true;

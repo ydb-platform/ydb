@@ -16,22 +16,26 @@ jobs:
   check-running-allowed:
     runs-on: ubuntu-latest
     outputs:
-      result: ${{ steps.check-if-org-member.outputs.result }}
+      result: ${{ steps.check-ownership-membership.outputs.result }}
     steps:
-      - id: check-if-org-member
+      - id: check-ownership-membership
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
-            //const response = await github.rest.orgs.checkMembershipForUser({
-            //  org: context.payload.organization.login,
-            //  username: context.payload.pull_request.user.login
-            //});
-            //// How to interpret status code: 
-            //// https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
-            return true
+            const userLogin = context.payload.pull_request.user.login;
+            if context.payload.organization.owner.login == userLogin {
+              return true;
+            }
+            const response = await github.rest.orgs.checkMembershipForUser({
+              org: context.payload.organization.login,
+              username: userLogin
+            });
+            // How to interpret status code: 
+            // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
+            return response.status == '204'
       - name: comment-if-waiting-on-ok
-        if: steps.check-if-org-member.outputs.result == 'false'
+        if: steps.check-ownership-membership.outputs.result == 'false'
         uses: actions/github-script@v6
         with:
           script: |

@@ -22,10 +22,13 @@ jobs:
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
+            // This is used primarily in forks. Repository owner 
+            // should be allowed to run anything. 
             const userLogin = context.payload.pull_request.user.login;
             if (context.payload.repository.owner.login == userLogin) {
               return true;
             }
+
             const response = await github.rest.orgs.checkMembershipForUser({
               org: context.payload.organization.login,
               username: userLogin,

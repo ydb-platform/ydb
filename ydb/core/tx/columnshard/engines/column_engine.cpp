@@ -53,8 +53,20 @@ std::shared_ptr<arrow::Scalar> TMark::MinScalar(const std::shared_ptr<arrow::Dat
 }
 
 NArrow::TReplaceKey TMark::MinBorder(const std::shared_ptr<arrow::Schema>& schema) {
-    Y_VERIFY_DEBUG(schema->num_fields() == 1);
-    return NArrow::TReplaceKey::FromScalar(MinScalar(schema->field(0)->type()));
+    if (schema->num_fields() == 1) {
+        return NArrow::TReplaceKey::FromScalar(MinScalar(schema->field(0)->type()));
+    } else {
+        std::vector<std::shared_ptr<arrow::Array>> columns;
+        columns.reserve(schema->num_fields());
+        for (const auto& field : schema->fields()) {
+            auto scalar = MinScalar(field->type());
+            Y_VERIFY_DEBUG(scalar);
+            auto res = arrow::MakeArrayFromScalar(*scalar, 1);
+            Y_VERIFY_DEBUG(res.ok());
+            columns.emplace_back(*res);
+        }
+        return NArrow::TReplaceKey::FromBatch(arrow::RecordBatch::Make(schema, 1, columns), 0);
+    }
 }
 
 }

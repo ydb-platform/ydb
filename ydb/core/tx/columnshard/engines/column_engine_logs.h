@@ -191,18 +191,18 @@ public:
     bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
 
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
-        if (UseCompositeMarks) {
-            return TMark::SerializeComposite(key, MarkSchema);
+        if (UseCompositeMarks()) {
+            return TMark::SerializeComposite(key, MarkSchema());
         } else {
-            return TMark::SerializeScalar(key, MarkSchema);
+            return TMark::SerializeScalar(key, MarkSchema());
         }
     }
 
     NArrow::TReplaceKey DeserializeMark(const TString& key) const override {
-        if (UseCompositeMarks) {
-            return TMark::DeserializeComposite(key, MarkSchema);
+        if (UseCompositeMarks()) {
+            return TMark::DeserializeComposite(key, MarkSchema());
         } else {
-            return TMark::DeserializeScalar(key, MarkSchema);
+            return TMark::DeserializeScalar(key, MarkSchema());
         }
     }
 
@@ -253,7 +253,6 @@ private:
     TVersionedIndex VersionedIndex;
     TCompactionLimits Limits;
     ui64 TabletId;
-    std::shared_ptr<arrow::Schema> MarkSchema;
     std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
     std::shared_ptr<TCountersTable> CountersTable;
@@ -271,9 +270,24 @@ private:
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
-    bool UseCompositeMarks = false;
+    mutable std::optional<TMark> CachedDefaultMark;
 
 private:
+    const std::shared_ptr<arrow::Schema>& MarkSchema() const noexcept {
+        return VersionedIndex.GetIndexKey();
+    }
+
+    const TMark& DefaultMark() const {
+        if (!CachedDefaultMark) {
+            CachedDefaultMark = TMark(TMark::MinBorder(MarkSchema()));
+        }
+        return *CachedDefaultMark;
+    }
+
+    bool UseCompositeMarks() const {
+        return MarkSchema()->num_fields() > 1;
+    }
+
     void ClearIndex() {
         Granules.clear();
         PathGranules.clear();

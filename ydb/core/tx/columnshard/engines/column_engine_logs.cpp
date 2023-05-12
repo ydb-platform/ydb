@@ -160,7 +160,7 @@ TColumnEngineForLogs::TMarksGranules::TMarksGranules(const TSelectInfo& selectIn
 
 bool TColumnEngineForLogs::TMarksGranules::MakePrecedingMark(const TIndexInfo& indexInfo) {
     ui64 minGranule = 0;
-    TMark minMark(indexInfo.GetEffectiveKey());
+    TMark minMark(TMark::MinBorder(indexInfo.GetIndexKey()));
     if (Marks.empty()) {
         Marks.emplace_back(std::move(minMark), minGranule);
         return true;
@@ -322,7 +322,6 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 
 void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
     if (!GranulesTable) {
-        MarkSchema = info.GetEffectiveKey();
         ui32 indexId = info.GetId();
         GranulesTable = std::make_shared<TGranulesTable>(*this, indexId);
         ColumnsTable = std::make_shared<TColumnsTable>(indexId);
@@ -455,7 +454,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), std::move(dataToIndex), Limits);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(dataToIndex), Limits);
     ui32 reserveGranules = 0;
 
     changes->InitSnapshot = LastSnapshot;
@@ -496,7 +495,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     Y_VERIFY(info);
     Y_VERIFY(info->Granules.size() == 1);
 
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), std::move(info), Limits, LastSnapshot);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(info), Limits, LastSnapshot);
 
     const ui64 granule = *changes->CompactionInfo->Granules.begin();
     const auto gi = Granules.find(granule);
@@ -538,7 +537,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
                                                                          THashSet<ui64>& pathsToDrop,
                                                                          ui32 maxRecords) {
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), snapshot, Limits);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), snapshot, Limits);
     ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
@@ -625,7 +624,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     }
 
     TSnapshot fakeSnapshot(1, 1); // TODO: better snapshot
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), TColumnEngineChanges::TTL, fakeSnapshot);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), TColumnEngineChanges::TTL, fakeSnapshot);
     ui64 evicttionSize = 0;
     bool allowEviction = true;
     ui64 dropBlobs = 0;
@@ -878,7 +877,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
     for (auto& [granule, p] : changes.NewGranules) {
         ui64 pathId = p.first;
         TMark mark = p.second;
-        TGranuleRecord rec(pathId, granule, snapshot, mark.Border);
+        TGranuleRecord rec(pathId, granule, snapshot, mark.GetBorder());
 
         if (!SetGranule(rec, apply)) {
             LOG_S_ERROR("Cannot insert granule " << rec << " at tablet " << TabletId);
@@ -1021,7 +1020,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             // granule vs portion minPK
             NArrow::TReplaceKey granuleStart = Granules.contains(granule)
                 ? Granules[granule]->Record.Mark
-                : changes.NewGranules.find(granule)->second.second.Border;
+                : changes.NewGranules.find(granule)->second.second.GetBorder();
 
             auto portionStart = portionInfo.EffKeyStart();
             if (portionStart < granuleStart) {
@@ -1239,7 +1238,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             auto& mark = it->first;
             ui64 granule = it->second;
 
-            if (keyTo && *keyTo < mark.Border) {
+            if (keyTo && *keyTo < mark.GetBorder()) {
                 break;
             }
 

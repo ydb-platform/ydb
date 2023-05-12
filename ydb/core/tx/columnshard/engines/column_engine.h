@@ -31,17 +31,10 @@ struct TCompactionLimits {
     ui32 InGranuleCompactSeconds{2 * 60}; // Trigger in-granule comcation to guarantee no PK intersections
 };
 
-struct TMark {
-    /// @note It's possible to share columns in TReplaceKey between multiple marks:
-    /// read all marks as a batch; create TMark for each row
-    NArrow::TReplaceKey Border;
-
+class TMark {
+public:
     explicit TMark(const NArrow::TReplaceKey& key)
         : Border(key)
-    {}
-
-    explicit TMark(const std::shared_ptr<arrow::Schema>& schema)
-        : Border(MinBorder(schema))
     {}
 
     TMark(const TMark& m) = default;
@@ -53,6 +46,10 @@ struct TMark {
 
     std::partial_ordering operator <=> (const TMark& m) const {
         return Border <=> m.Border;
+    }
+
+    const NArrow::TReplaceKey& GetBorder() const noexcept {
+        return Border;
     }
 
     ui64 Hash() const {
@@ -71,11 +68,16 @@ struct TMark {
     static TString SerializeComposite(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
     static NArrow::TReplaceKey DeserializeComposite(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
 
+    static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::Schema>& schema);
+
     std::string ToString() const;
 
 private:
+    /// @note It's possible to share columns in TReplaceKey between multiple marks:
+    /// read all marks as a batch; create TMark for each row
+    NArrow::TReplaceKey Border;
+
     static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
-    static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::Schema>& schema);
 };
 
 struct TCompactionInfo {
@@ -337,6 +339,7 @@ struct TColumnEngineStats {
 
 class TVersionedIndex {
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
+    std::shared_ptr<arrow::Schema> IndexKey;
 public:
     ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
         for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
@@ -354,7 +357,16 @@ public:
         return Snapshots.rbegin()->second;
     }
 
+    const std::shared_ptr<arrow::Schema>& GetIndexKey() const noexcept {
+        return IndexKey;
+    }
+
     void AddIndex(const TSnapshot& version, TIndexInfo&& indexInfo) {
+        if (Snapshots.empty()) {
+            IndexKey = indexInfo.GetIndexKey();
+        } else {
+            Y_VERIFY(IndexKey->Equals(indexInfo.GetIndexKey()));
+        }
         Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
     }
 };

@@ -23,7 +23,6 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             const userLogin = context.payload.pull_request.user.login;
-            console.log('*', context.payload.repository.owner.login, '*', userLogin,'*');
             if (context.payload.repository.owner.login == userLogin) {
               return true;
             }

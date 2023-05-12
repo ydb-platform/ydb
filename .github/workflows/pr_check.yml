@@ -23,6 +23,7 @@ jobs:
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
+<<<<<<< Updated upstream
             // const userLogin = context.payload.pull_request.user.login;
             // console.log('*', context.payload.repository.owner.login, '*', userLogin,'*');
             // if (context.payload.repository.owner.login == userLogin) {
@@ -36,6 +37,30 @@ jobs:
             // // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
             // return response.status == '204'
             return false;
+=======
+            // This is used primarily in forks. Repository owner 
+            // should be allowed to run anything. 
+            const userLogin = context.payload.pull_request.user.login;
+            if (context.payload.repository.owner.login == userLogin) {
+              return true;
+            }
+
+            const response = await github.rest.orgs.checkMembershipForUser({
+              org: context.payload.organization.login,
+              username: userLogin,
+            });
+            // How to interpret membership status code: 
+            // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
+            if (response.status == '204') {
+              return true;
+            }
+
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+            return okToTestLabel !== undefined;
+>>>>>>> Stashed changes
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false'
         uses: actions/github-script@v6

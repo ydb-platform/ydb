@@ -280,8 +280,7 @@ public:
             }
             switch (paramType) {
                 case INT2OID:
-                    paramsBuilder.AddParam(TStringBuilder() << "$_" << idxParam + 1).Int16(atoi(paramValue.data())).Build();
-                    injectedQuery << "DECLARE $_" << idxParam + 1 << " AS Int16;" << Endl;
+                    paramsBuilder.AddParam(TStringBuilder() << ":_" << idxParam + 1).Int16(atoi(paramValue.data())).Build();
                     break;
 
             }

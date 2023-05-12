@@ -185,6 +185,11 @@ public:
         auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, token, actorSystem);
         rpcFuture.Subscribe([actorSystem, ev](NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse> future) {
             auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
+            // HACK
+            if (ev->Get()->Message->GetQuery().starts_with("BEGIN")) {
+                response->Tag = "BEGIN";
+            }
+            // HACK
             try {
                 Ydb::Scripting::ExecuteYqlResponse yqlResponse(future.ExtractValueSync());
                 if (yqlResponse.has_operation()) {
@@ -216,6 +221,10 @@ public:
                                             }
                                         }
                                     }
+
+                                    // HACK
+                                    response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
+                                    // HACK
                                 }
                             }
                         }

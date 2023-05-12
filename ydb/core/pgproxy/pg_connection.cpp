@@ -491,7 +491,7 @@ protected:
     void HandleConnected(TEvPGEvents::TEvQueryResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
             if (ev->Get()->ErrorFields.empty()) {
-                TString tag = "OK";
+                TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
                 { // rowDescription
                     TPGStreamOutput<TPGRowDescription> rowDescription;
                     rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
@@ -540,7 +540,7 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvDescribeResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
-            TString tag = "OK";
+            TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
             { // rowDescription
                 TPGStreamOutput<TPGRowDescription> rowDescription;
                 rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
@@ -568,7 +568,7 @@ protected:
     void HandleConnected(TEvPGEvents::TEvExecuteResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
             if (ev->Get()->ErrorFields.empty()) {
-                TString tag = "OK";
+                TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
                 { // dataFields
                     for (const auto& row : ev->Get()->DataRows) {
                         TPGStreamOutput<TPGDataRow> dataRow;

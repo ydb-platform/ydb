@@ -1093,13 +1093,13 @@ private:
             }
             settings.EndOfQueryCommit = sqlAutoCommit;
             settings.Flags.insert("FlexibleTypes");
+            settings.Flags.insert("AnsiLike");
             if (SessionCtx->Query().Type == EKikimrQueryType::Scan
                 || SessionCtx->Query().Type == EKikimrQueryType::YqlScript
                 || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming)
             {
-                // We enable EmitAggApply and AnsiLike for filter and aggregate pushdowns to Column Shards
+                // We enable EmitAggApply for filter and aggregate pushdowns to Column Shards
                 settings.Flags.insert("EmitAggApply");
-                settings.Flags.insert("AnsiLike");
             } else {
                 settings.Flags.insert("DisableEmitStartsWith");
             }

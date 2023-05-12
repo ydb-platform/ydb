@@ -265,6 +265,60 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(DocApi) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // invalid mode
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatDocApiJson
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // invalid aws region
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              AwsRegion: "foo"
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // ok
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeNewAndOldImages
+              Format: ECdcStreamFormatDocApiJson
+              AwsRegion: "ru-central1"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDocApiJson),
+            NLs::StreamAwsRegion("ru-central1"),
+        });
+    }
+
     Y_UNIT_TEST(Negative) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));

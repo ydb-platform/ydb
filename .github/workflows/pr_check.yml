@@ -47,7 +47,8 @@ jobs:
             );
             return okToTestLabel !== undefined;
       - name: comment-if-waiting-on-ok
-        if: steps.check-ownership-membership.outputs.result == 'false'
+        if: steps.check-ownership-membership.outputs.result == 'false' &&
+            github.event.action == 'opened'
         uses: actions/github-script@v6
         with:
           script: |
@@ -57,14 +58,6 @@ jobs:
               repo: context.repo.repo,
               body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
             });
-  debug:
-    runs-on: ubuntu-latest
-    needs:
-      - check-running-allowed
-    steps:
-      - id: abc
-        run: |
-          echo '${{ toJSON(needs) }}'
   build_and_test:
     needs:
       - check-running-allowed

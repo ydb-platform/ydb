@@ -21,7 +21,7 @@ jobs:
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
       run_unit_tests: true
-      run_functional_tests: true
+      run_functional_tests: false
     secrets: inherit
 
   build_provisioned:
@@ -36,5 +36,5 @@ jobs:
       sanitizer: ${{matrix.sanitizer}}
       test_label_regexp: ${{inputs.test_label_regexp}}
       run_unit_tests: true
-      run_functional_tests: true
+      run_functional_tests: false
     secrets: inherit

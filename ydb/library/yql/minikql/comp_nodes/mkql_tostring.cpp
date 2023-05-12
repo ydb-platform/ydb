@@ -65,14 +65,10 @@ public:
 
         const auto name = "DecimalToString";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalToString));
-        llvm::Value* func;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
-            const auto fnType = FunctionType::get(valType, { valType, psType, psType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        } else {
-            const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, psType, psType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        }
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+            FunctionType::get(valType, { valType, psType, psType }, false):
+            FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, psType, psType }, false);
+        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
 
         const auto fail = BasicBlock::Create(context, "fail", ctx.Func);
         const auto nice = BasicBlock::Create(context, "nice", ctx.Func);
@@ -83,7 +79,7 @@ public:
         const auto value = GetNodeValue(Data, ctx, block);
 
         Value* result;
-        if (IsOptional) {
+        if constexpr (IsOptional) {
             const auto call = BasicBlock::Create(context, "call", ctx.Func);
             const auto res = PHINode::Create(valType, 2, "result", nice);
             res->addIncoming(zero, block);
@@ -101,7 +97,7 @@ public:
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
                 new StoreInst(GetterForInt128(value, block), retPtr, block);
                 CallInst::Create(func, { retPtr, retPtr, precision, scale }, "", block);
-                string = new LoadInst(retPtr, "res", block);
+                string = new LoadInst(valType, retPtr, "res", block);
             }
 
             res->addIncoming(string, block);
@@ -115,7 +111,7 @@ public:
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
                 new StoreInst(GetterForInt128(value, block), retPtr, block);
                 CallInst::Create(func, { retPtr, retPtr, precision, scale }, "", block);
-                result = new LoadInst(retPtr, "res", block);
+                result = new LoadInst(valType, retPtr, "res", block);
             }
 
             const auto test = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, result, zero, "test", block);
@@ -124,8 +120,9 @@ public:
 
         block = fail;
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TDecimalToStringWrapper::Throw));
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(FunctionType::get(Type::getVoidTy(context), {}, false)), "thrower", block);
-        CallInst::Create(doFuncPtr, {}, "", block);
+        const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {}, false);
+        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
+        CallInst::Create(doFuncType, doFuncPtr, {}, "", block);
         new UnreachableInst(context, block);
 
         block = nice;
@@ -174,20 +171,16 @@ public:
 
         const auto name = "DataToString";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DataToString));
-        llvm::Value* func;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
-            const auto fnType = FunctionType::get(valType, { valType, slotType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        } else {
-            const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, slotType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        }
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+            FunctionType::get(valType, { valType, slotType }, false):
+            FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, slotType }, false);
+        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
         const auto slot = ConstantInt::get(slotType, static_cast<ui32>(SchemeType));
         const auto value = GetNodeValue(Data, ctx, block);
 
-        if (IsOptional) {
+        if constexpr (IsOptional) {
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
             const auto call = BasicBlock::Create(context, "call", ctx.Func);
             const auto result = PHINode::Create(valType, 2, "result", done);
@@ -205,7 +198,7 @@ public:
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
                 new StoreInst(value, retPtr, block);
                 CallInst::Create(func, { retPtr, retPtr, slot }, "", block);
-                string = new LoadInst(retPtr, "res", block);
+                string = new LoadInst(valType, retPtr, "res", block);
             }
 
             if (Data->IsTemporaryValue())
@@ -224,7 +217,7 @@ public:
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
                 new StoreInst(value, retPtr, block);
                 CallInst::Create(func, { retPtr, retPtr, slot}, "", block);
-                string = new LoadInst(retPtr, "res", block);
+                string = new LoadInst(valType, retPtr, "res", block);
             }
 
             if (Data->IsTemporaryValue())

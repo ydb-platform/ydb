@@ -101,7 +101,8 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto result = PHINode::Create(Type::getInt128Ty(context), NewNodes.size() + 2U, "result", done);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(valueType, NewNodes.size() + 2U, "result", done);
 
         BranchInst::Create(init, work, IsInvalid(statePtr, block), block);
 
@@ -130,7 +131,7 @@ public:
         {
             block = work;
 
-            const auto state = new LoadInst(statePtr, "state", block);
+            const auto state = new LoadInst(valueType, statePtr, "state", block);
             const auto index = GetterFor<ui32>(state, context, block);
             result->addIncoming(GetFinish(context), block);
             const auto choise = SwitchInst::Create(index, done, NewNodes.size(), block);
@@ -228,7 +229,7 @@ public:
         {
             block = work;
 
-            const auto state = new LoadInst(statePtr, "state", block);
+            const auto state = new LoadInst(Type::getInt128Ty(context), statePtr, "state", block);
             const auto index = GetterFor<ui32>(state, context, block);
             result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
             const auto choise = SwitchInst::Create(index, done, NewNodes.size(), block);
@@ -260,10 +261,11 @@ public:
                 const auto done = BasicBlock::Create(context, "done", ctx.Func);
                 new UnreachableInst(context, stub);
 
-                const auto res = PHINode::Create(Type::getInt128Ty(context), slice.size(), "res", done);
+                const auto valueType = Type::getInt128Ty(context);
+                const auto res = PHINode::Create(valueType, slice.size(), "res", done);
 
-                const auto statePtr = GetElementPtrInst::CreateInBounds(ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), index)}, "state_ptr", block);
-                const auto state = new LoadInst(statePtr, "state", block);
+                const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), index)}, "state_ptr", block);
+                const auto state = new LoadInst(valueType, statePtr, "state", block);
                 const auto trunc = GetterFor<ui32>(state, context, block);
 
                 const auto choise = SwitchInst::Create(trunc, stub, slice.size(), block);

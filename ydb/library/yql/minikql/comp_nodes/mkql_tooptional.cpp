@@ -58,7 +58,7 @@ public:
             BranchInst::Create(many, none, test, block);
 
             block = many;
-            const auto item = new LoadInst(elements, "item", block);
+            const auto item = new LoadInst(valueType, elements, "item", block);
             ValueAddRef(this->GetRepresentation(), item, ctx, block);
             new StoreInst(IsOptional ? MakeOptional(context, item, block) : item, result, block);
             BranchInst::Create(done, block);
@@ -68,7 +68,7 @@ public:
             block = slow;
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(result, list, ctx.Codegen, block);
 
-            const auto iter = new LoadInst(result, "iter", block);
+            const auto iter = new LoadInst(valueType, result, "iter", block);
             new StoreInst(ConstantInt::get(valueType, 0ULL), result, block);
 
             const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
@@ -76,10 +76,10 @@ public:
 
             BranchInst::Create(good, none, status, block);
 
-            if (IsOptional) {
+            if constexpr (IsOptional) {
                 block = good;
 
-                const auto item = new LoadInst(result, "item", block);
+                const auto item = new LoadInst(valueType, result, "item", block);
                 new StoreInst(MakeOptional(context, item, block), result, block);
                 BranchInst::Create(done, block);
             }
@@ -157,8 +157,8 @@ public:
 
             block = many;
             const auto index = BinaryOperator::CreateSub(size, ConstantInt::get(size->getType(), 1), "index", block);
-            const auto last = GetElementPtrInst::CreateInBounds(elements, {index}, "last", block);
-            const auto item = new LoadInst(last, "item", block);
+            const auto last = GetElementPtrInst::CreateInBounds(valueType, elements, {index}, "last", block);
+            const auto item = new LoadInst(valueType, last, "item", block);
             ValueAddRef(this->GetRepresentation(), item, ctx, block);
             new StoreInst(IsOptional ? MakeOptional(context, item, block) : item, result, block);
             BranchInst::Create(done, block);
@@ -168,7 +168,7 @@ public:
             block = slow;
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(result, list, ctx.Codegen, block);
 
-            const auto iter = new LoadInst(result, "iter", block);
+            const auto iter = new LoadInst(valueType, result, "iter", block);
             new StoreInst(ConstantInt::get(valueType, 0ULL), result, block);
 
             const auto first = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
@@ -188,8 +188,8 @@ public:
 
             UnRefBoxed(iter, ctx, block);
 
-            if (IsOptional) {
-                const auto item = new LoadInst(result, "item", block);
+            if constexpr (IsOptional) {
+                const auto item = new LoadInst(valueType, result, "item", block);
                 new StoreInst(MakeOptional(context, item, block), result, block);
             }
 

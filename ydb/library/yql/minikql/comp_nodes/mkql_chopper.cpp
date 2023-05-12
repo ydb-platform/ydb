@@ -129,8 +129,8 @@ private:
         const auto load = BasicBlock::Create(context, "load", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
-        const auto statePtr = GetElementPtrInst::CreateInBounds(ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
-        const auto entry = new LoadInst(statePtr, "entry", block);
+        const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
+        const auto entry = new LoadInst(valueType, statePtr, "entry", block);
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, entry, GetConstant(ui64(EState::Next), context), "next", block);
 
         BranchInst::Create(load, work, next, block);
@@ -191,9 +191,10 @@ public:
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
         const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
 
-        const auto result = PHINode::Create(Type::getInt128Ty(context), 5U, "result", exit);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(valueType, 5U, "result", exit);
 
-        const auto first = new LoadInst(statePtr, "first", block);
+        const auto first = new LoadInst(valueType, statePtr, "first", block);
         const auto enter = SwitchInst::Create(first, loop, 2U, block);
         enter->addCase(GetInvalid(context), init);
         enter->addCase(GetConstant(ui64(EState::Skip), context), pass);
@@ -227,7 +228,7 @@ public:
             block = loop;
 
             const auto item = GetNodeValue(Output, ctx, block);
-            const auto state = new LoadInst(statePtr, "state", block);
+            const auto state = new LoadInst(valueType, statePtr, "state", block);
 
             result->addIncoming(item, block);
             BranchInst::Create(part, exit, IsFinish(item, block), block);
@@ -571,9 +572,9 @@ private:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
-        const auto first = new LoadInst(stateArg, "first", block);
+        const auto first = new LoadInst(stateType, stateArg, "first", block);
         const auto reload = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, first, ConstantInt::get(stateType, ui8(EState::Next)), "reload", block);
 
         BranchInst::Create(load, work, reload, block);
@@ -671,13 +672,13 @@ private:
         auto block = main;
 
         const auto input = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(inputArg, "load_input", false, block) : static_cast<Value*>(inputArg);
+            new LoadInst(valueType, inputArg, "load_input", false, block) : static_cast<Value*>(inputArg);
 
         BranchInst::Create(loop, block);
 
         block = loop;
 
-        const auto stream = new LoadInst(streamArg, "stream", block);
+        const auto stream = new LoadInst(valueType, streamArg, "stream", block);
         BranchInst::Create(next, work, IsEmpty(stream, block), block);
 
         {
@@ -705,7 +706,7 @@ private:
 
         block = next;
 
-        const auto state = new LoadInst(stateArg, "state", block);
+        const auto state = new LoadInst(stateType, stateArg, "state", block);
         const auto choise = SwitchInst::Create(state, skip, 2U, block);
         choise->addCase(ConstantInt::get(stateType, ui8(EState::Init)), init);
         choise->addCase(ConstantInt::get(stateType, ui8(EState::Chop)), pass);

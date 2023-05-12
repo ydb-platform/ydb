@@ -125,7 +125,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto arguments = new LoadInst(argsPtr, "arguments", block);
+        const auto arguments = new LoadInst(argsType, argsPtr, "arguments", block);
 
         unsigned i = 0U;
         for (const auto node : ArgNodes) {

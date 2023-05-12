@@ -47,7 +47,7 @@ public:
         const auto zero = ConstantInt::get(valType, 0ULL);
         const auto result = PHINode::Create(valType, IsLeftOptional || IsRightOptional ? 3 : 2, "result", done);
 
-        if (IsLeftOptional || IsRightOptional) {
+        if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ?
                 BinaryOperator::CreateAnd(left, right, "test", block):
                 IsLeftOptional ? left : right;
@@ -133,7 +133,7 @@ public:
 
         const auto r = NYql::NDecimal::TInt128(right.Get<TRight>());
 
-        if (std::is_signed<TRight>::value) {
+        if constexpr (std::is_signed<TRight>::value) {
             if (r >= +Bound || r <= -Bound)
                 return left.Release();
         } else {
@@ -160,7 +160,7 @@ public:
         const auto zero = ConstantInt::get(valType, 0ULL);
         const auto result = PHINode::Create(valType, IsLeftOptional || IsRightOptional ? 3 : 2, "result", done);
 
-        if (IsLeftOptional || IsRightOptional) {
+        if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ?
                 BinaryOperator::CreateAnd(left, right, "test", block):
                 IsLeftOptional ? left : right;
@@ -253,7 +253,7 @@ IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFact
     auto left = LocateNode(ctx.NodeLocator, callable, 0);
     auto right = LocateNode(ctx.NodeLocator, callable, 1);
 
-    switch(rightType->GetSchemeType()) {
+    switch (rightType->GetSchemeType()) {
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 

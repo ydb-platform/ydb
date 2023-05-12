@@ -92,8 +92,9 @@ public:
         const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto state = new LoadInst(statePtr, "state", block);
-        const auto result = PHINode::Create(state->getType(), Switch ? 4U : 3U, "result", exit);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto result = PHINode::Create(valueType, Switch ? 4U : 3U, "result", exit);
         result->addIncoming(state, block);
 
         const auto select = SwitchInst::Create(state, work, 3U, block);
@@ -112,7 +113,7 @@ public:
             const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
-            CallInst::Create(cleanupPtr, {}, "", block);
+            CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
         }
 
         new StoreInst(GetEmpty(context), statePtr, block);
@@ -371,9 +372,9 @@ private:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(stateType, statePtr, "state", block);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -400,7 +401,7 @@ private:
             const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
-            CallInst::Create(cleanupPtr, {}, "", block);
+            CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
         }
 
         new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);

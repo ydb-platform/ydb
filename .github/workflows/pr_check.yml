@@ -30,11 +30,21 @@ jobs:
               org: context.payload.organization.login,
               username: userLogin,
             });
-            // How to interpret status code: 
+
+            // How to interpret membership status code: 
             // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
-            return response.status == '204'
+            if (response.status == '204') {
+              return true;  
+            }
+
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+            return okToTestLabel !== undefined;
       - name: comment-if-waiting-on-ok
-        if: steps.check-ownership-membership.outputs.result == 'false'
+        if: steps.check-ownership-membership.outputs.result == 'false' &&
+            github.event.action == 'opened'
         uses: actions/github-script@v6
         with:
           script: |

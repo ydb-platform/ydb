@@ -24,6 +24,7 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             const userLogin = context.payload.pull_request.user.login;
+            console.log('*', context.payload.repository.owner.login, '*', userLogin,'*');
             if (context.payload.repository.owner.login == userLogin) {
               return true;
             }
@@ -45,6 +46,17 @@ jobs:
               repo: context.repo.repo,
               body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
             });
+  debug:
+    runs-on: ubuntu-latest
+    needs:
+      - check-running-allowed
+    steps:
+      - id: abc
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            console.log(context);
   build_and_test:
     needs:
       - check-running-allowed

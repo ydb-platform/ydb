@@ -19,7 +19,7 @@ A {{ ydb-short-name }} cluster has built-in groups that offer predefined sets of
 
 All users are added to the `USERS` group by default. The `root` user is added to the `ADMINS` group by default.
 
-You can see how groups inherit permissions below. For example, the `DATA_WRITERS` group includes all the permissions from `DATA_READERS`:
+You can see how groups inherit permissions below. For example, the `DATA-WRITERS` group includes all the permissions from `DATA-READERS`:
 
 ![groups](../_assets/groups.svg)
 
@@ -30,6 +30,16 @@ To create, update, or delete a group, use the YQL operators:
 * [{#T}](../yql/reference/syntax/create-group.md).
 * [{#T}](../yql/reference/syntax/alter-group.md).
 * [{#T}](../yql/reference/syntax/drop-group.md).
+
+{% note info %}
+
+When using the names of built-in groups in the `ALTER GROUP` commands, those names must be provided in the upper case. In addition, the names of built-in groups containing the "-" symbol must be surrounded with the backticks, for example:
+
+```
+ALTER GROUP `DATA-WRITERS` ADD USER myuser1;
+```
+
+{% endnote %}
 
 ## Managing users {#users} 
 

@@ -869,13 +869,20 @@ S2N_API extern int s2n_config_set_verify_after_sign(struct s2n_config *config, s
 S2N_API extern int s2n_config_set_send_buffer_size(struct s2n_config *config, uint32_t size);
 
 /**
- * Enable or disable recieving of multiple TLS records in a single s2n_recv call
+ * Enable or disable receiving of multiple TLS records in a single s2n_recv call
  *
- * Legacy behavior is to return after reading a single TLS record which may not be the most
- * efficient way to invoke this function, especially if larger receive buffers are used.
+ * By default, s2n-tls returns from s2n_recv() after reading a single TLS record.
+ * Enabling receiving of multiple records will instead cause s2n_recv() to attempt
+ * to read until the application-provided output buffer is full. This may be more
+ * efficient, especially if larger receive buffers are used.
+ *
+ * @note If this option is enabled with blocking IO, the call to s2n_recv() will
+ * not return until either the application-provided output buffer is full or the
+ * peer closes the connection. This may lead to unintentionally long waits if the
+ * peer does not send enough data.
  *
  * @param config The configuration object being updated
- * @param enabled Set to `true` if multiple record recieve is to be enabled; `false` to disable.
+ * @param enabled Set to `true` if multiple record receive is to be enabled; `false` to disable.
  * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
  */
 S2N_API extern int s2n_config_set_recv_multi_record(struct s2n_config *config, bool enabled);
@@ -1711,10 +1718,16 @@ S2N_API extern int s2n_connection_set_protocol_preferences(struct s2n_connection
 /**
  * Sets the server name for the connection.
  *
- * It may be desirable for clients
+ * The provided server name will be sent by the client to the server in the
+ * server_name ClientHello extension. It may be desirable for clients
  * to provide this information to facilitate secure connections to
  * servers that host multiple 'virtual' servers at a single underlying
  * network address.
+ *
+ * s2n-tls does not place any restrictions on the provided server name. However,
+ * other TLS implementations might. Specifically, the TLS specification for the
+ * server_name extension requires that it be an ASCII-encoded DNS name without a
+ * trailing dot, and explicitly forbids literal IPv4 or IPv6 addresses.
  *
  * @param conn The connection object being queried
  * @param server_name A pointer to a string containing the desired server name

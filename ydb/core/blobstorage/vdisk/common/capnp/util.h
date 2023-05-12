@@ -8,9 +8,9 @@
 
 namespace NKikimrCapnProtoUtil {
     struct TRopeStream : public kj::InputStream {
-        NActors::TRopeStream *underlying;
+        NProtoBuf::io::ZeroCopyInputStream *underlying;
 
-        explicit TRopeStream(NActors::TRopeStream *underlying) : underlying(underlying) {}
+        explicit TRopeStream(NProtoBuf::io::ZeroCopyInputStream *underlying) : underlying(underlying) {}
 
         virtual size_t tryRead(void* dst, size_t minBytes, size_t) override {
             size_t bytesRead = 0;

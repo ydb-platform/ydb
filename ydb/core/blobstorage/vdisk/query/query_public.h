@@ -58,25 +58,25 @@ namespace NKikimr {
 
         // only one field must be non empty
         if (int(hasRange) + int(hasExtreme) != 1) {
-            std::cout << "[CheckVGetQuery] int(hasRange) + int(hasExtreme) != 1\n";
+//            std::cout << "[CheckVGetQuery] int(hasRange) + int(hasExtreme) != 1\n";
             return false;
         }
 
         if (hasRange) {
             // check range query
             if (record.ExtremeQueriesSize() > 0) {
-                std::cout << "[CheckVGetQuery] hasRange && record.ExtremeQueriesSize() > 0 \n";
+//                std::cout << "[CheckVGetQuery] hasRange && record.ExtremeQueriesSize() > 0 \n";
                 return false; // can't have both range and extreme
             }
 
             const auto &query = record.GetRangeQuery();
             if (!query.HasFrom() || !query.HasTo()) {
-                std::cout << "[CheckVGetQuery] !query.HasFrom() || !query.HasTo() \n";
+//                std::cout << "[CheckVGetQuery] !query.HasFrom() || !query.HasTo() \n";
                 return false;
             }
 
             if (query.HasMaxResults() && query.GetMaxResults() == 0) {
-                std::cout << "[CheckVGetQuery] hasRange && query.HasMaxResults() && query.GetMaxResults() == 0\n";
+//                std::cout << "[CheckVGetQuery] hasRange && query.HasMaxResults() && query.GetMaxResults() == 0\n";
                 return false;
             }
 

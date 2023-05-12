@@ -887,8 +887,8 @@ namespace NKikimr {
 
             // FIXME: check PartId() is not null and is not too large
 
-            std::cerr << "[handle TEvVGet] TEvVGet: " << TEvBlobStorage::TEvVGet::ToString(record)
-                      << " Marker# BSVS14" << "\n\n";
+//            std::cerr << "[handle TEvVGet] TEvVGet: " << TEvBlobStorage::TEvVGet::ToString(record)
+//                      << " Marker# BSVS14" << "\n\n";
 
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 std::cerr << "[handle TEvVGet] " << "group generation mismatch" << "\n";

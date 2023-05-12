@@ -3,8 +3,11 @@
 #include "event.h"
 #include "event_load.h"
 #include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/gzip_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/actors/protos/actors.pb.h>
+#include <lz4.h>
+#include <lz4hc.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
@@ -12,7 +15,6 @@
 
 
 namespace NActors {
-
     class TRopeStream : public NProtoBuf::io::ZeroCopyInputStream {
         TRope::TConstIterator Iter;
         const size_t Size;
@@ -205,6 +207,15 @@ namespace NActors {
                 }
             }
 
+            // TEvVGetResult
+            if (TEventType == 268633601) {
+//                std::cout << "[SerializeToArcadiaStream] using compression for TEvVGetResult" << "\n";
+                NProtoBuf::io::GzipOutputStream compressing(chunker);
+                bool res = Record.SerializeToZeroCopyStream(&compressing);
+                compressing.Close();
+                return res;
+            }
+
             return Record.SerializeToZeroCopyStream(chunker);
         }
 
@@ -222,8 +233,8 @@ namespace NActors {
             return result;
         }
 
-        inline static std::set<uint32_t> messageSizes;
-        inline static std::mutex messageSizesMutex;
+//        inline static std::set<uint32_t> messageSizes;
+//        inline static std::mutex messageSizesMutex;
 
         static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
             THolder<TEventPBBase> ev(new TEv());
@@ -261,24 +272,35 @@ namespace NActors {
                 }
 
                 // parse the protobuf
-                TRopeStream stream(iter, size);
-                if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
-                }
 
-                if (ev->Record.GetTypeName() == "TEvVGet") {
-                    std::lock_guard l(messageSizesMutex);
-
-                    messageSizes.insert(size);
-
-                    if (messageSizes.size() == 10) {
-                        std::cerr << "[MSG SIZE METRICS] window size 10: "
-                                  << "p0 " << *messageSizes.begin() << " | "
-                                  << "p50 " << *std::next(messageSizes.begin(), 5) << " | "
-                                  << "p100 " << *messageSizes.rbegin() << "\n\n";
-                        messageSizes.clear();
+                // TEvVGetResult
+                if (TEventType == 268633601) {
+                    TRopeStream stream(iter, size);
+                    NProtoBuf::io::GzipInputStream decompressing(&stream);
+                    if (!ev->Record.ParseFromZeroCopyStream(&decompressing)) {
+                        Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
+                    }
+                } else {
+                    TRopeStream stream(iter, size);
+                    if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
+                        Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
                     }
                 }
+
+
+//                if (ev->Record.GetTypeName() == "TEvVGet") {
+//                    std::lock_guard l(messageSizesMutex);
+//
+//                    messageSizes.insert(size);
+//
+//                    if (messageSizes.size() == 10) {
+//                        std::cerr << "[MSG SIZE METRICS] window size 10: "
+//                                  << "p0 " << *messageSizes.begin() << " | "
+//                                  << "p50 " << *std::next(messageSizes.begin(), 5) << " | "
+//                                  << "p100 " << *messageSizes.rbegin() << "\n\n";
+//                        messageSizes.clear();
+//                    }
+//                }
             }
             ev->CachedByteSize = input->GetSize();
             return ev.Release();

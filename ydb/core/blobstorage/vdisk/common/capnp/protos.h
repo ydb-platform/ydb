@@ -797,7 +797,7 @@ namespace NKikimrCapnProto {
                 return builder.totalSize().wordCount * 8;
             }
 
-            bool ParseFromZeroCopyStream(NActors::TRopeStream *input) {
+            bool ParseFromZeroCopyStream(NProtoBuf::io::ZeroCopyInputStream *input) {
                 NKikimrCapnProtoUtil::TRopeStream stream(input);
                 kj::BufferedInputStreamWrapper buffered(stream);
 
@@ -810,7 +810,7 @@ namespace NKikimrCapnProto {
                 return true;
             }
 
-            bool SerializeToZeroCopyStream(NActors::TChunkSerializer *output) const {
+            bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 NKikimrCapnProto_::TEvVGet::Builder b(builder);
                 if (extremeQueriesInBuffer && !elements.empty()) {
                     auto extremeQueries = b.initExtremeQueries(elements.size());
@@ -824,7 +824,7 @@ namespace NKikimrCapnProto {
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);
                 const TString s((const char *) stream.getArray().begin(), stream.getArray().size());
-                output->WriteString(&s);
+                dynamic_cast<NActors::TChunkSerializer*>(output)->WriteString(&s);
 
                 return true;
             }

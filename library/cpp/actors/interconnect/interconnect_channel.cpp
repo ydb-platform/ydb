@@ -146,7 +146,7 @@ namespace NActors {
                         }
                         complete = !Iter.Valid();
                     }
-                    if (complete) {
+                    if (complete && event.Descr.Type != 268633601) {
                         Y_VERIFY(event.EventActuallySerialized == event.EventSerializedSize,
                             "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
                             event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);

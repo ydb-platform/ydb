@@ -195,4 +195,109 @@ namespace NKikimr {
             }
         }
     };
+
+
+    Y_UNIT_TEST_SUITE(CompressionTests) {
+        std::string gen_random(const size_t len) {
+            static const char alphanum[] =
+                    "0123456789"
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    "abcdefghijklmnopqrstuvwxyz";
+            std::string tmp_s;
+            tmp_s.reserve(len);
+
+            for (size_t i = 0; i < len; ++i) {
+                tmp_s += alphanum[rand() % (sizeof(alphanum) - 1)];
+            }
+
+            return tmp_s;
+        }
+
+        Y_UNIT_TEST(Basic) {
+            NKikimrBlobStorage::TEvVGetResult from;
+            from.SetCookie(12345);
+            for (size_t i = 0; i != 10; ++i) {
+                auto res = from.AddResult();
+                res->SetBuffer(gen_random(i * i));
+                res->SetSize(i * i);
+                res->SetCookie(13 * i + 71);
+            }
+
+
+            std::cout << "serializing ..." << "\n";
+            NActors::TAllocChunkSerializer output;
+            {
+                NProtoBuf::io::GzipOutputStream compressing(&output);
+                UNIT_ASSERT(from.SerializeToZeroCopyStream(&compressing));
+                compressing.Flush();
+            }
+
+
+            auto data = output.Release({});
+            std::cout << "data size: " << data->GetSize() << "\n";
+            std::cout << "serializing done" << "\n";
+
+            std::cout << "deserializing ..." << "\n";
+            NKikimrBlobStorage::TEvVGetResult to;
+            NActors::TRopeStream input(data->GetBeginIter(), data->GetSize());
+            {
+                NProtoBuf::io::GzipInputStream decompressing(&input);
+                UNIT_ASSERT(to.ParseFromZeroCopyStream(&decompressing));
+            }
+
+            std::cout << "deserializing done" << "\n";
+
+            UNIT_ASSERT(to.IsInitialized());
+
+            std::cout << "reading message ..." << "\n";
+            UNIT_ASSERT(to.GetCookie() == 12345);
+            for (size_t i = 0; i != 10; ++i) {
+                const auto& res = to.GetResult(i);
+                UNIT_ASSERT(res.GetBuffer().size() == i * i);
+                UNIT_ASSERT(res.GetSize() == i * i);
+                UNIT_ASSERT(res.GetCookie() == 13 * i + 71);
+            }
+            std::cout << "reading message done" << "\n";
+        }
+
+        Y_UNIT_TEST(Advanced) {
+            TEvBlobStorage::TEvVGetResult from;
+            auto &rec = from.Record;
+            rec.SetCookie(12345);
+
+            NActors::TAllocChunkSerializer output;
+            from.SerializeToArcadiaStream(&output);
+
+            std::unique_ptr<TEvBlobStorage::TEvVGetResult> to(
+                    (TEvBlobStorage::TEvVGetResult*) TEvBlobStorage::TEvVGetResult::Load(output.Release(from.CreateSerializationInfo()))
+            );
+            UNIT_ASSERT(to->Record.GetCookie() == 12345);
+        }
+
+        Y_UNIT_TEST(AdvancedHugeMessage) {
+            TEvBlobStorage::TEvVGetResult from;
+            from.Record.SetCookie(12345);
+            for (size_t i = 0; i != 100; ++i) {
+                auto res = from.Record.AddResult();
+                res->SetBuffer(gen_random(i * i));
+                res->SetSize(i * i);
+                res->SetCookie(13 * i + 71);
+            }
+
+            NActors::TAllocChunkSerializer output;
+            from.SerializeToArcadiaStream(&output);
+
+            std::unique_ptr<TEvBlobStorage::TEvVGetResult> to(
+                    (TEvBlobStorage::TEvVGetResult*) TEvBlobStorage::TEvVGetResult::Load(output.Release(from.CreateSerializationInfo()))
+            );
+            UNIT_ASSERT(to->Record.GetCookie() == 12345);
+            for (size_t i = 0; i != 100; ++i) {
+                const auto& res = to->Record.GetResult(i);
+                UNIT_ASSERT(res.GetBuffer().size() == i * i);
+                UNIT_ASSERT(res.GetSize() == i * i);
+                UNIT_ASSERT(res.GetCookie() == 13 * i + 71);
+            }
+        }
+    };
+
 };

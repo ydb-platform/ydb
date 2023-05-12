@@ -310,8 +310,8 @@ namespace NKikimr {
                         const TVDiskID &vdiskID, ui64 vdiskIncarnationGuid,
                         const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo)
         {
-            std::cout << "[ErroneousResult] " << errorReason << "\n\n";
-            std::cerr << "[ErroneousResult] " << errorReason << "\n\n";
+//            std::cout << "[ErroneousResult] " << errorReason << "\n\n";
+//            std::cerr << "[ErroneousResult] " << errorReason << "\n\n";
 
             auto& record = ev->Get()->Record;
             TMaybe<ui64> cookie;

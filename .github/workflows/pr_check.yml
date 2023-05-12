@@ -29,6 +29,7 @@ jobs:
               return true;
             }
 
+
             const response = await github.rest.orgs.checkMembershipForUser({
               org: context.payload.organization.login,
               username: userLogin,

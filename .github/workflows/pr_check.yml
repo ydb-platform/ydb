@@ -58,6 +58,28 @@ jobs:
               repo: context.repo.repo,
               body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
             });
+      - name: cleanup-test-label
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            const labelToRemove = 'ok-to-test';
+            try {
+              const result = await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number: prNumber,
+                name: labelToRemove
+              });
+            } catch(e) {
+              // ignore the 404 error that arises
+              // when the label did not exist for the
+              // organization member
+              console.log(e);
+            }
+
   build_and_test:
     needs:
       - check-running-allowed

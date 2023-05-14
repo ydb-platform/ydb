@@ -1,4 +1,5 @@
 #include "long_tx_service_impl.h"
+#include "lwtrace_probes.h"
 
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/core/log.h>
@@ -10,16 +11,19 @@
 #define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
 #define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
 
+LWTRACE_USING(LONG_TX_SERVICE_PROVIDER)
+
 namespace NKikimr {
 namespace NLongTxService {
 
 static constexpr size_t MaxAcquireSnapshotInFlight = 4;
-static constexpr TDuration AcquireSnapshotBatchDelay = TDuration::MicroSeconds(500);
+static constexpr TDuration AcquireSnapshotBatchDelay = TDuration::MicroSeconds(100);
 static constexpr TDuration RemoteLockTimeout = TDuration::Seconds(15);
 static constexpr bool InterconnectUndeliveryBroken = true;
 
 void TLongTxServiceActor::Bootstrap() {
     LogPrefix = TStringBuilder() << "TLongTxService [Node " << SelfId().NodeId() << "] ";
+    RegisterLongTxServiceProbes();
     Become(&TThis::StateWork);
 }
 
@@ -331,14 +335,16 @@ const TString& TLongTxServiceActor::GetDatabaseNameOrLegacyDefault(const TString
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev) {
-    const auto* msg = ev->Get();
+    auto* msg = ev->Get();
     const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->Record.GetDatabaseName());
     TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
+
+    LWTRACK(AcquireReadSnapshotRequest, msg->Orbit, databaseName);
 
     if (databaseName.empty()) {
         NYql::TIssues issues;
         issues.AddIssue("Cannot acquire snapshot for an unspecified database");
-        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::SCHEME_ERROR, std::move(issues)), 0, ev->Cookie);
+        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::SCHEME_ERROR, std::move(issues), std::move(msg->Orbit)), 0, ev->Cookie);
         return;
     }
 
@@ -349,6 +355,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         auto& req = state.PendingUserRequests.emplace_back();
         req.Sender = ev->Sender;
         req.Cookie = ev->Cookie;
+        req.Orbit = std::move(msg->Orbit);
     }
     ScheduleAcquireSnapshot(databaseName, state);
 }
@@ -390,7 +397,8 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
 
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
         for (auto& userReq : req->UserRequests) {
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot), 0, userReq.Cookie);
+            LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
             auto txId = beginReq.TxId;
@@ -409,7 +417,8 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
         }
     } else {
         for (auto& userReq : req->UserRequests) {
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues), 0, userReq.Cookie);
+            LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(msg->Status));
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues, std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie);

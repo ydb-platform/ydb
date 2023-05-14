@@ -59,7 +59,7 @@ public:
         return true;
     }
 public:
-    TIndexInfo(const TString& name, ui32 id);
+    TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
 
     /// Returns id of the index.
     ui32 GetId() const noexcept {
@@ -97,12 +97,6 @@ public:
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return ReplaceKey; }
     const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
     const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
-
-    const std::shared_ptr<arrow::Schema> GetEffectiveKey() const {
-        // TODO: composite key
-        Y_VERIFY(IndexKey->num_fields() == 1);
-        return std::make_shared<arrow::Schema>(arrow::FieldVector{GetIndexKey()->field(0)});
-    }
 
     /// Initializes sorting, replace, index and extended keys.
     void SetAllKeys();
@@ -146,17 +140,21 @@ public:
 
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }
+
     static const std::vector<std::string>& GetSpecialColumnNames() {
         static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID) };
         return result;
     }
+
     static const std::vector<ui32>& GetSpecialColumnIds() {
         static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
         return result;
     }
+
 private:
     ui32 Id;
     TString Name;
+    const bool CompositeIndexKey;
     mutable std::shared_ptr<arrow::Schema> Schema;
     mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> SortingKey;

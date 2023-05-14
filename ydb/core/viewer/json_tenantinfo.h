@@ -595,6 +595,10 @@ public:
             tenant.SetName(path);
             tenant.SetOverall(overall);
         }
+        std::sort(Result.MutableTenantInfo()->begin(), Result.MutableTenantInfo()->end(), 
+            [](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {
+                return a.name() < b.name();
+            });
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
         Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

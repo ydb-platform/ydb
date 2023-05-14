@@ -80,8 +80,8 @@ public:
 
             block = next;
 
-            const auto item1Ptr = GetElementPtrInst::CreateInBounds(elements, {nil}, "item1_ptr", block);
-            const auto item1 = new LoadInst(item1Ptr, "item1", block);
+            const auto item1Ptr = GetElementPtrInst::CreateInBounds(valueType, elements, {nil}, "item1_ptr", block);
+            const auto item1 = new LoadInst(valueType, item1Ptr, "item1", block);
             codegenItem->CreateSetValue(ctx, block, item1);
 
             const auto init = GetNodeValue(InitialState, ctx, block);
@@ -99,8 +99,8 @@ public:
 
             block = good;
 
-            const auto itemPtr = GetElementPtrInst::CreateInBounds(elements, {index}, "item_ptr", block);
-            const auto item = new LoadInst(itemPtr, "item", block);
+            const auto itemPtr = GetElementPtrInst::CreateInBounds(valueType, elements, {index}, "item_ptr", block);
+            const auto item = new LoadInst(valueType, itemPtr, "item", block);
 
             codegenItem->CreateSetValue(ctx, block, item);
 
@@ -128,7 +128,7 @@ public:
                 new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);
-            const auto iter = new LoadInst(iterPtr, "iter", block);
+            const auto iter = new LoadInst(valueType, iterPtr, "iter", block);
 
             const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
             const auto next = BasicBlock::Create(context, "next", ctx.Func);

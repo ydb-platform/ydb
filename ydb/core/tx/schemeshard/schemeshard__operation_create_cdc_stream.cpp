@@ -174,10 +174,16 @@ public:
 
         switch (streamDesc.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamModeUpdate:
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+            break;
+        case NKikimrSchemeOp::ECdcStreamModeUpdate:
+            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDocApiJson) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DocApiJson format incompatible with specified stream mode");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
@@ -188,6 +194,13 @@ public:
         switch (streamDesc.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
+            if (!streamDesc.GetAwsRegion().empty()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "AwsRegion option incompatible with specified stream format");
+                return result;
+            }
+            break;
+        case NKikimrSchemeOp::ECdcStreamFormatDocApiJson:
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()

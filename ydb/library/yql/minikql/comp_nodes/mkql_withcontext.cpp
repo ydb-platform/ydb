@@ -124,19 +124,19 @@ public:
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWithContextFlowWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto attachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Attach));
         const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType }, false);
         const auto attachFuncPtr = CastInst::Create(Instruction::IntToPtr, attachFunc, PointerType::getUnqual(attachFuncType), "attach", block);
-        CallInst::Create(attachFuncPtr, { stateArg }, "", block);
+        CallInst::Create(attachFuncType, attachFuncPtr, { stateArg }, "", block);
 
         const auto value = GetNodeValue(Flow, ctx, block);
         const auto finish = IsFinish(value, block);
@@ -144,7 +144,7 @@ public:
         const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Detach));
         const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType, finish->getType() }, false);
         const auto detachFuncPtr = CastInst::Create(Instruction::IntToPtr, detachFunc, PointerType::getUnqual(detachFuncType), "detach", block);
-        CallInst::Create(detachFuncPtr, { stateArg, finish }, "", block);
+        CallInst::Create(detachFuncType, detachFuncPtr, { stateArg, finish }, "", block);
 
         return value;
     }

@@ -32,15 +32,15 @@ public:
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(creator, {factory, value}, "output", block);
+            const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
             return output;
         } else {
             const auto place = new AllocaInst(value->getType(), 0U, "place", block);
             new StoreInst(value, place, block);
             const auto signature = FunctionType::get(Type::getVoidTy(context), {factory->getType(), place->getType(), place->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(creator, {factory, place, place}, "", block);
-            const auto output = new LoadInst(place, "output", block);
+            CallInst::Create(signature, creator, {factory, place, place}, "", block);
+            const auto output = new LoadInst(value->getType(), place, "output", block);
             return output;
         }
     }
@@ -78,15 +78,15 @@ public:
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto signature = FunctionType::get(value->getType(), {factory->getType(), value->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(creator, {factory, value}, "output", block);
+            const auto output = CallInst::Create(signature, creator, {factory, value}, "output", block);
             return output;
         } else {
             const auto place = new AllocaInst(value->getType(), 0U, "place", block);
             new StoreInst(value, place, block);
             const auto signature = FunctionType::get(Type::getVoidTy(context), {factory->getType(), place->getType(), place->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(creator, {factory, place, place}, "", block);
-            const auto output = new LoadInst(place, "output", block);
+            CallInst::Create(signature, creator, {factory, place, place}, "", block);
+            const auto output = new LoadInst(value->getType(), place, "output", block);
             return output;
         }
     }
@@ -219,7 +219,7 @@ private:
         SafeUnRefUnboxed(valuePtr, ctx, block);
         GetNodeValue(valuePtr, Flow, ctx, block);
 
-        const auto value = new LoadInst(valuePtr, "value", block);
+        const auto value = new LoadInst(valueType, valuePtr, "value", block);
 
         const auto kill = BasicBlock::Create(context, "kill", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -228,8 +228,9 @@ private:
 
         block = kill;
         const auto doThrow = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowForwardListWrapper::Throw));
-        const auto doThrowPtr = CastInst::Create(Instruction::IntToPtr, doThrow, PointerType::getUnqual(FunctionType::get(Type::getVoidTy(context), {}, false)), "thrower", block);
-        CallInst::Create(doThrowPtr, {}, "", block)->setTailCall();
+        const auto doThrowType = FunctionType::get(Type::getVoidTy(context), {}, false);
+        const auto doThrowPtr = CastInst::Create(Instruction::IntToPtr, doThrow, PointerType::getUnqual(doThrowType), "thrower", block);
+        CallInst::Create(doThrowType, doThrowPtr, {}, "", block)->setTailCall();
         new UnreachableInst(context, block);
 
         block = good;

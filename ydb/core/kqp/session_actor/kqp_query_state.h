@@ -14,6 +14,10 @@
 #include <ydb/core/kqp/session_actor/kqp_tx.h>
 
 #include <util/generic/noncopyable.h>
+#include <util/generic/string.h>
+
+#include <map>
+#include <memory>
 
 namespace NKikimr::NKqp {
 
@@ -42,6 +46,14 @@ public:
         , UserToken(ev->Get()->GetUserToken())
     {
         RequestEv.reset(ev->Release().Release());
+
+        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+            QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+            for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
+                QueryParameterTypes->insert({name, typedValue.Gettype()});
+            }
+        }
+
         SetQueryDeadlines(config);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
@@ -94,6 +106,8 @@ public:
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
 
+    std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -112,6 +126,10 @@ public:
 
     NKikimrKqp::EQueryType GetType() const {
         return RequestEv->GetType();
+    }
+
+    std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
+        return QueryParameterTypes;
     }
 
     void EnsureAction() {

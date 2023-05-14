@@ -127,12 +127,12 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
     bool keepInCache = false;
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
             keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
             keepInCache = query->IsSql();
             break;
 
@@ -166,11 +166,11 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:

@@ -4,6 +4,8 @@
 #include <ydb/core/fq/libs/config/protos/control_plane_storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
 #include <google/protobuf/timestamp.pb.h>
 
 #include <util/datetime/base.h>
@@ -35,6 +37,8 @@ public:
 bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status);
 
 bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status);
+
+bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode);
 
 TDuration GetDuration(const TString& value, const TDuration& defaultValue);
 

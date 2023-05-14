@@ -20,10 +20,11 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
     return out;
 }
 
-TIndexInfo::TIndexInfo(const TString& name, ui32 id)
+TIndexInfo::TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey)
     : NTable::TScheme::TTableSchema()
     , Id(id)
     , Name(name)
+    , CompositeIndexKey(compositeIndexKey)
 {}
 
 std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
@@ -277,7 +278,11 @@ void TIndexInfo::SetAllKeys() {
         SortingKey = ArrowSchema(primaryKeyNames);
         ReplaceKey = SortingKey;
         fields = ReplaceKey->fields();
-        IndexKey = std::make_shared<arrow::Schema>(arrow::FieldVector({ fields[0] }));
+        if (CompositeIndexKey) {
+            IndexKey = ReplaceKey;
+        } else {
+            IndexKey = std::make_shared<arrow::Schema>(arrow::FieldVector({ fields[0] }));
+        }
     }
 
     fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));

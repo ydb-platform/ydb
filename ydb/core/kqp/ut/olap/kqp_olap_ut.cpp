@@ -1547,6 +1547,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate pushed down. Query: " << query);
     }
 
+    Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        EnableDebugLogging(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto query = R"(
+            PRAGMA DisableAnsiLike;
+            SELECT id, resource_id FROM `/Root/tableWithNulls` WHERE resource_id LIKE "%5%"
+        )";
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
+                        TStringBuilder() << "Predicate pushed down. Query: " << query);
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -4408,6 +4434,44 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[10u]]");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_GetValue) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .SetExpectedReply(R"([[1;["val1"];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Exists) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .SetExpectedReply(R"([[1;[%true];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Query) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_QUERY(jsonval, "$.col1" WITH UNCONDITIONAL WRAPPER),
+                    JSON_QUERY(jsondoc, "$.col1" WITH UNCONDITIONAL WRAPPER)
+                FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
 
         TestTableWithNulls({ testCase });
     }

@@ -46,16 +46,16 @@ public:
 
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
-
+        const auto arrayType = ArrayType::get(valType, ArgNodes.size());
         const auto args = *Stateless || ctx.AlwaysInline ?
-            new AllocaInst(ArrayType::get(valType, ArgNodes.size()), 0U, "args", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(ArrayType::get(valType, ArgNodes.size()), 0U, "args", block);
+            new AllocaInst(arrayType, 0U, "args", &ctx.Func->getEntryBlock().back()):
+            new AllocaInst(arrayType, 0U, "args", block);
 
         ui32 i = 0;
         std::vector<std::pair<Value*, EValueRepresentation>> argsv;
         argsv.reserve(ArgNodes.size());
         for (const auto node : ArgNodes) {
-            const auto argPtr = GetElementPtrInst::CreateInBounds(args, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i++)}, "arg_ptr", block);
+            const auto argPtr = GetElementPtrInst::CreateInBounds(arrayType, args, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i++)}, "arg_ptr", block);
             if (node) {
                 GetNodeValue(argPtr, node, ctx, block);
                 argsv.emplace_back(argPtr, node->GetRepresentation());
@@ -68,8 +68,8 @@ public:
             codegen->CreateRun(ctx, block, pointer, args);
         } else {
             const auto callable = GetNodeValue(CallableNode, ctx, block);
-            const auto calleePtr = GetElementPtrInst::CreateInBounds(ctx.Ctx, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, 6)}, "callee_ptr", block);
-            const auto previous = new LoadInst(calleePtr, "previous", block);
+            const auto calleePtr = GetElementPtrInst::CreateInBounds(GetCompContextType(context), ctx.Ctx, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, 6)}, "callee_ptr", block);
+            const auto previous = new LoadInst(calleePtr->getType()->getPointerElementType(), calleePtr, "previous", block);
             const auto callee = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), ui64(&Position)), previous->getType(), "callee", block);
             new StoreInst(callee, calleePtr, block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, callable, ctx.Codegen, block, ctx.GetBuilder(), args);

@@ -43,7 +43,7 @@ public:
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-        const TString& uid, const TKqpQueryId& query,
+        const TString& uid, const TKqpQueryId& queryId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
         : Owner(owner)
@@ -51,17 +51,18 @@ public:
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
         , Uid(uid)
-        , Query(query)
+        , QueryId(queryId)
+        , QueryRef(QueryId.Text, QueryId.QueryParameterTypes)
         , UserToken(userToken)
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
     {
-        Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), Query.Cluster, kqpSettings->Settings, false);
+        Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
 
-        if (!Query.Database.empty()) {
-            Config->_KqpTablePathPrefix = Query.Database;
+        if (!QueryId.Database.empty()) {
+            Config->_KqpTablePathPrefix = QueryId.Database;
         }
 
         ApplyServiceConfig(*Config, serviceConfig);
@@ -80,9 +81,9 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
             << ", self: " << ctx.SelfID
-            << ", cluster: " << Query.Cluster
-            << ", database: " << Query.Database
-            << ", text: \"" << EscapeC(Query.Text) << "\""
+            << ", cluster: " << QueryId.Cluster
+            << ", database: " << QueryId.Database
+            << ", text: \"" << EscapeC(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -96,45 +97,45 @@ public:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), true);
-        Gateway = CreateKikimrIcGateway(Query.Cluster, Query.Database, std::move(loader),
+        Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters);
-        Gateway->SetToken(Query.Cluster, UserToken);
+        Gateway->SetToken(QueryId.Cluster, UserToken);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
-        KqpHost = CreateKqpHost(Gateway, Query.Cluster, Query.Database, Config, ModuleResolverState->ModuleResolver,
-            HttpGateway, AppData(ctx)->FunctionRegistry, false, Query.Settings.IsInternalCall);
+        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
+            HttpGateway, AppData(ctx)->FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
-        prepareSettings.DocumentApiRestricted = Query.Settings.DocumentApiRestricted;
-        prepareSettings.IsInternalCall = Query.Settings.IsInternalCall;
+        prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
+        prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
 
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-        switch (Query.QueryType) {
+        switch (QueryId.QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
-                AsyncCompileResult = KqpHost->PrepareDataQuery(Query.Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareDataQuery(QueryRef, prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_AST_DML:
-                AsyncCompileResult = KqpHost->PrepareDataQueryAst(Query.Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareDataQueryAst(QueryRef, prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-                AsyncCompileResult = KqpHost->PrepareScanQuery(Query.Text, Query.IsSql(), prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareScanQuery(QueryRef, QueryId.IsSql(), prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-                AsyncCompileResult = KqpHost->PrepareQuery(Query.Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareQuery(QueryRef, prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
-                AsyncCompileResult = KqpHost->PrepareFederatedQuery(Query.Text, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareFederatedQuery(QueryRef, prepareSettings);
                 break;
 
             default:
-                YQL_ENSURE(false, "Unexpected query type: " << Query.QueryType);
+                YQL_ENSURE(false, "Unexpected query type: " << QueryId.QueryType);
         }
 
         Continue(ctx);
@@ -187,14 +188,21 @@ private:
 
         replayMessage.InsertValue("query_id", Uid);
         replayMessage.InsertValue("version", "1.0");
-        replayMessage.InsertValue("query_text", EscapeC(Query.Text));
+        replayMessage.InsertValue("query_text", EscapeC(QueryId.Text));
+        NJson::TJsonValue queryParameterTypes(NJson::JSON_MAP);
+        if (QueryId.QueryParameterTypes) {
+            for (const auto& [paramName, paramType] : *QueryId.QueryParameterTypes) {
+                queryParameterTypes[paramName] = Base64Encode(paramType.SerializeAsString());
+            }
+        }
+        replayMessage.InsertValue("query_parameter_types", std::move(queryParameterTypes));
         replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
         replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef()));
-        replayMessage.InsertValue("query_database", Query.Database);
-        replayMessage.InsertValue("query_cluster", Query.Cluster);
+        replayMessage.InsertValue("query_database", QueryId.Database);
+        replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_plan", queryPlan);
-        replayMessage.InsertValue("query_type", ToString(Query.QueryType));
+        replayMessage.InsertValue("query_type", ToString(QueryId.QueryType));
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
             << "Built the replay message " << message);
@@ -230,7 +238,7 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
-        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues, ETableReadType::Other));
+        Reply(TKqpCompileResult::Make(Uid, std::move(QueryId), status, issues, ETableReadType::Other));
     }
 
     void InternalError(const TString message) {
@@ -264,7 +272,7 @@ private:
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
         auto status = GetYdbStatus(kqpResult);
 
-        auto database = Query.Database;
+        auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
         }
@@ -275,14 +283,16 @@ private:
 
         ETableReadType maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(Query), status, kqpResult.Issues(), maxReadType);
+        auto queryType = QueryId.QueryType;
+
+        KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(QueryId), status, kqpResult.Issues(), maxReadType);
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
             {
                 auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
                     kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
-                preparedQueryHolder->MutableLlvmSettings().Fill(Config, Query.QueryType);
+                preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
                 KqpCompileResult->PreparedQuery = preparedQueryHolder;
             }
 
@@ -307,9 +317,9 @@ private:
     void HandleTimeout() {
         ALOG_NOTICE(NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
             << ", self: " << SelfId()
-            << ", cluster: " << Query.Cluster
-            << ", database: " << Query.Database
-            << ", text: \"" << EscapeC(Query.Text) << "\""
+            << ", cluster: " << QueryId.Cluster
+            << ", database: " << QueryId.Database
+            << ", text: \"" << EscapeC(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -322,7 +332,8 @@ private:
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
     TString Uid;
-    TKqpQueryId Query;
+    TKqpQueryId QueryId;
+    TKqpQueryRef QueryRef;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
@@ -365,7 +376,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, std::move(httpGateway), moduleResolverState, counters, uid,
-        std::move(query), userToken, dbCounters, std::move(traceId));
+        query, userToken, dbCounters, std::move(traceId));
 }
 
 } // namespace NKqp

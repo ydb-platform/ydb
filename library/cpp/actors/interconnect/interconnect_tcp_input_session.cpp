@@ -131,6 +131,7 @@ namespace NActors {
         }
 
         UsageHisto.fill(0);
+        InputTrafficArray.fill(0);
 
         XXH3_64bits_reset(&XxhashXdcState);
     }
@@ -311,6 +312,17 @@ namespace NActors {
                 break;
             }
         }
+
+        for (size_t channel = 0; channel < InputTrafficArray.size(); ++channel) {
+            if (auto& value = InputTrafficArray[channel]) {
+                Metrics->AddInputChannelsIncomingTraffic(channel, std::exchange(value, 0));
+            }
+        }
+        for (auto& [channel, value] : std::exchange(InputTrafficMap, {})) {
+            if (value) {
+                Metrics->AddInputChannelsIncomingTraffic(channel, std::exchange(value, 0));
+            }
+        }
     }
 
     void TInputSessionTCP::ProcessHeader() {
@@ -466,7 +478,12 @@ namespace NActors {
                 ProcessEvents(context);
             }
 
-            Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
+            const ui32 traffic = sizeof(part) + part.Size;
+            if (channel < InputTrafficArray.size()) {
+                InputTrafficArray[channel] += traffic;
+            } else {
+                InputTrafficMap[channel] += traffic;
+            }
         }
 
         // mark packet as processed

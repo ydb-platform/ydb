@@ -2336,11 +2336,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
 
     static constexpr ui32 MaxInProgressShards = 10;
 
-    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, EState state)
+    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TString& awsRegion, EState state)
         : AlterVersion(version)
         , Mode(mode)
         , Format(format)
         , VirtualTimestamps(vt)
+        , AwsRegion(awsRegion)
         , State(state)
     {}
 
@@ -2354,12 +2355,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
-    static TPtr New(EMode mode, EFormat format, bool vt) {
-        return new TCdcStreamInfo(0, mode, format, vt, EState::ECdcStreamStateInvalid);
+    static TPtr New(EMode mode, EFormat format, bool vt, const TString& awsRegion) {
+        return new TCdcStreamInfo(0, mode, format, vt, awsRegion, EState::ECdcStreamStateInvalid);
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
-        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps());
+        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps(), desc.GetAwsRegion());
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2373,6 +2374,7 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     EMode Mode;
     EFormat Format;
     bool VirtualTimestamps;
+    TString AwsRegion;
     EState State;
 
     TCdcStreamInfo::TPtr AlterData = nullptr;

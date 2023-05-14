@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 
 class TPKRangesFilter {
 private:
-    bool NotFakeRanges = false;
+    bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
     bool ReverseFlag = false;
 public:

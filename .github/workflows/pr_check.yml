@@ -10,7 +10,6 @@ on:
       - 'synchronize'
       - 'reopened'
       - 'labeled'
-      
 jobs:
 
   check-running-allowed:
@@ -18,28 +17,29 @@ jobs:
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result }}
     steps:
-      - id: check-ownership-membership
+      - name: Check if running tests is allowed
+        id: check-ownership-membership
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
-            // // This is used primarily in forks. Repository owner 
-            // // should be allowed to run anything. 
-            // const userLogin = context.payload.pull_request.user.login;
-            // if (context.payload.repository.owner.login == userLogin) {
-            //   return true;
-            // }
+            // This is used primarily in forks. Repository owner 
+            // should be allowed to run anything. 
+            const userLogin = context.payload.pull_request.user.login;
+            if (context.payload.repository.owner.login == userLogin) {
+              return true;
+            }
 
-            // const response = await github.rest.orgs.checkMembershipForUser({
-            //   org: context.payload.organization.login,
-            //   username: userLogin,
-            // });
+            const response = await github.rest.orgs.checkMembershipForUser({
+              org: context.payload.organization.login,
+              username: userLogin,
+            });
 
-            // // How to interpret membership status code: 
-            // // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
-            // if (response.status == '204') {
-            //   return true;  
-            // }
+            // How to interpret membership status code: 
+            // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
+            if (response.status == '204') {
+              return true;  
+            }
 
             const labels = context.payload.pull_request.labels;
             const okToTestLabel = labels.find(

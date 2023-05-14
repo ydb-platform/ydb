@@ -183,6 +183,8 @@ public:
         Columns { Name: "resource_id" Type: "Utf8" }
         Columns { Name: "level" Type: "Int32" }
         Columns { Name: "binary_str" Type: "String" }
+        Columns { Name: "jsonval" Type: "Json" }
+        Columns { Name: "jsondoc" Type: "JsonDocument" }
         KeyColumnNames: "id"
     )";
 

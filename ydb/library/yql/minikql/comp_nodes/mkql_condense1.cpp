@@ -93,8 +93,9 @@ public:
         const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto state = new LoadInst(statePtr, "state", block);
-        const auto result = PHINode::Create(state->getType(), Switch ? 4U : 3U, "result", exit);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto result = PHINode::Create(valueType, Switch ? 4U : 3U, "result", exit);
         result->addIncoming(state, block);
 
         const auto way = SwitchInst::Create(state, frst, 2U, block);
@@ -107,7 +108,7 @@ public:
             const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
-            CallInst::Create(cleanupPtr, {}, "", block);
+            CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
         }
 
         new StoreInst(GetEmpty(context), statePtr, block);
@@ -389,13 +390,13 @@ private:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto step = BasicBlock::Create(context, "step", ctx.Func);
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
 
-        const auto state0 = new LoadInst(statePtr, "state0", block);
+        const auto state0 = new LoadInst(stateType, statePtr, "state0", block);
 
         const auto select = SwitchInst::Create(state0, loop, 2U, block);
         select->addCase(ConstantInt::get(stateType, static_cast<ui8>(ESqueezeState::Finished)), none);
@@ -410,7 +411,7 @@ private:
             const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
-            CallInst::Create(cleanupPtr, {}, "", block);
+            CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
         }
 
         new StoreInst(ConstantInt::get(state0->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);
@@ -440,7 +441,7 @@ private:
         BranchInst::Create(stop, good, icmp, block);
         block = good;
 
-        const auto state1 = new LoadInst(statePtr, "state1", block);
+        const auto state1 = new LoadInst(stateType, statePtr, "state1", block);
         const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state1, ConstantInt::get(state1->getType(), static_cast<ui8>(ESqueezeState::Idle)), "one", block);
 
         const auto wait = BasicBlock::Create(context, "wait", ctx.Func);
@@ -495,7 +496,7 @@ private:
         BranchInst::Create(loop, block);
 
         block = stop;
-        const auto state2 = new LoadInst(statePtr, "state2", block);
+        const auto state2 = new LoadInst(stateType, statePtr, "state2", block);
 
         const auto full = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state2, ConstantInt::get(state2->getType(), static_cast<ui8>(ESqueezeState::Work)), "full", block);
         new StoreInst(ConstantInt::get(state2->getType(), static_cast<ui8>(ESqueezeState::Finished)), statePtr, block);

@@ -138,8 +138,9 @@ private:
         const auto resultType = Type::getInt32Ty(context);
         const auto result = PHINode::Create(resultType, 4U, "result", done);
 
-        const auto statePtr = GetElementPtrInst::CreateInBounds(ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
-        const auto entry = new LoadInst(statePtr, "entry", block);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
+        const auto entry = new LoadInst(valueType, statePtr, "entry", block);
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, entry, GetConstant(ui64(EState::Next), context), "next", block);
 
         BranchInst::Create(load, work, next, block);
@@ -202,7 +203,8 @@ public:
         const auto resultType = Type::getInt32Ty(context);
         const auto result = PHINode::Create(resultType, 5U, "result", exit);
 
-        const auto first = new LoadInst(statePtr, "first", block);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto first = new LoadInst(valueType, statePtr, "first", block);
         const auto enter = SwitchInst::Create(first, loop, 2U, block);
         enter->addCase(GetInvalid(context), init);
         enter->addCase(GetConstant(ui64(EState::Skip), context), pass);
@@ -246,7 +248,7 @@ public:
         block = loop;
 
         auto getres = GetNodeValues(Output, ctx, block);
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, getres.first, ConstantInt::get(getres.first->getType(), 0), "finish", block);
         result->addIncoming(getres.first, block);
         BranchInst::Create(part, exit, finish, block);

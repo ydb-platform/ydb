@@ -49,7 +49,7 @@ struct TGraceJoinPacker {
     ui64 TuplesPacked = 0; // Total number of packed tuples
     ui64 TuplesBatchPacked = 0; // Number of tuples packed during current join batch
     ui64 TuplesUnpacked = 0; // Total number of unpacked tuples
-    ui64 BatchSize = PartialJoinBatchSize; // Batch size for partial table packing and join 
+    ui64 BatchSize = PartialJoinBatchSize; // Batch size for partial table packing and join
     std::chrono::time_point<std::chrono::system_clock> StartTime; // Start time of execution
     std::chrono::time_point<std::chrono::system_clock> EndTime; // End time of execution
     std::vector<ui64> TupleIntVals; // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
@@ -108,7 +108,7 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.DataType = NUdf::EDataSlot::String;
             res.Name = pgType->GetName();
         } else {
-            res.IsIType = true;    
+            res.IsIType = true;
         }
         return res;
     }
@@ -426,7 +426,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         auto colType = columnTypes[i];
         auto packInfo = GetPackInfo(colType);
         packInfo.ColumnIdx = i;
-        
+
 
         ui32 keyColNums = std::count_if(keyColumns.begin(), keyColumns.end(), [&](ui32 k) {return k == i;});
 
@@ -449,7 +449,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui64 totalStrColumnsNum = nColumns - totalIntColumnsNum - totalIColumnsNum;
 
     ui64 keyIntColumnsNum = std::count_if(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo a) { return (a.IsKeyColumn && !a.IsString && !a.IsPgType);});
-    ui64 keyIColumnsNum = std::count_if(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo a) { return (a.IsKeyColumn && a.IsIType);});   
+    ui64 keyIColumnsNum = std::count_if(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo a) { return (a.IsKeyColumn && a.IsIType);});
     ui64 keyStrColumnsNum = nKeyColumns - keyIntColumnsNum - keyIColumnsNum;
     ui64 dataIntColumnsNum = totalIntColumnsNum - keyIntColumnsNum;
     ui64 dataStrColumnsNum = totalStrColumnsNum - keyStrColumnsNum;
@@ -457,7 +457,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     TotalColumnsNum = nColumns;
     TotalIntColumnsNum = totalIntColumnsNum;
     TotalStrColumnsNum = totalStrColumnsNum;
-    TotalIColumnsNum = totalIColumnsNum; 
+    TotalIColumnsNum = totalIColumnsNum;
 
 
     KeyIntColumnsNum = keyIntColumnsNum;
@@ -490,7 +490,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
             return false;
         });
 
-   
+
     Offsets.resize(nColumns);
     TupleHolder.resize(nColumns);
     TupleStringHolder.resize(nColumns);
@@ -511,7 +511,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     for( auto & p: ColumnsPackInfo ) {
         if ( !p.IsString && !p.IsIType ) {
             if (prevKeyColumn && !p.IsKeyColumn) {
-                currIntOffset = ( (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) ) * sizeof(ui64); 
+                currIntOffset = ( (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) ) * sizeof(ui64);
             }
             prevKeyColumn = p.IsKeyColumn;
             p.Offset = currIntOffset;
@@ -566,7 +566,7 @@ public:
     ,   LeftKeyColumns(leftKeyColumns)
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
-    ,   RightRenames(rightRenames) 
+    ,   RightRenames(rightRenames)
     {
         if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
@@ -650,14 +650,13 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         std::vector<Value*> pointers;
         pointers.reserve(getters.size());
         for (auto i = 0U; i < getters.size(); ++i) {
-            pointers.emplace_back(GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), atTop));
+            pointers.emplace_back(GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), atTop));
             initV = InsertValueInst::Create(initV, ConstantInt::get(valueType, 0), {i}, (TString("zero_") += ToString(i)).c_str(), atTop);
             initF = InsertValueInst::Create(initF, pointers.back(), {i}, (TString("insert_") += ToString(i)).c_str(), atTop);
 
-            getters[i] = [i, values](const TCodegenContext& ctx, BasicBlock*& block) {
-                const auto indexType = Type::getInt32Ty(ctx.Codegen->GetContext());
-                const auto pointer = GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-                return new LoadInst(pointer, (TString("load_") += ToString(i)).c_str(), block);
+            getters[i] = [i, values, indexType, arrayType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
+                return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
             };
         }
 
@@ -680,7 +679,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TGraceJoinWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -691,14 +690,14 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         new StoreInst(initV, values, block);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TGraceJoinState::FetchValues));
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { statePtrType, ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto result = CallInst::Create(funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);
+        const auto result = CallInst::Create(funcType, funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);
 
         for (ui32 i = 0U; i < OutputRepresentations.size(); ++i) {
             ValueRelease(OutputRepresentations[i], pointers[i], ctx, block);
@@ -758,7 +757,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                         }
 
                         for (ui32 i = 0; i < RightRenames.size() / 2; i++)
-                        {   
+                        {
                             auto & valPtr = output[RightRenames[2 * i + 1]];
                             if ( valPtr ) {
                                 *valPtr = valsRight[RightRenames[2 * i]];
@@ -832,7 +831,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *PartialJoinCompleted = true;
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
-                                         
+
                 }
 
 
@@ -840,7 +839,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *PartialJoinCompleted = true;
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
-                   
+
                 }
 
                 if (!*HaveMoreRightRows && !*HaveMoreLeftRows && !*PartialJoinCompleted) {
@@ -849,9 +848,9 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     RightPacker->StartTime = std::chrono::system_clock::now();
                     JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     JoinedTablePtr->ResetIterator();
-                    LeftPacker->EndTime = std::chrono::system_clock::now(); 
+                    LeftPacker->EndTime = std::chrono::system_clock::now();
                     RightPacker->EndTime = std::chrono::system_clock::now();
-                    
+
                 }
 
             }

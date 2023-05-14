@@ -191,11 +191,19 @@ public:
     bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
 
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
-        return TMark::Serialize(key, MarkSchema);
+        if (UseCompositeMarks()) {
+            return TMark::SerializeComposite(key, MarkSchema());
+        } else {
+            return TMark::SerializeScalar(key, MarkSchema());
+        }
     }
 
     NArrow::TReplaceKey DeserializeMark(const TString& key) const override {
-        return TMark::Deserialize(key, MarkSchema);
+        if (UseCompositeMarks()) {
+            return TMark::DeserializeComposite(key, MarkSchema());
+        } else {
+            return TMark::DeserializeScalar(key, MarkSchema());
+        }
     }
 
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
@@ -245,7 +253,6 @@ private:
     TVersionedIndex VersionedIndex;
     TCompactionLimits Limits;
     ui64 TabletId;
-    std::shared_ptr<arrow::Schema> MarkSchema;
     std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
     std::shared_ptr<TCountersTable> CountersTable;
@@ -263,8 +270,24 @@ private:
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
+    mutable std::optional<TMark> CachedDefaultMark;
 
 private:
+    const std::shared_ptr<arrow::Schema>& MarkSchema() const noexcept {
+        return VersionedIndex.GetIndexKey();
+    }
+
+    const TMark& DefaultMark() const {
+        if (!CachedDefaultMark) {
+            CachedDefaultMark = TMark(TMark::MinBorder(MarkSchema()));
+        }
+        return *CachedDefaultMark;
+    }
+
+    bool UseCompositeMarks() const {
+        return MarkSchema()->num_fields() > 1;
+    }
+
     void ClearIndex() {
         Granules.clear();
         PathGranules.clear();
@@ -297,7 +320,6 @@ private:
                             EStatsUpdateType updateType) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
-    TMap<TSnapshot, std::vector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;
     void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules);
 
     /// Return lists of adjacent empty granules for the path.

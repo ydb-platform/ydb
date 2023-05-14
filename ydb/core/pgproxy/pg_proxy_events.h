@@ -99,6 +99,7 @@ struct TEvPGEvents {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
+        TString Tag;
     };
 
         /*
@@ -181,6 +182,7 @@ struct TEvPGEvents {
     struct TEvDescribeResponse : NActors::TEventLocal<TEvDescribeResponse, EvDescribeResponse> {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<std::pair<char, TString>> ErrorFields;
+        TString Tag;
     };
 
     struct TEvExecute : NActors::TEventLocal<TEvExecute, EvExecute> {
@@ -194,6 +196,7 @@ struct TEvPGEvents {
     struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
+        TString Tag;
     };
 };
 

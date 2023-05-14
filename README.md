@@ -9,9 +9,10 @@
 [Website](https://ydb.tech) |
 [Documentation](https://ydb.tech/docs) |
 [Official Repository](https://github.com/ydb-platform/ydb) |
-[YouTube](https://www.youtube.com/c/YDBPlatform) |
 [Blog](https://medium.com/ydbtech) |
-[Twitter](https://twitter.com/YDBPlatform)
+[YouTube](https://www.youtube.com/c/YDBPlatform) |
+[Twitter](https://twitter.com/YDBPlatform) |
+[LinkedIn](https://www.linkedin.com/company/ydb-platform)
 
 YDB is an open-source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
 

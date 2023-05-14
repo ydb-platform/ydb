@@ -1,7 +1,12 @@
 #pragma once
 #include "settings.h"
-#include <util/generic/string.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
+
+#include <util/generic/string.h>
+
+#include <map>
+#include <memory>
 
 namespace NKikimr::NKqp {
 
@@ -12,21 +17,14 @@ struct TKqpQueryId {
     TString Text;
     TKqpQuerySettings Settings;
     NKikimrKqp::EQueryType QueryType;
+    std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, NKikimrKqp::EQueryType type);
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, NKikimrKqp::EQueryType type, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes);
 
     bool IsSql() const;
 
-    bool operator==(const TKqpQueryId& other) const {
-        return
-            Cluster == other.Cluster &&
-            Database == other.Database &&
-            UserSid == other.UserSid &&
-            Text == other.Text &&
-            Settings == other.Settings &&
-            QueryType == other.QueryType;
-    }
+    bool operator==(const TKqpQueryId& other) const;
 
     bool operator!=(const TKqpQueryId& other) {
         return !(*this == other);
@@ -38,7 +36,7 @@ public:
     bool operator>=(const TKqpQueryId&) = delete;
 
     size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, QueryType);
+        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, QueryType, QueryParameterTypes ? QueryParameterTypes->size() : 0u);
         return THash<decltype(tuple)>()(tuple);
     }
 };

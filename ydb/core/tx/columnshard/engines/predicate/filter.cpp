@@ -23,7 +23,7 @@ bool TPKRangesFilter::Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<
     if (!fromContainer || !toContainer) {
         return false;
     }
-    if (SortedRanges.size() && NotFakeRanges) {
+    if (SortedRanges.size() && !FakeRanges) {
         if (ReverseFlag) {
             if (fromContainer->CrossRanges(SortedRanges.front().GetPredicateTo())) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
@@ -40,8 +40,8 @@ bool TPKRangesFilter::Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<
     if (!pkRangeFilter) {
         return false;
     }
-    if (!NotFakeRanges) {
-        NotFakeRanges = true;
+    if (FakeRanges) {
+        FakeRanges = false;
         SortedRanges.clear();
     }
     if (ReverseFlag) {

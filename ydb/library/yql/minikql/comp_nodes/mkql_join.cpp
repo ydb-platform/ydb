@@ -1179,14 +1179,13 @@ public:
         std::vector<Value*> pointers;
         pointers.reserve(size);
         for (auto i = 0U; i < size; ++i) {
-            pointers.emplace_back(GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), atTop));
+            pointers.emplace_back(GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), atTop));
             initV = InsertValueInst::Create(initV, ConstantInt::get(valueType, 0), {i}, (TString("zero_") += ToString(i)).c_str(), atTop);
             initF = InsertValueInst::Create(initF, pointers.back(), {i}, (TString("insert_") += ToString(i)).c_str(), atTop);
 
-            getters[i] = [i, values](const TCodegenContext& ctx, BasicBlock*& block) {
-                const auto indexType = Type::getInt32Ty(ctx.Codegen->GetContext());
-                const auto pointer = GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-                return new LoadInst(pointer, (TString("load_") += ToString(i)).c_str(), block);
+            getters[i] = [i, values, valueType, indexType, arrayType](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
+                return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
             };
         }
 
@@ -1210,7 +1209,7 @@ public:
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideCommonJoinCoreWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -1221,14 +1220,14 @@ public:
 
         new StoreInst(initV, values, block);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValue::FetchValues));
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { statePtrType, ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto result = CallInst::Create(funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);
+        const auto result = CallInst::Create(funcType, funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);
 
         for (ui32 i = 0U; i < OutputRepresentations.size(); ++i) {
             ValueRelease(OutputRepresentations[i], pointers[i], ctx, block);
@@ -1329,7 +1328,7 @@ private:
 
         block = good;
 
-        const auto fields = new LoadInst(outputArg, "fields", block);
+        const auto fields = new LoadInst(arrayType, outputArg, "fields", block);
 
         for (ui32 i = 0U; i < InputRepresentations.size(); ++i) {
             const auto save = BasicBlock::Create(context, (TString("save_") += ToString(i)).c_str(), ctx.Func);

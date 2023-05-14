@@ -6,10 +6,10 @@ namespace NKikimr::NOlap {
 
 std::shared_ptr<arrow::RecordBatch> TIndexLogicBase::GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                         const TIndexInfo& indexInfo) {
-    // TODO: composite effective key
-    auto columnName = indexInfo.GetPrimaryKey()[0].first;
-    auto resBatch = NArrow::ExtractColumns(batch, {std::string(columnName.data(), columnName.size())});
-    Y_VERIFY_S(resBatch, "No column '" << columnName << "' in batch " << batch->schema()->ToString());
+    const auto& key = indexInfo.GetIndexKey();
+    auto resBatch = NArrow::ExtractColumns(batch, key);
+    Y_VERIFY_S(resBatch, "Cannot extract effective key " << key->ToString()
+        << " from batch " << batch->schema()->ToString());
     return resBatch;
 }
 
@@ -209,7 +209,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TIndexLogicBase::SliceIntoGr
                                 // Just take the number of elements in the key column for the last granule.
                                 ? effKey->num_rows()
                                 // Locate position of the next granule in the key.
-                                : NArrow::LowerBound(keys, granules[i + 1].first.Border, offset);
+                                : NArrow::LowerBound(keys, granules[i + 1].first.GetBorder(), offset);
 
             if (const i64 size = end - offset) {
                 Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
@@ -227,7 +227,7 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
     Y_VERIFY(changes->AppendedPortions.empty());
 
 
-    TSnapshot minSnapshot = changes->ApplySnapshot;    
+    TSnapshot minSnapshot = changes->ApplySnapshot;
     for (auto& inserted : changes->DataToIndex) {
         TSnapshot insertSnap = inserted.GetSnapshot();
         Y_VERIFY(insertSnap.Valid());
@@ -238,7 +238,7 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
     Y_VERIFY(minSnapshot.Valid());
     auto& indexInfo = IndexInfo.GetSchema(minSnapshot)->GetIndexInfo();
     Y_VERIFY(indexInfo.IsSorted());
-    
+
     THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> pathBatches;
     for (auto& inserted : changes->DataToIndex) {
         TBlobRange blobRange(inserted.BlobId, 0, inserted.BlobId.BlobSize());
@@ -377,7 +377,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
     Y_VERIFY(uniqKeyCount.size());
     auto minTs = uniqKeyCount.begin()->first;
     auto maxTs = uniqKeyCount.rbegin()->first;
-    Y_VERIFY(minTs >= ts0.Border);
+    Y_VERIFY(minTs >= ts0.GetBorder());
 
     // It's an estimation of needed count cause numRows calculated before key replaces
     ui32 numSplitInto = changes.NumSplitInto(numRows);
@@ -493,7 +493,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
         for (auto& batch : merged) {
             Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey()));
 
-            auto startKey = ts0.Border;
+            auto startKey = ts0.GetBorder();
             if (granuleNo) {
                 startKey = borders[granuleNo - 1];
             }

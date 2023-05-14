@@ -55,19 +55,15 @@ public:
 
         const auto name = "DecimalMulAndDivNormalMultiplier";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalMulAndDivNormalMultiplier));
-        llvm::Value* func;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
-            const auto fnType = FunctionType::get(valType, { valType, valType, valType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        } else {
-            const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr, valTypePtr }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        }
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+            FunctionType::get(valType, { valType, valType, valType }, false):
+            FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr, valTypePtr }, false);
+        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
 
-        if (IsLeftOptional || IsRightOptional) {
+        if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ?
                 BinaryOperator::CreateAnd(left, right, "test", block):
                 IsLeftOptional ? left : right;
@@ -94,7 +90,7 @@ public:
                 new StoreInst(NDecimal::GenConstant(Divider, context), arg2Ptr, block);
                 new StoreInst(GetterForInt128(right, block), arg3Ptr, block);
                 CallInst::Create(func, { retPtr, arg1Ptr, arg2Ptr, arg3Ptr }, "", block);
-                muldiv = new LoadInst(retPtr, "res", block);
+                muldiv = new LoadInst(valType, retPtr, "res", block);
             }
 
             const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
@@ -123,7 +119,7 @@ public:
                 new StoreInst(NDecimal::GenConstant(Divider, context), arg2Ptr, block);
                 new StoreInst(GetterForInt128(right, block), arg3Ptr, block);
                 CallInst::Create(func, { retPtr, arg1Ptr, arg2Ptr, arg3Ptr }, "", block);
-                muldiv = new LoadInst(retPtr, "res", block);
+                muldiv = new LoadInst(valType, retPtr, "res", block);
             }
 
             const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
@@ -181,22 +177,17 @@ public:
         const auto valType = Type::getInt128Ty(context);
         const auto valTypePtr = PointerType::getUnqual(valType);
 
-        const auto fnType = FunctionType::get(valType, {valType, valType}, false);
         const auto name = "DecimalDiv";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalDiv));
-        llvm::Value* func;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
-            const auto fnType = FunctionType::get(valType, { valType, valType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        } else {
-            const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
-        }
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+            FunctionType::get(valType, { valType, valType }, false):
+            FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr }, false);
+        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
 
-        if (IsLeftOptional || IsRightOptional) {
+        if constexpr (IsLeftOptional || IsRightOptional) {
             const auto test = IsLeftOptional && IsRightOptional ?
                 BinaryOperator::CreateAnd(left, right, "test", block):
                 IsLeftOptional ? left : right;
@@ -225,7 +216,7 @@ public:
                 new StoreInst(GetterForInt128(left, block), arg1Ptr, block);
                 new StoreInst(cast, arg2Ptr, block);
                 CallInst::Create(func, { retPtr, arg1Ptr, arg2Ptr }, "", block);
-                div = new LoadInst(retPtr, "res", block);
+                div = new LoadInst(valType, retPtr, "res", block);
             }
 
             result->addIncoming(SetterForInt128(div, block), block);
@@ -247,7 +238,7 @@ public:
                 new StoreInst(GetterForInt128(left, block), arg1Ptr, block);
                 new StoreInst(cast, arg2Ptr, block);
                 CallInst::Create(func, { retPtr, arg1Ptr, arg2Ptr }, "", block);
-                div = new LoadInst(retPtr, "res", block);
+                div = new LoadInst(valType, retPtr, "res", block);
             }
             return SetterForInt128(div, block);
         }
@@ -276,7 +267,7 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
     auto left = LocateNode(ctx.NodeLocator, callable, 0);
     auto right = LocateNode(ctx.NodeLocator, callable, 1);
 
-    switch(rightType->GetSchemeType()) {
+    switch (rightType->GetSchemeType()) {
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 

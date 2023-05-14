@@ -142,7 +142,8 @@ class KikimrConfigGenerator(object):
             enable_alter_database_create_hive_first=False,
             disable_iterator_reads=False,
             disable_iterator_lookups=False,
-            overrided_actor_system_config=None
+            overrided_actor_system_config=None,
+            default_users=None,  # dict[user]=password
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -312,6 +313,20 @@ class KikimrConfigGenerator(object):
             self.yaml_config["grpc_config"]["ca"] = self.grpc_tls_ca_path
             self.yaml_config["grpc_config"]["cert"] = self.grpc_tls_cert_path
             self.yaml_config["grpc_config"]["key"] = self.grpc_tls_key_path
+
+        if default_users is not None:
+            # check for None for remove default users for empty dict
+            if "security_config" not in self.yaml_config["domains_config"]:
+                self.yaml_config["domains_config"]["security_config"] = dict()
+
+            # remove existed default users
+            self.yaml_config["domains_config"]["security_config"]["default_users"] = []
+
+            for user, password in default_users.items():
+                self.yaml_config["domains_config"]["security_config"]["default_users"].append({
+                    "name": user,
+                    "password": password,
+                })
 
         if os.getenv("YDB_ALLOW_ORIGIN") is not None:
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}

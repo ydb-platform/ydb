@@ -41,7 +41,7 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        const auto load = new LoadInst(statePtr, "load", block);
+        const auto load = new LoadInst(valueType, statePtr, "load", block);
         const auto state = PHINode::Create(load->getType(), 2U, "state", main);
         state->addIncoming(load, block);
 
@@ -58,7 +58,7 @@ public:
                 CleanupBoxed(list, ctx, block);
         }
 
-        const auto save = new LoadInst(statePtr, "save", block);
+        const auto save = new LoadInst(valueType, statePtr, "save", block);
         state->addIncoming(save, block);
         BranchInst::Create(main, block);
 
@@ -92,7 +92,7 @@ public:
         }
 
         block = good;
-        const auto value = new LoadInst(valuePtr, "value", block);
+        const auto value = new LoadInst(valueType, valuePtr, "value", block);
         ValueRelease(static_cast<const IComputationNode*>(this)->GetRepresentation(), value, ctx, block);
         result->addIncoming(value, block);
         BranchInst::Create(done, block);
@@ -133,12 +133,13 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
+        const auto valueType = Type::getInt128Ty(context);
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto load = new LoadInst(statePtr, "load", block);
-        const auto result = PHINode::Create(load->getType(), 2U, "state", done);
+        const auto load = new LoadInst(valueType, statePtr, "load", block);
+        const auto result = PHINode::Create(valueType, 2U, "state", done);
 
         result->addIncoming(load, block);
         BranchInst::Create(done, main, IsFinish(load, block), block);
@@ -242,7 +243,6 @@ private:
         auto& module = codegen->GetModule();
         auto& context = codegen->GetContext();
 
-
         const auto& name = TBaseComputation::MakeName("Fetch");
         if (const auto f = module.getFunction(name.c_str()))
             return f;
@@ -266,7 +266,7 @@ private:
         SafeUnRefUnboxed(valuePtr, ctx, block);
         GetNodeValue(valuePtr, Flow, ctx, block);
 
-        const auto value = new LoadInst(valuePtr, "value", block);
+        const auto value = new LoadInst(valueType, valuePtr, "value", block);
 
         const auto second = SelectInst::Create(IsYield(value, block), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "second", block);
         const auto first = SelectInst::Create(IsFinish(value, block), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), second, "second", block);
@@ -404,7 +404,7 @@ private:
     const ui32 StubsIndex;
 };
 
-} // namespace 
+} // namespace
 
 IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());

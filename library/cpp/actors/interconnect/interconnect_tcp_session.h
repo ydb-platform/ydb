@@ -295,6 +295,8 @@ namespace NActors {
         ui64 ConfirmedByInput;
 
         std::shared_ptr<IInterconnectMetrics> Metrics;
+        std::array<ui32, 16> InputTrafficArray;
+        THashMap<ui16, ui32> InputTrafficMap;
 
         bool CloseInputSessionRequested = false;
 

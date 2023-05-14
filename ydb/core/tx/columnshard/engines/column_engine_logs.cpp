@@ -127,17 +127,6 @@ bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& por
     return true;
 }
 
-std::vector<const TPortionInfo*> GetActualPortions(const THashMap<ui64, TPortionInfo>& portions) {
-    std::vector<const TPortionInfo*> out;
-    out.reserve(portions.size());
-    for (auto& [portion, portionInfo] : portions) {
-        if (portionInfo.IsActive()) {
-            out.emplace_back(&portionInfo);
-        }
-    }
-    return out;
-}
-
 } // namespace
 
 
@@ -171,7 +160,7 @@ TColumnEngineForLogs::TMarksGranules::TMarksGranules(const TSelectInfo& selectIn
 
 bool TColumnEngineForLogs::TMarksGranules::MakePrecedingMark(const TIndexInfo& indexInfo) {
     ui64 minGranule = 0;
-    TMark minMark(indexInfo.GetEffectiveKey());
+    TMark minMark(TMark::MinBorder(indexInfo.GetIndexKey()));
     if (Marks.empty()) {
         Marks.emplace_back(std::move(minMark), minGranule);
         return true;
@@ -333,7 +322,6 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 
 void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
     if (!GranulesTable) {
-        MarkSchema = info.GetEffectiveKey();
         ui32 indexId = info.GetId();
         GranulesTable = std::make_shared<TGranulesTable>(*this, indexId);
         ColumnsTable = std::make_shared<TColumnsTable>(indexId);
@@ -466,7 +454,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), std::move(dataToIndex), Limits);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(dataToIndex), Limits);
     ui32 reserveGranules = 0;
 
     changes->InitSnapshot = LastSnapshot;
@@ -507,7 +495,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     Y_VERIFY(info);
     Y_VERIFY(info->Granules.size() == 1);
 
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), std::move(info), Limits, LastSnapshot);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(info), Limits, LastSnapshot);
 
     const ui64 granule = *changes->CompactionInfo->Granules.begin();
     const auto gi = Granules.find(granule);
@@ -549,7 +537,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
                                                                          THashSet<ui64>& pathsToDrop,
                                                                          ui32 maxRecords) {
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), snapshot, Limits);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), snapshot, Limits);
     ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
@@ -636,7 +624,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
     }
 
     TSnapshot fakeSnapshot(1, 1); // TODO: better snapshot
-    auto changes = std::make_shared<TChanges>(TMark(MarkSchema), TColumnEngineChanges::TTL, fakeSnapshot);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), TColumnEngineChanges::TTL, fakeSnapshot);
     ui64 evicttionSize = 0;
     bool allowEviction = true;
     ui64 dropBlobs = 0;
@@ -889,7 +877,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
     for (auto& [granule, p] : changes.NewGranules) {
         ui64 pathId = p.first;
         TMark mark = p.second;
-        TGranuleRecord rec(pathId, granule, snapshot, mark.Border);
+        TGranuleRecord rec(pathId, granule, snapshot, mark.GetBorder());
 
         if (!SetGranule(rec, apply)) {
             LOG_S_ERROR("Cannot insert granule " << rec << " at tablet " << TabletId);
@@ -1032,7 +1020,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             // granule vs portion minPK
             NArrow::TReplaceKey granuleStart = Granules.contains(granule)
                 ? Granules[granule]->Record.Mark
-                : changes.NewGranules.find(granule)->second.second.Border;
+                : changes.NewGranules.find(granule)->second.second.GetBorder();
 
             auto portionStart = portionInfo.EffKeyStart();
             if (portionStart < granuleStart) {
@@ -1193,13 +1181,9 @@ bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& c
     return true;
 }
 
-TMap<TSnapshot, std::vector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64 granule, const TSnapshot& snapshot) const {
-    Y_VERIFY(Granules.contains(granule));
-    auto& spg = Granules.find(granule)->second;
-    Y_VERIFY(spg);
-
-    TMap<TSnapshot, std::vector<ui64>> out;
-    for (const auto& [portion, portionInfo] : spg->Portions) {
+static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot(const THashMap<ui64, TPortionInfo>& portions, const TSnapshot& snapshot) {
+    TMap<TSnapshot, std::vector<const TPortionInfo*>> out;
+    for (const auto& [portion, portionInfo] : portions) {
         if (portionInfo.Empty()) {
             continue;
         }
@@ -1213,7 +1197,7 @@ TMap<TSnapshot, std::vector<ui64>> TColumnEngineForLogs::GetOrderedPortions(ui64
         }
 
         if (visible) {
-            out[recSnapshot].push_back(portion);
+            out[recSnapshot].push_back(&portionInfo);
         }
     }
     return out;
@@ -1250,7 +1234,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             auto& mark = it->first;
             ui64 granule = it->second;
 
-            if (keyTo && *keyTo < mark.Border) {
+            if (keyTo && *keyTo < mark.GetBorder()) {
                 break;
             }
 
@@ -1261,16 +1245,14 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             auto& portions = spg->Portions;
             bool granuleHasDataForSnaphsot = false;
 
-            TMap<TSnapshot, std::vector<ui64>> orderedPortions = GetOrderedPortions(granule, snapshot);
+            TMap<TSnapshot, std::vector<const TPortionInfo*>> orderedPortions = GroupPortionsBySnapshot(portions, snapshot);
             for (auto& [snap, vec] : orderedPortions) {
-                for (auto& portion : vec) {
-                    auto& portionInfo = portions.find(portion)->second;
-
+                for (const auto* portionInfo : vec) {
                     TPortionInfo outPortion;
-                    outPortion.Meta = portionInfo.Meta;
+                    outPortion.Meta = portionInfo->Meta;
                     outPortion.Records.reserve(columnIds.size());
 
-                    for (auto& rec : portionInfo.Records) {
+                    for (auto& rec : portionInfo->Records) {
                         Y_VERIFY(rec.Valid());
                         if (columnIds.contains(rec.ColumnId)) {
                             outPortion.Records.push_back(rec);
@@ -1278,10 +1260,10 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                     }
                     Y_VERIFY(outPortion.Produced());
                     if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portion);
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portionInfo->Portion());
                         continue;
                     } else {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portion);
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portionInfo->Portion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));
                     granuleHasDataForSnaphsot = true;
@@ -1298,28 +1280,49 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     return out;
 }
 
-static bool NeedSplit(const std::vector<const TPortionInfo*>& actual, const TCompactionLimits& limits, bool& inserted) {
-    if (actual.size() < 2) {
-        return false;
-    }
-
+static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompactionLimits& limits, bool& inserted) {
     ui64 sumSize = 0;
     ui64 sumMaxSize = 0;
-    auto [minPk0, maxPk0] = actual[0]->MinMaxValue(actual[0]->FirstPkColumn);
-    bool pkEqual = !!minPk0 && !!maxPk0 && arrow::ScalarEquals(*minPk0, *maxPk0);
-    for (auto* portionInfo : actual) {
-        Y_VERIFY(portionInfo);
-        if (pkEqual) {
-            auto [minPkCurrent, maxPkCurrent] = portionInfo->MinMaxValue(portionInfo->FirstPkColumn);
-            pkEqual = !!minPkCurrent && !!maxPkCurrent && arrow::ScalarEquals(*minPk0, *minPkCurrent)
-                && arrow::ScalarEquals(*maxPk0, *maxPkCurrent);
+    size_t activeCount = 0;
+    std::shared_ptr<arrow::Scalar> minPk0;
+    std::shared_ptr<arrow::Scalar> maxPk0;
+    bool pkEqual = true;
+
+    for (const auto& [_, info] : portions) {
+        // We need only actual portions here (with empty XPlanStep:XTxId)
+        if (info.IsActive()) {
+            ++activeCount;
+        } else {
+            continue;
         }
-        auto sizes = portionInfo->BlobsSizes();
+
+        if (pkEqual) {
+            const auto [minPkCurrent, maxPkCurrent] = info.MinMaxValue(info.FirstPkColumn);
+            // Check that all pks equal to each other.
+            if ((pkEqual = bool(minPkCurrent) && bool(maxPkCurrent))) {
+                if (minPk0 && maxPk0) {
+                    pkEqual = arrow::ScalarEquals(*minPk0, *minPkCurrent) && arrow::ScalarEquals(*maxPk0, *maxPkCurrent);
+                } else {
+                    pkEqual = arrow::ScalarEquals(*minPkCurrent, *maxPkCurrent);
+
+                    minPk0 = minPkCurrent;
+                    maxPk0 = maxPkCurrent;
+                }
+            }
+        }
+
+        auto sizes = info.BlobsSizes();
         sumSize += sizes.first;
         sumMaxSize += sizes.second;
-        if (portionInfo->IsInserted()) {
+        if (info.IsInserted()) {
             inserted = true;
         }
+    }
+
+    // Do nothing if count of active portions is less than two.
+    if (activeCount < 2) {
+        inserted = false;
+        return false;
     }
 
     return !pkEqual && (sumMaxSize >= limits.GranuleBlobSplitSize || sumSize >= limits.GranuleOverloadSize);
@@ -1343,18 +1346,17 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
         const auto gi = Granules.find(*it);
         // Check granule exists.
         Y_VERIFY(gi != Granules.end());
-        // We need only actual portions here (with empty XPlanStep:XTxId)
-        if (const auto& actualPortions = GetActualPortions(gi->second->Portions); !actualPortions.empty()) {
-            bool inserted = false;
-            if (NeedSplit(actualPortions, Limits, inserted)) {
-                inGranule = false;
-                granule = *it;
-                break;
-            } else if (inserted) {
-                granule = *it;
-                break;
-            }
+
+        bool inserted = false;
+        if (NeedSplit(gi->second->Portions, Limits, inserted)) {
+            inGranule = false;
+            granule = *it;
+            break;
+        } else if (inserted) {
+            granule = *it;
+            break;
         }
+
         // Nothing to compact in the current granule. Throw it.
         it = CompactionGranules.erase(it);
     }

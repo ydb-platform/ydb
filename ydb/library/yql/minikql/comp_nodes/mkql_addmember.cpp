@@ -64,16 +64,17 @@ public:
         const auto ptrType = PointerType::getUnqual(valType);
         const auto idxType = Type::getInt32Ty(context);
         const auto type = ArrayType::get(valType, newSize);
+        const auto itmsType = PointerType::getUnqual(type);
         const auto itms = *Stateless || ctx.AlwaysInline ?
-            new AllocaInst(PointerType::getUnqual(type), 0U, "itms", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(PointerType::getUnqual(type), 0U, "itms", block);
+            new AllocaInst(itmsType, 0U, "itms", &ctx.Func->getEntryBlock().back()):
+            new AllocaInst(itmsType, 0U, "itms", block);
         const auto result = Cache_.GenNewArray(newSize, itms, ctx, block);
-        const auto itemsPtr = new LoadInst(itms, "items", block);
+        const auto itemsPtr = new LoadInst(itmsType, itms, "items", block);
 
         const auto array = GetNodeValue(StructObj_, ctx, block);
         const auto zero = ConstantInt::get(idxType, 0);
 
-        const auto itemPtr = GetElementPtrInst::CreateInBounds(itemsPtr, {zero, ConstantInt::get(idxType, Index_)}, "item", block);
+        const auto itemPtr = GetElementPtrInst::CreateInBounds(type, itemsPtr, {zero, ConstantInt::get(idxType, Index_)}, "item", block);
         GetNodeValue(itemPtr, Member_, ctx, block);
 
         const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(ptrType, array, ctx.Codegen, block);
@@ -89,9 +90,9 @@ public:
             block = fast;
             for (ui32 i = 0; i < Index_; ++i) {
                 const auto index = ConstantInt::get(idxType, i);
-                const auto srcPtr = GetElementPtrInst::CreateInBounds(elements, {index}, "src", block);
-                const auto dstPtr = GetElementPtrInst::CreateInBounds(itemsPtr, {zero, index}, "dst", block);
-                const auto item = new LoadInst(srcPtr, "item", block);
+                const auto srcPtr = GetElementPtrInst::CreateInBounds(valType, elements, {index}, "src", block);
+                const auto dstPtr = GetElementPtrInst::CreateInBounds(type, itemsPtr, {zero, index}, "dst", block);
+                const auto item = new LoadInst(valType, srcPtr, "item", block);
                 new StoreInst(item, dstPtr, block);
                 ValueAddRef(Representations_[i], dstPtr, ctx, block);
             }
@@ -99,9 +100,9 @@ public:
             for (ui32 i = Index_ + 1U; i < newSize; ++i) {
                 const auto oldIndex = ConstantInt::get(idxType, --i);
                 const auto newIndex = ConstantInt::get(idxType, ++i);
-                const auto srcPtr = GetElementPtrInst::CreateInBounds(elements, {oldIndex}, "src", block);
-                const auto dstPtr = GetElementPtrInst::CreateInBounds(itemsPtr, {zero, newIndex}, "dst", block);
-                const auto item = new LoadInst(srcPtr, "item", block);
+                const auto srcPtr = GetElementPtrInst::CreateInBounds(valType, elements, {oldIndex}, "src", block);
+                const auto dstPtr = GetElementPtrInst::CreateInBounds(type, itemsPtr, {zero, newIndex}, "dst", block);
+                const auto item = new LoadInst(valType, srcPtr, "item", block);
                 new StoreInst(item, dstPtr, block);
                 ValueAddRef(Representations_[i - 1U], dstPtr, ctx, block);
             }
@@ -111,14 +112,14 @@ public:
             block = slow;
             for (ui32 i = 0; i < Index_; ++i) {
                 const auto index = ConstantInt::get(idxType, i);
-                const auto itemPtr = GetElementPtrInst::CreateInBounds(itemsPtr, {zero, index}, "item", block);
+                const auto itemPtr = GetElementPtrInst::CreateInBounds(type, itemsPtr, {zero, index}, "item", block);
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(itemPtr, array, ctx.Codegen, block, index);
             }
 
             for (ui32 i = Index_ + 1U; i < newSize; ++i) {
                 const auto oldIndex = ConstantInt::get(idxType, --i);
                 const auto newIndex = ConstantInt::get(idxType, ++i);
-                const auto itemPtr = GetElementPtrInst::CreateInBounds(itemsPtr, {zero, newIndex}, "item", block);
+                const auto itemPtr = GetElementPtrInst::CreateInBounds(type, itemsPtr, {zero, newIndex}, "item", block);
                 CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(itemPtr, array, ctx.Codegen, block, oldIndex);
             }
             BranchInst::Create(done, block);

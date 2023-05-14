@@ -79,7 +79,6 @@ jobs:
               // organization member
               console.log(e);
             }
-
   build_and_test:
     needs:
       - check-running-allowed

@@ -11,7 +11,6 @@ on:
       - 'reopened'
       - 'labeled'
 jobs:
-
   check-running-allowed:
     runs-on: ubuntu-latest
     outputs:

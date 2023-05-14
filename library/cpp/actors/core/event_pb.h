@@ -208,7 +208,7 @@ namespace NActors {
             }
 
             // TEvVGetResult
-            if (TEventType == 268633601) {
+            if (false/*TEventType == 268633601*/) {
 //                std::cout << "[SerializeToArcadiaStream] using compression for TEvVGetResult" << "\n";
                 NProtoBuf::io::GzipOutputStream compressing(chunker);
                 bool res = Record.SerializeToZeroCopyStream(&compressing);
@@ -274,7 +274,7 @@ namespace NActors {
                 // parse the protobuf
 
                 // TEvVGetResult
-                if (TEventType == 268633601) {
+                if (false/*TEventType == 268633601*/) {
                     TRopeStream stream(iter, size);
                     NProtoBuf::io::GzipInputStream decompressing(&stream);
                     if (!ev->Record.ParseFromZeroCopyStream(&decompressing)) {

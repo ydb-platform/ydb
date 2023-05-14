@@ -810,6 +810,39 @@ namespace NKikimrCapnProto {
                 return true;
             }
 
+            void writeBufferToStream(google::protobuf::io::ZeroCopyOutputStream* stream, const kj::byte* buffer, size_t bufferSize) const {
+                while (bufferSize > 0) {
+                    void* streamBuffer;
+                    int streamBufferSize;
+
+                    // Request the next block of data to write into
+                    if (!stream->Next(&streamBuffer, &streamBufferSize)) {
+                        // Handle the error
+                        return;
+                    }
+
+                    // Calculate the size to write in this iteration
+                    size_t sizeToWrite = std::min(static_cast<size_t>(streamBufferSize), bufferSize);
+
+                    // Copy the data from the buffer to the stream
+                    std::memcpy(streamBuffer, buffer, sizeToWrite);
+
+                    // If we didn't fill the entire stream buffer, back up
+                    if (sizeToWrite < static_cast<size_t>(streamBufferSize)) {
+                        // Ensure the result fits into an int
+                        size_t backupSize = streamBufferSize - sizeToWrite;
+                        Y_VERIFY(backupSize <= static_cast<size_t>(std::numeric_limits<int>::max()));
+
+                        stream->BackUp(static_cast<int>(backupSize));
+                    }
+
+                    // Move the pointer in the source buffer and decrease the remaining size
+                    buffer += sizeToWrite;
+                    bufferSize -= sizeToWrite;
+                }
+            }
+
+
             bool SerializeToZeroCopyStream(NProtoBuf::io::ZeroCopyOutputStream *output) const {
                 NKikimrCapnProto_::TEvVGet::Builder b(builder);
                 if (extremeQueriesInBuffer && !elements.empty()) {
@@ -823,8 +856,7 @@ namespace NKikimrCapnProto {
 
                 kj::VectorOutputStream stream;
                 capnp::writePackedMessage(stream, *message);
-                const TString s((const char *) stream.getArray().begin(), stream.getArray().size());
-                dynamic_cast<NActors::TChunkSerializer*>(output)->WriteString(&s);
+                writeBufferToStream(output, stream.getArray().begin(), stream.getArray().size());
 
                 return true;
             }

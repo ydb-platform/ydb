@@ -1700,12 +1700,10 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         auto it = Self->ReadIterators.find(ReadId);
-        if (it == Self->ReadIterators.end()) {
-            // iterator aborted
+        if (it == Self->ReadIterators.end() && !Op) {
+            // iterator aborted before we could start operation
             return true;
         }
-
-        auto& state = *it->second;
 
         try {
             // If tablet is in follower mode then we should sync scheme
@@ -1719,13 +1717,18 @@ public:
                 }
 
                 if (status != NKikimrTxDataShard::TError::OK) {
+                    Y_VERIFY_DEBUG(!Op);
+                    if (Y_UNLIKELY(it == Self->ReadIterators.end())) {
+                        // iterator already aborted
+                        return true;
+                    }
                     std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
                     SetStatusError(
                         result->Record,
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage);
                     result->Record.SetReadId(ReadId.ReadId);
-                    SendViaSession(state.SessionId, ReadId.Sender, Self->SelfId(), result.release());
+                    SendViaSession(it->second->SessionId, ReadId.Sender, Self->SelfId(), result.release());
 
                     return true;
                 }

@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
 
@@ -3574,5 +3575,102 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
         UNIT_ASSERT(state.State == NDataShard::TReadIteratorState::EState::Executing);
     }
 };
+
+Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
+    Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
+        TPortManager pm;
+        NFake::TCaches caches;
+        caches.Shared = 1 /* bytes */;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetCacheParams(caches);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_INFO);
+        // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        auto opts = TShardedTableOptions()
+                .Shards(1)
+                .ExecutorCacheSize(1 /* byte */)
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"value", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+        CompactTable(runtime, shard1, tableId1, false);
+        RebootTablet(runtime, shard1, sender);
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        size_t observedReadResults = 0;
+        bool captureCacheRequests = true;
+        std::vector<std::unique_ptr<IEventHandle>> capturedCacheRequests;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvReadResult::EventType: {
+                    auto* msg = ev->Get<TEvDataShard::TEvReadResult>();
+                    Cerr << "... observed TEvReadResult:\n" << msg->ToString() << Endl;
+                    observedReadResults++;
+                    break;
+                }
+                case NSharedCache::TEvRequest::EventType: {
+                    if (captureCacheRequests) {
+                        Cerr << "... captured TEvRequest" << Endl;
+                        capturedCacheRequests.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        auto readSender = runtime.AllocateEdgeActor();
+        auto tabletPipe = runtime.ConnectToPipe(shard1, readSender, 0, NTabletPipe::TClientConfig());
+        {
+            auto request = std::make_unique<TEvDataShard::TEvRead>();
+            request->Record.SetReadId(1);
+            request->Record.MutableTableId()->SetOwnerId(tableId1.PathId.OwnerId);
+            request->Record.MutableTableId()->SetTableId(tableId1.PathId.LocalPathId);
+            request->Record.MutableTableId()->SetSchemaVersion(tableId1.SchemaVersion);
+            request->Record.AddColumns(1);
+            request->Record.AddColumns(2);
+            request->Ranges.emplace_back(TOwnedCellVec(), true, TOwnedCellVec(), true);
+            runtime.SendToPipe(tabletPipe, readSender, request.release());
+        }
+
+        WaitFor(runtime, [&]() { return capturedCacheRequests.size() > 0 || observedReadResults > 0; }, "shared cache request");
+        UNIT_ASSERT_C(capturedCacheRequests.size() > 0, "cache request was not captured");
+
+        {
+            auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
+            request->Record.SetReadId(1);
+            runtime.SendToPipe(tabletPipe, readSender, request.release());
+        }
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        captureCacheRequests = false;
+        for (auto& ev : capturedCacheRequests) {
+            runtime.Send(ev.release(), 0, true);
+        }
+
+        // We should be able to drop table
+        WaitTxNotification(server, AsyncDropTable(server, sender, "/Root", "table-1"));
+    }
+}
 
 } // namespace NKikimr

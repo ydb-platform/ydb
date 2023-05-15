@@ -2593,7 +2593,7 @@ namespace NTypeAnnImpl {
         if (auto status = TryConvertToPgOp("%", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
-        
+
         const bool checked = input->Content().StartsWith("Checked");
 
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -7271,6 +7271,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             {"String.Substring", "'SUBSTRING' builtin function"},
             {"String.Find", "'FIND' builtin function"},
             {"String.ReverseFind", "'RFIND' builtin function"},
+            {"String.StartsWith", "'StartsWith' builtin function"},
+            {"String.EndsWith", "'EndsWith' builtin function"},
+            {"Math.Abs", "'Abs' builtin function"},
+            {"Math.Fabs", "'Abs' builtin function"},
         };
 
         if (const auto bad = deprecated.find(name); deprecated.cend() != bad) {

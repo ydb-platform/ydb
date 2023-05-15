@@ -201,6 +201,11 @@ public:
             }
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDocApiJson:
+            if (tablePath.Base()->DocumentApiVersion < 1) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DocApiJson format incompatible with non-document table");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()

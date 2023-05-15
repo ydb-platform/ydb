@@ -271,16 +271,34 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
+            Name: "RowTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "value" Type: "Uint64" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "DocumentTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"__document_api_version", "1"}}));
+        env.TestWaitNotification(runtime, txId);
+
+        // non-document table
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "RowTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeNewAndOldImages
+              Format: ECdcStreamFormatDocApiJson
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
         // invalid mode
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
+            TableName: "DocumentTable"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeUpdate
@@ -290,7 +308,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // invalid aws region
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
+            TableName: "DocumentTable"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
@@ -301,7 +319,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         // ok
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
+            TableName: "DocumentTable"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeNewAndOldImages
@@ -311,7 +329,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DocumentTable/Stream"), {
             NLs::PathExist,
             NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages),
             NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDocApiJson),

@@ -1224,6 +1224,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"id_sort", "Utf8", true, false},
                 {"__RowData", "JsonDocument", false, false},
                 {"extra", "Bool", false, false},
+            })
+            .Attributes({
+                {"__document_api_version", "1"},
             });
     }
 

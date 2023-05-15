@@ -1048,6 +1048,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
     }
+    request->Record.SetRequestType("_document_api_request");
     request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     request->Record.MutableRequest()->SetType(dml
                                               ? NKikimrKqp::QUERY_TYPE_SQL_DML
@@ -1141,6 +1142,12 @@ void CreateShardedTable(
         for (const auto& col : index.DataColumns) {
             indexDesc->AddDataColumnNames(col);
         }
+    }
+
+    for (const auto& [k, v] : opts.Attributes_) {
+        auto* attr = tx.MutableAlterUserAttributes()->AddUserAttributes();
+        attr->SetKey(k);
+        attr->SetValue(v);
     }
 
     desc->SetUniformPartitionsCount(opts.Shards_);
@@ -1656,6 +1663,8 @@ ui64 AsyncAlterAddStream(
         const TShardedTableOptions::TCdcStream& streamDesc)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateCdcStream, workingDir);
+    request->Record.SetRequestType("_document_api_request");
+
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateCdcStream();
     desc.SetTableName(tableName);
     desc.MutableStreamDescription()->SetName(streamDesc.Name);

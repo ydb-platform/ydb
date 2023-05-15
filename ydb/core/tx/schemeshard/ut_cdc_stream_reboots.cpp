@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     Columns { Name: "key" Type: "Uint64" }
                     Columns { Name: "value" Type: "Uint64" }
                     KeyColumnNames: ["key"]
-                )");
+                )", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"__document_api_version", "1"}}));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 

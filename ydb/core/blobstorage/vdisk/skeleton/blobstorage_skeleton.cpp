@@ -1751,7 +1751,7 @@ namespace NKikimr {
             if (!runRepl) {
                 ReplDone = true;
             }
-            UpdateReplState(ctx);
+            UpdateReplState();
         }
 
         void SkeletonErrorState(const TActorContext &ctx,
@@ -1768,7 +1768,7 @@ namespace NKikimr {
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
-            UpdateVDiskStatus(NKikimrBlobStorage::ERROR, ctx);
+            UpdateVDiskStatus(NKikimrBlobStorage::ERROR);
         }
 
         void Handle(TEvBlobStorage::TEvLocalRecoveryDone::TPtr &ev, const TActorContext &ctx) {
@@ -2306,17 +2306,22 @@ namespace NKikimr {
             // FIXME: reconfigure handoff
         }
 
-        void HandleReplDone(const TActorContext& ctx) {
-            ReplDone = true;
-            UpdateReplState(ctx);
+        void HandleReplDone(STFUNC_SIG) {
+            if (ev->Cookie) { // semi-finished replication, only phantom blobs
+                ReplOnlyPhantomsRemain = true;
+            } else {
+                ReplDone = true;
+            }
+            UpdateReplState();
         }
 
         void Ignore(const TActorContext&)
         {}
 
-        void UpdateVDiskStatus(NKikimrBlobStorage::EVDiskStatus status, const TActorContext& ctx) {
+        void UpdateVDiskStatus(NKikimrBlobStorage::EVDiskStatus status) {
             const auto& base = Db->Config->BaseInfo;
-            Send(NodeWardenServiceId, new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId, status));
+            Send(NodeWardenServiceId, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
+                ReplOnlyPhantomsRemain));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2366,13 +2371,13 @@ namespace NKikimr {
 
         void Handle(TEvReportScrubStatus::TPtr ev, const TActorContext& ctx) {
             HasUnreadableBlobs = ev->Get()->HasUnreadableBlobs;
-            UpdateReplState(ctx);
+            UpdateReplState();
             ctx.Send(ev->Forward(*SkeletonFrontIDPtr));
         }
 
-        void UpdateReplState(const TActorContext& ctx) {
+        void UpdateReplState() {
             const bool ready = ReplDone && !HasUnreadableBlobs;
-            UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING, ctx);
+            UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING);
         }
 
         void Handle(TEvRestoreCorruptedBlob::TPtr ev, const TActorContext& ctx) {
@@ -2619,7 +2624,7 @@ namespace NKikimr {
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvActorDied, Handle)
-            CFunc(TEvBlobStorage::EvReplDone, HandleReplDone)
+            fFunc(TEvBlobStorage::EvReplDone, HandleReplDone)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
             fFunc(TEvBlobStorage::EvScrubAwait, ForwardToScrubActor)
@@ -2731,6 +2736,7 @@ namespace NKikimr {
         NMonGroup::TSyncLogIFaceGroup SyncLogIFaceGroup;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         bool ReplDone = false;
+        bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();
         TLoggedRecsVault LoggedRecsVault;

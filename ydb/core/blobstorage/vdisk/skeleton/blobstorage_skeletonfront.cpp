@@ -1589,7 +1589,8 @@ namespace NKikimr {
             // update status in NodeWarden
             const TActorId& warden = MakeBlobStorageNodeWardenID(SelfId().NodeId());
             const auto& base = Config->BaseInfo;
-            ctx.Send(warden, new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId, NKikimrBlobStorage::EVDiskStatus::ERROR));
+            ctx.Send(warden, new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId,
+                NKikimrBlobStorage::EVDiskStatus::ERROR, false));
             // drop messages in internal queues
             for (auto *q : {&IntQueueAsyncGets, &IntQueueFastGets, &IntQueueDiscover, &IntQueueLowGets, &IntQueueLogPuts,
                     &IntQueueHugePutsForeground, &IntQueueHugePutsBackground}) {

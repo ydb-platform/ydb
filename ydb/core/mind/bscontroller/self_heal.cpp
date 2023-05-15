@@ -323,11 +323,12 @@ namespace NKikimr::NBsController {
                     Groups.erase(it);
                 }
             }
-            for (const auto& [vdiskId, status] : ev->Get()->VDiskStatusUpdate) {
+            for (const auto& [vdiskId, status, onlyPhantomsRemain] : ev->Get()->VDiskStatusUpdate) {
                 if (const auto it = Groups.find(vdiskId.GroupID); it != Groups.end()) {
                     auto& group = it->second;
                     if (const auto it = group.Content.VDisks.find(vdiskId); it != group.Content.VDisks.end()) {
                         it->second.VDiskStatus = status;
+                        it->second.OnlyPhantomsRemain = onlyPhantomsRemain;
                         group.VDiskStatus[vdiskId].Update(status, now);
                     }
                 }
@@ -760,6 +761,7 @@ namespace NKikimr::NBsController {
                     slot->PDisk->ShouldBeSettledBySelfHeal(),
                     slot->PDisk->BadInTermsOfSelfHeal(),
                     slot->PDisk->Decommitted(),
+                    slot->OnlyPhantomsRemain,
                     slot->Status,
                 };
             }
@@ -784,8 +786,8 @@ namespace NKikimr::NBsController {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    if (slot->Status != m.GetStatus()) {
-                        slot->SetStatus(m.GetStatus(), mono, now);
+                    if (slot->Status != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
+                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain());
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {
@@ -794,7 +796,7 @@ namespace NKikimr::NBsController {
                         }
                         timingQ.emplace_back(*slot);
                     }
-                    ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus());
+                    ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus(), m.GetOnlyPhantomsRemain());
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
                         groups.insert(const_cast<TGroupInfo*>(group));
                     }

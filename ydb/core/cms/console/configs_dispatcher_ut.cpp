@@ -478,6 +478,9 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         NKikimrConfig::TAppConfig expectedConfig;
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         auto *ncdConfig = expectedConfig.MutableNetClassifierDistributableConfig();
         ncdConfig->SetLastUpdateTimestamp(1);
         UNIT_ASSERT(notifications > 0);
@@ -612,6 +615,9 @@ selector_config: []
         subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
         auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         NKikimrConfig::TAppConfig expectedConfig;
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         auto *logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster1");
         logConfig->SetDefaultLevel(5);
@@ -690,6 +696,9 @@ selector_config: []
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
         logConfig->SetDefaultLevel(5);
@@ -757,6 +766,9 @@ selector_config:
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
         logConfig->SetDefaultLevel(5);
@@ -770,6 +782,9 @@ selector_config:
         CheckDropConfig(runtime, Ydb::StatusIds::SUCCESS, "", 5);
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster2");
         logConfig->SetDefaultLevel(5);
@@ -812,6 +827,9 @@ selector_config:
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
         logConfig->SetDefaultLevel(5);
@@ -857,6 +875,9 @@ selector_config:
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster3");
         logConfig->SetDefaultLevel(5);
@@ -892,6 +913,9 @@ selector_config:
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
         logConfig = expectedConfig.MutableLogConfig();
         logConfig->SetClusterName("cluster2");
         logConfig->SetDefaultLevel(5);

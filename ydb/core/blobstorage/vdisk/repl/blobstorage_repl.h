@@ -26,6 +26,7 @@ namespace NKikimr {
             TInstant End;
             TLogoBlobID KeyPos;
             bool Eof;
+            bool UnrecoveredNonphantomBlobs = false;
             TVDiskID DonorVDiskId;
             bool DropDonor = false;
 

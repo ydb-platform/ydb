@@ -262,7 +262,9 @@ namespace NKikimr::NStorage {
             ui64 WhiteboardInstanceGuid;
 
             NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+            bool OnlyPhantomsRemain = false;
             std::optional<NKikimrBlobStorage::EVDiskStatus> ReportedVDiskStatus; // last reported to BSC
+            std::optional<bool> ReportedOnlyPhantomsRemain;
 
             enum EScrubState : ui32 {
                 IDLE,

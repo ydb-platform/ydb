@@ -562,6 +562,10 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             out << "Void"sv;
             break;
 
+        case TTypeParser::ETypeKind::Null:
+            out << "Null"sv;
+            break;
+
         default:
             ThrowFatalError(TStringBuilder()
                 << "Unexpected type kind: " << parser.GetKind());

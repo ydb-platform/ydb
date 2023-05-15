@@ -14,15 +14,18 @@ inputs:
     required: true
     type: string
   testman_token:
-     required: false
-     type: string
+    required: false
+    type: string
   testman_url:
-     required: false
-     type: string
+    required: false
+    type: string
   testman_project_id:
-     required: false
-     type: string
-    
+    required: false
+    type: string
+  aws_bucket:
+    required: true
+    type: string
+
 runs:
   using: "composite"
   steps:
@@ -36,7 +39,7 @@ runs:
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
-      echo "logfilename=${{inputs.log_suffix}}-stdout.gz" >> $GITHUB_OUTPUT
+      echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
   - name: Install Node required for Testmo CLI
     uses: actions/setup-node@v3
     with:
@@ -91,7 +94,7 @@ runs:
     with:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
-      aws_bucket: ydb-tech-ci
+      aws_bucket: ${{inputs.aws_bucket}}
       source_dir: artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: https://storage.yandexcloud.net

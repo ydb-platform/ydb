@@ -490,6 +490,9 @@ TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString con
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (state) {
+    case NKikimrWhiteboard::TTabletStateInfo::Dead:
+        flag = NKikimrViewer::EFlag::Red;
+        break;
     case NKikimrWhiteboard::TTabletStateInfo::Created:
     case NKikimrWhiteboard::TTabletStateInfo::ResolveStateStorage:
     case NKikimrWhiteboard::TTabletStateInfo::Candidate:
@@ -498,12 +501,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
     case NKikimrWhiteboard::TTabletStateInfo::Restored:
     case NKikimrWhiteboard::TTabletStateInfo::Discover:
     case NKikimrWhiteboard::TTabletStateInfo::Lock:
-    case NKikimrWhiteboard::TTabletStateInfo::Dead:
-        flag = NKikimrViewer::EFlag::Red;
-        break;
     case NKikimrWhiteboard::TTabletStateInfo::RebuildGraph:
-        flag = NKikimrViewer::EFlag::Orange;
-        break;
     case NKikimrWhiteboard::TTabletStateInfo::ResolveLeader:
         flag = NKikimrViewer::EFlag::Yellow;
         break;

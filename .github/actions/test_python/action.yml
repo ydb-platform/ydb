@@ -38,7 +38,7 @@ runs:
       python ${source_root}/ydb/tests/oss/launch/launch.py --test-dir ${source_root}/ydb/tests/functional \
       --xml-dir ${source_root}/ydb/tests/functional/test-results/xml $suite | \
       sed -e 's/\x1b\[[0-9;]*m//g' | \
-      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-stdout.gz) | \
+      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-pytest-stdout.gz) | \
       tee -a $GITHUB_STEP_SUMMARY
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master

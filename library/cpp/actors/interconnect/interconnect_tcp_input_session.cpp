@@ -770,7 +770,7 @@ namespace NActors {
                     w = (w & mask) >> 1;
                 }
             }
-            UsageHisto[word] += 1 << offset;
+            UsageHisto[word] += ui64(1) << offset;
 
             while (CurrentBuffers > 1) {
                 const size_t index = CurrentBuffers - 1;

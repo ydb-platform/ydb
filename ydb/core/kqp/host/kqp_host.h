@@ -19,8 +19,15 @@ public:
     using IAsyncGenericResult = NYql::IKikimrAsyncResult<TGenericResult>;
     using IAsyncGenericResultPtr = TIntrusivePtr<IAsyncGenericResult>;
 
-    struct TPrepareSettings {
+    struct TExecSettings {
         TMaybe<bool> DocumentApiRestricted;
+
+        TString ToString() const {
+            return TStringBuilder() << "TExecSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " }";
+        }
+    };
+
+    struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
 
         TString ToString() const {
@@ -45,8 +52,8 @@ public:
     virtual TQueryResult SyncPrepareDataQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 
     /* Scheme queries */
-    virtual IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql) = 0;
-    virtual TQueryResult SyncExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql) = 0;
+    virtual IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) = 0;
+    virtual TQueryResult SyncExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) = 0;
 
     /* Scan queries */
     virtual IAsyncQueryResultPtr PrepareScanQuery(const TKqpQueryRef& query, bool isSql, const TPrepareSettings& settings) = 0;

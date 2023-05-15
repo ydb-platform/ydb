@@ -1,5 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/docapi/traits.h>
+
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
@@ -1383,7 +1385,11 @@ public:
                 } else if (isColumn) {
                     future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
                 } else {
-                    future = Gateway->AlterTable(std::move(alterTableRequest), cluster);
+                    TMaybe<TString> requestType;
+                    if (!SessionCtx->Query().DocumentApiRestricted) {
+                        requestType = NKikimr::NDocApi::RequestType;
+                    }
+                    future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType);
                 }
             }
 

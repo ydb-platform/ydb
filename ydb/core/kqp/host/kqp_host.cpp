@@ -911,17 +911,17 @@ public:
         SessionCtx->SetDatabase(database);
     }
 
-    IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql) override {
+    IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, isSql] (TExprContext& ctx) {
-                return ExecuteSchemeQueryInternal(query, isSql, ctx);
+            [this, &query, isSql, settings] (TExprContext& ctx) {
+                return ExecuteSchemeQueryInternal(query, isSql, settings, ctx);
             });
     }
 
-    TQueryResult SyncExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql) override {
+    TQueryResult SyncExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {
         return CheckedSyncProcessQuery(
-            [this, &query, isSql] () {
-                return ExecuteSchemeQuery(query, isSql);
+            [this, &query, isSql, settings] () {
+                return ExecuteSchemeQuery(query, isSql, settings);
             });
     }
 
@@ -1217,8 +1217,12 @@ private:
         return true;
     }
 
-    IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx) {
+    IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings, TExprContext& ctx) {
         SetupYqlTransformer(EKikimrQueryType::Ddl);
+
+        if (settings.DocumentApiRestricted) {
+            SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion);

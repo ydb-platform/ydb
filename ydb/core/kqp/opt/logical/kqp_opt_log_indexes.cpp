@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -288,43 +289,29 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     return node;
 }
 
-/// Can push filter node to read from table using only columns available in table description
-bool CanPushFilter(const TCoFlatMap& node, const TKikimrTableDescription& tableDesc, TVector<TString> & extraColumns) {
-    if (node.Lambda().Args().Size() != 1)
+/// Can push flat map node to read from table using only columns available in table description
+bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription& tableDesc, const TParentsMap& parentsMap, TVector<TString> & extraColumns) {
+    if (!IsPassthroughFlatMap(flatMap, nullptr)) {
         return false;
+    }
 
-    THashSet<TString> extraColumnsSet;
-    bool canPushFilter = true;
+    const auto & flatMapBody = flatMap.Lambda().Body().Ptr();
+    const auto & flatMapLambdaArgument = flatMap.Lambda().Args().Arg(0).Ref();
 
-    const auto * filterLambdaArgument = node.Lambda().Args().Arg(0).Raw();
+    TSet<TString> lambdaSubset;
+    if (!HaveFieldsSubset(flatMapBody, flatMapLambdaArgument, lambdaSubset, parentsMap, true /*allowDependsOn*/, true /*allowOptionalIf*/)) {
+        return false;
+    }
 
-    VisitExpr(node.Ptr(), [&](const TExprNode::TPtr& exprNode) {
-        if (!canPushFilter)
-            return false;
-
-        if (!TCoMember::Match(exprNode.Get()))
-            return true;
-
-        TCoMember member(exprNode);
-        if (member.Struct().Raw() != filterLambdaArgument) {
-            canPushFilter = false;
-            return false;
-        }
-
-        auto column = member.Name().StringValue();
-        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
+    for (auto & lambdaColumn : lambdaSubset) {
+        auto columnIndex = tableDesc.GetKeyColumnIndex(lambdaColumn);
         if (!columnIndex) {
-            canPushFilter = false;
             return false;
         }
+    }
 
-        extraColumnsSet.insert(column);
-        return true;
-    });
-
-    extraColumns.insert(extraColumns.end(), extraColumnsSet.begin(), extraColumnsSet.end());
-
-    return canPushFilter;
+    extraColumns.insert(extraColumns.end(), lambdaSubset.begin(), lambdaSubset.end());
+    return true;
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake
@@ -332,7 +319,8 @@ bool CanPushFilter(const TCoFlatMap& node, const TKikimrTableDescription& tableD
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
 // Additionally if there is TopSort or Take over filter, and filter depends only on columns available in index,
 // we also push copy of filter through TKqlLookupTable.
-TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+                                        const TParentsMap& parentsMap) {
     if (!node.Maybe<TCoTopBase>()) {
         return node;
     }
@@ -358,7 +346,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
 
     TVector<TString> extraColumns;
 
-    if (maybeFlatMap && !CanPushFilter(maybeFlatMap.Cast(), indexDesc, extraColumns))
+    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), indexDesc, parentsMap, extraColumns))
         return node;
 
     if (!CanPushTopSort(topBase, indexDesc, &extraColumns)) {
@@ -399,7 +387,8 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         .Done();
 }
 
-TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+                                    const TParentsMap& parentsMap) {
     if (!node.Maybe<TCoTake>()) {
         return node;
     }
@@ -424,7 +413,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     const auto& indexDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, indexMeta->Name);
 
     TVector<TString> extraColumns;
-    if (maybeFlatMap && !CanPushFilter(maybeFlatMap.Cast(), indexDesc, extraColumns))
+    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), indexDesc, parentsMap, extraColumns))
         return node;
 
     auto filter = [&](const TExprBase& in) mutable {

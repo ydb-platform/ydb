@@ -122,14 +122,14 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteTakeOverIndexRead(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRewriteTakeOverIndexRead(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> RewriteTakeOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteTakeOverIndexRead(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTakeOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

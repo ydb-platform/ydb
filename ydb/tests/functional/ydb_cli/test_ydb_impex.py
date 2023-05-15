@@ -49,12 +49,15 @@ DATA_ARRAY_CSV = ["""key,id,value
 DATA_ARRAY_CSV_BAD_HEADER = DATA_ARRAY_CSV
 DATA_ARRAY_CSV_BAD_HEADER[0].replace("key,id,value", 'a,b,c')
 
+DATA_CSV_END_LINES = DATA_CSV.replace("\n", ",\n")
+
 DATA_TSV = DATA_CSV.replace(',', '\t')
 
 DATA_ARRAY_TSV = list(map(lambda s: s.replace(',', '\t'), DATA_ARRAY_CSV))
 DATA_ARRAY_TSV_BAD_HEADER = DATA_ARRAY_TSV
 DATA_ARRAY_TSV_BAD_HEADER[0].replace("key\tid\tvalue", 'a\tb\tc')
 
+DATA_TSV_END_LINES = DATA_TSV.replace('\n', '\t\n')
 
 DATA_JSON = """{"key":1,"id":1111,"value":"one"}
 {"key":2,"id":2222,"value":"two"}
@@ -199,11 +202,11 @@ class TestImpex(BaseTestTableService):
                 for key in range(i * rows, (i + 1) * rows):
                     f.write(TestImpex.get_row_in_format(ftype, key, id_set[key % len(id_set)], value_set[key % len(value_set)]))
 
-    def run_import(self, ftype, data):
+    def run_import(self, ftype, data, additional_args=[]):
         self.clear_table()
         with open("tempinput.{}".format(ftype), "w") as f:
             f.writelines(data)
-        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", "tempinput.{}".format(ftype)] + self.get_header_flag(ftype))
+        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", "tempinput.{}".format(ftype)] + self.get_header_flag(ftype) + additional_args)
 
     def run_import_from_stdin(self, ftype, data):
         self.clear_table()
@@ -241,6 +244,14 @@ class TestImpex(BaseTestTableService):
 
     def test_format_csv(self):
         self.run_import("csv", DATA_CSV)
+        return self.run_export("csv")
+
+    def test_format_csv_delimeter_at_end_of_lines(self):
+        self.run_import("csv", DATA_CSV_END_LINES)
+        return self.run_export("csv")
+
+    def test_format_csv_delimeter_at_end_of_lines_newline_delimited(self):
+        self.run_import("csv", DATA_CSV_END_LINES, ["--newline-delimited"])
         return self.run_export("csv")
 
     def test_format_csv_from_stdin(self):
@@ -284,6 +295,14 @@ class TestImpex(BaseTestTableService):
 
     def test_format_tsv(self):
         self.run_import("tsv", DATA_TSV)
+        return self.run_export("tsv")
+
+    def test_format_tsv_delimeter_at_end_of_lines(self):
+        self.run_import("tsv", DATA_TSV_END_LINES)
+        return self.run_export("tsv")
+
+    def test_format_tsv_delimeter_at_end_of_lines_newline_delimited(self):
+        self.run_import("tsv", DATA_TSV_END_LINES, ["--newline-delimited"])
         return self.run_export("tsv")
 
     def test_format_tsv_from_stdin(self):

@@ -362,12 +362,17 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
     TString headerRow;
+    bool RemoveLastDelimiter = false;
     if (settings.Header_ || settings.HeaderRow_) {
         if (settings.Header_) {
             headerRow = splitter.ConsumeLine();
         }
         if (settings.HeaderRow_) {
             headerRow = settings.HeaderRow_;
+        }
+        if (headerRow.EndsWith(settings.Delimiter_)) {
+            RemoveLastDelimiter = true;
+            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
         }
         headerRow += '\n';
         buffer = headerRow;
@@ -384,9 +389,16 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
     ui64 readSize = 0;
     ui64 nextBorder = VerboseModeReadSize;
     while (TString line = splitter.ConsumeLine()) {
+        readSize += line.size();
+        if (RemoveLastDelimiter) {
+            if (!line.EndsWith(settings.Delimiter_)) {
+                return MakeStatus(EStatus::BAD_REQUEST, 
+                        "According to the header, lines should end with a delimiter");
+            }
+            line.erase(line.Size() - settings.Delimiter_.Size());
+        }
         buffer += line;
         buffer += '\n';
-        readSize += line.size();
         ++idx;
         if (readSize >= nextBorder && RetrySettings.Verbose_) {
             nextBorder += VerboseModeReadSize;
@@ -414,10 +426,15 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
     TString headerRow;
     TCsvFileReader splitter(filePath, settings, headerRow, inFlightGetter);
+    bool RemoveLastDelimiter = false;
 
     if (settings.Header_ || settings.HeaderRow_) {
         if (settings.HeaderRow_) {
             headerRow = settings.HeaderRow_;
+        }
+        if (headerRow.EndsWith(settings.Delimiter_)) {
+            RemoveLastDelimiter = true;
+            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
         }
         headerRow += '\n';
     }
@@ -425,7 +442,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
     TVector<TAsyncStatus> threadResults(splitter.GetSplitCount());
     THolder<IThreadPool> pool = CreateThreadPool(splitter.GetSplitCount());
     for (size_t threadId = 0; threadId < splitter.GetSplitCount(); ++threadId) {
-        auto loadCsv = [this, &settings, &headerRow, &splitter, &dbPath, threadId] () {
+        auto loadCsv = [this, &settings, &headerRow, &splitter, &dbPath, threadId, RemoveLastDelimiter] () {
             std::vector<TAsyncStatus> inFlightRequests;
             TString buffer;
             buffer = headerRow;
@@ -435,9 +452,16 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
             TAsyncStatus status;
             TString line;
             while (splitter.GetChunk(threadId).ConsumeLine(line)) {
+                readSize += line.size();
+                if (RemoveLastDelimiter) {
+                    if (!line.EndsWith(settings.Delimiter_)) {
+                        return MakeStatus(EStatus::BAD_REQUEST, 
+                                "According to the header, lines should end with a delimiter");
+                    }
+                    line.erase(line.Size() - settings.Delimiter_.Size());
+                }
                 buffer += line;
                 buffer += '\n';
-                readSize += line.size();
                 ++idx;
                 if (readSize >= nextBorder && RetrySettings.Verbose_) {
                     nextBorder += VerboseModeReadSize;

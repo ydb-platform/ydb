@@ -2,6 +2,12 @@
     "test_ydb_impex.TestImpex.test_format_csv": {
         "uri": "file://test_ydb_impex.TestImpex.test_format_csv/result.output"
     },
+    "test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited/result.output"
+    },
     "test_ydb_impex.TestImpex.test_format_csv_from_stdin": {
         "uri": "file://test_ydb_impex.TestImpex.test_format_csv_from_stdin/result.output"
     },
@@ -43,6 +49,12 @@
     },
     "test_ydb_impex.TestImpex.test_format_tsv": {
         "uri": "file://test_ydb_impex.TestImpex.test_format_tsv/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited": {
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited/result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_from_stdin": {
         "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_from_stdin/result.output"

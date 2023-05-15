@@ -254,11 +254,11 @@ public:
         QueryState->TxCtx = std::move(txCtx);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxId = txId;
-        if (!CheckTransacionLocks()) {
+        if (!CheckTransactionLocks(/*tx*/ nullptr)) {
             return;
         }
 
-        bool replied = ExecutePhyTx(/*query*/ nullptr, /*tx*/ nullptr, /*commit*/ true);
+        bool replied = ExecutePhyTx(/*tx*/ nullptr, /*commit*/ true);
         if (!replied) {
             Become(&TKqpSessionActor::ExecuteState);
         }
@@ -768,13 +768,20 @@ public:
         }
     }
 
-    bool CheckTransacionLocks() {
+    bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         auto& txCtx = *QueryState->TxCtx;
         if (!txCtx.DeferredEffects.Empty() && txCtx.Locks.Broken()) {
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
                 MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
             return false;
         }
+
+        if (tx && tx->GetHasEffects() && txCtx.Locks.Broken()) {
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
+            return false;
+        }
+
         return true;
     }
 
@@ -794,36 +801,6 @@ public:
         return false;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(const NKqpProto::TKqpPhyQuery& phyQuery) {
-        auto& txCtx = *QueryState->TxCtx;
-        auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx);
-
-        if (Config->FeatureFlags.GetEnableKqpImmediateEffects()) {
-            // Execute every physical tx immediately
-            return tx;
-        }
-
-        // Deffer effects and execute them at the end before commit
-        while (tx && tx->GetHasEffects()) {
-            try {
-                QueryState->QueryData->CreateKqpValueMap(tx);
-            } catch (const yexception& ex) {
-                ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-            }
-            bool success = txCtx.AddDeferredEffect(tx, QueryState->QueryData);
-            YQL_ENSURE(success);
-            LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
-            if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-                ++QueryState->CurrentTx;
-                tx = QueryState->PreparedQuery->GetPhyTx(QueryState->CurrentTx);
-            } else {
-                tx = nullptr;
-            }
-        }
-
-        return tx;
-    }
-
     void ExecuteOrDefer() {
         bool haveWork = QueryState->PreparedQuery &&
                 QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()
@@ -834,58 +811,51 @@ public:
             return;
         }
 
-        const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        auto tx = GetCurrentPhyTx(phyQuery);
+        TKqpPhyTxHolder::TConstPtr tx;
+        try {
+            tx = QueryState->GetCurrentPhyTx();
+        } catch (const yexception& ex) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+        }
 
-        auto& txCtx = *QueryState->TxCtx;
-        if (tx && tx->GetHasEffects() && txCtx.Locks.Broken()) {
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
+        if (!CheckTransactionLocks(tx) || !CheckTopicOperations()) {
             return;
         }
 
-        if (!CheckTransacionLocks() || !CheckTopicOperations()) {
-            return;
-        }
-
-        bool commit = ShouldCommitWithCurrentTx(phyQuery, tx);
-        if (tx || commit) {
-            ExecutePhyTx(&phyQuery, tx, commit);
+        if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
+            ExecuteDeferredEffectsImmediately();
+        } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
+            ExecutePhyTx(tx, commit);
         } else {
             ReplySuccess();
         }
     }
 
-    bool ShouldCommitWithCurrentTx(const NKqpProto::TKqpPhyQuery& phyQuery, const TKqpPhyTxHolder::TConstPtr& tx) {
-        if (!QueryState->Commit) {
-            return false;
+    void ExecuteDeferredEffectsImmediately() {
+        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
+
+        auto& txCtx = *QueryState->TxCtx;
+        auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
+
+        for (const auto& effect : txCtx.DeferredEffects) {
+            YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
+            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+
+            LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
+                << " current Transactions.size(): " << request.Transactions.size());
         }
 
-        if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-            // commit can only be applied to the last transaction or perform separately at the end
-            return false;
-        }
+        request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+        request.UseImmediateEffects = true;
+        request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
-        if (!tx) {
-            // no physical transactions left, perform commit
-            return true;
-        } else if (Config->FeatureFlags.GetEnableKqpImmediateEffects() && QueryState->TxCtx->HasUncommittedChangesRead) {
-            YQL_ENSURE(tx);
-            if (tx->GetHasEffects()) {
-                YQL_ENSURE(tx->ResultsSize() == 0);
-                // perform commit with last tx with effects
-                return QueryState->CurrentTx + 1 == phyQuery.TransactionsSize();
-            }
+        txCtx.HasImmediateEffects = true;
+        txCtx.ClearDeferredEffects();
 
-            // last tx contains reads, so commit should be sent separately
-            return false;
-        } else {
-            // we can merge commit with last tx only for read-only transactions
-            return QueryState->TxCtx->DeferredEffects.Empty();
-        }
+        SendToExecuter(std::move(request));
     }
 
-    bool ExecutePhyTx(const NKqpProto::TKqpPhyQuery* query, const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
+    bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         auto& txCtx = *QueryState->TxCtx;
 
         bool literal = tx && tx->IsLiteralTx();
@@ -972,10 +942,13 @@ public:
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
-        } else if (txCtx.ShouldAcquireLocks(query, QueryState->Commit)) {
+        } else if (QueryState->ShouldAcquireLocks()) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
-            // TODO: Use immediate effects only if tx contains uncommitted changes reading (KIKIMR-17576)
-            request.UseImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
+
+            if (txCtx.HasUncommittedChangesRead) {
+                YQL_ENSURE(Config->FeatureFlags.GetEnableKqpImmediateEffects());
+                request.UseImmediateEffects = true;
+            }
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,
@@ -986,7 +959,6 @@ public:
             request.AcquireLocksTxId.Defined());
 
         SendToExecuter(std::move(request));
-
         ++QueryState->CurrentTx;
         return false;
     }
@@ -1109,7 +1081,9 @@ public:
         YQL_ENSURE(QueryState);
         LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->ResultRowsCount);
 
-        QueryState->QueryData->AddTxResults(std::move(ev->GetTxResults()));
+        if (!ev->GetTxResults().empty()) {
+            QueryState->QueryData->AddTxResults(QueryState->CurrentTx - 1, std::move(ev->GetTxResults()));
+        }
         QueryState->QueryData->AddTxHolders(std::move(ev->GetTxHolders()));
 
         if (ev->LockHandle) {

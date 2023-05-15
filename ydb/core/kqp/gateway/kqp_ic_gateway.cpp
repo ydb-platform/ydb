@@ -474,8 +474,9 @@ public:
     }
 
     TKqpExecLiteralRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
-        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params)
+        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params, ui32 txIndex)
         : Request(std::move(request))
+        , TxIndex(txIndex)
         , Parameters(params)
         , Counters(counters)
         , Promise(promise)
@@ -516,7 +517,10 @@ private:
                 result.Results.emplace_back(tx.GetMkql());
             }
             Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
-            Parameters->AddTxResults(std::move(txResults));
+
+            if (!txResults.empty()) {
+                Parameters->AddTxResults(TxIndex, std::move(txResults));
+            }
         }
         Promise.SetValue(std::move(result));
         this->PassAway();
@@ -524,6 +528,7 @@ private:
 
 private:
     IKqpGateway::TExecPhysicalRequest Request;
+    const ui32 TxIndex;
     TQueryData::TPtr Parameters;
     TKqpRequestCounters::TPtr Counters;
     TPromise<TResult> Promise;
@@ -1844,7 +1849,7 @@ public:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
+    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
@@ -1867,7 +1872,7 @@ public:
 
         YQL_ENSURE(containOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();
-        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params);
+        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }

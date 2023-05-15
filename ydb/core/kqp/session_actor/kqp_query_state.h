@@ -224,6 +224,96 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
+    bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
+        const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
+
+        if (!Commit) {
+            return false;
+        }
+
+        if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
+            // commit can only be applied to the last transaction or perform separately at the end
+            return false;
+        }
+
+        if (!tx) {
+            // no physical transactions left, perform commit
+            return true;
+        }
+
+        if (TxCtx->HasUncommittedChangesRead) {
+            YQL_ENSURE(AppData()->FeatureFlags.GetEnableKqpImmediateEffects());
+
+            if (tx && tx->GetHasEffects()) {
+                YQL_ENSURE(tx->ResultsSize() == 0);
+                // commit can be applied to the last transaction with effects
+                return CurrentTx + 1 == phyQuery.TransactionsSize();
+            }
+
+            return false;
+        }
+
+        // we can merge commit with last tx only for read-only transactions
+        return !TxCtx->TxHasEffects();
+    }
+
+    bool ShouldAcquireLocks() {
+        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+            return false;
+        }
+
+        if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
+            return true;  // Continue to acquire locks
+        }
+
+        if (TxCtx->Locks.Broken()) {
+            YQL_ENSURE(TxCtx->GetSnapshot().IsValid() && !TxCtx->TxHasEffects());
+            return false;  // Do not acquire locks after first lock issue
+        }
+
+        if (TxCtx->TxHasEffects()) {
+            return true; // Acquire locks in read write tx
+        }
+
+        const auto& query = PreparedQuery->GetPhysicalQuery();
+        for (auto& tx : query.GetTransactions()) {
+            if (tx.GetHasEffects()) {
+                return true; // Acquire locks in read write tx
+            }
+        }
+
+        if (!Commit) {
+            return true; // Is not a commit tx
+        }
+
+        if (TxCtx->GetSnapshot().IsValid()) {
+            return false; // It is a read only tx with snapshot, no need to acquire locks
+        }
+
+        return true;
+    }
+
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx() {
+        const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
+        auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
+
+        if (TxCtx->CanDeferEffects()) {
+            while (tx && tx->GetHasEffects()) {
+                QueryData->CreateKqpValueMap(tx);
+                bool success = TxCtx->AddDeferredEffect(tx, QueryData);
+                YQL_ENSURE(success);
+                if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
+                    ++CurrentTx;
+                    tx = PreparedQuery->GetPhyTx(CurrentTx);
+                } else {
+                    tx = nullptr;
+                }
+            }
+        }
+
+        return tx;
+    }
+
     bool HasTxControl() const {
         return RequestEv->HasTxControl();
     }

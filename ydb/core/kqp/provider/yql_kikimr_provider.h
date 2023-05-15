@@ -277,6 +277,7 @@ public:
         Invalidated = false;
         Readonly = false;
         Closed = false;
+        HasUncommittedChangesRead = false;
     }
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>

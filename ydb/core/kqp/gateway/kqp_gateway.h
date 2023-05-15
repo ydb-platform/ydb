@@ -155,7 +155,7 @@ public:
 public:
     /* Compute */
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
-        TQueryData::TPtr params) = 0;
+        TQueryData::TPtr params, ui32 txIndex) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;

@@ -294,6 +294,46 @@ public:
         return false;
     }
 
+    void FreeResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources) override {
+
+        auto& txBucket = TxBucket(txId);
+
+        {
+            TGuard<TMutex> guard(txBucket.Lock);
+
+            auto txIt = txBucket.Txs.find(txId);
+            if (txIt == txBucket.Txs.end()) {
+                return;
+            }
+
+            auto taskIt = txIt->second.Tasks.find(taskId);
+            if (taskIt == txIt->second.Tasks.end()) {
+                return;
+            }
+
+            taskIt->second.ScanQueryMemory -= resources.Memory;
+            taskIt->second.ExecutionUnits -= resources.ExecutionUnits;
+
+            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
+                taskIt->second.ResourceBrokerTaskId, {0, resources.Memory}, SelfId);
+            Y_VERIFY_DEBUG(reduced);
+
+            txIt->second.TxScanQueryMemory -= resources.Memory;
+            txIt->second.TxExecutionUnits -= resources.ExecutionUnits;
+
+            ScanQueryMemoryResource.Release(resources.Memory);
+            ExecutionUnitsResource.Release(resources.ExecutionUnits);
+        }
+
+        Counters->RmComputeActors->Sub(resources.ExecutionUnits);
+        Counters->RmMemory->Sub(resources.Memory);
+
+        Y_VERIFY_DEBUG(Counters->RmComputeActors->Val() >= 0);
+        Y_VERIFY_DEBUG(Counters->RmMemory->Val() >= 0);
+
+        FireResourcesPublishing();
+    }
+
     void FreeResources(ui64 txId, ui64 taskId) override {
         ui64 releaseScanQueryMemory = 0;
         ui32 releaseExecutionUnits = 0;

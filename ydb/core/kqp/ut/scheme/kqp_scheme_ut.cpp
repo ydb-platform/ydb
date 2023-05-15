@@ -2655,6 +2655,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         switch (format) {
         case EChangefeedFormat::Json:
             return "JSON";
+        case EChangefeedFormat::DocumentTableJson:
+            return "DOCUMENT_TABLE_JSON";
         case EChangefeedFormat::Unknown:
             UNIT_ASSERT(false);
             return "";
@@ -2667,17 +2669,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            auto query = R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/table` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
 
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            if (format == EChangefeedFormat::DocumentTableJson) {
+                builder.AddAttribute("__document_api_version", "1");
+            }
+
+            auto result = session.CreateTable("/Root/table", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto execOpts = TExecSchemeQuerySettings();
+        if (format == EChangefeedFormat::DocumentTableJson) {
+            execOpts.RequestType("_document_api_request");
         }
 
         {
@@ -2688,7 +2695,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", ModeToString(mode), FormatToString(format));
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = session.ExecuteSchemeQuery(query, execOpts).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
@@ -2706,7 +2713,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER TABLE `/Root/table` DROP CHANGEFEED `feed`;
             )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = session.ExecuteSchemeQuery(query, execOpts).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -2718,8 +2725,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
 
             for (auto format : GetEnumAllValues<EChangefeedFormat>()) {
-                if (format == EChangefeedFormat::Unknown) {
+                switch (format) {
+                case EChangefeedFormat::Unknown:
                     continue;
+                case EChangefeedFormat::DocumentTableJson:
+                    if (mode == EChangefeedMode::Updates) {
+                        continue;
+                    }
+                    break;
+                default:
+                    break;
                 }
 
                 AddChangefeed(mode, format);
@@ -2826,6 +2841,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.CreateTable("/Root/document-table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddAttribute("__document_api_version", "1")
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/document-table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'DOCUMENT_TABLE_JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query, TExecSchemeQuerySettings().RequestType("_document_api_request")).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
     }
 

@@ -4332,6 +4332,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         format = EChangefeedFormat::Json;
         break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON:
+        format = EChangefeedFormat::DocumentTableJson;
+        break;
     default:
         format = EChangefeedFormat::Unknown;
         break;
@@ -4394,6 +4397,9 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     switch (Format_) {
     case EChangefeedFormat::Json:
         proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        break;
+    case EChangefeedFormat::DocumentTableJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
         break;
     case EChangefeedFormat::Unknown:
         break;

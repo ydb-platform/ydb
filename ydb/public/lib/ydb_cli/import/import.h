@@ -1,5 +1,8 @@
 #pragma once
 
+#include <thread>
+#include <functional>
+
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
@@ -41,6 +44,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
+    FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency());
     // Settings below are for CSV format only
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
@@ -73,16 +77,21 @@ private:
 
     static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
 
+    using ProgressCallbackFunc = std::function<void (size_t)>;
+
     void SetupUpsertSettingsCsv(const TImportFileSettings& settings);
-    TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
+    TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
+                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
     TStatus UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings);
     TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& buffer);
 
-    TStatus UpsertJson(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
+    TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,
+                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
     TAsyncStatus UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder);
     TType GetTableType(const NTable::TTableDescription& tableDescription);
 
-    TStatus UpsertParquet(const TString& filename, const TString& dbPath, const TImportFileSettings& settings);
+    TStatus UpsertParquet(const TString& filename, const TString& dbPath, const TImportFileSettings& settings,
+                    ProgressCallbackFunc & progressCallback);
     TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
 };
 

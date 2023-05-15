@@ -943,6 +943,9 @@ TUniqueConstraintNodeBase<Distinct>::GetComplicatedForType(const TTypeAnnotation
 template<bool Distinct>
 const TUniqueConstraintNodeBase<Distinct>*
 TUniqueConstraintNodeBase<Distinct>::GetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    if (Sets_.size() == 1U && Sets_.front().size() == 1U && Sets_.front().front().empty())
+        return GetComplicatedForType(type, ctx);
+
     const auto& rowType = GetSeqItemType(type);
     const auto getPrefix = [](TConstraintNode::TPathType path) {
         path.pop_back();

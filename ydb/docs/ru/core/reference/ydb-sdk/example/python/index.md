@@ -24,7 +24,7 @@ python3 -m pip install iso8601
 ```python
 def run(endpoint, database, path):
     driver_config = ydb.DriverConfig(
-        endpoint, database, credentials=ydb.construct_credentials_from_environ(),
+        endpoint, database, credentials=ydb.credentials_from_env_variables(),
         root_certificates=ydb.load_ydb_root_certificate(),
     )
     with ydb.Driver(driver_config) as driver:
@@ -52,7 +52,7 @@ def create_tables(session, path):
     session.create_table(
         os.path.join(path, 'series'),
         ydb.TableDescription()
-        .with_column(ydb.Column('series_id', ydb.PrimitiveType.Uint64))  # not null column 
+        .with_column(ydb.Column('series_id', ydb.PrimitiveType.Uint64))  # not null column
         .with_column(ydb.Column('title', ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column('series_info', ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column('release_date', ydb.OptionalType(ydb.PrimitiveType.Uint64)))

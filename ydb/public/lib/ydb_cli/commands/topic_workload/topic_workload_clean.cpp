@@ -1,5 +1,6 @@
 #include "topic_workload_clean.h"
 
+#include "topic_workload_describe.h"
 #include "topic_workload_defines.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -26,12 +27,7 @@ int TCommandWorkloadTopicClean::Run(TConfig& config) {
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*Driver);
 
-    auto topicName = config.Database + "/" + TOPIC;
-    auto describeTopicResult = topicClient->DescribeTopic(topicName, {}).GetValueSync();
-    if (describeTopicResult.GetTopicDescription().GetTotalPartitionsCount() == 0) {
-        Cout << "Topic " << topicName << " does not exists.\n";
-        return EXIT_FAILURE;
-    }
+    TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, *Driver);
 
     auto result = topicClient->DropTopic(config.Database + "/" + TOPIC).GetValueSync();
     ThrowOnError(result);

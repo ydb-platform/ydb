@@ -7,6 +7,10 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <util/generic/guid.h>
 
 #include <sstream>
@@ -46,6 +50,8 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&ConsumerThreadCount);
+
+    config.IsNetworkIntensive = true;
 }
 
 void TCommandWorkloadTopicRunRead::Parse(TConfig& config) {
@@ -54,16 +60,17 @@ void TCommandWorkloadTopicRunRead::Parse(TConfig& config) {
 
 int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
     Log = std::make_shared<TLog>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(false, true, Quiet, PrintTimestamp, WindowDurationSec, Seconds, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(0, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, ErrorFlag);
     StatsCollector->PrintHeader();
 
     std::vector<std::future<void>> threads;
 
     auto consumerStartedCount = std::make_shared<std::atomic_uint>();
-    for (ui32 readerIdx = 0; readerIdx < ConsumerCount; ++readerIdx) {
-        for (ui32 readerThreadIdx = 0; readerThreadIdx < ConsumerThreadCount; ++readerThreadIdx) {
+    for (ui32 consumerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
+        for (ui32 consumerThreadIdx = 0; consumerThreadIdx < ConsumerThreadCount; ++consumerThreadIdx) {
             TTopicWorkloadReaderParams readerParams{
                 .Seconds = Seconds,
                 .Driver = Driver.get(),
@@ -72,7 +79,8 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
                 .ErrorFlag = ErrorFlag,
                 .StartedCount = consumerStartedCount,
 
-                .ConsumerIdx = readerIdx};
+                .ConsumerIdx = consumerIdx,
+                .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(std::move(readerParams)); }));
         }
@@ -84,18 +92,18 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
 
     for (auto& future : threads) {
         future.wait();
-        WRITE_LOG(Log,ELogPriority::TLOG_INFO, "All thread joined.\n");
+        WRITE_LOG(Log, ELogPriority::TLOG_INFO, "All thread joined.");
     }
 
     StatsCollector->PrintTotalStats();
 
     if (*ErrorFlag) {
-        WRITE_LOG(Log,ELogPriority::TLOG_EMERG, "Problems occured while reading messages.\n");
+        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "Problems occured while reading messages.");
         return EXIT_FAILURE;
     }
 
     if (StatsCollector->GetTotalReadMessages() == 0) {
-        WRITE_LOG(Log,ELogPriority::TLOG_EMERG, "No messages were read.\n");
+        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "No messages were read.");
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

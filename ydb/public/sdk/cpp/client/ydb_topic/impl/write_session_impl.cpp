@@ -863,7 +863,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
     LOG_LAZY(DbDriverState->Log,
         TLOG_DEBUG,
-        LogPrefix() << "write " << CurrentBatch.Messages.size() << " messages with seqNo from "
+        LogPrefix() << "Write " << CurrentBatch.Messages.size() << " messages with seqNo from "
             << CurrentBatch.Messages.begin()->SeqNo << " to " << CurrentBatch.Messages.back().SeqNo
     );
 

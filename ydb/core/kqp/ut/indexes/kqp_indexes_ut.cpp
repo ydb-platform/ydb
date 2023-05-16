@@ -3928,81 +3928,68 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session, false /*populateTables*/);
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        TScriptingClient client(kikimr.GetDriver());
-
-        auto scriptResult = client.ExecuteYqlScript(R"(
-            --!syntax_v1
-            CREATE TABLE TestTable (
-                Key Int64,
-                Value1 Int64,
-                Value2 Int64,
-                PRIMARY KEY (Key)
-            );
-
-            COMMIT;
-
-            INSERT INTO TestTable (Key, Value1, Value2) VALUES (0, 0, 0), (1, 0, 0), (2, 1, 1);
-
-            COMMIT;
-
-            ALTER TABLE TestTable ADD INDEX Value1Index GLOBAL ON (Value1);
-        )").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptResult.GetStatus(), EStatus::SUCCESS, scriptResult.GetIssues().ToString());
-
         auto result = session.ExecuteDataQuery(Q1_(R"(
-            SELECT Value1, Value2 FROM TestTable VIEW Value1Index WHERE Value1 = CAST(0 AS UInt64) LIMIT 1;
+            REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (0,    0,    "Value0"),
+                (1,    0,    "Value1"),
+                (2,    1,    "Value2");
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        AssertTableStats(result, "/Root/TestTable", {
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT Fk, Value FROM /Root/SecondaryKeys VIEW Index WHERE Fk = CAST(0 AS UInt32) LIMIT 1;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
             .ExpectedReads = 1
         });
 
-        AssertTableStats(result, "/Root/TestTable/Value1Index/indexImplTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
             .ExpectedReads = 1
         });
 
         result = session.ExecuteDataQuery(Q1_(R"(
-            SELECT Value1, Value2 FROM TestTable VIEW Value1Index WHERE Value1 = CAST(0 AS UInt64) AND Value1 + Value1 >= 0 LIMIT 1;
+            SELECT Fk, Value FROM /Root/SecondaryKeys VIEW Index WHERE Fk = CAST(0 AS UInt32) AND Fk + Fk >= 0 LIMIT 1;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        AssertTableStats(result, "/Root/TestTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys", {
             .ExpectedReads = 1
         });
 
-        AssertTableStats(result, "/Root/TestTable/Value1Index/indexImplTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
             .ExpectedReads = 1
         });
 
         result = session.ExecuteDataQuery(Q1_(R"(
-            SELECT Value1, Value2 FROM TestTable VIEW Value1Index WHERE Value1 = CAST(0 AS UInt64) ORDER BY Value1 LIMIT 1;
+            SELECT Fk, Value FROM /Root/SecondaryKeys VIEW Index WHERE Fk = CAST(0 AS UInt32) ORDER BY Fk LIMIT 1;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        AssertTableStats(result, "/Root/TestTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys", {
             .ExpectedReads = 1
         });
 
-        AssertTableStats(result, "/Root/TestTable/Value1Index/indexImplTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
             .ExpectedReads = 1
         });
 
         result = session.ExecuteDataQuery(Q1_(R"(
-            SELECT Value1, Value2 FROM TestTable VIEW Value1Index WHERE Value1 = CAST(0 AS UInt64) AND Value1 + Value1 >= 0 ORDER BY Value1 LIMIT 1;
+            SELECT Fk, Value FROM /Root/SecondaryKeys VIEW Index WHERE Fk = CAST(0 AS UInt32) AND Fk + Fk >= 0 ORDER BY Fk LIMIT 1;
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        AssertTableStats(result, "/Root/TestTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys", {
             .ExpectedReads = 1
         });
 
-        AssertTableStats(result, "/Root/TestTable/Value1Index/indexImplTable", {
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
             .ExpectedReads = 1
         });
     }

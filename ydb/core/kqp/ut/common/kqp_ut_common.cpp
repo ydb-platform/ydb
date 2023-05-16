@@ -898,7 +898,7 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     return stages;
 }
 
-void CreateSampleTablesWithIndex(TSession& session) {
+void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (
@@ -928,6 +928,9 @@ void CreateSampleTablesWithIndex(TSession& session) {
 
     )").GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    if (!populateTables)
+        return;
 
     auto result = session.ExecuteDataQuery(R"(
 

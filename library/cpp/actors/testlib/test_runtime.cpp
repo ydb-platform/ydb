@@ -246,6 +246,20 @@ namespace NActors {
         TTestActorRuntimeBase& Runtime;
     };
 
+    class TTestActorRuntimeBase::TBootTimeProvider : public IBootTimeProvider {
+    public:
+        TBootTimeProvider(TTestActorRuntimeBase& runtime)
+            : Runtime(runtime)
+        { }
+
+        TBootTime Now() override {
+            return Runtime.GetCurrentBootTime();
+        }
+
+    private:
+        TTestActorRuntimeBase& Runtime;
+    };
+
     class TTestActorRuntimeBase::TSchedulerThreadStub : public ISchedulerThread {
     public:
         TSchedulerThreadStub(TTestActorRuntimeBase* runtime, TTestActorRuntimeBase::TNodeDataBase* node)
@@ -496,6 +510,7 @@ namespace NActors {
         , RandomProvider(CreateDeterministicRandomProvider(DefaultRandomSeed))
         , TimeProvider(new TTimeProvider(*this))
         , MonotonicTimeProvider(new TMonotonicTimeProvider(*this))
+        , BootTimeProvider(new TBootTimeProvider(*this))
         , ShouldContinue()
         , CurrentTimestamp(0)
         , DispatchTimeout(DEFAULT_DISPATCH_TIMEOUT)
@@ -829,6 +844,12 @@ namespace NActors {
         return TMonotonic::MicroSeconds(CurrentTimestamp);
     }
 
+    TBootTime TTestActorRuntimeBase::GetCurrentBootTime() const {
+        TGuard<TMutex> guard(Mutex);
+        Y_VERIFY(!UseRealThreads);
+        return TBootTime::MicroSeconds(CurrentTimestamp);
+    }
+
     void TTestActorRuntimeBase::UpdateCurrentTime(TInstant newTime) {
         static int counter = 0;
         ++counter;
@@ -858,6 +879,11 @@ namespace NActors {
     TIntrusivePtr<IMonotonicTimeProvider> TTestActorRuntimeBase::GetMonotonicTimeProvider() {
         Y_VERIFY(!UseRealThreads);
         return MonotonicTimeProvider;
+    }
+
+    TIntrusivePtr<IBootTimeProvider> TTestActorRuntimeBase::GetBootTimeProvider() {
+        Y_VERIFY(!UseRealThreads);
+        return BootTimeProvider;
     }
 
     ui32 TTestActorRuntimeBase::GetNodeId(ui32 index) const {

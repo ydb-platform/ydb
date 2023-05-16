@@ -238,4 +238,12 @@ TIntrusivePtr<IMonotonicTimeProvider> TTestActorSystem::CreateMonotonicTimeProvi
     return MakeIntrusive<TTestActorMonotonicTimeProvider>();
 }
 
+TIntrusivePtr<IBootTimeProvider> TTestActorSystem::CreateBootTimeProvider() {
+    class TTestActorBootTimeProvider : public IBootTimeProvider {
+    public:
+        TBootTime Now() override { return TBootTime::MicroSeconds(CurrentTestActorSystem->Clock.MicroSeconds()); }
+    };
+    return MakeIntrusive<TTestActorBootTimeProvider>();
+}
+
 }

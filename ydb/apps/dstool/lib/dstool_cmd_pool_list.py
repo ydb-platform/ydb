@@ -217,7 +217,10 @@ def do(args):
                 row[column] = 0
 
         # fill usage at the end
-        row['Usage'] = row['UsedSize'] / row['TotalSize'] if row['TotalSize'] != 0 else 0.0
+        if 'UsedSize' in row and 'TotalSize' in row:
+            row['Usage'] = row['UsedSize'] / row['TotalSize'] if row['TotalSize'] != 0 else 0.0
+        else:
+            row['Usage'] = 0.0
 
         rows.append(row)
 

@@ -31,7 +31,10 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
 
     enum ESimpleEventType {
         EvQuickSort,
-        EvActorStatus
+        EvActorStatus,
+        EvSumVector,
+        EvSumVectorResult,
+        EvSumSendRequests,
     };
 
     using TContainer = std::vector<i32>;
@@ -275,7 +278,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
         return numbers;
     }
 
-    std::unique_ptr<TActorSystem> PrepareActorSystem(ui32 poolThreads) {
+    std::unique_ptr<TActorSystem> PrepareActorSystem(ui32 poolThreads, TAffinity* affinity = nullptr) {
         auto setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 1;
 
@@ -284,8 +287,8 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
 
         ui32 poolId = 0;
         ui64 poolSpinThreashold = 20;
-        setup->Executors[0].Reset(new TBasicExecutorPool(poolId, poolThreads, poolSpinThreashold));
-
+        setup->Executors[0].Reset(new TBasicExecutorPool(
+            poolId, poolThreads, poolSpinThreashold, "", nullptr, affinity));
         TSchedulerConfig schedulerConfig;
         schedulerConfig.ResolutionMicroseconds = 512;
         schedulerConfig.SpinThreshold = 100;
@@ -411,6 +414,296 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             }
 
             std::cerr << "-----" << std::endl << std::endl;
+        }
+    }
+
+    // vector sum benchmark
+
+    i64 CalculateOddSum(const TContainer& numbers) {
+        i64 result = 0;
+        for (auto x : numbers) {
+            if (x % 2 == 1) {
+                result += x;
+            }
+        }
+
+        return result;
+    }
+
+    TContainer prepareVectorToSum(const ui32 vectorSize) {
+        TContainer numbers;
+        numbers.reserve(vectorSize);
+        for (ui32 i = 0; i < vectorSize; i++) {
+            numbers.push_back(i + 1);
+        }
+
+        return numbers;
+    }
+
+    class TEvSumVector : public TEventLocal<TEvSumVector, EvSumVector> {
+    public:
+        const TContainer Numbers;
+
+    public:
+        TEvSumVector() = delete;
+
+        TEvSumVector(TContainer&& numbers)
+            : Numbers(std::move(numbers))
+        {}
+    };
+
+    class TEvSumVectorResult : public TEventLocal<TEvSumVectorResult, EvSumVectorResult> {
+    public:
+        const i64 Sum = 0;
+
+    public:
+        TEvSumVectorResult(i64 sum)
+            : Sum(sum)
+        {}
+    };
+
+    class TEvSumSendRequests : public TEventLocal<TEvSumSendRequests, EvSumSendRequests> {
+    public:
+        const ui32 VectorSize;
+        const ui32 RequestsNumber;
+        const TActorIds ActorIds;
+
+    public:
+        TEvSumSendRequests() = delete;
+        TEvSumSendRequests(ui32 vectorSize, ui32 requestsNumber, TActorIds actorIds)
+            : VectorSize(vectorSize)
+            , RequestsNumber(requestsNumber)
+            , ActorIds(actorIds)
+        {}
+    };
+
+    class TSumProxyActor : public TActorBootstrapped<TSumProxyActor> {
+    private:
+        i64 LastSum_ = 0;
+        ui32 NumberOfResults_ = 0;
+        ui32 ExpectedResults_ = 0;
+        ui32 VectorSize_ = 0;
+        TActorIds SumVectorActorIds_ = {};
+        ui32 LastUsedActor_ = 0;
+
+        std::mutex NumberOfResultsMutex_;
+        std::condition_variable NumberOfResultsCv_;
+
+    public:
+        STFUNC(StateInit) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvSumSendRequests, HandleRequest);
+                hFunc(TEvSumVectorResult, HandleResult);
+                default:
+                    Y_VERIFY(false);
+            }
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateInit);
+        }
+
+        i64 LastSum() {
+            return LastSum_;
+        }
+
+        bool WaitForResults(std::chrono::microseconds timeout = 1ms, bool nonZero = true) {
+            std::unique_lock lock(NumberOfResultsMutex_);
+            NumberOfResultsCv_.wait_for(lock, timeout, [this, nonZero] {
+                return ((nonZero && NumberOfResults_ != 0) || !nonZero)
+                    && NumberOfResults_ == ExpectedResults_;
+            });
+            return NumberOfResults_ == ExpectedResults_;
+        }
+
+        void ShiftLastUsedActor(ui32 shift) {
+            LastUsedActor_ += shift;
+        }
+
+    private:
+        TActorId NextActorId() {
+            auto actorId = SumVectorActorIds_[LastUsedActor_ % SumVectorActorIds_.size()];
+            LastUsedActor_ = (LastUsedActor_ + 1) % SumVectorActorIds_.size();
+
+            return actorId;
+        }
+
+        bool SendVectorIfNeeded() {
+            if (NumberOfResults_ < ExpectedResults_) {
+                Send(NextActorId(), new TEvSumVector(prepareVectorToSum(VectorSize_)));
+                return true;
+            }
+            return false;
+        }
+
+        void HandleRequest(TEvSumSendRequests::TPtr& ev) {
+            auto evPtr = ev->Get();
+            ExpectedResults_ = evPtr->RequestsNumber;
+            VectorSize_ = evPtr->VectorSize;
+            SumVectorActorIds_ = evPtr->ActorIds;
+
+            {
+                std::unique_lock lock(NumberOfResultsMutex_);
+                NumberOfResults_ = 0;
+
+                SendVectorIfNeeded();
+            }
+        }
+
+        void HandleResult(TEvSumVectorResult::TPtr& ev) {
+            LastSum_ = ev->Get()->Sum;
+            {
+                std::unique_lock lock(NumberOfResultsMutex_);
+                NumberOfResults_++;
+
+                if (!SendVectorIfNeeded()) {
+                    NumberOfResultsCv_.notify_all();
+                }
+            }
+        }
+    };
+
+    class TSumVectorActor : public TActorBootstrapped<TSumVectorActor> {
+    private:
+        TActorId ResultActorId_;
+
+    public:
+        STFUNC(StateInit) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvSumVector, Handle);
+                default:
+                    Y_VERIFY(false);
+            }
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateInit);
+        }
+
+    private:
+        void Handle(TEvSumVector::TPtr& ev) {
+            auto evPtr = ev->Get();
+            auto oddSum = CalculateOddSum(evPtr->Numbers);
+
+            Send(ev->Sender, new TEvSumVectorResult(oddSum));
+        }
+    };
+
+    std::vector<TActorId> prepareSumActors(TActorSystem* actorSystem, ui32 actorsNumber) {
+        std::vector<TActorId> actorIds;
+        actorIds.reserve(actorsNumber);
+        for (ui32 i = 0; i < actorsNumber; i++) {
+            actorIds.push_back(actorSystem->Register(new TSumVectorActor()));
+        }
+        return actorIds;
+    }
+
+    std::pair<std::vector<TSumProxyActor*>, std::vector<TActorId>> prepareProxyActors(
+        TActorSystem* actorSystem, ui32 actorsNumber
+    ) {
+        std::pair<std::vector<TSumProxyActor*>, std::vector<TActorId>> result;
+        auto& [actors, actorIds] = result;
+        actors.reserve(actorsNumber);
+        actorIds.reserve(actorsNumber);
+        for (ui32 i = 0; i < actorsNumber; i++) {
+            actors.push_back(new TSumProxyActor());
+            actorIds.push_back(actorSystem->Register(actors.back()));
+            actors.back()->ShiftLastUsedActor(i);
+        }
+
+        return result;
+    }
+
+    std::chrono::microseconds calcTimeoutForSumVector(
+        ui32 vectorSize, ui32 iterations, ui32 proxyActorsNum, ui32 sumActorsNum, ui32 threadsNum
+    ) {
+        auto expectedMaxTimePerMillion = 100000us;
+        auto vectorSizeRatio = vectorSize / 1000000 + 1;
+
+        return expectedMaxTimePerMillion * vectorSizeRatio * iterations * proxyActorsNum / std::min(threadsNum, sumActorsNum);
+    }
+
+    bool WaitForSumActorResult(const std::vector<TSumProxyActor*>& actors, std::chrono::microseconds timeout = 1ms) {
+        for (auto& actor : actors) {
+            if (!actor->WaitForResults(timeout)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::pair<std::chrono::microseconds, i64> BenchmarkSumVectorActor(
+        ui32 threads,
+        ui32 proxyActorsNumber,
+        ui32 sumActorsNumber,
+        ui32 iterations,
+        ui32 vectorSize
+    ) {
+        auto actorSystem = PrepareActorSystem(threads);
+        actorSystem->Start();
+
+        auto sumActorIds = prepareSumActors(actorSystem.get(), sumActorsNumber);
+        auto [proxyActors, proxyActorIds] = prepareProxyActors(actorSystem.get(), proxyActorsNumber);
+
+        auto timeout = calcTimeoutForSumVector(vectorSize, iterations, proxyActorsNumber, sumActorsNumber, threads);
+
+        BENCH_START(sumVectorActor);
+
+        for (auto proxyActorId : proxyActorIds) {
+            actorSystem->Send(proxyActorId, new TEvSumSendRequests(vectorSize, iterations, sumActorIds));
+        }
+
+        UNIT_ASSERT_C(WaitForSumActorResult(proxyActors, timeout), "timeout");
+
+        auto totalDuration = std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(sumVectorActor));
+        auto checkSum = proxyActors.back()->LastSum();
+
+        return {totalDuration / iterations, checkSum};
+    }
+
+    Y_UNIT_TEST(SumVector) {
+        using TVui64 = std::vector<ui64>;
+        const bool forCI = true;
+        const TVui64 vectorSizes = forCI ?
+            TVui64{1'000, 1'000'000} : TVui64{1'000, 1'000'000, 10'000'000, 100'000'000};
+        const TVui64 threadsNumbers = forCI ? TVui64{1} : TVui64{1, 4};
+        const TVui64 proxyActorsNumbers = forCI ? TVui64{1} : TVui64{1, 4};
+        const TVui64 sumActorsNumbers = forCI ? TVui64{1} : TVui64{1, 8, 32};
+        const ui32 iterations = 30;
+
+        std::cout << "sep=," << std::endl;
+        std::cout << "size,threads,proxy_actors,sum_actors,duration(us)" << std::endl;
+
+        for (auto vectorSize : vectorSizes) {
+            for (auto threads : threadsNumbers) {
+                for (auto proxyActors : proxyActorsNumbers) {
+                    for (auto sumActors : sumActorsNumbers) {
+                        std::cerr << "vector size: " << vectorSize
+                                  << ", threads: " << threads
+                                  << ", proxy actors: " << proxyActors
+                                  << ", sum actors: " << sumActors << std::endl;
+
+                        auto [duration, resultSum] = BenchmarkSumVectorActor(
+                            threads, proxyActors, sumActors, iterations, vectorSize);
+                        std::cerr << "duration: " << duration.count() << "us" << std::endl;
+
+                        const i64 referenceSum = vectorSize * vectorSize / 4;
+                        UNIT_ASSERT_EQUAL_C(
+                            resultSum, referenceSum,
+                            resultSum << "!=" << referenceSum << "; failed on vectorSize=" << vectorSize
+                            << ", threads=" << threads
+                            << ", proxyActors=" << proxyActors
+                            << ", sumActors=" << sumActors);
+
+                        std::cout << vectorSize << ","
+                                  << threads << ","
+                                  << proxyActors << ","
+                                  << sumActors << ","
+                                  << duration.count()
+                                  << std::endl;
+                    }
+                }
+            }
         }
     }
 }

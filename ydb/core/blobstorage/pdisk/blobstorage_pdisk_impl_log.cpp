@@ -1137,6 +1137,12 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     TGuard<TMutex> guard(StateMutex);
 
+    for (const auto& chunkIdx : req.ChunksToRelease) {
+        BlockDevice->EraseCacheRange(
+            Format.Offset(chunkIdx, 0), 
+            Format.Offset(chunkIdx + 1, 0));
+    }
+
     if (req.IsChunksFromLogSplice) {
         auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease));
 

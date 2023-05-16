@@ -19,8 +19,8 @@ runs:
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -fno-omit-frame-pointer" \
-        -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -fno-omit-frame-pointer" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
+        -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
         -DCMAKE_ENABLE_EXPORTS=true \
         ../ydb
   - name: Configure
@@ -33,8 +33,6 @@ runs:
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        -DCMAKE_CXX_FLAGS="-g" \
-        -DCMAKE_C_FLAGS="-g" \
         -DCMAKE_ENABLE_EXPORTS=true \
         ../ydb
   - name: Build

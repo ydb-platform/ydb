@@ -1,5 +1,22 @@
 # CREATE TABLE
 
+{% if feature_olap_tables %}
+
+{{ ydb-short-name }} supports two types of tables:
+
+* [Row-oriented](../../../../concepts/datamodel/table.md)
+* [Column-oriented](../../../../concepts/column-table.md).
+
+When you create a table, the table type is specified by the `STORE` parameter, with `ROW` creating a [row-oriented table](#row) and `COLUMN` creating a [column](#olap-tables)-oriented table. If the `STORE` parameter is omitted, a row-oriented table is created by default.
+
+{% endif %}
+
+{% if feature_olap_tables %}
+
+## Row-oriented tables {#row}
+
+{% endif %}
+
 {% if feature_bulk_tables %}
 
 The table is created automatically during the first [INSERT INTO](insert_into.md){% if feature_mapreduce %} in the database specified in [USE](../use.md){% endif %}. The schema is determined automatically.
@@ -28,7 +45,7 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
     WITH ( key = value, ... )
 {% endif %}
 
-## Columns {#columns}
+{% if feature_olap_tables %}#{% endif %}## Columns {#row-columns}
 
 {% if feature_column_container_type == true %}
 In non-key columns, you can use any data types, but for key columns, only [primitive ones](../../types/primitive.md). When specifying complex types (for example, `List<String>`), the type is enclosed in double quotes.
@@ -64,19 +81,19 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 
 
 {% if feature_secondary_index %}
-## Secondary indexes {#secondary_index}
+{% if feature_olap_tables %}#{% endif %}## Secondary indexes {#secondary_index}
 
 The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
 ```sql
-CREATE TABLE table_name ( 
+CREATE TABLE table_name (
     ...
     INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
     ...
 )
 ```
 
-where:
+Where:
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC/ASYNC** indicates synchronous/asynchronous data writes to the index. If not specified, synchronous.
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.
@@ -95,13 +112,12 @@ CREATE TABLE my_table (
     PRIMARY KEY (a)
 )
 ```
-
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
-## Additional parameters {#additional}
+{% if feature_olap_tables %}#{% endif %}## Additional parameters {#row-additional}
 
-You can also specify a number of {{ backend_name }}-specific parameters for the table. When creating a table using YQL, such parameters are listed in the ```WITH``` section:
+You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
 ```sql
 CREATE TABLE table_name (...)
@@ -132,7 +148,7 @@ WITH (
 );
 ```
 
-## Column groups {#column-family}
+{% if feature_olap_tables %}#{% endif %}## Column groups {#column-family}
 
 Columns of the same table can be grouped to set the following parameters:
 
@@ -168,5 +184,93 @@ Available types of storage devices depend on the {{ ydb-short-name }} cluster co
 {% endnote %}
 
 {% endif %}
+
+{% endif %}
+
+{% if feature_olap_tables %}
+
+## Сolumn-oriented tables {#olap-tables}
+
+{% note warning %}
+
+Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
+
+{% endnote %}
+
+The `CREATE TABLE` statement creates a [column-oriented](../../../../concepts/column-table.md) table with the specified data schema and key columns (`PRIMARY KEY`).
+
+```sql
+CREATE TABLE table_name (
+    column1 type1,
+    column2 type2 NOT NULL,
+    column2 type2,
+    ...
+    columnN typeN,
+    PRIMARY KEY ( column, ... ),
+    ...
+)
+PARTITION BY HASH(column1, column2, ...)
+WITH (
+    STORE = COLUMN,
+    key = value,
+    ...
+)
+```
+
+### Columns {#olap-columns}
+
+Data types supported by column-oriented tables and constraints imposed on data types in primary keys or data columns are described in the [supported data types](../../../../concepts/column-table.md#olap-data-types) section for column-oriented tables.
+
+Make sure to add the `PRIMARY KEY` and `PARTITION BY` clauses with a non-empty list of columns.
+
+If you omit modifiers, a column is assigned an [optional](../../types/optional.md) type and can accept `NULL` values. To create a non-optional type, use `NOT NULL`.
+
+**Example**
+
+```sql
+CREATE TABLE my_table (
+    a Uint64 NOT NULL,
+    b String,
+    c Float,
+    PRIMARY KEY (b, a)
+)
+PARTITION BY HASH(b)
+WITH (
+STORE = COLUMN
+)
+```
+
+### Additional parameters {#olap-additional}
+
+You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
+
+```sql
+CREATE TABLE table_name (...)
+WITH (
+    key1 = value1,
+    key2 = value2,
+    ...
+)
+```
+
+Here, `key` is the name of the parameter and `value` is its value.
+
+Supported parameters in column-oriented tables:
+
+* `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` sets the minimum physical number of partitions used to store data (see [{#T}](../../../../concepts/column-table.md#olap-tables-partitioning)).
+
+For example, the following code creates a column-oriented table with ten partitions:
+
+```sql
+CREATE TABLE my_table (
+    id Uint64,
+    title Utf8,
+    PRIMARY KEY (id)
+)
+PARTITION BY HASH(id)
+WITH (
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+);
+```
 
 {% endif %}

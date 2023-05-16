@@ -466,6 +466,9 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
             changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
             break;
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDocApiJson:
+            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
+            break;
         default:
             break;
         }
@@ -507,6 +510,9 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     switch (in.format()) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson);
+        break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDocApiJson);
         break;
     default:
         status = Ydb::StatusIds::BAD_REQUEST;

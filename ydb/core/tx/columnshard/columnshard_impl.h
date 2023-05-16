@@ -116,9 +116,6 @@ class TColumnShard
     : public TActor<TColumnShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
-    friend class TIndexingActor;
-    friend class TCompactionActor;
-    friend class TEvictionActor;
     friend class TTxInit;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;

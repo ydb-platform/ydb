@@ -1,8 +1,10 @@
 #include "columnshard_impl.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 class TIndexingActor : public TActorBootstrapped<TIndexingActor> {
 public:
@@ -123,8 +125,8 @@ private:
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
 
             TCpuGuard guard(TxEvent->ResourceUsage);
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::IndexBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
-
+            NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering);
+            TxEvent->Blobs = indexationLogic.Apply(TxEvent->IndexChanges);
             LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
         } else {
             LOG_S_ERROR("Indexing failed at tablet " << TabletId);
@@ -135,6 +137,8 @@ private:
         //Die(ctx); // It's alive till tablet's death
     }
 };
+
+} // namespace
 
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent) {
     return new TIndexingActor(tabletId, parent);

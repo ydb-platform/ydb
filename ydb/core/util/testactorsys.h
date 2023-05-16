@@ -194,6 +194,7 @@ public:
         CurrentTestActorSystem = this;
 
         AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
+        AppData.BootTimeProvider = CreateBootTimeProvider();
     }
 
     ~TTestActorSystem() {
@@ -203,6 +204,7 @@ public:
 
     static TIntrusivePtr<ITimeProvider> CreateTimeProvider();
     static TIntrusivePtr<IMonotonicTimeProvider> CreateMonotonicTimeProvider();
+    static TIntrusivePtr<IBootTimeProvider> CreateBootTimeProvider();
 
     TAppData *GetAppData() {
         return &AppData;

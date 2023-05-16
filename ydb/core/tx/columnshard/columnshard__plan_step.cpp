@@ -21,7 +21,7 @@ public:
 
 private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
-    THashMap<TActorId, TVector<ui64>> TxAcks;
+    THashMap<TActorId, std::vector<ui64>> TxAcks;
     std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result;
 };
 
@@ -36,7 +36,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto& record = Ev->Get()->Record;
     ui64 step = record.GetStep();
 
-    TVector<ui64> txIds;
+    std::vector<ui64> txIds;
     for (const auto& tx : record.GetTransactions()) {
         Y_VERIFY(tx.HasTxId());
         Y_VERIFY(tx.HasAckTo());

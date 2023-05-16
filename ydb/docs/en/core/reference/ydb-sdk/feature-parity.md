@@ -102,12 +102,12 @@
 | DescribeNode | \+ | ? | \+ | \- | \- | \- |
 | Session (leader election, distributed lock) | \+ | ? | \- | \- | \- | \- |
 | **Topic service** |
-| CreateTopic | \+ | \- | \+ | \- | \- | \- | \- |
-| DescribeTopic | \+ | \- | \+ | \- | \- | \- | \- |
+| CreateTopic | \+ | \+ | \+ | \- | \- | \- | \- |
+| DescribeTopic | \+ | \+ | \+ | \- | \- | \- | \- |
 | AlterTopic | \+ | \- | \+ | \- | \- | \- | \- |
-| DropTopic | \+ | \- | \+ | \- | \- | \- | \- |
-| StreamWrite | \+ | \- | \+ | \- | \- | \- | \- |
-| StreamRead | \+ | \- | \+ | \- | \- | \- | \- |
+| DropTopic | \+ | \+ | \+ | \- | \- | \- | \- |
+| StreamWrite | \+ | \+ | \+ | \- | \- | \- | \- |
+| StreamRead | \+ | \+ | \+ | \- | \- | \- | \- |
 | **Ratelimiter service** |
 | CreateResource | \+ | ? | \+ | \- | \- | \- | \- |
 | AlterResource | \+ | ? | \+ | \- | \- | \- | \- |

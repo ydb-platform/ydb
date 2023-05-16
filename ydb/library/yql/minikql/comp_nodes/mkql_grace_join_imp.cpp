@@ -508,17 +508,25 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             std::sort(rightIds.begin(), rightIds.end());
         }
 
-        if (    (JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi || 
-                JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi ) && 
-                (RightTableBatch_ || LeftTableBatch_) ) 
-        {
-            for (auto & jid: joinIds ) {
-                leftMatchedIds.insert(jid.id1);
+        if (   JoinKind == EJoinKind::Left || JoinKind == EJoinKind::LeftOnly || JoinKind == EJoinKind::LeftSemi ) {
+            if (RightTableBatch_ ) {
+                for (auto & jid: joinIds ) {
+                    leftMatchedIds.insert(jid.id1);
+                }
+                leftIdsMatch += leftMatchedIds.size();
             }
-            leftIdsMatch += leftMatchedIds.size();
 
         }
 
+        if(   JoinKind == EJoinKind::Right || JoinKind == EJoinKind::RightOnly || JoinKind == EJoinKind::RightSemi )  {
+            if (LeftTableBatch_) {
+                for (auto & jid: joinIds ) {
+                    leftMatchedIds.insert(jid.id1);
+                }
+                leftIdsMatch += leftMatchedIds.size();
+            }
+
+        }
 
     }
 
@@ -763,7 +771,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             ui32 tupleId2;
 
             bool globalMatchedId = false;
-            if ( RightTableBatch_ || LeftTableBatch_ ) {
+            if ( RightTableBatch_  ) {
                 std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
                 globalMatchedId = leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex);
             }
@@ -794,7 +802,7 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             ui32 tupleId2;
 
             bool globalMatchedId = false;
-            if ( RightTableBatch_ || LeftTableBatch_ ) {
+            if ( LeftTableBatch_ ) {
                 std::set<ui32> & leftMatchedIds = TableBuckets[JoinTable1->CurrIterBucket].AllLeftMatchedIds;
                 globalMatchedId = leftMatchedIds.contains( (ui32) JoinTable1->CurrIterIndex);
             }

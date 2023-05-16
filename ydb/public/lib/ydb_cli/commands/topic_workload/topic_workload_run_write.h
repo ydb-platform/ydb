@@ -14,7 +14,6 @@ namespace NYdb {
             virtual void Config(TConfig& config) override;
             virtual void Parse(TConfig& config) override;
             virtual int Run(TConfig& config) override;
-
         private:
             size_t Seconds;
             size_t MessageRate;

@@ -148,7 +148,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("InFlyTasks")->Val(), infly);
     }
 
-    void AssertResourceManagerStats(const NRm::IKqpResourceManager* rm, ui64 scanQueryMemory, ui32 executionUnits) {
+    void AssertResourceManagerStats(std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         auto stats = rm->GetLocalResources();
         UNIT_ASSERT_VALUES_EQUAL(scanQueryMemory, stats.Memory[NRm::EKqpMemoryPool::ScanQuery]);
         UNIT_ASSERT_VALUES_EQUAL(executionUnits, stats.ExecutionUnits);
@@ -161,6 +161,7 @@ public:
         UNIT_TEST(NotEnoughExecutionUnits);
         UNIT_TEST(ResourceBrokerNotEnoughResources);
         UNIT_TEST(Snapshot);
+        UNIT_TEST(Reduce);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -169,6 +170,7 @@ public:
     void NotEnoughExecutionUnits();
     void ResourceBrokerNotEnoughResources();
     void Snapshot();
+    void Reduce();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -184,7 +186,7 @@ void KqpRm::SingleTask() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -206,7 +208,7 @@ void KqpRm::ManyTasks() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -244,7 +246,7 @@ void KqpRm::NotEnoughMemory() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -262,7 +264,7 @@ void KqpRm::NotEnoughExecutionUnits() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 1000;
@@ -282,7 +284,7 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     CreateKqpResourceManager(config);
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -305,7 +307,7 @@ void KqpRm::Snapshot() {
     CreateKqpResourceManager(MakeKqpResourceManagerConfig());
     NKikimr::TActorSystemStub stub;
 
-    auto* rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
 
     NRm::TKqpResourcesRequest request;
     request.ExecutionUnits = 10;
@@ -367,6 +369,43 @@ void KqpRm::Snapshot() {
         UNIT_ASSERT_VALUES_EQUAL(1, snapshot[0].GetMemory()[0].GetPool());
         UNIT_ASSERT_VALUES_EQUAL(1000, snapshot[0].GetMemory()[0].GetAvailable());
     }
+}
+
+void KqpRm::Reduce() {
+    CreateKqpResourceManager(MakeKqpResourceManagerConfig());
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagerActorId.NodeId());
+
+    NRm::TKqpResourcesRequest request;
+    request.ExecutionUnits = 10;
+    request.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
+    request.Memory = 100;
+
+    bool allocated = rm->AllocateResources(1, 1, request);
+    UNIT_ASSERT(allocated);
+
+    AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+
+    NRm::TKqpResourcesRequest reduceRequest;
+    reduceRequest.ExecutionUnits = 3;
+    reduceRequest.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
+    reduceRequest.Memory = 70;
+
+    // invalid taskId
+    rm->FreeResources(1, 0);
+    AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+
+    // invalid txId
+    rm->FreeResources(10, 1);
+    AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+
+    rm->FreeResources(1, 1, reduceRequest);
+    AssertResourceManagerStats(rm, 1000 - 30, 100 - 7);
+    AssertResourceBrokerSensors(0, 30, 0, 0, 1);
 }
 
 } // namespace NKqp

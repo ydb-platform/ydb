@@ -780,6 +780,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t);\n\n"},
             {"select 1 in ((select 1))",
              "SELECT\n\t1 IN (\n\t\t(\n\t\t\tSELECT\n\t\t\t\t1\n\t\t)\n\t);\n\n"},
+            {"select 1 in (\nselect 1)",
+             "SELECT\n\t1 IN (\n\t\tSELECT\n\t\t\t1\n\t);\n\n"},
         };
 
         TSetup setup;

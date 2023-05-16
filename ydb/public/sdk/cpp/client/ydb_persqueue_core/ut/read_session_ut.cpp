@@ -450,9 +450,6 @@ public:
     using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
     using TMockProcessorFactory = ::TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
-    struct TMockErrorHandler : public IErrorHandler<true> {
-        MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&& closeEvent), (override));
-    };
 
     struct TFakeContext : public NGrpc::IQueueClientContext {
         IQueueClientContextPtr CreateContext() override {
@@ -499,7 +496,6 @@ public:
     TString ClusterName = "cluster";
     TLog Log = CreateLogBackend("cerr");
     std::shared_ptr<TReadSessionEventsQueue<true>> EventsQueue;
-    TIntrusivePtr<testing::StrictMock<TMockErrorHandler>> MockErrorHandler = MakeIntrusive<testing::StrictMock<TMockErrorHandler>>();
     std::shared_ptr<TFakeContext> FakeContext = std::make_shared<TFakeContext>();
     std::shared_ptr<TMockProcessorFactory> MockProcessorFactory = std::make_shared<TMockProcessorFactory>();
     TIntrusivePtr<TMockReadSessionProcessor> MockProcessor = MakeIntrusive<TMockReadSessionProcessor>();
@@ -585,7 +581,6 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
 
     Mock::AllowLeak(MockProcessor.Get());
     Mock::AllowLeak(MockProcessorFactory.get());
-    Mock::AllowLeak(MockErrorHandler.Get());
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
@@ -625,7 +620,6 @@ TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
             Log,
             MockProcessorFactory,
             GetEventsQueue(),
-            MockErrorHandler,
             FakeContext,
             PartitionIdStart, PartitionIdStep);
     }
@@ -1013,11 +1007,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                     setup.MockProcessorFactory->FailCreation();
             });
 
-        EXPECT_CALL(*setup.MockErrorHandler, AbortSession(_));
+        //EXPECT_CALL(*setup.MockErrorHandler, AbortSession(_));
 
         setup.GetSession()->Start();
         setup.MockProcessorFactory->Wait();
+        UNIT_ASSERT(setup.GetEventsQueue()->IsClosed());
     }
+
 
     Y_UNIT_TEST(StopsRetryAfterFailedAttempt) {
         StopsRetryAfterFailedAttemptImpl(false);
@@ -1882,8 +1878,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                 1ull,
                                                                 1ull,
                                                                 0ull,
-                                                                session,
-                                                                nullptr);
+                                                                session);
 
         TPartitionData<true> message;
         Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch =

@@ -118,6 +118,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-yql-core
   yql-minikql-arrow
   yql-minikql-computation
+  yql-minikql-comp_nodes
   yql-parser-pg_catalog
   providers-common-codec
   yql-public-issue

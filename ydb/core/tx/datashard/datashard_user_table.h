@@ -295,6 +295,7 @@ struct TUserTable : public TThrRefBase {
         EFormat Format;
         EState State;
         bool VirtualTimestamps = false;
+        TString AwsRegion;
 
         TCdcStream() = default;
 
@@ -304,6 +305,7 @@ struct TUserTable : public TThrRefBase {
             , Format(streamDesc.GetFormat())
             , State(streamDesc.GetState())
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
+            , AwsRegion(streamDesc.GetAwsRegion())
         {
         }
     };

@@ -63,6 +63,8 @@ public:
     IGraphTransformer& GetPhysicalFinalizingTransformer() override;
     IGraphTransformer& GetLoadTableMetadataTransformer() override;
     bool IsPersistent(const TExprNode& node) override;
+    bool IsRead(const TExprNode& node) override;
+    bool IsWrite(const TExprNode& node) override;
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override;
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override;
     bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override;

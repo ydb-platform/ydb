@@ -2,52 +2,62 @@
 
 namespace NKikimr::NSchemeShard {
 
-TSchemeLimits::TSchemeLimits(const NKikimrScheme::TSchemeLimits& proto) {
+TSchemeLimits TSchemeLimits::FromProto(const NKikimrScheme::TSchemeLimits& proto) {
+    TSchemeLimits result;
+
     if (proto.HasMaxDepth()) {
-        MaxDepth = proto.GetMaxDepth();
+        result.MaxDepth = proto.GetMaxDepth();
     }
     if (proto.HasMaxPaths()) {
-        MaxPaths = proto.GetMaxPaths();
+        result.MaxPaths = proto.GetMaxPaths();
     }
     if (proto.HasMaxChildrenInDir()) {
-        MaxChildrenInDir = proto.GetMaxChildrenInDir();
+        result.MaxChildrenInDir = proto.GetMaxChildrenInDir();
     }
     if (proto.HasMaxAclBytesSize()) {
-        MaxAclBytesSize = proto.GetMaxAclBytesSize();
+        result.MaxAclBytesSize = proto.GetMaxAclBytesSize();
     }
     if (proto.HasMaxTableColumns()) {
-        MaxTableColumns = proto.GetMaxTableColumns();
+        result.MaxTableColumns = proto.GetMaxTableColumns();
     }
     if (proto.HasMaxTableColumnNameLength()) {
-        MaxTableColumnNameLength = proto.GetMaxTableColumnNameLength();
+        result.MaxTableColumnNameLength = proto.GetMaxTableColumnNameLength();
     }
     if (proto.HasMaxTableKeyColumns()) {
-        MaxTableKeyColumns = proto.GetMaxTableKeyColumns();
+        result.MaxTableKeyColumns = proto.GetMaxTableKeyColumns();
     }
     if (proto.HasMaxTableIndices()) {
-        MaxTableIndices = proto.GetMaxTableIndices();
+        result.MaxTableIndices = proto.GetMaxTableIndices();
     }
     if (proto.HasMaxTableCdcStreams()) {
-        MaxTableCdcStreams = proto.GetMaxTableCdcStreams();
+        result.MaxTableCdcStreams = proto.GetMaxTableCdcStreams();
     }
     if (proto.HasMaxShards()) {
-        MaxShards = proto.GetMaxShards();
+        result.MaxShards = proto.GetMaxShards();
     }
     if (proto.HasMaxShardsInPath()) {
-        MaxShardsInPath = proto.GetMaxShardsInPath();
+        result.MaxShardsInPath = proto.GetMaxShardsInPath();
     }
     if (proto.HasMaxConsistentCopyTargets()) {
-        MaxConsistentCopyTargets = proto.GetMaxConsistentCopyTargets();
+        result.MaxConsistentCopyTargets = proto.GetMaxConsistentCopyTargets();
     }
     if (proto.HasMaxPathElementLength()) {
-        MaxPathElementLength = proto.GetMaxPathElementLength();
+        result.MaxPathElementLength = proto.GetMaxPathElementLength();
     }
     if (proto.HasExtraPathSymbolsAllowed()) {
-        ExtraPathSymbolsAllowed = proto.GetExtraPathSymbolsAllowed();
+        result.ExtraPathSymbolsAllowed = proto.GetExtraPathSymbolsAllowed();
     }
     if (proto.HasMaxPQPartitions()) {
-        MaxPQPartitions = proto.GetMaxPQPartitions();
+        result.MaxPQPartitions = proto.GetMaxPQPartitions();
     }
+    if (proto.HasMaxExports()) {
+        result.MaxExports = proto.GetMaxExports();
+    }
+    if (proto.HasMaxImports()) {
+        result.MaxImports = proto.GetMaxImports();
+    }
+
+    return result;
 }
 
 NKikimrScheme::TSchemeLimits TSchemeLimits::AsProto() const {
@@ -71,6 +81,9 @@ NKikimrScheme::TSchemeLimits TSchemeLimits::AsProto() const {
     result.SetExtraPathSymbolsAllowed(ExtraPathSymbolsAllowed);
 
     result.SetMaxPQPartitions(MaxPQPartitions);
+
+    result.SetMaxExports(MaxExports);
+    result.SetMaxImports(MaxImports);
 
     return result;
 }

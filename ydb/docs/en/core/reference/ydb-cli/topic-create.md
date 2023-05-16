@@ -37,7 +37,7 @@ View the description of the create topic command:
 Create a topic with 2 partitions, `RAW` and `GZIP` compression methods, message retention time of 2 hours, and the `my-topic` path:
 
 ```bash
-{{ ydb-cli }} -p db1 topic create \
+{{ ydb-cli }} -p quickstart topic create \
   --partitions-count 2 \
   --supported-codecs raw,gzip \
   --retention-period-hours 2 \
@@ -47,7 +47,7 @@ Create a topic with 2 partitions, `RAW` and `GZIP` compression methods, message 
 View parameters of the created topic:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme describe my-topic
+{{ ydb-cli }} -p quickstart scheme describe my-topic
 ```
 
 Result:

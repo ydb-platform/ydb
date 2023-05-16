@@ -437,6 +437,8 @@ struct TShardedTableOptions {
         bool VirtualTimestamps = false;
     };
 
+    using TAttributes = THashMap<TString, TString>;
+
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \
     TSelf& name(type value) {\
         name##_ = std::move(value); \
@@ -458,6 +460,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
     TABLE_OPTION(bool, Replicated, false);
     TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
+    TABLE_OPTION(TAttributes, Attributes, {});
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL

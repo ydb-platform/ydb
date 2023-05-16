@@ -78,6 +78,7 @@ struct TWhiteboardMergerComparator<NNodeWhiteboard::TEvWhiteboard::TEvTabletStat
 
 class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse> {
     static const bool WithRetry = false;
+    bool ReplyWithDeadTabletsInfo;
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
     using TThis = TJsonTabletInfo;
     THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
@@ -93,6 +94,7 @@ public:
     void Bootstrap() override {
         BLOG_TRACE("Bootstrap()");
         const auto& params(Event->Get()->Request.GetParams());
+        ReplyWithDeadTabletsInfo = params.Has("path");
         if (params.Has("path")) {
             TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
             THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
@@ -187,12 +189,14 @@ public:
                     Tablets.erase(tablet->first);
                 }
             }
-            for (auto tablet : Tablets) {
-                auto deadTablet = result.MutableTabletStateInfo()->Add();
-                deadTablet->SetTabletId(tablet.first);
-                deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
-                deadTablet->SetType(tablet.second);
-                deadTablet->SetHiveId(HiveId);
+            if (ReplyWithDeadTabletsInfo) {
+                for (auto tablet : Tablets) {
+                    auto deadTablet = result.MutableTabletStateInfo()->Add();
+                    deadTablet->SetTabletId(tablet.first);
+                    deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
+                    deadTablet->SetType(tablet.second);
+                    deadTablet->SetHiveId(HiveId);
+                }
             }
             result.SetResponseTime(response.GetResponseTime());
             response = std::move(result);

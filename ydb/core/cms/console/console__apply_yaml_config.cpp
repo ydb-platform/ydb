@@ -24,59 +24,57 @@ public:
 
         auto config = req.GetRequest().config();
 
-        if (config != Self->YamlConfig || Self->YamlDropped) {
-            Modify = true;
+        try {
+            auto metadata = NYamlConfig::GetMetadata(config);
+            Cluster = metadata.Cluster.value_or(TString("unknown"));
+            Version = metadata.Version.value_or(0);
+            UpdatedConfig = NYamlConfig::ReplaceMetadata(config, NYamlConfig::TMetadata{
+                    .Version = Version + 1,
+                    .Cluster = Cluster,
+                });
 
-            try {
-                auto parser = NFyaml::TParser::Create(config.Detach());
-                auto header = parser.NextDocument();
-                auto cluster = header->Root().Map()["cluster"].Scalar();
-                Version = TryFromString<ui64>(header->Root().Map()["version"].Scalar())
-                    .GetOrElse(0);
+            if (UpdatedConfig != Self->YamlConfig || Self->YamlDropped) {
+                Modify = true;
 
-                if (Version == 0) {
-                    ythrow yexception() << "Invalid version";
-                }
+                auto tree = NFyaml::TDocument::Parse(UpdatedConfig);
+                auto resolved = NYamlConfig::ResolveAll(tree);
 
-                auto tree = parser.NextDocument();
-                auto resolved = NYamlConfig::ResolveAll(*tree);
-
-                if (Self->ClusterName != cluster) {
+                if (Self->ClusterName != Cluster) {
                     ythrow yexception() << "ClusterName mismatch";
                 }
 
-                if (Version != Self->YamlVersion + 1) {
+                if (Version != Self->YamlVersion) {
                     ythrow yexception() << "Version mismatch";
                 }
 
                 for (auto& [_, config] : resolved.Configs) {
                     auto cfg = NYamlConfig::YamlToProto(config.second);
                 }
-            } catch (const yexception& ex) {
-                Response = MakeHolder<TEvConsole::TEvApplyConfigResponse>();
-                auto *op = Response->Record.MutableResponse()->mutable_operation();
-                op->set_status(Ydb::StatusIds::BAD_REQUEST);
-                op->set_ready(true);
-                auto *issue = op->add_issues();
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                issue->set_message(ex.what());
-                Error = true;
-                return true;
+
+                db.Table<Schema::YamlConfig>().Key(Version + 1)
+                    .Update<Schema::YamlConfig::Config>(UpdatedConfig)
+                    .Update<Schema::YamlConfig::Dropped>(false);
+
+                /* Later we shift this boundary to support rollback and history */
+                db.Table<Schema::YamlConfig>().Key(Version)
+                    .Delete();
             }
 
-            db.Table<Schema::YamlConfig>().Key(Version)
-                .Update<Schema::YamlConfig::Config>(config)
-                .Update<Schema::YamlConfig::Dropped>(false);
+            Response = MakeHolder<TEvConsole::TEvApplyConfigResponse>();
+            auto *op = Response->Record.MutableResponse()->mutable_operation();
+            op->set_status(Ydb::StatusIds::SUCCESS);
+            op->set_ready(true);
+        } catch (const yexception& ex) {
+            Error = true;
 
-            /* Later we shift this boundary to support rollback and history */
-            db.Table<Schema::YamlConfig>().Key(Version - 1)
-                .Delete();
+            Response = MakeHolder<TEvConsole::TEvApplyConfigResponse>();
+            auto *op = Response->Record.MutableResponse()->mutable_operation();
+            op->set_status(Ydb::StatusIds::BAD_REQUEST);
+            op->set_ready(true);
+            auto *issue = op->add_issues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(ex.what());
         }
-
-        Response = MakeHolder<TEvConsole::TEvApplyConfigResponse>();
-        auto *op = Response->Record.MutableResponse()->mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
-        op->set_ready(true);
 
         return true;
     }
@@ -85,13 +83,11 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxApplyYamlConfig Complete");
 
-        auto &req = Request->Get()->Record;
-
         ctx.Send(Request->Sender, Response.Release());
 
         if (!Error && Modify) {
-            Self->YamlVersion = Version;
-            Self->YamlConfig = req.GetRequest().config();
+            Self->YamlVersion = Version + 1;
+            Self->YamlConfig = UpdatedConfig;
             Self->YamlDropped = false;
 
             Self->VolatileYamlConfigs.clear();
@@ -109,6 +105,8 @@ private:
     bool Error = false;
     bool Modify = false;
     ui32 Version;
+    TString Cluster;
+    TString UpdatedConfig;
 };
 
 ITransaction *TConfigsManager::CreateTxApplyYamlConfig(TEvConsole::TEvApplyConfigRequest::TPtr &ev)

@@ -382,7 +382,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->AddStoragePool(x);
         }
 
-        subdomain->SetSchemeLimits(TSchemeLimits(schemeLimits));
+        subdomain->SetSchemeLimits(TSchemeLimits::FromProto(schemeLimits));
 
         if (record.HasDeclaredSchemeQuotas()) {
             subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now());

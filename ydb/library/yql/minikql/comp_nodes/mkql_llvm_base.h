@@ -1,10 +1,10 @@
 #pragma once
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <contrib/libs/llvm12/include/llvm/IR/LLVMContext.h>
-#include <contrib/libs/llvm12/include/llvm/IR/Type.h>
-#include <contrib/libs/llvm12/include/llvm/IR/Constant.h>
-#include <contrib/libs/llvm12/include/llvm/IR/DerivedTypes.h>
-#include <contrib/libs/llvm12/include/llvm/IR/Constants.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Constant.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Constants.h>
 
 namespace NKikimr::NMiniKQL {
 template <class T>

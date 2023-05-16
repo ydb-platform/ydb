@@ -12,6 +12,9 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
 #include <util/datetime/cputimer.h>
@@ -251,6 +254,8 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
+        XXH3_state_t XxhashState;
+        XXH3_state_t XxhashXdcState;
 
         size_t PayloadSize;
         ui32 ChecksumExpected, Checksum;
@@ -290,6 +295,8 @@ namespace NActors {
         ui64 ConfirmedByInput;
 
         std::shared_ptr<IInterconnectMetrics> Metrics;
+        std::array<ui32, 16> InputTrafficArray;
+        THashMap<ui16, ui32> InputTrafficMap;
 
         bool CloseInputSessionRequested = false;
 
@@ -316,12 +323,13 @@ namespace NActors {
 
         void PassAway() override;
 
-        TDeque<TIntrusivePtr<TRopeAlignedBuffer>> Buffers;
-        size_t FirstBufferOffset = 0;
+        TDeque<TRcBuf> Buffers;
 
         size_t CurrentBuffers = 1; // number of buffers currently required to allocate
-        static constexpr size_t MaxBuffers = 64; // maximum buffers possible
-        std::array<ui8, MaxBuffers> UsageHisto; // read count histogram
+        static constexpr size_t MaxBuffers = 72; // maximum buffers possible
+        static constexpr int BitsPerUsageCount = 5;
+        static constexpr size_t ItemsPerUsageCount = sizeof(ui64) * CHAR_BIT / BitsPerUsageCount;
+        std::array<ui64, (MaxBuffers + ItemsPerUsageCount - 1) / ItemsPerUsageCount> UsageHisto; // read count histogram
 
         void PreallocateBuffers();
 
@@ -354,6 +362,8 @@ namespace NActors {
         ui64 BytesReadFromXdcSocket = 0;
         ui64 XdcSections = 0;
         ui64 XdcRefs = 0;
+
+        ui64 CpuStarvationEvents = 0;
 
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr ev);
     };
@@ -393,6 +403,10 @@ namespace NActors {
         ui64 PacketsGenerated = 0;
         ui64 BytesWrittenToSocket = 0;
         ui64 PacketsConfirmed = 0;
+        ui64 BytesAlignedForOutOfBand = 0;
+        ui64 OutOfBandBytesSent = 0;
+        ui64 CpuStarvationEvents = 0;
+        ui64 CpuStarvationEventsOnWriteData = 0;
 
     public:
         static constexpr EActivityType ActorActivityType() {
@@ -429,24 +443,30 @@ namespace NActors {
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
 
-        STRICT_STFUNC(StateFunc,
-            fFunc(TEvInterconnect::EvForward, Forward)
-            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
-            fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
-            fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
-            fFunc(TEvents::TEvUnsubscribe::EventType, Unsubscribe)
-            cFunc(TEvFlush::EventType, HandleFlush)
-            hFunc(TEvPollerReady, Handle)
-            hFunc(TEvPollerRegisterResult, Handle)
-            hFunc(TEvUpdateFromInputSession, Handle)
-            hFunc(TEvRam, HandleRam)
-            hFunc(TEvCheckCloseOnIdle, CloseOnIdleWatchdog)
-            hFunc(TEvCheckLostConnection, LostConnectionWatchdog)
-            cFunc(TEvents::TSystem::Wakeup, SendUpdateToWhiteboard)
-            hFunc(TEvSocketDisconnect, OnDisconnect)
-            hFunc(TEvTerminate, Handle)
-            hFunc(TEvProcessPingRequest, Handle)
-        )
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        std::optional<TTimeLimit> TimeLimit;
+
+        STATEFN(StateFunc) {
+            TimeLimit.emplace(GetMaxCyclesPerEvent());
+            STRICT_STFUNC_BODY(
+                fFunc(TEvInterconnect::EvForward, Forward)
+                cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+                fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
+                fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
+                fFunc(TEvents::TEvUnsubscribe::EventType, Unsubscribe)
+                cFunc(TEvFlush::EventType, HandleFlush)
+                hFunc(TEvPollerReady, Handle)
+                hFunc(TEvPollerRegisterResult, Handle)
+                hFunc(TEvUpdateFromInputSession, Handle)
+                hFunc(TEvRam, HandleRam)
+                hFunc(TEvCheckCloseOnIdle, CloseOnIdleWatchdog)
+                hFunc(TEvCheckLostConnection, LostConnectionWatchdog)
+                cFunc(TEvents::TSystem::Wakeup, SendUpdateToWhiteboard)
+                hFunc(TEvSocketDisconnect, OnDisconnect)
+                hFunc(TEvTerminate, Handle)
+                hFunc(TEvProcessPingRequest, Handle)
+            )
+        }
 
         void Handle(TEvUpdateFromInputSession::TPtr& ev);
 
@@ -457,8 +477,19 @@ namespace NActors {
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
+        void IssueRam(bool batching);
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
+        void ProducePackets();
+
+        size_t GetUnsentSize() const {
+            return OutgoingStream.CalculateUnsentSize() + OutOfBandStream.CalculateUnsentSize() +
+                XdcStream.CalculateUnsentSize();
+        }
+
+        size_t GetUnsentLimit() const {
+            return 128 * 1024;
+        }
 
         void SendUpdateToWhiteboard(bool connected = true);
         ui32 CalculateQueueUtilization();
@@ -466,11 +497,11 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void WriteData();
-        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket);
+        ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
-        ui64 MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        ui32 MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
-        bool DropConfirmed(ui64 confirm);
+        void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
 
         void StartHandshake();
@@ -528,17 +559,18 @@ namespace NActors {
         void SwitchStuckPeriod();
 
         NInterconnect::TOutgoingStream OutgoingStream;
+        NInterconnect::TOutgoingStream OutOfBandStream;
         NInterconnect::TOutgoingStream XdcStream;
 
         struct TOutgoingPacket {
             ui32 PacketSize; // including header
             ui32 ExternalSize;
-            ui64 Serial;
-            bool Data;
         };
         std::deque<TOutgoingPacket> SendQueue; // packet boundaries
         size_t OutgoingOffset = 0;
         size_t XdcOffset = 0;
+        size_t OutgoingIndex = 0; // index into current packet in SendQueue
+        bool ForceCurrentPacket = false;
 
         ui64 XdcBytesSent = 0;
 

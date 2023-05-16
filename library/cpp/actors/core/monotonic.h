@@ -5,7 +5,10 @@
 
 namespace NActors {
 
-ui64 GetMonotonicMicroSeconds();
+using NMonotonic::GetMonotonicMicroSeconds;
+using NMonotonic::GetBootTimeMicroSeconds;
 
 using TMonotonic = NMonotonic::TMonotonic;
+using TBootTime = NMonotonic::TBootTime;
+
 } // namespace NActors

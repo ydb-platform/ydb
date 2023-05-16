@@ -6,7 +6,7 @@ General syntax for calling {{ ydb-short-name }} CLI commands:
 {{ ydb-cli }} [global options] <command> [<subcommand> ...] [command options]
 ```
 
-, where:
+where:
 
 - `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }}CLI from the OS command line.
 - `[global options]` are [global options](../commands/global-options.md) that are common for all {{ ydb-short-name }} CLI commands.
@@ -35,10 +35,10 @@ Any command can be run from the command line with the `--help` option to get hel
 | [import file tsv](../export_import/import-file.md) | Importing data from a TSV file |
 | [import s3](../export_import/s3_import.md) | Importing data from S3 storage |
 | [init](../profile/create.md) | Initializing the CLI, creating a [profile](../profile/index.md) |
-| [operation cancel](../operation-cancel.md) | Aborting long running operations |
-| [operation forget](../operation-forget.md) | Deleting long running operations from the list |
-| [operation get](../operation-get.md) | Status of long running operations |
-| [operation list](../operation-list.md) | List of long running operations |
+| [operation cancel](../operation-cancel.md) | Aborting long-running operations |
+| [operation forget](../operation-forget.md) | Deleting long-running operations from the list |
+| [operation get](../operation-get.md) | Status of long-running operations |
+| [operation list](../operation-list.md) | List of long-running operations |
 | [scheme describe](../commands/scheme-describe.md) | Description of a data schema object |
 | [scheme ls](../commands/scheme-ls.md) | List of data schema objects |
 | [scheme mkdir](../commands/dir.md#mkdir) | Creating a directory |
@@ -71,10 +71,12 @@ Any command can be run from the command line with the `--help` option to get hel
 | [topic drop](../topic-drop.md) | Deleting a topic |
 | [topic consumer add](../topic-consumer-add.md) | Adding a consumer to a topic |
 | [topic consumer drop](../topic-consumer-drop.md) | Deleting a consumer from a topic |
+| [topic consumer offset commit](../topic-consumer-offset-commit.md) | Saving a consumer offset |
 | [topic read](../topic-read.md) | Reading messages from a topic |
 | [topic write](../topic-write.md) | Writing messages to a topic |
 {% if ydb-cli == "ydb" %}
 [update](../commands/service.md) | Update the {{ ydb-short-name }} CLI
 [version](../commands/service.md) | Output details about the {{ ydb-short-name }} CLI version
 {% endif %}
-[workload](../commands/workload/index.md) | Generate the yql workload | Execute a YQL script (with streaming support)
+[workload](../commands/workload/index.md) | Generate the workload
+[yql](../yql.md) | Execute a YQL script (with streaming support)

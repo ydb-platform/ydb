@@ -9,8 +9,28 @@
 #include <util/string/join.h>
 #include <util/stream/format.h> // for SF_BYTES
 
+#if defined(_win32_)
+#include <io.h>
+#elif defined(_unix_)
+#include <unistd.h>
+#endif
+
 namespace NYdb {
 namespace NConsoleClient {
+namespace {
+    bool IsStdinInteractive() {
+#if defined(_win32_)
+    errno = 0;
+    bool value = _isatty(_fileno(stdin));
+    return value || (errno == EBADF);
+#elif defined(_unix_)
+    errno = 0;
+    bool value = isatty(fileno(stdin));
+    return value || (errno == EBADF);
+#endif
+    return true;
+}
+}
 
 TCommandImport::TCommandImport()
     : TClientCommandTree("import", {}, "Import service operations")
@@ -148,14 +168,12 @@ TCommandImportFromFile::TCommandImportFromFile()
 void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    config.SetFreeArgsNum(0);
-
+    config.Opts->SetTrailingArgTitle("<input files...>", 
+            "One or more file paths to import from");
     config.Opts->AddLongOption('p', "path", "Database path to table")
         .Required().RequiredArgument("STRING").StoreResult(&Path);
 
-    config.Opts->AddLongOption('i', "input-file", 
-            "Path to file to be imported, standard input if empty or not specified")
-        .StoreResult(&FilePath).DefaultValue(FilePath);
+    config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
 
     const TImportFileSettings defaults;
     config.Opts->AddLongOption("batch-bytes",
@@ -181,6 +199,19 @@ void TCommandImportFileBase::Parse(TConfig& config) {
     if (MaxInFlightRequests == 0) {
         throw TMisuseException()
             << "--max-in-flight must be greater than zero";
+    }
+
+    for (const auto& filePath : config.ParseResult->GetFreeArgs()) {
+        FilePaths.push_back(filePath);
+    }
+    for (const auto& filePath : FilePaths) {
+        if (filePath.empty()) {
+            throw TMisuseException() << "File path is not allowed to be empty";
+        }
+    }
+    // If no filenames or stdin isn't connected to tty, read from stdin.
+    if (FilePaths.empty() || !IsStdinInteractive()) {
+        FilePaths.push_back("");
     }
 }
 
@@ -229,7 +260,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     }
 
     TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePath, Path, settings));
+    ThrowOnError(client.Import(FilePaths, Path, settings));
 
     return EXIT_SUCCESS;
 }
@@ -259,7 +290,7 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
 
     TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePath, Path, settings));
+    ThrowOnError(client.Import(FilePaths, Path, settings));
 
     return EXIT_SUCCESS;
 }
@@ -276,7 +307,7 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
 
     TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePath, Path, settings));
+    ThrowOnError(client.Import(FilePaths, Path, settings));
 
     return EXIT_SUCCESS;
 }

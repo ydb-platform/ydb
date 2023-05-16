@@ -16,6 +16,14 @@
 #include <util/generic/is_in.h>
 #include <util/generic/strbuf.h>
 
+namespace NKikimr {
+namespace NGRpcService {
+
+class IRequestCtxMtSafe;
+
+}
+}
+
 namespace NYql {
 
 const TStringBuf KikimrMkqlProtoFormat = "mkql_proto";
@@ -110,6 +118,9 @@ struct TKikimrQueryContext : TThrRefBase {
 
     NActors::TActorId ReplyTarget;
     TMaybe<NKikimrKqp::TRlPath> RlPath;
+    // All rpc calls should be made via Session actor.
+    // we do not want add extra life time for query context here
+    std::shared_ptr<NKikimr::NGRpcService::IRequestCtxMtSafe> RpcCtx;
 
     void Reset() {
         PrepareOnly = false;
@@ -128,6 +139,7 @@ struct TKikimrQueryContext : TThrRefBase {
         ExecutionOrder.clear();
 
         RlPath.Clear();
+        RpcCtx.reset();
     }
 };
 
@@ -265,6 +277,7 @@ public:
         Invalidated = false;
         Readonly = false;
         Closed = false;
+        HasUncommittedChangesRead = false;
     }
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>

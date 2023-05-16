@@ -580,11 +580,11 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     return shardInfoMap;
 }
 
-THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
+TVector<TSerializedPointOrRange> ExtractRanges(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc>&)
 {
-    auto guard = typeEnv.BindAllocator();
     const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
     YQL_ENSURE(table);
 
@@ -606,6 +606,39 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     } else {
         ranges = BuildFullRange(keyColumnTypes);
     }
+
+    return ranges;
+}
+
+TShardInfo MakeFakePartition(const TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    auto guard = typeEnv.BindAllocator();
+    auto ranges = ExtractRanges(tableKeys, source, stageInfo, holderFactory, typeEnv, guard);
+    TShardInfo result;
+    for (auto& range: ranges) {
+        if (!result.KeyReadRanges) {
+            result.KeyReadRanges.ConstructInPlace();
+        }
+
+        result.KeyReadRanges->Add(std::move(range));
+    }
+
+    return result;
+}
+
+
+THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    auto guard = typeEnv.BindAllocator();
+    const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
+    YQL_ENSURE(table);
+
+    const auto& keyColumnTypes = table->KeyColumnTypes;
+    auto ranges = ExtractRanges(tableKeys, source, stageInfo, holderFactory, typeEnv, guard);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
 

@@ -24,8 +24,8 @@ public:
     TString ToString() const;
     void Out(IOutputStream& o) const;
 
-private:
     const Ydb::Type& GetProto() const;
+    Ydb::Type& GetProto();
 
 private:
     class TImpl;
@@ -246,6 +246,7 @@ struct TPgValue {
 
 struct TUuidValue {
     TString ToString() const;
+    TUuidValue(ui64 low_128, ui64 high_128);
     TUuidValue(const Ydb::Value& uuidValueProto);
     TUuidValue(const TString& uuidString);
 
@@ -264,9 +265,10 @@ public:
     TValue(const TType& type, Ydb::Value&& valueProto);
 
     const TType& GetType() const;
+    TType & GetType();
 
-private:
     const Ydb::Value& GetProto() const;
+    Ydb::Value& GetProto();
 
 private:
     class TImpl;
@@ -455,6 +457,7 @@ public:
     TDerived& BeginList();
     TDerived& AddListItem();
     TDerived& AddListItem(const TValue& itemValue);
+    TDerived& AddListItem(TValue&& itemValue);
     TDerived& EndList();
     TDerived& EmptyList(const TType& itemType);
     TDerived& EmptyList();
@@ -463,6 +466,7 @@ public:
     TDerived& BeginStruct();
     TDerived& AddMember(const TString& memberName);
     TDerived& AddMember(const TString& memberName, const TValue& memberValue);
+    TDerived& AddMember(const TString& memberName, TValue&& memberValue);
     TDerived& EndStruct();
 
     // Tuple

@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "column_engine.h"
-#include "predicate.h"
+#include "predicate/predicate.h"
 #include "reader/queue.h"
 #include "reader/granule.h"
 #include "reader/batch.h"
@@ -21,8 +21,8 @@ class TIndexedReadData {
 private:
     std::unique_ptr<NIndexedReader::TGranulesFillingContext> GranulesContext;
 
-    YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
-    YDB_READONLY_DEF(NColumnShard::TDataTasksProcessorContainer, TasksProcessor);
+    NColumnShard::TScanCounters Counters;
+    NColumnShard::TDataTasksProcessorContainer TasksProcessor;
     TFetchBlobsQueue& FetchBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     bool OnePhaseReadMode = false;
@@ -38,6 +38,14 @@ public:
     TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, TFetchBlobsQueue& fetchBlobsQueue,
         const bool internalRead, const NColumnShard::TScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
 
+    const NColumnShard::TScanCounters& GetCounters() const noexcept {
+        return Counters;
+    }
+
+    const NColumnShard::TDataTasksProcessorContainer& GetTasksProcessor() const noexcept {
+        return TasksProcessor;
+    }
+
     NIndexedReader::TGranulesFillingContext& GetGranulesContext() {
         Y_VERIFY(GranulesContext);
         return *GranulesContext;
@@ -47,7 +55,7 @@ public:
     void InitRead(ui32 numNotIndexed);
     void Abort() {
         Y_VERIFY(GranulesContext);
-            return GranulesContext->Abort();
+        return GranulesContext->Abort();
     }
     bool IsInProgress() const {
         Y_VERIFY(GranulesContext);
@@ -55,19 +63,18 @@ public:
     }
 
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
-    TVector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
+    std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddNotIndexed(ui32 batchNo, TString blob, ui64 planStep, ui64 txId) {
-        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->BlobSchema);
-        AddNotIndexed(batchNo, batch, planStep, txId);
+    void AddNotIndexed(ui32 batchNo, TString blob, const TSnapshot& snapshot) {
+        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(snapshot));
+        AddNotIndexed(batchNo, batch, snapshot);
     }
 
-    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) {
+    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
         Y_VERIFY(batchNo < NotIndexed.size());
-        if (!NotIndexed[batchNo]) {
-            ++ReadyNotIndexed;
-        }
-        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, planStep, txId);
+        Y_VERIFY(!NotIndexed[batchNo]);
+        ++ReadyNotIndexed;
+        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, snapshot);
     }
 
     void AddIndexed(const TBlobRange& blobRange, const TString& column);
@@ -86,17 +93,13 @@ public:
     }
 
 private:
-    const TIndexInfo& IndexInfo() const {
-        return ReadMetadata->IndexInfo;
-    }
-
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(
-        const std::shared_ptr<arrow::RecordBatch>& batch, ui64 planStep, ui64 txId) const;
+        const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) const;
 
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
-    TVector<TPartialReadResult> MakeResult(
+    std::vector<TPartialReadResult> MakeResult(
         std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules, int64_t maxRowsInBatch) const;
 };
 

@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/tx/sharding/sharding.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/aclib/aclib.h>
 
 using namespace NYdb;

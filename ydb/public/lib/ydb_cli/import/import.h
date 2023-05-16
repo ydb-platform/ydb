@@ -55,11 +55,11 @@ public:
     explicit TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig);
     TImportFileClient(const TImportFileClient&) = delete;
 
-    // Ingest data from the input file to the database table.
-    //   fsPath: path to input file, stdin if empty
+    // Ingest data from the input files to the database table.
+    //   fsPaths: vector of paths to input files
     //   dbPath: full path to the database table, including the database path
     //   settings: input data format and operational settings
-    TStatus Import(const TString& fsPath, const TString& dbPath, const TImportFileSettings& settings = {});
+    TStatus Import(const TVector<TString>& fsPaths, const TString& dbPath, const TImportFileSettings& settings = {});
 
 private:
     std::shared_ptr<NOperation::TOperationClient> OperationClient;
@@ -69,8 +69,11 @@ private:
     NTable::TBulkUpsertSettings UpsertSettings;
     NTable::TRetryOperationSettings RetrySettings;
 
+    std::atomic<ui64> FilesCount;
+
     static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
 
+    void SetupUpsertSettingsCsv(const TImportFileSettings& settings);
     TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings);
     TStatus UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings);
     TAsyncStatus UpsertCsvBuffer(const TString& dbPath, const TString& buffer);

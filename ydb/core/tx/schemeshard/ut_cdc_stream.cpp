@@ -265,6 +265,78 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(DocApi) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "RowTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "DocumentTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"__document_api_version", "1"}}));
+        env.TestWaitNotification(runtime, txId);
+
+        // non-document table
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "RowTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeNewAndOldImages
+              Format: ECdcStreamFormatDocApiJson
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // invalid mode
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "DocumentTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatDocApiJson
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // invalid aws region
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "DocumentTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              AwsRegion: "foo"
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // ok
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "DocumentTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeNewAndOldImages
+              Format: ECdcStreamFormatDocApiJson
+              AwsRegion: "ru-central1"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DocumentTable/Stream"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDocApiJson),
+            NLs::StreamAwsRegion("ru-central1"),
+        });
+    }
+
     Y_UNIT_TEST(Negative) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));

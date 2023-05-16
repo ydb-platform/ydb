@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 

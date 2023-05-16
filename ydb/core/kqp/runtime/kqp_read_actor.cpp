@@ -383,6 +383,10 @@ public:
         }
         Counters->ReadActorsCount->Inc();
         Snapshot = IKqpGateway::TKqpSnapshot(Settings.GetSnapshot().GetStep(), Settings.GetSnapshot().GetTxId());
+
+        if (settings.HasMaxInFlightShards()) {
+            MaxInFlight = settings.GetMaxInFlightShards();
+        }
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

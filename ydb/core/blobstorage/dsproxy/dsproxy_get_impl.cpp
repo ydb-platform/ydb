@@ -42,11 +42,15 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.PartMap = blobState.PartMap;
             outResponse.Keep = blobState.Keep;
             outResponse.DoNotKeep = blobState.DoNotKeep;
+            outResponse.LooksLikePhantom = blobState.LooksLikePhantom;
+
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;
 
                 // extra validation code for phantom logic
                 if (PhantomCheck) {
+                    outResponse.LooksLikePhantom = true;
+
                     TSubgroupPartLayout possiblyWritten;
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {

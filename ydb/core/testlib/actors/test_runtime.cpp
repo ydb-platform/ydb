@@ -127,6 +127,7 @@ namespace NActors {
             auto* nodeAppData = node->GetAppData<NKikimr::TAppData>();
             if (!UseRealThreads) {
                 nodeAppData->MonotonicTimeProvider = MonotonicTimeProvider;
+                nodeAppData->BootTimeProvider = BootTimeProvider;
             }
             nodeAppData->DataShardExportFactory = app0->DataShardExportFactory;
             nodeAppData->DomainsInfo = app0->DomainsInfo;

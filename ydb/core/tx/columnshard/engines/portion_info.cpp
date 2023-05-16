@@ -18,7 +18,7 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
                                         const std::shared_ptr<arrow::Field>& field,
                                         TColumnRecord&& record,
                                         const arrow::ipc::IpcWriteOptions& writeOptions,
-                                        ui32 limitBytes) {
+                                        const ui32 limitBytes) {
     auto blob = SerializeColumn(array, field, writeOptions);
     if (blob.size() >= limitBytes) {
         return {};
@@ -44,11 +44,12 @@ void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>&
     Meta.ColumnMeta[columnId].Max = NArrow::GetScalar(column, minMaxPos.second);
 }
 
-void TPortionInfo::AddMetadata(const TIndexInfo& indexInfo, const std::shared_ptr<arrow::RecordBatch>& batch,
+void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                                const TString& tierName) {
     TierName = tierName;
     Meta = {};
 
+    auto& indexInfo = snapshotSchema.GetIndexInfo();
     /// @note It does not add RawBytes info for snapshot columns, only for user ones.
     for (auto& [columnId, col] : indexInfo.Columns) {
         auto column = batch->GetColumnByName(col.Name);
@@ -162,14 +163,12 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
     }
 }
 
-void TPortionInfo::MinMaxValue(const ui32 columnId, std::shared_ptr<arrow::Scalar>& minValue, std::shared_ptr<arrow::Scalar>& maxValue) const {
+std::tuple<std::shared_ptr<arrow::Scalar>, std::shared_ptr<arrow::Scalar>> TPortionInfo::MinMaxValue(const ui32 columnId) const {
     auto it = Meta.ColumnMeta.find(columnId);
     if (it == Meta.ColumnMeta.end()) {
-        minValue = nullptr;
-        maxValue = nullptr;
+        return std::make_tuple(std::shared_ptr<arrow::Scalar>(), std::shared_ptr<arrow::Scalar>());
     } else {
-        minValue = it->second.Min;
-        maxValue = it->second.Max;
+        return std::make_tuple(it->second.Min, it->second.Max);
     }
 }
 
@@ -233,11 +232,12 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(con
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector< std::shared_ptr<arrow::Field>> fields;
+    ui64 limit = options.RecordsCountLimit ? *options.RecordsCountLimit : Max<ui64>();
     for (auto&& i : Columns) {
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
         }
-        columns.emplace_back(i.Assemble(options.GetRecordsCountLimitDef(Max<ui32>()), !options.IsForwardAssemble()));
+        columns.emplace_back(i.Assemble(limit, !options.ForwardAssemble));
         fields.emplace_back(i.GetField());
     }
 

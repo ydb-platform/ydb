@@ -36,10 +36,10 @@ TMaybe<ui32> GetPartitionFromConfigOptions(
     TMaybe<ui32> ret;
     if (preferred < Max<ui32>()) {
         ret = preferred;
-    } else if (!useRoundRobin){
-        ret = encodedSrcId.Hash % partPerTablet;
     } else if (firstClass) {
         ret = NKikimr::NDataStreams::V1::CalculateShardFromSrcId(encodedSrcId.OriginalSourceId, partPerTablet);
+    } else if (!useRoundRobin){
+        ret = encodedSrcId.Hash % partPerTablet;
     }
     return ret;
 }

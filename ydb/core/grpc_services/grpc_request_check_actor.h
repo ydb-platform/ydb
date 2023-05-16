@@ -499,7 +499,9 @@ const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
     static const TVector<TString> permissions = {
                 "ydb.databases.list",
                 "ydb.databases.create",
-                "ydb.databases.connect"
+                "ydb.databases.connect",
+                "ydb.tables.select",
+                "ydb.schemas.getMetadata"
             };
     return permissions;
 }

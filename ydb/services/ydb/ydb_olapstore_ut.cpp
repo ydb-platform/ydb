@@ -1,6 +1,5 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/services/ydb/ut/udfs.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
@@ -43,14 +42,6 @@ static constexpr const char* testShardingVariants[] = {
 }
 
 Y_UNIT_TEST_SUITE(YdbOlapStore) {
-
-    NMiniKQL::IFunctionRegistry* UdfFrFactory(const NKikimr::NScheme::TTypeRegistry& typeRegistry) {
-        Y_UNUSED(typeRegistry);
-        auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
-        funcRegistry->AddModule("fake_re2_path", "Re2", CreateRe2Module());
-        funcRegistry->AddModule("fake_json2_path", "Json2", CreateJson2Module());
-        return funcRegistry.Release();
-    }
 
     void EnableDebugLogs(TKikimrWithGrpcAndRootSchema& server) {
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
@@ -483,7 +474,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     template<bool NotNull>
     void TestQuery(const TString& query, const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, &UdfFrFactory);
+        TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, nullptr);
 
         auto connection = ConnectToServer(server);
 

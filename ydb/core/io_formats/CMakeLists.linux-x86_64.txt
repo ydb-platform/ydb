@@ -19,7 +19,7 @@ target_link_libraries(ydb-core-io_formats PUBLIC
   yutil
   contrib-libs-double-conversion
   cpp-string_utils-quote
-  ydb-core-formats
+  core-formats-arrow
   ydb-core-scheme
   ydb-library-binary_json
   ydb-library-dynumber

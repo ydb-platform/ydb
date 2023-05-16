@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-kqp-ut-query PUBLIC
   yutil
   cpp-testing-unittest_main
   ydb-core-kqp
+  cpp-client-ydb_proto
   kqp-ut-common
   yql-sql-pg_dummy
 )

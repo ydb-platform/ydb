@@ -34,7 +34,7 @@ runs:
       pytest -n 32 -o junit_logging=log -o junit_log_passing_tests=False \
       -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/res.xml ${{inputs.test_label_regexp}} | \
       sed -e 's/\x1b\[[0-9;]*m//g' | \
-      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-stdout.gz) | \
+      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-pytest-stdout.gz) | \
       tee -a $GITHUB_STEP_SUMMARY
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master

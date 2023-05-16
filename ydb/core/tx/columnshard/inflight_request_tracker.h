@@ -66,7 +66,7 @@ public:
             }
 
             for (const auto& committedBlob : readMeta->CommittedBlobs) {
-                blobTracker.SetBlobInUse(committedBlob.BlobId, false);
+                blobTracker.SetBlobInUse(committedBlob.GetBlobId(), false);
             }
         }
 
@@ -107,7 +107,7 @@ private:
         }
 
         for (const auto& committedBlob : readMeta->CommittedBlobs) {
-            blobTracker.SetBlobInUse(committedBlob.BlobId, true);
+            blobTracker.SetBlobInUse(committedBlob.GetBlobId(), true);
         }
     }
 

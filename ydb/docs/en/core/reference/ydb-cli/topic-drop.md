@@ -30,5 +30,5 @@ View the description of the delete topic command:
 Delete the [previously created](topic-create.md) topic:
 
 ```bash
-{{ ydb-cli }} -p db1 topic drop my-topic
+{{ ydb-cli }} -p quickstart topic drop my-topic
 ```

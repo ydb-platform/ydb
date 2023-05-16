@@ -332,6 +332,10 @@ private:
     }
 
 private:
+    TActorId SelfId() const {
+        return {};
+    }
+
     void InternalError(const TString& message) {
         LOG_E(message);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");

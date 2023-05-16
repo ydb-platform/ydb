@@ -33,6 +33,7 @@ target_link_libraries(core-tx-tx_proxy PUBLIC
   ydb-core-actorlib_impl
   ydb-core-base
   core-blobstorage-base
+  ydb-core-docapi
   ydb-core-engine
   ydb-core-formats
   ydb-core-grpc_services

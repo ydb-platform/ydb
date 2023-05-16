@@ -77,24 +77,20 @@ namespace NActors {
             if (CancelFlag || AbortFlag) {
                 return false;
             } else if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
-                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 2 * 64 &&
+                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
                         (NumChunks == 0 || data != Chunks[NumChunks - 1].first + Chunks[NumChunks - 1].second)) {
                     memcpy(BufferPtr, data, bytesToAppend);
-
                     if (!Produce(BufferPtr, bytesToAppend)) {
                         return false;
                     }
-
                     BufferPtr += bytesToAppend;
-                    data = static_cast<const char*>(data) + bytesToAppend;
-                    size -= bytesToAppend;
                 } else {
                     if (!Produce(data, bytesToAppend)) {
                         return false;
                     }
-                    data = static_cast<const char*>(data) + bytesToAppend;
-                    size -= bytesToAppend;
                 }
+                data = static_cast<const char*>(data) + bytesToAppend;
+                size -= bytesToAppend;
             } else {
                 InnerContext.SwitchTo(BufFeedContext);
             }

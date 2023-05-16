@@ -34,6 +34,25 @@ By default, virtual timestamps are not uploaded to the changefeed. To enable the
 
 {% endnote %}
 
+## Initial table scan {#initial-scan}
+
+By default, a changefeed only includes records about those table rows that changed after the changefeed was created. Initial table scan enables you to export, to the changefeed, the values of all the rows that existed at the time of changefeed creation.
+
+The scan runs in the background mode on top of the table snapshot. The following situations are possible:
+* A non-scanned row changes in the table. The changefeed will receive, one after another: a record with the source value and a record about the update.  When the same record is changed again, only the update record is exported.
+* A changed row is found during scanning. Nothing is exported to the changefeed because the source value has already been exported at the time of change (see the previous paragraph).
+* A scanned row changes in the table. Only an update record exports to the changefeed.
+
+This ensures that, for the same row (the same primary key), the source value is exported first, and then the updated value is exported.
+
+{% note info %}
+
+The record with the source row value is labeled as an [update](#restrictions) record. When using [virtual timestamps](#virtual-timestamps), records are marked by the snapshot's timestamp.
+
+{% endnote %}
+
+During the scanning process, depending on the table update frequency, you might see too many `OVERLOADED` errors. This is because, besides the update records, you also need to deliver records with the source row values. When the scan is complete, the changefeed switches to normal operation.
+
 ## Record structure {#record-structure}
 
 Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md#changefeed-options), the structure of a record may differ.

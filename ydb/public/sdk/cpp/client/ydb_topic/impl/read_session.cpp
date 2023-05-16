@@ -43,7 +43,6 @@ TReadSession::~TReadSession() {
 }
 
 void TReadSession::Start() {
-    ErrorHandler = MakeIntrusive<NPersQueue::TErrorHandler<false>>(weak_from_this());
     Tracker = std::make_shared<NPersQueue::TImplTracker>();
     EventsQueue = std::make_shared<NPersQueue::TReadSessionEventsQueue<false>>(Settings, weak_from_this(), Tracker);
 
@@ -85,7 +84,6 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         Log,
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
-        ErrorHandler,
         context,
         1, 1,
         Tracker);
@@ -120,11 +118,19 @@ NThreading::TFuture<void> TReadSession::WaitEvent() {
 }
 
 TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) {
-    return EventsQueue->GetEvents(block, maxEventsCount, maxByteSize);
+    auto res = EventsQueue->GetEvents(block, maxEventsCount, maxByteSize);
+    if (EventsQueue->IsClosed()) {
+        Abort(EStatus::ABORTED, "Aborted");
+    }
+    return res;
 }
 
 TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxByteSize) {
-    return EventsQueue->GetEvent(block, maxByteSize);
+    auto res = EventsQueue->GetEvent(block, maxByteSize);
+    if (EventsQueue->IsClosed()) {
+        Abort(EStatus::ABORTED, "Aborted");
+    }
+    return res;
 }
 
 bool TReadSession::Close(TDuration timeout) {
@@ -300,19 +306,25 @@ void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
     }
 }
 
-void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDeferredActions<false>& deferred) {
+
+void TReadSession::AbortImpl(NPersQueue::TDeferredActions<false>&) {
     Y_VERIFY(Lock.IsLocked());
 
     if (!Aborting) {
         Aborting = true;
-        LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
             DumpCountersContext.reset();
         }
         Session->Abort();
-        EventsQueue->Close(std::move(closeEvent), deferred);
     }
+}
+
+void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDeferredActions<false>& deferred) {
+    LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
+
+    EventsQueue->Close(std::move(closeEvent), deferred);
+    AbortImpl(deferred);
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, NPersQueue::TDeferredActions<false>& deferred) {

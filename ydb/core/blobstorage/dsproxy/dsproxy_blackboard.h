@@ -85,6 +85,7 @@ struct TBlobState {
     NWilson::TSpan *Span = nullptr;
     bool Keep = false;
     bool DoNotKeep = false;
+    bool LooksLikePhantom = false;
 
     void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
     void AddNeeded(ui64 begin, ui64 size);

@@ -137,7 +137,10 @@ message ChangefeedMode {
 message ChangefeedFormat {
     enum Format {
         FORMAT_UNSPECIFIED = 0;
+        // Change record in JSON format for common (row oriented) tables
         FORMAT_JSON = 1;
+        // Change record in JSON format for document (DynamoDB-compatible) tables
+        FORMAT_DOCUMENT_TABLE_JSON = 2;
     }
 }
 

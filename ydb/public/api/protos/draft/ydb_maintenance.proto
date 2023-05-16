@@ -4,7 +4,6 @@ option cc_enable_arenas = true;
 package Ydb.Maintenance;
 option java_package = "com.yandex.ydb.maintenance.service";
 
-import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 
 import "google/protobuf/duration.proto";
@@ -63,9 +62,9 @@ message ActionState {
         ACTION_STATUS_CREATED = 1;
         ACTION_STATUS_WAITING = 2;
         ACTION_STATUS_PENDING = 3;
-        // Action has granded permission.
-        ACTION_STATUS_PERMIT_GRANDED = 4;
-        // Permission withdrawn due to deadline        
+        // Action has granted result.
+        ACTION_STATUS_RESULT_PROVIDED = 4;
+        // Result withdrawn due to deadline        
         ACTION_STATUS_TIMEOUT_EXPIRED = 5;
         // The user marked the action as completed
         ACTION_STATUS_FINISHED_BY_USER = 6;
@@ -87,11 +86,17 @@ message ActionState {
         // State storage broken. Too many (more than (nToSelect - 1) / 2) unavailable rings 
         ACTION_REASON_STATE_STORAGE_BROKEN = 5;
         // Issue in cluster disabled nodes limit
-        ACTION_REASON_DISABLED_NODES_LIMIT_RICHED = 6;
+        ACTION_REASON_DISABLED_NODES_LIMIT_REACHED = 6;
         // Issue in tenant limits
-        ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_RICHED = 7;
+        ACTION_REASON_TENANT_DISABLED_NODES_LIMIT_REACHED = 7;
         // Wrong request
         ACTION_REASON_WRONG_REQUEST = 8;
+        // Low priority
+        ACTION_REASON_LOW_PRIORITY = 9;
+        // Lock is granded to this item
+        ACTION_REASON_ALREADY_LOCKED = 10;
+        // Limit to nodes with sys tablets
+        ACTION_REASON_SYS_TABLETS_NODE_LIMIT_REACHED = 11;
     }
 
     Action action = 1;
@@ -100,7 +105,7 @@ message ActionState {
     ActionReason reason = 4;
     // The time when the state was assigned
     google.protobuf.Timestamp state_timestamp = 5;
-    // Fields specified for PERMISSION_GRANDED state
+    // Fields specified for RESULT_GRANTED state
     google.protobuf.Timestamp deadline = 6;
 }
 
@@ -268,13 +273,13 @@ message ManageMaintenanceTaskResponse {
     StatusIds.StatusCode status = 1;
 }
 
-// Removes resolved premits
-message ReleasePermitRequest {
+// Removes resolved result
+message ReleaseActionResultRequest {
     repeated ActionUid action_uid = 1;
 }
 
-// Extends permits deadlines
-message ProlongatePermitRequest {
+// Extends results deadlines
+message ProlongateActionResultRequest {
     message ActionDuration {
         ActionUid action_uid = 1;
         google.protobuf.Timestamp new_deadline = 2;
@@ -282,16 +287,16 @@ message ProlongatePermitRequest {
     repeated ActionDuration action_durations = 1;
 }
 
-message PermitStatus {
-    ActionUid action_uid = 1;
-    StatusIds.StatusCode status = 2;
+message ManageActionResultResponse {
+    message ResultStatus {
+        ActionUid action_uid = 1;
+        StatusIds.StatusCode status = 2;
+    }
+
+    repeated ResultStatus result_statuses = 1;
 }
 
-message ManagePermitResponse {
-    repeated PermitStatus permit_statuses = 1;
-}
-
-// Getting a detailed reason why the action doesn't get a permit
+// Getting a detailed reason why the action doesn't get a result granted state
 message GetReadableActionReasonRequest {
     repeated ActionUid action_ids = 1;
 }

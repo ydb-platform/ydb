@@ -256,6 +256,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
+        const auto valueType = Type::getInt128Ty(context);
 
         const auto startv = GetNodeValue(Start, ctx, block);
         const auto endv = GetNodeValue(End, ctx, block);
@@ -278,16 +279,16 @@ public:
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListFromRangeWrapper::MakeList));
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
-            const auto signature = FunctionType::get(Type::getInt128Ty(context), {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
+            const auto signature = FunctionType::get(valueType, {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(creator, {ctx.Ctx, start, end, step, timezone}, "output", block);
+            const auto output = CallInst::Create(signature, creator, {ctx.Ctx, start, end, step, timezone}, "output", block);
             return output;
         } else {
-            const auto place = new AllocaInst(Type::getInt128Ty(context), 0U, "place", block);
+            const auto place = new AllocaInst(valueType, 0U, "place", block);
             const auto signature = FunctionType::get(Type::getVoidTy(context), {place->getType(), ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(creator, {place, ctx.Ctx, start, end, step, timezone}, "", block);
-            const auto output = new LoadInst(place, "output", block);
+            CallInst::Create(signature, creator, {place, ctx.Ctx, start, end, step, timezone}, "", block);
+            const auto output = new LoadInst(valueType, place, "output", block);
             return output;
         }
     }

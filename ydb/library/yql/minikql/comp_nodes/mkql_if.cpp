@@ -122,8 +122,9 @@ public:
 
         block = test;
 
-        const auto state = new LoadInst(statePtr, "state", block);
-        const auto result = PHINode::Create(state->getType(), IsOptional ? 3U : 2U, "result", done);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto result = PHINode::Create(valueType, IsOptional ? 3U : 2U, "result", done);
 
         if (IsOptional) {
             result->addIncoming(state, block);
@@ -203,7 +204,8 @@ public:
 
         block = test;
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto result = PHINode::Create(Type::getInt32Ty(context), 2, "result", done);
 
         const auto cast = CastInst::Create(Instruction::Trunc, state, Type::getInt1Ty(context), "bool", block);
@@ -237,10 +239,11 @@ public:
                 const auto then = BasicBlock::Create(context, "then", ctx.Func);
                 const auto elsb = BasicBlock::Create(context, "elsb", ctx.Func);
                 const auto done = BasicBlock::Create(context, "done", ctx.Func);
-                const auto result = PHINode::Create(Type::getInt128Ty(context), 2, "result", done);
+                const auto valueType = Type::getInt128Ty(context);
+                const auto result = PHINode::Create(valueType, 2, "result", done);
 
-                const auto statePtr = GetElementPtrInst::CreateInBounds(ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), index)}, "state_ptr", block);
-                const auto state = new LoadInst(statePtr, "state", block);
+                const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), index)}, "state_ptr", block);
+                const auto state = new LoadInst(valueType, statePtr, "state", block);
                 const auto trunc = CastInst::Create(Instruction::Trunc, state, Type::getInt1Ty(context), "trunc", block);
 
                 BranchInst::Create(then, elsb, trunc, block);

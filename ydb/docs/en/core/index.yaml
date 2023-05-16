@@ -8,8 +8,8 @@ meta:
   title: YDB
 links:
   - title: Getting started
-    description: Creating a database, connecting to it, setting up access permissions, and performing basic operations with it
-    href: getting_started/
+    description: Deploy your cluster and perform basic operations with data
+    href: administration/quickstart
   - title: Concepts
     description: How YDB works, its features and available usage modes
     href: concepts/
@@ -31,6 +31,3 @@ links:
   - title: Managing a cluster
     description: Configuring, maintaining, monitoring, and performing diagnostics of YDB clusters
     href: cluster/
-  - title: Useful links
-    description: Links to various resources related to YDB
-    href: getting_started/useful_links

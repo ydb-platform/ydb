@@ -713,7 +713,12 @@ namespace Tests {
                                         TMailboxType::Revolving, 0);
         Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
         if (Settings->EnableConfigsDispatcher) {
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig, {});
+            // We overwrite icb settings here to save behavior when configs dispatcher are enabled
+            NKikimrConfig::TAppConfig initial = Settings->AppConfig;
+            if (!initial.HasImmediateControlsConfig()) {
+                initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
+            }
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(initial, {});
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

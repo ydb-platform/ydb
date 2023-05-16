@@ -52,7 +52,7 @@ void TDbWrapper::EraseGranule(ui32 index, const IColumnEngine& engine, const TGr
     NColumnShard::Schema::IndexGranules_Erase(db, index, engine, row);
 }
 
-bool TDbWrapper::LoadGranules(ui32 index, const IColumnEngine& engine, std::function<void(TGranuleRecord&&)> callback) {
+bool TDbWrapper::LoadGranules(ui32 index, const IColumnEngine& engine, const std::function<void(const TGranuleRecord&)>& callback) {
     NIceDb::TNiceDb db(Database);
     return NColumnShard::Schema::IndexGranules_Load(db, index, engine, callback);
 }
@@ -67,7 +67,7 @@ void TDbWrapper::EraseColumn(ui32 index, const TColumnRecord& row) {
     NColumnShard::Schema::IndexColumns_Erase(db, index, row);
 }
 
-bool TDbWrapper::LoadColumns(ui32 index, std::function<void(TColumnRecord&&)> callback) {
+bool TDbWrapper::LoadColumns(ui32 index, const std::function<void(const TColumnRecord&)>& callback) {
     NIceDb::TNiceDb db(Database);
     return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, index, callback);
 }
@@ -77,7 +77,7 @@ void TDbWrapper::WriteCounter(ui32 index, ui32 counterId, ui64 value) {
     return NColumnShard::Schema::IndexCounters_Write(db, index, counterId, value);
 }
 
-bool TDbWrapper::LoadCounters(ui32 index, std::function<void(ui32 id, ui64 value)> callback) {
+bool TDbWrapper::LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
     NIceDb::TNiceDb db(Database);
     return NColumnShard::Schema::IndexCounters_Load(db, index, callback);
 }

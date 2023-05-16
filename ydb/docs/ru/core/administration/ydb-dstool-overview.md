@@ -6,6 +6,7 @@
 
 Команда | Описание
 --- | ---
+[device list](./ydb-dstool-device-list.md) | Вывести список устройств хранения.
 pdisk add-by-serial | Добавить PDisk в набор по серийному номеру.
 pdisk remove-by-serial | Удалить PDisk из набора по серийному номеру.
 pdisk set | Задать параметры PDisk'а.

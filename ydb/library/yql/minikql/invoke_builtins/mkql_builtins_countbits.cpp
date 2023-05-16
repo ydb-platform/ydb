@@ -22,7 +22,7 @@ struct TCountBits : public TSimpleArithmeticUnary<TInput, TOutput, TCountBits<TI
         const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
         const auto& name = GetFuncNameForType<TInput>("llvm.ctpop");
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
-        const auto result = CallInst::Create(func, {arg}, "popcount", block);
+        const auto result = CallInst::Create(fnType, func, {arg}, "popcount", block);
         return StaticCast<TInput, TOutput>(result, context, block);
     }
 #endif

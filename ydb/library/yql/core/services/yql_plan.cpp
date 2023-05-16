@@ -17,8 +17,6 @@ struct TPinAttrs {
     {}
 };
 
-const ui32 LIMIT_PINS = 10;
-
 struct TNodeInfo {
     ui64 NodeId;
     const TExprNode* const Node;
@@ -184,7 +182,7 @@ public:
         : Types_(types)
     {}
 
-    void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root) override {
+    void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root, const TPlanSettings& settings) override {
         if (!root) {
             return;
         }
@@ -234,12 +232,12 @@ public:
 
                 info.InputsCount = inputs.size();
                 info.OutputsCount = outputs.size();
-                if (inputs.size() > LIMIT_PINS) {
-                    inputs.resize(LIMIT_PINS, TPinInfo(nullptr, nullptr, nullptr, "", true));
+                if (settings.LimitInputPins && inputs.size() > *settings.LimitInputPins) {
+                    inputs.resize(*settings.LimitInputPins, TPinInfo(nullptr, nullptr, nullptr, "", true));
                 }
 
-                if (outputs.size() > LIMIT_PINS) {
-                    outputs.resize(LIMIT_PINS, TPinInfo(nullptr, nullptr, nullptr, "", true));
+                if (settings.LimitOutputPins && outputs.size() > *settings.LimitOutputPins) {
+                    outputs.resize(*settings.LimitOutputPins, TPinInfo(nullptr, nullptr, nullptr, "", true));
                 }
 
                 WritePins("Inputs", inputs, writer, info.Inputs, providers);

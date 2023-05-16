@@ -48,7 +48,8 @@ public:
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
 
-        const auto flagPtr = new AllocaInst(Type::getInt1Ty(context), 0U, "flag_ptr", &ctx.Func->getEntryBlock().back());
+        const auto flagType = Type::getInt1Ty(context);
+        const auto flagPtr = new AllocaInst(flagType, 0U, "flag_ptr", &ctx.Func->getEntryBlock().back());
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -108,7 +109,7 @@ public:
             else if (Outputs[i]->GetDependencesCount() > 0 || OutputsOnUpdate[i])
                 result.emplace_back([output = Outputs[i]] (const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(output, ctx, block); });
             else
-                result.emplace_back([this, i, source = getres.second, flagPtr] (const TCodegenContext& ctx, BasicBlock*& block) {
+                result.emplace_back([this, i, source = getres.second, flagPtr, flagType] (const TCodegenContext& ctx, BasicBlock*& block) {
                     auto& context = ctx.Codegen->GetContext();
 
                     const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -117,7 +118,7 @@ public:
 
                     const auto result = PHINode::Create(Type::getInt128Ty(context), 2U, "result", done);
 
-                    const auto flag = new LoadInst(flagPtr, "flag", block);
+                    const auto flag = new LoadInst(flagType, flagPtr, "flag", block);
                     BranchInst::Create(init, next, flag, block);
 
                     block = init;

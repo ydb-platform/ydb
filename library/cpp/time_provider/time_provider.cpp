@@ -30,7 +30,7 @@ TIntrusivePtr<ITimeProvider> CreateDeterministicTimeProvider(ui64 seed) {
 }
 
 namespace {
-TIntrusivePtr<ITimeProvider> GlobalTimeProvider;
+    TIntrusivePtr<ITimeProvider> GlobalTimeProvider;
 }
 
 void TInstantOperator::RegisterProvider(TIntrusivePtr<ITimeProvider> provider) {

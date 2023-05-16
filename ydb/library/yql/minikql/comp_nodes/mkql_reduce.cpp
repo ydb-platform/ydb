@@ -105,7 +105,7 @@ public:
                 new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);
-            const auto iter = new LoadInst(iterPtr, "iter", block);
+            const auto iter = new LoadInst(valueType, iterPtr, "iter", block);
 
             BranchInst::Create(loop, block);
             block = loop;

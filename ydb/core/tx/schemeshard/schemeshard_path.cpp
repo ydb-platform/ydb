@@ -819,6 +819,38 @@ const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus stat
         << ", delta: " << delta);
 }
 
+const TPath::TChecker& TPath::TChecker::ExportsLimit(ui64 delta, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+    if (Path.SS->Exports.size() + delta <= domainInfo->GetSchemeLimits().MaxExports) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "exports count limit exceeded"
+        << ", limit: " << domainInfo->GetSchemeLimits().MaxExports
+        << ", exports: " << Path.SS->Exports.size()
+        << ", delta: " << delta);
+}
+
+const TPath::TChecker& TPath::TChecker::ImportsLimit(ui64 delta, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+    if (Path.SS->Imports.size() + delta <= domainInfo->GetSchemeLimits().MaxImports) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "imports count limit exceeded"
+        << ", limit: " << domainInfo->GetSchemeLimits().MaxImports
+        << ", exports: " << Path.SS->Imports.size()
+        << ", delta: " << delta);
+}
+
 const TPath::TChecker& TPath::TChecker::NotChildren(EStatus status) const {
     if (Failed) {
         return *this;

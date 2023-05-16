@@ -229,6 +229,13 @@ NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
 
 namespace NYql {
 
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(pool);
+    return arrow::Datum();
+}
+
 TMaybe<ui32> ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
     return Nothing();

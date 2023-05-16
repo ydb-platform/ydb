@@ -6,7 +6,13 @@
 #include "group_layout_checker.h"
 #include "layout_helpers.h"
 
+#include <ydb/core/debug_tools/operation_log.h>
+
 namespace NKikimr::NBsController {
+    enum class EGroupRepairOperation {
+        SelfHeal = 0,
+        GroupLayoutSanitizer,
+    };
 
     enum {
         EvReassignerDone = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
@@ -15,10 +21,14 @@ namespace NKikimr::NBsController {
     struct TEvReassignerDone : TEventLocal<TEvReassignerDone, EvReassignerDone> {
         TGroupId GroupId;
         bool Success;
+        EGroupRepairOperation Operation;
+        TString ErrorReason;
 
-        TEvReassignerDone(TGroupId groupId, bool success)
+        TEvReassignerDone(TGroupId groupId, bool success, EGroupRepairOperation operation, TString errorReason = "")
             : GroupId(groupId)
             , Success(success)
+            , Operation(operation)
+            , ErrorReason(errorReason)
         {}
     };
 
@@ -120,7 +130,7 @@ namespace NKikimr::NBsController {
 
             bool diskIsOk = false;
             if (record.GetStatus() == NKikimrProto::RACE) {
-                return Finish(false); // group reconfigured while we were querying it
+                return Finish(false, "Race occured"); // group reconfigured while we were querying it
             } else if (record.GetStatus() == NKikimrProto::OK) {
                 diskIsOk = record.GetJoinedGroup() && record.GetReplicated();
             }
@@ -150,7 +160,7 @@ namespace NKikimr::NBsController {
             auto& checker = Topology.GetQuorumChecker();
             if (!checker.CheckFailModelForGroup(*FailedGroupDisks)) {
                 STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH06, "Reassigner ProcessResult quorum checker failed", (GroupId, GroupId));
-                return Finish(false); // this change will render group unusable
+                return Finish(false, "Reassigner ProcessResult quorum checker failed"); // this change will render group unusable
             }
 
             auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -179,6 +189,7 @@ namespace NKikimr::NBsController {
             if (!record.GetResponse().GetSuccess()) {
                 STLOG(PRI_WARN, BS_SELFHEAL, BSSH07, "Reassigner ReassignGroupDisk request failed", (GroupId, GroupId),
                     (VDiskToReplace, VDiskToReplace), (Response, record));
+                Finish(false, record.GetResponse().GetErrorDescription());
             } else {
                 TString items = "none";
                 for (const auto& item : record.GetResponse().GetStatus(0).GetReassignedItem()) {
@@ -186,20 +197,21 @@ namespace NKikimr::NBsController {
                         << TVSlotId(item.GetFrom()) << " -> " << TVSlotId(item.GetTo());
                 }
                 STLOG(PRI_INFO, BS_SELFHEAL, BSSH09, "Reassigner succeeded", (GroupId, GroupId), (Items, items));
+                Finish(true);
             }
-            Finish(record.GetResponse().GetSuccess());
         }
 
-        void Finish(bool success) {
+        void Finish(bool success, TString errorReason = "") {
             STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH08, "Reassigner finished", (GroupId, GroupId), (Success, success));
-            Send(SelfHealId, new TEvReassignerDone(GroupId, success));
+            auto operation = VDiskToReplace ? EGroupRepairOperation::SelfHeal : EGroupRepairOperation::GroupLayoutSanitizer;
+            Send(SelfHealId, new TEvReassignerDone(GroupId, success, operation, errorReason));
             PassAway();
         }
 
         void HandleWakeup() {
             // actually it is watchdog timer for VDisk status query
             if (PendingVDisks) {
-                Finish(false);
+                Finish(false, "VDisk status query timer expired");
             }
         }
 
@@ -255,6 +267,9 @@ namespace NKikimr::NBsController {
         THostRecordMap HostRecords;
 
         static constexpr TDuration SelfHealWakeupPeriod = TDuration::Seconds(10);
+
+        static constexpr uint32_t GroupLayoutSanitizerOperationLogSize = 128;
+        TOperationLog<GroupLayoutSanitizerOperationLogSize> GroupLayoutSanitizerOperationLog;
 
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords)
@@ -323,11 +338,12 @@ namespace NKikimr::NBsController {
                     Groups.erase(it);
                 }
             }
-            for (const auto& [vdiskId, status] : ev->Get()->VDiskStatusUpdate) {
+            for (const auto& [vdiskId, status, onlyPhantomsRemain] : ev->Get()->VDiskStatusUpdate) {
                 if (const auto it = Groups.find(vdiskId.GroupID); it != Groups.end()) {
                     auto& group = it->second;
                     if (const auto it = group.Content.VDisks.find(vdiskId); it != group.Content.VDisks.end()) {
                         it->second.VDiskStatus = status;
+                        it->second.OnlyPhantomsRemain = onlyPhantomsRemain;
                         group.VDiskStatus[vdiskId].Update(status, now);
                     }
                 }
@@ -360,6 +376,8 @@ namespace NKikimr::NBsController {
                     if (group.ReassignerActorId || now < group.NextRetryTimestamp) {
                         // nothing to do
                     } else {
+                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
+                                "Start sanitizing GroupId# " << group.GroupId);
                         group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content, std::nullopt));
                     }
                 }
@@ -450,9 +468,17 @@ namespace NKikimr::NBsController {
                 if (ev->Get()->Success) {
                     group.NextRetryTimestamp = now;
                     group.RetryTimeout = MinRetryTimeout;
+                    if (ev->Get()->Operation == EGroupRepairOperation::GroupLayoutSanitizer) {
+                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
+                                "Sanitizing succeeded GroupId# " << group.GroupId);
+                    }
                 } else {
                     group.NextRetryTimestamp = now + group.RetryTimeout;
                     group.RetryTimeout = std::min(MaxRetryTimeout, group.RetryTimeout * 3 / 2);
+                    if (ev->Get()->Operation == EGroupRepairOperation::GroupLayoutSanitizer) {
+                        ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
+                                "Sanitizing failed GroupId# " << group.GroupId << " ErrorReason# " << ev->Get()->ErrorReason);
+                    }
                 }
 
                 CheckGroups();
@@ -620,6 +646,39 @@ namespace NKikimr::NBsController {
                     }
                     DIV_CLASS("panel-body") {
                         out << "Status: " << (GroupLayoutSanitizerEnabled ? "enabled" : "disabled");
+
+                        out << "<br/>";
+
+                        out << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
+                            data-target='#operationLogCollapse'>Operation Log</button>";
+                        out << "<div id='operationLogCollapse' class='collapse'>";
+                        TABLE_CLASS("table") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Index"; }
+                                    TABLEH() { out << "Record"; }
+                                }
+                            }
+
+                            ui32 logSize = GroupLayoutSanitizerOperationLog.Size();
+                            TABLEBODY() {
+                                for (ui32 i = 0; i < logSize; ++i) {
+                                    TABLER() {
+                                        TABLED() {
+                                            out << i;
+                                        }
+                                        TABLED() { 
+                                            auto record = GroupLayoutSanitizerOperationLog.BorrowByIdx(i);
+                                            if (record) {
+                                                out << *record;
+                                                GroupLayoutSanitizerOperationLog.ReturnBorrowedRecord(record);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        out << "</div>";
                     }
                 }
 
@@ -760,6 +819,7 @@ namespace NKikimr::NBsController {
                     slot->PDisk->ShouldBeSettledBySelfHeal(),
                     slot->PDisk->BadInTermsOfSelfHeal(),
                     slot->PDisk->Decommitted(),
+                    slot->OnlyPhantomsRemain,
                     slot->Status,
                 };
             }
@@ -784,8 +844,8 @@ namespace NKikimr::NBsController {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    if (slot->Status != m.GetStatus()) {
-                        slot->SetStatus(m.GetStatus(), mono, now);
+                    if (slot->Status != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
+                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain());
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {
@@ -794,7 +854,7 @@ namespace NKikimr::NBsController {
                         }
                         timingQ.emplace_back(*slot);
                     }
-                    ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus());
+                    ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus(), m.GetOnlyPhantomsRemain());
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
                         groups.insert(const_cast<TGroupInfo*>(group));
                     }

@@ -555,7 +555,7 @@ size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, NScheme::TTy
     return column->byteSize() - prevBytes;
 }
 
-TTypesAndNames MakeColumns(const TDataTypeRegistryPtr& dataTypeRegistry, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+TTypesAndNames MakeColumns(const TDataTypeRegistryPtr& dataTypeRegistry, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     TTypesAndNames res;
     for (auto& c : columns) {
         TDataTypePtr dataType = dataTypeRegistry->GetByYdbType(c.second);
@@ -575,7 +575,7 @@ class TBlockBuilder : public NKikimr::IBlockBuilder {
 public:
     explicit TBlockBuilder(TDataTypeRegistryPtr dataTypeRegistry);
     ~TBlockBuilder();
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override;
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) override;
     void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override;
     TString Finish() override;
     size_t Bytes() const override;
@@ -594,7 +594,7 @@ private:
 class TBlockBuilder::TImpl {
     constexpr static ui32 DBMS_MIN_REVISION_WITH_CURRENT_AGGREGATION_VARIANT_SELECTION_METHOD = 54408;
 public:
-    TImpl(const TDataTypeRegistryPtr& dataTypeRegistry, const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock)
+    TImpl(const TDataTypeRegistryPtr& dataTypeRegistry, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock)
         : MaxRowsInBlock(maxRowsInBlock)
         , MaxBytesInBlock(maxBytesInBlock)
         , BlockTemplate(MakeColumns(dataTypeRegistry, columns))
@@ -663,7 +663,7 @@ TBlockBuilder::TBlockBuilder(TDataTypeRegistryPtr dataTypeRegistry)
 TBlockBuilder::~TBlockBuilder() {
 }
 
-bool TBlockBuilder::Start(const TVector<std::pair<TString,  NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) {
+bool TBlockBuilder::Start(const std::vector<std::pair<TString,  NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) {
     try {
         Impl.Reset(new TImpl(DataTypeRegistry, columns, maxRowsInBlock, maxBytesInBlock));
     } catch (std::exception& e) {

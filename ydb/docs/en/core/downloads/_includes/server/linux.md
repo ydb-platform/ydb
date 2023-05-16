@@ -1,5 +1,7 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+**v23.1**
+v.23.1.26 | 05/05/2023 | [Binary file](https://binaries.ydb.tech/release/23.1.26/ydbd-23.1.26-linux-amd64.tar.gz) | [See the changelog](../../../changelog-server.md#23-1)
 **v22.5**
 v.22.5.10 | 09/02/2023 | [Binary file](https://binaries.ydb.tech/release/22.5.10/ydbd-22.5.10-linux-amd64.tar.gz) | [See the changelog](../../../changelog-server.md#22-5)
 **v22.4**

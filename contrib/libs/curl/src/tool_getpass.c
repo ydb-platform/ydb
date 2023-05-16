@@ -41,9 +41,9 @@
 #endif
 
 #ifdef __VMS
-#  include descrip
-#  include starlet
-#  include iodef
+#  error #include descrip
+#  error #include starlet
+#  error #include iodef
 #endif
 
 #ifdef WIN32

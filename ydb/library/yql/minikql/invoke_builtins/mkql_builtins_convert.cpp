@@ -46,7 +46,7 @@ struct TFloatToIntegralImpl {
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
-        const auto classify = CallInst::Create(func, {val}, "fpclassify", block);
+        const auto classify = CallInst::Create(fnType, func, {val}, "fpclassify", block);
 
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
         const auto zero = BasicBlock::Create(context, "zero", ctx.Func);
@@ -113,7 +113,7 @@ struct TFloatToIntegralImpl<TIn, bool> {
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
-        const auto classify = CallInst::Create(func, {val}, "fpclassify", block);
+        const auto classify = CallInst::Create(fnType, func, {val}, "fpclassify", block);
 
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
         const auto zero = BasicBlock::Create(context, "zero", ctx.Func);
@@ -401,7 +401,7 @@ struct TJsonToJsonDocumentConvert {
         const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonToJsonDocument));
         const auto functionType = FunctionType::get(json->getType(), {json->getType()}, /* isVarArg */ false);
         const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
-        return CallInst::Create(functionPtr, {json}, "jsonToJsonDocument", block);
+        return CallInst::Create(functionType, functionPtr, {json}, "jsonToJsonDocument", block);
     }
 #endif
 };
@@ -424,7 +424,7 @@ struct TJsonDocumentToJsonConvert {
         const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonDocumentToJson));
         const auto functionType = FunctionType::get(jsonDocument->getType(), {jsonDocument->getType()}, /* isVarArg */ false);
         const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
-        return CallInst::Create(functionPtr, {jsonDocument}, "jsonDocumentToJson", block);
+        return CallInst::Create(functionType, functionPtr, {jsonDocument}, "jsonDocumentToJson", block);
     }
 #endif
 };

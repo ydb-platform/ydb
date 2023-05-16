@@ -18,7 +18,7 @@ A Helm chart installs a controller in the {{ k8s }} cluster. It implements the l
 * _Storage nodes_: Provide the data storage layer.
 * _Dynamic nodes_: Implement data access and processing.
 
-To deploy each of the components, just create an appropriate resource: [Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-sample.yaml) or [Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database-sample.yaml) with the desired parameters. To learn more about the resource schema, follow [this link](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy/ydb-operator/crds).
+To deploy each of the components, just create an appropriate resource: [Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-block-4-2.yaml) or [Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database.yaml) with the desired parameters. To learn more about the resource schema, follow [this link](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy/ydb-operator/crds).
 
 After the chart data is processed by the controller, the following resources are created:
 

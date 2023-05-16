@@ -1,3 +1,5 @@
+#include "engines/reader/description.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -10,8 +12,8 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 template <typename T, typename U>
-TVector<T> ProtoToVector(const U& cont) {
-    return TVector<T>(cont.begin(), cont.end());
+std::vector<T> ProtoToVector(const U& cont) {
+    return std::vector<T>(cont.begin(), cont.end());
 }
 
 }
@@ -44,43 +46,44 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     txc.DB.NoMoreReadsForTx();
 
-    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo();
     auto& record = Proto(Ev->Get());
-
     ui64 metaShard = record.GetTxInitiator();
 
-    TReadDescription read;
-    read.PlanStep = record.GetPlanStep();
-    read.TxId = record.GetTxId();
+    NOlap::TReadDescription read(NOlap::TSnapshot(record.GetPlanStep(), record.GetTxId()), false);
     read.PathId = record.GetTableId();
     read.ReadNothing = !(Self->TablesManager.HasTable(read.PathId));
     read.ColumnIds = ProtoToVector<ui32>(record.GetColumnIds());
     read.ColumnNames = ProtoToVector<TString>(record.GetColumnNames());
+
+    const NOlap::TIndexInfo& indexInfo = Self->TablesManager.GetIndexInfo(read.GetSnapshot());
     if (read.ColumnIds.empty() && read.ColumnNames.empty()) {
         auto allColumnNames = indexInfo.ArrowSchema()->field_names();
         read.ColumnNames.assign(allColumnNames.begin(), allColumnNames.end());
     }
 
+    std::shared_ptr<NOlap::TPredicate> fromPredicate;
+    std::shared_ptr<NOlap::TPredicate> toPredicate;
     if (record.HasGreaterPredicate()) {
         auto& proto = record.GetGreaterPredicate();
         auto schema = indexInfo.ArrowSchema(ProtoToVector<TString>(proto.GetColumnNames()));
-        read.GreaterPredicate = std::make_shared<NOlap::TPredicate>(
-            NArrow::EOperation::Greater, proto.GetRow(), schema, proto.GetInclusive());
+        fromPredicate = std::make_shared<NOlap::TPredicate>(
+            proto.GetInclusive() ? NArrow::EOperation::GreaterEqual : NArrow::EOperation::Greater, proto.GetRow(), schema);
     }
     if (record.HasLessPredicate()) {
         auto& proto = record.GetLessPredicate();
         auto schema = indexInfo.ArrowSchema(ProtoToVector<TString>(proto.GetColumnNames()));
-        read.LessPredicate = std::make_shared<NOlap::TPredicate>(
-            NArrow::EOperation::Less, proto.GetRow(), schema, proto.GetInclusive());
+        toPredicate = std::make_shared<NOlap::TPredicate>(
+            proto.GetInclusive() ? NArrow::EOperation::LessEqual : NArrow::EOperation::Less, proto.GetRow(), schema);
     }
+    Y_VERIFY(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
 
     bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
-        TIndexColumnResolver(Self->TablesManager.GetIndexInfo()));
+        TIndexColumnResolver(indexInfo));
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
         metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
-                                       ErrorDescription);
+                                       ErrorDescription, false);
     }
 
     ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;
@@ -92,7 +95,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     }
 
     Result = std::make_unique<TEvColumnShard::TEvReadResult>(
-        Self->TabletID(), metaShard, read.PlanStep, read.TxId, read.PathId, 0, true, status);
+        Self->TabletID(), metaShard, read.GetSnapshot().GetPlanStep(), read.GetSnapshot().GetTxId(), read.PathId, 0, true, status);
 
     if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
         Self->IncCounter(COUNTER_READ_SUCCESS);

@@ -4,12 +4,14 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_workload.h>
 
+#include <util/thread/lfqueue.h>
+
 namespace NYdb {
     namespace NConsoleClient {
         class TTopicWorkloadStatsCollector {
         public:
             TTopicWorkloadStatsCollector(
-                bool producer, bool consumer,
+                size_t producerCount, size_t consumerCount,
                 bool quiet, bool printTimestamp,
                 ui32 windowDurationSec, ui32 totalDurationSec,
                 std::shared_ptr<std::atomic_bool> errorFlag);
@@ -19,19 +21,25 @@ namespace NYdb {
             void PrintHeader(bool total = false) const;
             void PrintTotalStats() const;
 
-            void AddWriterEvent(ui64 messageSize, ui64 writeTime, ui64 inflightMessages);
-            void AddReaderEvent(ui64 messageSize, ui64 fullTime);
-            void AddLagEvent(ui64 lagMessages, ui64 lagTime);
+            void AddWriterEvent(size_t writerIdx, const TTopicWorkloadStats::WriterEvent& event);
+            void AddReaderEvent(size_t readerIdx, const TTopicWorkloadStats::ReaderEvent& event);
+            void AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event);
 
             ui64 GetTotalReadMessages() const;
             ui64 GetTotalWriteMessages() const;
 
         private:
+            void CollectThreadEvents();
+
             void PrintWindowStats(ui32 windowIt);
             void PrintStats(TMaybe<ui32> windowIt) const;
 
-            bool Producer;
-            bool Consumer;
+            size_t WriterCount;
+            size_t ReaderCount;
+
+            std::vector<THolder<TAutoLockFreeQueue<TTopicWorkloadStats::WriterEvent>>> WriterEventQueues;
+            std::vector<THolder<TAutoLockFreeQueue<TTopicWorkloadStats::ReaderEvent>>> ReaderEventQueues;
+            std::vector<THolder<TAutoLockFreeQueue<TTopicWorkloadStats::LagEvent>>> LagEventQueues;
 
             bool Quiet;
             bool PrintTimestamp;
@@ -39,7 +47,6 @@ namespace NYdb {
             double WindowDurationSec;
             double TotalDurationSec;
 
-            TSpinLock Lock;
             std::shared_ptr<std::atomic_bool> ErrorFlag;
 
             THolder<TTopicWorkloadStats> WindowStats;

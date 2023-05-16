@@ -107,6 +107,7 @@ TStatus RemoveDirectoryRecursive(
                 }
                 break;
 
+            case ESchemeEntryType::ColumnTable:
             case ESchemeEntryType::Table:
                 if (auto result = Remove(&RemoveTable, tableClient, entry, prompt, settings); !result.IsSuccess()) {
                     return result;

@@ -9,8 +9,6 @@ namespace NYdb {
         public:
             static ui32 StrToCodec(const TString& str);
             static ui64 StrToBytes(const TString& str);
-
-            static TString GenerateConsumerName(ui32 consumerIdx);
         };
     }
 }

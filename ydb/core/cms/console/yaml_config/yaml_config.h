@@ -190,4 +190,22 @@ void ResolveAndParseYamlConfig(
  */
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
 
+/**
+ * Represents config metadata
+ */
+struct TMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+};
+
+/**
+ * Parses config metadata
+ */
+TMetadata GetMetadata(const TString& config);
+
+/**
+ * Replaces metadata in config
+ */
+TString ReplaceMetadata(const TString& config, const TMetadata& metadata);
+
 } // namespace NYamlConfig

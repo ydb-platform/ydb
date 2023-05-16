@@ -18,22 +18,23 @@ In {{ ydb-short-name }}, you can make YQL queries to a database using:
 
 * [{{ ydb-short-name }} CLI](#cli)
 
-* [{{ ydb-short-name }} SDK](../sdk.md)
+* [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md)
 
 {% include [yql/ui_execute.md](yql/ui_execute.md) %}
 
 ### {{ ydb-short-name }} CLI {#cli}
 
-To enable script execution using the {{ ydb-short-name }} CLI, do the following:
+To execute scripts using the {{ ydb-short-name }} CLI, first do the following:
 
-* [Install the CLI](../cli.md#install).
-* Define and check [DB connection parameters](../cli#scheme-ls).
-* [Create a `db1` profile](../cli.md#profile) configured to connect to your database.
+1. [Install the {{ ydb-short-name }} CLI](../../reference/ydb-cli/install.md).
+1. [Create a profile](../../reference/ydb-cli/profile/create.md) configured to connect to your database.
 
-Save the text of the scripts below to a file. Name it `script.yql` to be able to run the statements given in the examples by simply copying them through the clipboard. Next, run `{{ ydb-cli }} yql` indicating the use of the `db1` profile and reading the script from the `script.yql` file:
+{% include [ydb-cli-profile.md](../../_includes/ydb-cli-profile.md) %}
+
+Save the text of the scripts below to a file. Name it `script.yql` to be able to run the statements given in the examples by simply copying them through the clipboard. Next, run the `{{ ydb-cli }} yql` command with the `quickstart` profile, reading the script from the `script.yql` file:
 
 ```bash
-{{ ydb-cli }} --profile db1 yql -f script.yql
+{{ ydb-cli }} --profile quickstart yql -f script.yql
 ```
 
 ## Working with a data schema {#ddl}
@@ -82,16 +83,46 @@ For a description of everything you can do when working with tables, review the 
 
 To execute the script via the {{ ydb-short-name }} CLI, follow the instructions given under [Executing YQL queries in the {{ ydb-short-name }} CLI](#cli) in this article.
 
+### Creating a column-oriented table {#create-olap-table}
+
+A table with the specified columns is created [using the YQL `CREATE TABLE` command](../../yql/reference/syntax/create_table.md). Make sure the primary key and partitioning key are defined in the table. The data types that are acceptable in analytical tables are specified in [Supported data types in column-oriented tables](../../concepts/datamodel/table.md#olap-data-types).
+
+Make sure to use the `NOT NULL` constraint when defining the primary key columns. The other columns are optional by default and may contain `NULL`.  {{ ydb-short-name }} does not support `FOREIGN KEY` limits.
+
+To build a series directory, create a table named `views` by running the following script:
+
+```sql
+CREATE TABLE views (
+    series_id Uint64 NOT NULL,
+    season_id Uint64,
+    viewed_at Timestamp NOT NULL,
+    person_id Uint64 NOT NULL,
+    PRIMARY KEY (viewed_at, series_id, person_id)
+)
+PARTITION BY HASH(viewed_at, series_id)
+WITH (
+  STORE = COLUMN,
+  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+)
+```
+
+For a description of everything you can do when working with tables, review the relevant sections of the YQL documentation:
+
+* [CREATE TABLE](../../yql/reference/syntax/create_table.md): Create a table and define its initial parameters.
+* [DROP TABLE](../../yql/reference/syntax/drop_table.md): Delete a table.
+
+To execute the script via the {{ ydb-short-name }} CLI, follow the instructions given under [Executing YQL queries in the {{ ydb-short-name }} CLI](#cli) in this article.
+
 ### Getting a list of existing DB tables {#scheme-ls}
 
 Check that the tables are actually created in the database.
 
 {% include [yql/ui_scheme_ls.md](yql/ui_scheme_ls.md) %}
 
-To get a list of existing DB tables via the {{ ydb-short-name }} CLI, make sure that the prerequisites under [Executing YQL scripts in the {{ ydb-short-name }} CLI](#cli) are complete and run the [`scheme ls` command](../cli.md#ping):
+To get a list of existing DB tables via the {{ ydb-short-name }} CLI, make sure you have met the prerequisites under [Executing YQL scripts in the {{ ydb-short-name }} CLI](#cli), then run the `scheme ls` command:
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls
+{{ ydb-cli }} --profile quickstart scheme ls
 ```
 
 ## Operations with data {#dml}
@@ -100,9 +131,9 @@ Commands for running YQL queries and scripts in the YDB CLI and the web interfac
 
 ### UPSERT: Adding data {#upsert}
 
-The most efficient way to add data to {{ ydb-short-name }} is through the [`UPSERT`](../../yql/reference/syntax/upsert_into.md) statement. It inserts new data by primary keys regardless of whether data by these keys previously existed in the table. As a result, unlike regular `INSERT` and `UPDATE`, it does not require a data pre-fetch on the server to verify that a key is unique. When working with {{ ydb-short-name }}, always consider `UPSERT` as the main way to add data and only use other statements when absolutely necessary.
+The most efficient way to add data to {{ ydb-short-name }} is through the [`UPSERT` command](../../yql/reference/syntax/upsert_into.md). It inserts new data by primary keys regardless of whether data by these keys previously existed in the table. As a result, unlike regular `INSERT`and `UPDATE`, it does not require a data pre-fetch from the server to verify that a key is unique before it runs. When working with {{ ydb-short-name }}, always consider `UPSERT` as the main way to add data and only use other statements when absolutely necessary.
 
-All statements that write data to {{ ydb-short-name }} support working with both subqueries and multiple entries passed directly in a query.
+All commands that write data to {{ ydb-short-name }} support working with both samples and multiple logs passed directly in a query.
 
 Let's add data to the previously created tables:
 
@@ -178,7 +209,7 @@ To learn more about the commands for selecting data, see the YQL reference:
 
 ### Parameterized queries {#param}
 
-Transactional applications working with a database are characterized by the execution of multiple similar queries that only differ in parameters. Like most databases, {{ ydb-short-name }} will work more efficiently if you define variable parameters and their types and then initiate the execution of a query by passing the parameter values separately from its text.
+Transactional applications working with a database are characterized by the execution of multiple similar queries that only differ in parameters. Like most databases, {{ ydb-short-name }} will work more efficiently if you define updateable parameters and their types and then initiate the execution of a query by passing the parameter values separately from its text.
 
 To define parameters in the text of a YQL query, use the [DECLARE](../../yql/reference/syntax/declare.md).
 
@@ -201,7 +232,7 @@ WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId;
 To make a parameterized select query, make sure the prerequisites of the [Executing YQL scripts in the {{ ydb-short-name }} CLI](#cli) section of this article are met, then run:
 
 ```bash
-{{ ydb-cli }} --profile db1 yql -f script.yql -p '$seriesId=1' -p '$seasonId=1'
+{{ ydb-cli }} --profile quickstart yql -f script.yql -p '$seriesId=1' -p '$seasonId=1'
 ```
 
 For a full description of the ways to pass parameters, see the [{{ ydb-short-name }} CLI reference](../../reference/ydb-cli/index.md).
@@ -209,7 +240,3 @@ For a full description of the ways to pass parameters, see the [{{ ydb-short-nam
 ## YQL tutorial {#tutorial}
 
 You can learn more about YQL use cases by completing tasks from the [YQL tutorial](../../yql/tutorial/index.md).
-
-## Next step {#next}
-
-Go to [YDB SDK - Getting started](../sdk.md).

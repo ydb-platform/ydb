@@ -38,7 +38,7 @@ The command changes the values of parameters specified in the command line. The 
 Add a partition and the `lzop` compression method to the [previously created](topic-create.md) topic:
 
 ```bash
-{{ ydb-cli }} -p db1 topic alter \
+{{ ydb-cli }} -p quickstart topic alter \
   --partitions-count 3 \
   --supported-codecs raw,gzip,lzop \
   my-topic
@@ -47,7 +47,7 @@ Add a partition and the `lzop` compression method to the [previously created](to
 Make sure that the topic parameters have been updated:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme describe my-topic
+{{ ydb-cli }} -p quickstart scheme describe my-topic
 ```
 
 Result:

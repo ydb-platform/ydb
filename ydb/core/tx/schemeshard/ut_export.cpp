@@ -90,15 +90,25 @@ namespace {
         }
 
         for (const auto& table : tables) {
-            TestCreateTable(runtime, schemeshardId, ++txId, dbName, table);
+            TestCreateTable(runtime, schemeshardId, ++txId, dbName, table, {
+                NKikimrScheme::StatusAccepted,
+                NKikimrScheme::StatusAlreadyExists,
+            });
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
-        TestExport(runtime, schemeshardId, ++txId, dbName, request, userSID);
+        const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
+            ? expectedStatus
+            : Ydb::StatusIds::SUCCESS;
+        TestExport(runtime, schemeshardId, ++txId, dbName, request, userSID, initialStatus);
         env.TestWaitNotification(runtime, txId, schemeshardId);
+
+        if (initialStatus != Ydb::StatusIds::SUCCESS) {
+            return;
+        }
 
         const ui64 exportId = txId;
         TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus);
@@ -1059,5 +1069,43 @@ partitioning_settings {
 
         env.TestWaitNotification(runtime, exportId);
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldCheckQuotas) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const TString userSID = "user@builtin";
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().SystemBackupSIDs({userSID}));
+
+        TSchemeLimits lowLimits;
+        lowLimits.MaxExports = 0;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        const TVector<TString> tables = {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        };
+        const TString request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        Run(runtime, env, tables, request, Ydb::StatusIds::PRECONDITION_FAILED);
+        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
     }
 }

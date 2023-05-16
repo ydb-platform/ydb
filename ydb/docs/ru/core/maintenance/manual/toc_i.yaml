@@ -1,14 +1,22 @@
 items:
-- name: "{{ ydb-short-name }} DSTool"
+- name: "Утилита {{ ydb-short-name }} DSTool"
   items:
   - name: Обзор
     href: ../../administration/ydb-dstool-overview.md
   - name: Установка
     href: ../../administration/ydb-dstool-setup.md
+  - name: Глобальные параметры
+    href: ../../administration/ydb-dstool-global-options.md
+  - name: device list
+    href: ../../administration/ydb-dstool-device-list.md
 - name: Расширение кластера
   href: cluster_expansion.md
 - name: Добавление групп хранения
   href: adding_storage_groups.md
+- name: Перемещение State Storage
+  href: ../../administration/state-storage-move.md
+- name: Перемещение статической группы
+  href: ../../administration/static-group-move.md
 - name: Безопасный рестарт и выключение узлов
   href: node_restarting.md
 - name: Включение и выключение Scrubbing

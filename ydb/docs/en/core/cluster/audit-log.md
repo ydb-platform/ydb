@@ -1,7 +1,5 @@
 # Audit log
 
-{% include [release-candidate](../_includes/trunk.md) %}
-
 _An audit log_ is a stream that includes data about all the operations that tried to change the {{ ydb-short-name }} objects, successfully or unsuccessfully:
 
 * Database: Creating, editing, and deleting databases.

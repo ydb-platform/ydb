@@ -15,7 +15,10 @@ struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TO
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
-        return std::is_integral<TInput>() ? BinaryOperator::CreateNeg(arg, "neg", block) : BinaryOperator::CreateFNeg(arg, "neg", block);
+        if constexpr (std::is_integral<TInput>())
+            return BinaryOperator::CreateNeg(arg, "neg", block);
+        else
+            return UnaryOperator::CreateFNeg(arg, "neg", block);
     }
 #endif
 };

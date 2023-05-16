@@ -1,7 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 #include "granule.h"
-#include "order_controller.h"
+#include "order_control/abstract.h"
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
@@ -12,41 +12,62 @@ namespace NKikimr::NOlap::NIndexedReader {
 
 class TGranulesFillingContext {
 private:
+    YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
     bool AbortedFlag = false;
-    YDB_READONLY_DEF(TReadMetadata::TConstPtr, ReadMetadata);
+    TReadMetadata::TConstPtr ReadMetadata;
     const bool InternalReading = false;
     TIndexedReadData& Owner;
     THashMap<ui64, NIndexedReader::TGranule*> GranulesToOut;
     std::set<ui64> ReadyGranulesAccumulator;
-    THashMap<ui64, NIndexedReader::TGranule> Granules;
-    YDB_READONLY_DEF(std::set<ui32>, EarlyFilterColumns);
-    YDB_READONLY_DEF(std::set<ui32>, PostFilterColumns);
+    std::deque<NIndexedReader::TGranule> GranulesStorage;
+    THashMap<ui64, NIndexedReader::TGranule*> GranulesUpserted;
+    std::set<ui32> EarlyFilterColumns;
+    std::set<ui32> PostFilterColumns;
     std::set<ui32> FilterStageColumns;
     std::set<ui32> UsedColumns;
-    YDB_READONLY_DEF(IOrderPolicy::TPtr, SortingPolicy);
-    YDB_READONLY_DEF(NColumnShard::TScanCounters, Counters);
-    std::vector<NIndexedReader::TBatch*> Batches;
+    IOrderPolicy::TPtr SortingPolicy;
+    NColumnShard::TScanCounters Counters;
 
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
 public:
-    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading, const ui32 batchesCount);
+    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading);
+
+    TReadMetadata::TConstPtr GetReadMetadata() const noexcept {
+        return ReadMetadata;
+    }
+
+    const std::set<ui32>& GetEarlyFilterColumns() const noexcept {
+        return EarlyFilterColumns;
+    }
+
+    const std::set<ui32>& GetPostFilterColumns() const noexcept {
+        return PostFilterColumns;
+    }
+
+    IOrderPolicy::TPtr GetSortingPolicy() const noexcept {
+        return SortingPolicy;
+    }
+
+    NColumnShard::TScanCounters GetCounters() const noexcept {
+        return Counters;
+    }
 
     NColumnShard::TDataTasksProcessorContainer GetTasksProcessor() const;
 
-    void AddNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>& batches);
-    TBatch& GetBatchInfo(const ui32 batchNo);
+    void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
+    TBatch& GetBatchInfo(const TBatchAddress& address);
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
     void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
 
     NIndexedReader::TGranule& GetGranuleVerified(const ui64 granuleId) {
-        auto it = Granules.find(granuleId);
-        Y_VERIFY(it != Granules.end());
-        return it->second;
+        auto it = GranulesUpserted.find(granuleId);
+        Y_VERIFY(it != GranulesUpserted.end());
+        return *it->second;
     }
 
-    bool IsInProgress() const { return Granules.size() > ReadyGranulesAccumulator.size(); }
+    bool IsInProgress() const { return GranulesStorage.size() > ReadyGranulesAccumulator.size(); }
 
     void OnNewBatch(TBatch& batch) {
         if (!InternalReading && PredictEmptyAfterFilter(batch.GetPortionInfo())) {
@@ -54,7 +75,6 @@ public:
         } else {
             batch.ResetNoFilter(UsedColumns);
         }
-        Batches[batch.GetBatchNo()] = &batch;
     }
 
     std::vector<TGranule*> DetachReadyInOrder() {
@@ -64,25 +84,30 @@ public:
 
     void Abort() {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "abort");
-        for (auto&& i : Granules) {
-            ReadyGranulesAccumulator.emplace(i.first);
+        for (auto&& i : GranulesStorage) {
+            ReadyGranulesAccumulator.emplace(i.GetGranuleId());
         }
         AbortedFlag = true;
-        Y_VERIFY(ReadyGranulesAccumulator.size() == Granules.size());
+        Y_VERIFY(ReadyGranulesAccumulator.size() == GranulesStorage.size());
         Y_VERIFY(!IsInProgress());
     }
 
     TGranule& UpsertGranule(const ui64 granuleId) {
-        auto itGranule = Granules.find(granuleId);
-        if (itGranule == Granules.end()) {
-            itGranule = Granules.emplace(granuleId, NIndexedReader::TGranule(granuleId, *this)).first;
+        auto itGranule = GranulesUpserted.find(granuleId);
+        if (itGranule == GranulesUpserted.end()) {
+            GranulesStorage.emplace_back(NIndexedReader::TGranule(granuleId, GranulesStorage.size(), *this));
+            itGranule = GranulesUpserted.emplace(granuleId, &GranulesStorage.back()).first;
         }
-        return itGranule->second;
+        return *itGranule->second;
     }
 
     void OnGranuleReady(TGranule& granule) {
         Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
         Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
+    }
+
+    void Wakeup(TGranule& granule) {
+        SortingPolicy->Wakeup(granule, *this);
     }
 
     void PrepareForStart() {

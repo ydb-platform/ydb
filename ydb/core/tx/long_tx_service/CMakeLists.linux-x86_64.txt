@@ -17,6 +17,8 @@ target_link_libraries(core-tx-long_tx_service PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lwtrace
+  cpp-lwtrace-mon
   ydb-core-base
   core-tx-columnshard
   tx-long_tx_service-public
@@ -26,4 +28,5 @@ target_sources(core-tx-long_tx_service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/commit_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/long_tx_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/long_tx_service_impl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/lwtrace_probes.cpp
 )

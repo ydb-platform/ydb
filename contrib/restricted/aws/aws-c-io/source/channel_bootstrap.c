@@ -21,8 +21,6 @@
 #    pragma warning(disable : 4221)
 #endif
 
-#define DEFAULT_DNS_TTL 30
-
 static void s_client_bootstrap_destroy_impl(struct aws_client_bootstrap *bootstrap) {
     AWS_ASSERT(bootstrap);
     AWS_LOGF_DEBUG(AWS_LS_IO_CHANNEL_BOOTSTRAP, "id=%p: bootstrap destroying", (void *)bootstrap);
@@ -85,11 +83,7 @@ struct aws_client_bootstrap *aws_client_bootstrap_new(
     if (options->host_resolution_config) {
         bootstrap->host_resolver_config = *options->host_resolution_config;
     } else {
-        bootstrap->host_resolver_config = (struct aws_host_resolution_config){
-            .impl = aws_default_dns_resolve,
-            .max_ttl = DEFAULT_DNS_TTL,
-            .impl_data = NULL,
-        };
+        bootstrap->host_resolver_config = aws_host_resolver_init_default_resolution_config();
     }
 
     return bootstrap;
@@ -829,11 +823,16 @@ int aws_client_bootstrap_new_socket_channel(struct aws_socket_channel_bootstrap_
             goto error;
         }
 
+        const struct aws_host_resolution_config *host_resolution_config = &bootstrap->host_resolver_config;
+        if (options->host_resolution_override_config) {
+            host_resolution_config = options->host_resolution_override_config;
+        }
+
         if (aws_host_resolver_resolve_host(
                 bootstrap->host_resolver,
                 client_connection_args->host_name,
                 s_on_host_resolved,
-                &bootstrap->host_resolver_config,
+                host_resolution_config,
                 client_connection_args)) {
             goto error;
         }

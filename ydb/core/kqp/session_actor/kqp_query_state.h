@@ -14,6 +14,10 @@
 #include <ydb/core/kqp/session_actor/kqp_tx.h>
 
 #include <util/generic/noncopyable.h>
+#include <util/generic/string.h>
+
+#include <map>
+#include <memory>
 
 namespace NKikimr::NKqp {
 
@@ -42,6 +46,14 @@ public:
         , UserToken(ev->Get()->GetUserToken())
     {
         RequestEv.reset(ev->Release().Release());
+
+        if (AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes() && !RequestEv->GetYdbParameters().empty()) {
+            QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+            for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
+                QueryParameterTypes->insert({name, typedValue.Gettype()});
+            }
+        }
+
         SetQueryDeadlines(config);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
@@ -94,6 +106,8 @@ public:
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;
 
+    std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -112,6 +126,10 @@ public:
 
     NKikimrKqp::EQueryType GetType() const {
         return RequestEv->GetType();
+    }
+
+    std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
+        return QueryParameterTypes;
     }
 
     void EnsureAction() {
@@ -204,6 +222,96 @@ public:
 
     bool NeedSnapshot(const NYql::TKikimrConfiguration& config) const {
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
+    }
+
+    bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
+        const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
+
+        if (!Commit) {
+            return false;
+        }
+
+        if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
+            // commit can only be applied to the last transaction or perform separately at the end
+            return false;
+        }
+
+        if (!tx) {
+            // no physical transactions left, perform commit
+            return true;
+        }
+
+        if (TxCtx->HasUncommittedChangesRead) {
+            YQL_ENSURE(AppData()->FeatureFlags.GetEnableKqpImmediateEffects());
+
+            if (tx && tx->GetHasEffects()) {
+                YQL_ENSURE(tx->ResultsSize() == 0);
+                // commit can be applied to the last transaction with effects
+                return CurrentTx + 1 == phyQuery.TransactionsSize();
+            }
+
+            return false;
+        }
+
+        // we can merge commit with last tx only for read-only transactions
+        return !TxCtx->TxHasEffects();
+    }
+
+    bool ShouldAcquireLocks() {
+        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+            return false;
+        }
+
+        if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
+            return true;  // Continue to acquire locks
+        }
+
+        if (TxCtx->Locks.Broken()) {
+            YQL_ENSURE(TxCtx->GetSnapshot().IsValid() && !TxCtx->TxHasEffects());
+            return false;  // Do not acquire locks after first lock issue
+        }
+
+        if (TxCtx->TxHasEffects()) {
+            return true; // Acquire locks in read write tx
+        }
+
+        const auto& query = PreparedQuery->GetPhysicalQuery();
+        for (auto& tx : query.GetTransactions()) {
+            if (tx.GetHasEffects()) {
+                return true; // Acquire locks in read write tx
+            }
+        }
+
+        if (!Commit) {
+            return true; // Is not a commit tx
+        }
+
+        if (TxCtx->GetSnapshot().IsValid()) {
+            return false; // It is a read only tx with snapshot, no need to acquire locks
+        }
+
+        return true;
+    }
+
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx() {
+        const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
+        auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
+
+        if (TxCtx->CanDeferEffects()) {
+            while (tx && tx->GetHasEffects()) {
+                QueryData->CreateKqpValueMap(tx);
+                bool success = TxCtx->AddDeferredEffect(tx, QueryData);
+                YQL_ENSURE(success);
+                if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
+                    ++CurrentTx;
+                    tx = PreparedQuery->GetPhyTx(CurrentTx);
+                } else {
+                    tx = nullptr;
+                }
+            }
+        }
+
+        return tx;
     }
 
     bool HasTxControl() const {

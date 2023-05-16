@@ -27,10 +27,11 @@ struct TEvPrivate {
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
-        NOlap::TIndexInfo IndexInfo;
+        NOlap::TVersionedIndex IndexInfo;
+        THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
-        TVector<TString> Blobs;
+        std::vector<TString> Blobs;
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
         TUsage ResourceUsage;
@@ -39,7 +40,7 @@ struct TEvPrivate {
         bool CacheData{false};
         TDuration Duration;
 
-        TEvWriteIndex(NOlap::TIndexInfo&& indexInfo,
+        TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
             bool cacheData,
             THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>&& cachedBlobs = {})
@@ -48,6 +49,11 @@ struct TEvPrivate {
             , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)
         {}
+
+        TEvWriteIndex& SetTiering(const THashMap<ui64, NKikimr::NOlap::TTiering>& tiering) {
+            Tiering = tiering;
+            return *this;
+        }
     };
 
     struct TEvIndexing : public TEventLocal<TEvIndexing, EvIndexing> {
@@ -72,7 +78,7 @@ struct TEvPrivate {
             GroupedBlobRanges = NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->SwitchedPortions);
 
             if (blobManager.HasExternBlobs()) {
-                for (auto& [blobId, _] : GroupedBlobRanges) {
+                for (const auto& [blobId, _] : GroupedBlobRanges) {
                     TEvictMetadata meta;
                     if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
                         Externals.insert(blobId);

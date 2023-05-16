@@ -4,6 +4,7 @@
 
 #include <library/cpp/getopt/small/last_getopt_support.h>
 #include <library/cpp/regex/pcre/regexp.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 using namespace NYdb::NConsoleClient;
@@ -48,10 +49,4 @@ ui64 TCommandWorkloadTopicParams::StrToBytes(const TString& str)
         ui64 ret = std::stoul(loweredStr);
         return ret;
     }
-}
-
-TString TCommandWorkloadTopicParams::GenerateConsumerName(ui32 consumerIdx)
-{
-    TString consumerName = TStringBuilder() << CONSUMER_PREFIX << '-' << consumerIdx;
-    return consumerName;
 }

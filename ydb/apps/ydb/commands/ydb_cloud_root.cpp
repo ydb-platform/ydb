@@ -80,7 +80,7 @@ int TYCloudClientCommandRoot::Run(TConfig& config) {
         }
         if (updater.CheckIfUpdateNeeded(config.ForceVersionCheck)) {
             NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-            Cerr << colors.RedColor() << "(!) New version of YDB CLI is available. Run 'ydb update' command for update. "
+            Cerr << colors.Green() << "(!) New version of YDB CLI is available. Run 'ydb update' command for update. "
                 << "You can also disable further version checks with 'ydb version --disable-checks' command"
                 << colors.OldColor() << Endl;
         } else if (config.ForceVersionCheck) {

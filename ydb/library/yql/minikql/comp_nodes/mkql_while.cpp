@@ -62,7 +62,7 @@ public:
 
         const auto result = PHINode::Create(valueType, SkipOrTake ? 3U : 4U, "result", done);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto finished = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetTrue(context), "finished", block);
 
         BranchInst::Create(skip, work, finished, block);
@@ -334,7 +334,7 @@ protected:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
@@ -358,7 +358,7 @@ protected:
         BranchInst::Create(good, done, icmp, block);
         block = good;
 
-        const auto item = new LoadInst(itemPtr, "item", block);
+        const auto item = new LoadInst(valueType, itemPtr, "item", block);
         const auto predicate = GetNodeValue(Predicate, ctx, block);
 
         const auto boolPred = CastInst::Create(Instruction::Trunc, predicate, Type::getInt1Ty(context), "bool", block);
@@ -537,14 +537,14 @@ public:
 
             block = loop;
 
-            const auto ptr = GetElementPtrInst::CreateInBounds(elements, {index}, "ptr", block);
+            const auto ptr = GetElementPtrInst::CreateInBounds(list->getType(), elements, {index}, "ptr", block);
             const auto plus = BinaryOperator::CreateAdd(index, ConstantInt::get(size->getType(), 1), "plus", block);
             const auto more = CmpInst::Create(Instruction::ICmp, Inclusive ? ICmpInst::ICMP_ULT : ICmpInst::ICMP_ULE, plus, size, "more", block);
             BranchInst::Create(test, stop, more, block);
 
             block = test;
 
-            const auto item = new LoadInst(ptr, "item", block);
+            const auto item = new LoadInst(list->getType(), ptr, "item", block);
             codegenItem->CreateSetValue(ctx, block, item);
             const auto predicate = GetNodeValue(this->Predicate, ctx, block);
             const auto boolPred = CastInst::Create(Instruction::Trunc, predicate, Type::getInt1Ty(context), "bool", block);
@@ -562,12 +562,13 @@ public:
 
             block = make;
 
+            const auto itemsType = PointerType::getUnqual(list->getType());
             const auto itemsPtr = *this->Stateless || ctx.AlwaysInline ?
-                new AllocaInst(PointerType::getUnqual(list->getType()), 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
-                new AllocaInst(PointerType::getUnqual(list->getType()), 0U, "items_ptr", block);
+                new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
+                new AllocaInst(itemsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, copy, itemsPtr, block);
-            const auto items = new LoadInst(itemsPtr, "items", block);
-            const auto from = SkipOrTake ? GetElementPtrInst::CreateInBounds(elements, {pass}, "from", block) : elements;
+            const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
+            const auto from = SkipOrTake ? GetElementPtrInst::CreateInBounds(list->getType(), elements, {pass}, "from", block) : elements;
 
             const auto move = BasicBlock::Create(context, "move", ctx.Func);
             const auto step = BasicBlock::Create(context, "step", ctx.Func);
@@ -584,10 +585,10 @@ public:
 
             block = step;
 
-            const auto src = GetElementPtrInst::CreateInBounds(from, {idx}, "src", block);
-            const auto itm = new LoadInst(src, "item", block);
+            const auto src = GetElementPtrInst::CreateInBounds(list->getType(), from, {idx}, "src", block);
+            const auto itm = new LoadInst(list->getType(), src, "item", block);
             ValueAddRef(this->Item->GetRepresentation(), itm, ctx, block);
-            const auto dst = GetElementPtrInst::CreateInBounds(items, {idx}, "dst", block);
+            const auto dst = GetElementPtrInst::CreateInBounds(list->getType(), items, {idx}, "dst", block);
             new StoreInst(itm, dst, block);
             const auto inc = BinaryOperator::CreateAdd(idx, ConstantInt::get(idx->getType(), 1), "inc", block);
             idx->addIncoming(inc, block);
@@ -610,15 +611,15 @@ public:
             if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-                const auto value = CallInst::Create(doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+                const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
                 out->addIncoming(value, block);
             } else {
                 const auto resultPtr = new AllocaInst(list->getType(), 0U, "return", block);
                 new StoreInst(list, resultPtr, block);
                 const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), resultPtr->getType(), ctx.Ctx->getType(), resultPtr->getType()}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-                CallInst::Create(doFuncPtr, {self, resultPtr, ctx.Ctx, resultPtr}, "", block);
-                const auto value = new LoadInst(resultPtr, "value", block);
+                CallInst::Create(funType, doFuncPtr, {self, resultPtr, ctx.Ctx, resultPtr}, "", block);
+                const auto value = new LoadInst(list->getType(), resultPtr, "value", block);
                 out->addIncoming(value, block);
             }
             BranchInst::Create(done, block);

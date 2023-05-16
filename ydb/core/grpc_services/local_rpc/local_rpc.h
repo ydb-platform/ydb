@@ -30,10 +30,15 @@ class TLocalRpcCtx : public NGRpcService::IRequestOpCtx {
 public:
     using TResp = typename TRpc::TResponse;
     template<typename TProto, typename TCb>
-    TLocalRpcCtx(TProto&& req, TCb&& cb, const TString& databaseName, const TMaybe<TString>& token, bool internalCall)
+    TLocalRpcCtx(TProto&& req, TCb&& cb,
+            const TString& databaseName,
+            const TMaybe<TString>& token,
+            const TMaybe<TString>& requestType,
+            bool internalCall)
         : Request(std::forward<TProto>(req))
         , CbWrapper(std::forward<TCb>(cb))
         , DatabaseName(databaseName)
+        , RequestType(requestType)
         , InternalCall(internalCall)
     {
         if (token) {
@@ -191,7 +196,7 @@ public:
     }
 
     const TMaybe<TString> GetRequestType() const override {
-        return Nothing();
+        return RequestType;
     }
 
     void SetCostInfo(float consumed_units) override {
@@ -229,6 +234,7 @@ private:
     typename TRpc::TRequest Request;
     TCbWrapper CbWrapper;
     const TString DatabaseName;
+    const TMaybe<TString> RequestType;
     const bool InternalCall;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
     const TString EmptySerializedTokenMessage_;
@@ -240,13 +246,16 @@ private:
 };
 
 template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false) {
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
+        const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+        TActorSystem* actorSystem, bool internalCall = false)
+{
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
     proto.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, internalCall);
+    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall);
     auto actor = TRpc::CreateRpcActor(req);
     actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
 
@@ -254,12 +263,25 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest
 }
 
 template<typename TRpc>
-TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false) {
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false) {
+    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall);
+}
+
+template<typename TRpc>
+TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb,
+        const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+        const TActorContext& ctx, bool internalCall = false)
+{
     proto.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 
-    auto req = new TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>(std::move(proto), std::move(cb), database, token, internalCall);
+    auto req = new TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>(std::move(proto), std::move(cb), database, token, requestType, internalCall);
     auto actor = TRpc::CreateRpcActor(req);
     return ctx.RegisterWithSameMailbox(actor);
+}
+
+template<typename TRpc>
+TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false) {
+    return DoLocalRpcSameMailbox<TRpc>(std::move(proto), std::move(cb), database, token, Nothing(), ctx, internalCall);
 }
 
 } // namespace NRpcService

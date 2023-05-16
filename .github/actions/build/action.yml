@@ -4,7 +4,7 @@ inputs:
   sanitizer:
     required: false
     type: string
-    
+
 runs:
   using: "composite"
   steps:
@@ -16,10 +16,12 @@ runs:
       patch -p1 < ydb/deploy/patches/0001-sanitizer-build.patch
       cd ../build
       rm -rf *
-      cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+      cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
         -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
         -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -fno-omit-frame-pointer" \
+        -DCMAKE_ENABLE_EXPORTS=true \
         ../ydb
   - name: Configure
     shell: bash
@@ -28,7 +30,11 @@ runs:
       mkdir -p ../build
       cd ../build
       rm -rf *
-      cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+      cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+        -DCMAKE_ENABLE_EXPORTS=true \
+        ../ydb
   - name: Build
     shell: bash
     run: |

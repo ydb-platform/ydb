@@ -1406,11 +1406,17 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
         const TString& consumer = operation.GetConsumer();
 
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "' has been removed");
             predicate = false;
             break;
         }
 
         if (!UsersInfoStorage->GetIfExists(consumer)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Unknown consumer '" << consumer << "'");
             predicate = false;
             break;
         }
@@ -1419,13 +1425,28 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
         if (operation.GetBegin() > operation.GetEnd()) {
-            // BAD_REQUEST
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (invalid range) " <<
+                        " Begin " << operation.GetBegin() <<
+                        " End " << operation.GetEnd());
             predicate = false;
         } else if (userInfo.Offset != (i64)operation.GetBegin()) {
-            // ABORTED
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (gap) " <<
+                        " Offset " << userInfo.Offset <<
+                        " Begin " << operation.GetBegin());
             predicate = false;
         } else if (operation.GetEnd() > EndOffset) {
-            // BAD_REQUEST
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (behind the last offset) " <<
+                        " EndOffset " << EndOffset <<
+                        " End " << operation.GetEnd());
             predicate = false;
         }
 

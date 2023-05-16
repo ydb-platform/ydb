@@ -856,6 +856,7 @@ message TEvProposeTransactionResult {
     optional uint64 MaxStep = 6;
     optional string StatusMessage = 7;
     optional uint64 Step = 8;
+    repeated fixed64 DomainCoordinators = 9;
 };
 
 message TEvCancelTransactionProposal {

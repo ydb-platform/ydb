@@ -580,6 +580,20 @@ private:
         }
     }
 
+    TString DescribeValue(const NKikimr::NClient::TValue& value) {
+        auto str = value.GetDataText();
+        switch (value.GetType().GetData().GetScheme()) {
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+            return "«" + str + "»";
+        default:
+            return str;
+        }
+    }
+
     void Visit(const TKqpReadRangesSourceSettings& sourceSettings, TQueryPlanNode& planNode) {
         if (sourceSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
             auto table = TString(sourceSettings.Table().Path());
@@ -599,7 +613,7 @@ private:
                         if (auto result = GetResult(txId, resId)) {
                             auto index = FromString<ui32>(key.Cast<TCoNth>().Index());
                             Y_ENSURE(index < result->Size());
-                            return (*result)[index].GetDataText();
+                            return DescribeValue((*result)[index]);
                         }
                     }
                 }
@@ -1301,7 +1315,7 @@ private:
                     if (auto result = GetResult(txId, resId)) {
                         auto index = FromString<ui32>(key.Cast<TCoNth>().Index());
                         Y_ENSURE(index < result->Size());
-                        return (*result)[index].GetDataText();
+                        return DescribeValue((*result)[index]);
                     }
                 }
             }

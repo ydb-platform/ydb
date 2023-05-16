@@ -55,9 +55,10 @@ public:
         const auto step = BasicBlock::Create(context, "step", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto result = PHINode::Create(Type::getInt128Ty(context), 2U, "result", exit);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(valueType, 2U, "result", exit);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto reset = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetInvalid(context), "reset", block);
 
         BranchInst::Create(init, work, reset, block);
@@ -151,7 +152,7 @@ public:
         const auto resultType = Type::getInt32Ty(context);
         const auto result = PHINode::Create(resultType, 2U, "result", exit);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(Type::getInt128Ty(context), statePtr, "state", block);
         const auto reset = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetInvalid(context), "reset", block);
 
         BranchInst::Create(init, work, reset, block);
@@ -246,10 +247,11 @@ public:
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto result = PHINode::Create(Type::getInt128Ty(context), 3U, "result", exit);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(valueType, 3U, "result", exit);
         result->addIncoming(GetFinish(context), block);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto choise = SwitchInst::Create(state, work, 2U, block);
         choise->addCase(GetInvalid(context), init);
         choise->addCase(GetFinish(context), exit);
@@ -266,7 +268,7 @@ public:
 
         block = next;
 
-        const auto iterator = new LoadInst(statePtr, "iterator", block);
+        const auto iterator = new LoadInst(valueType, statePtr, "iterator", block);
         const auto itemPtr = codegenInput->CreateRefValue(ctx, block);
         const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iterator, ctx.Codegen, block, itemPtr);
         BranchInst::Create(work, done, status,  block);
@@ -349,7 +351,8 @@ public:
         const auto result = PHINode::Create(resultType, 3U, "result", exit);
         result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::Finish)), block);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto choise = SwitchInst::Create(state, work, 2U, block);
         choise->addCase(GetInvalid(context), init);
         choise->addCase(GetFinish(context), exit);
@@ -366,7 +369,7 @@ public:
 
         block = next;
 
-        const auto iterator = new LoadInst(statePtr, "iterator", block);
+        const auto iterator = new LoadInst(valueType, statePtr, "iterator", block);
         const auto itemPtr = codegenInput->CreateRefValue(ctx, block);
         const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iterator, ctx.Codegen, block, itemPtr);
         BranchInst::Create(work, done, status,  block);
@@ -461,9 +464,10 @@ public:
         const auto step = BasicBlock::Create(context, "step", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto result = PHINode::Create(Type::getInt128Ty(context), 2U, "result", exit);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto result = PHINode::Create(valueType, 2U, "result", exit);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto reset = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetInvalid(context), "reset", block);
 
         BranchInst::Create(init, work, reset, block);
@@ -625,7 +629,7 @@ public:
 
         block = more;
 
-        const auto current = new LoadInst(currentPtr, "current", block);
+        const auto current = new LoadInst(valueType, currentPtr, "current", block);
         BranchInst::Create(pull, skip, HasValue(current, block), block);
 
         {
@@ -646,7 +650,7 @@ public:
             }
 
             block = good;
-            const auto value = new LoadInst(valuePtr, "value", block);
+            const auto value = new LoadInst(valueType, valuePtr, "value", block);
             ValueRelease(static_cast<const IComputationNode*>(this)->GetRepresentation(), value, ctx, block);
             result->addIncoming(value, block);
             BranchInst::Create(over, block);
@@ -824,7 +828,7 @@ public:
 
         block = more;
 
-        const auto current = new LoadInst(currentPtr, "current", block);
+        const auto current = new LoadInst(valueType, currentPtr, "current", block);
         BranchInst::Create(pull, skip, HasValue(current, block), block);
 
         {
@@ -845,7 +849,7 @@ public:
             }
 
             block = good;
-            const auto value = new LoadInst(valuePtr, "value", block);
+            const auto value = new LoadInst(valueType, valuePtr, "value", block);
             ValueRelease(static_cast<const IComputationNode*>(this)->GetRepresentation(), value, ctx, block);
             result->addIncoming(value, block);
             BranchInst::Create(over, block);
@@ -1184,7 +1188,7 @@ protected:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -1256,11 +1260,11 @@ protected:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto zero = ConstantInt::get(valueType, 0);
 
-        const auto init = new LoadInst(currentArg, "init", block);
+        const auto init = new LoadInst(valueType, currentArg, "init", block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -1298,7 +1302,7 @@ protected:
                 CleanupBoxed(list, ctx, block);
         }
 
-        const auto iter = new LoadInst(currentArg, "iter", block);
+        const auto iter = new LoadInst(valueType, currentArg, "iter", block);
         current->addIncoming(iter, block);
 
         BranchInst::Create(pass, block);
@@ -1480,7 +1484,7 @@ public:
                 const auto array = *this->Stateless || ctx.AlwaysInline ?
                     new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
                     new AllocaInst(arrayType, 0U, "array", block);
-                const auto ptr = GetElementPtrInst::CreateInBounds(array, {zeroSize, zeroSize}, "ptr", block);
+                const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
 
                 vector->addIncoming(ptr, block);
                 BranchInst::Create(main, block);
@@ -1492,7 +1496,7 @@ public:
                 const auto fnType = FunctionType::get(vector->getType(), {size->getType()}, false);
                 const auto name = "MyArrayAlloc";
                 ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&MyArrayAlloc));
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
                 const auto ptr = CallInst::Create(func, {size}, "ptr", block);
                 vector->addIncoming(ptr, block);
                 BranchInst::Create(main, block);
@@ -1521,10 +1525,10 @@ public:
             BranchInst::Create(next, stop, more, block);
 
             block = next;
-            const auto src = GetElementPtrInst::CreateInBounds(elements, {index}, "src", block);
-            const auto item = new LoadInst(src, "item", block);
+            const auto src = GetElementPtrInst::CreateInBounds(list->getType(), elements, {index}, "src", block);
+            const auto item = new LoadInst(list->getType(), src, "item", block);
             codegenItem->CreateSetValue(ctx, block, item);
-            const auto dst = GetElementPtrInst::CreateInBounds(vector, {idx}, "dst", block);
+            const auto dst = GetElementPtrInst::CreateInBounds(list->getType(), vector, {idx}, "dst", block);
             GetNodeValue(dst, this->NewItem, ctx, block);
 
             const auto inc = BinaryOperator::CreateAdd(index, plusSize, "inc", block);
@@ -1532,7 +1536,7 @@ public:
 
             if constexpr (!IsMultiRowPerItem) {
                 const auto plus = BinaryOperator::CreateAdd(idx, plusSize, "plus", block);
-                const auto load = new LoadInst(dst, "load", block);
+                const auto load = new LoadInst(list->getType(), dst, "load", block);
                 new StoreInst(GetOptionalValue(context, load, block), dst, block);
                 const auto move = SelectInst::Create(IsExists(load, block), plus, idx, "move", block);
                 idx->addIncoming(move, block);
@@ -1548,11 +1552,12 @@ public:
 
             Value* res;
             if constexpr (!IsMultiRowPerItem) {
+                const auto newType = PointerType::getUnqual(list->getType());
                 const auto newPtr = *this->Stateless || ctx.AlwaysInline ?
-                    new AllocaInst(PointerType::getUnqual(list->getType()), 0U, "new_ptr", &ctx.Func->getEntryBlock().back()):
-                    new AllocaInst(PointerType::getUnqual(list->getType()), 0U, "new_ptr", block);
+                    new AllocaInst(newType, 0U, "new_ptr", &ctx.Func->getEntryBlock().back()):
+                    new AllocaInst(newType, 0U, "new_ptr", block);
                 res = GenNewArray(ctx, idx, newPtr, block);
-                const auto target = new LoadInst(newPtr, "target", block);
+                const auto target = new LoadInst(newType, newPtr, "target", block);
 
                 const auto pType = PointerType::getUnqual(Type::getInt8Ty(context));
                 const auto pdst = CastInst::Create(Instruction::BitCast, target, pType, "pdst", block);
@@ -1560,7 +1565,7 @@ public:
                 const auto bytes = BinaryOperator::CreateShl(idx, ConstantInt::get(idx->getType(), 4), "bytes", block);
 
                 const auto fnType = FunctionType::get(Type::getVoidTy(context), {pType, pType, bytes->getType(), Type::getInt1Ty(context)}, false);
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction("llvm.memcpy.p0i8.p0i8.i64", fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction("llvm.memcpy.p0i8.p0i8.i64", fnType);
                 CallInst::Create(func, {pdst, psrc, bytes, ConstantInt::getFalse(context)}, "", block);
             } else {
                 const auto factory = ctx.GetFactory();
@@ -1570,13 +1575,13 @@ public:
                 if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
                     const auto funType = FunctionType::get(list->getType(), {factory->getType(), vector->getType(), index->getType()}, false);
                     const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                    res = CallInst::Create(funcPtr, {factory, vector, index}, "res", block);
+                    res = CallInst::Create(funType, funcPtr, {factory, vector, index}, "res", block);
                 } else {
                     const auto retPtr = new AllocaInst(list->getType(), 0U, "ret_ptr", block);
                     const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), vector->getType(), index->getType()}, false);
                     const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                    CallInst::Create(funcPtr, {factory, retPtr, vector, index}, "", block);
-                    res = new LoadInst(retPtr, "res", block);
+                    CallInst::Create(funType, funcPtr, {factory, retPtr, vector, index}, "", block);
+                    res = new LoadInst(list->getType(), retPtr, "res", block);
                 }
             }
             map->addIncoming(res, block);
@@ -1588,7 +1593,7 @@ public:
                 const auto fnType = FunctionType::get(Type::getVoidTy(context), {vector->getType(), size->getType()}, false);
                 const auto name = "MyArrayFree";
                 ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&MyArrayFree));
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
                 CallInst::Create(func, {vector, size}, "", block);
 
                 map->addIncoming(res, block);
@@ -1605,15 +1610,15 @@ public:
             if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-                const auto value = CallInst::Create(doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+                const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
                 map->addIncoming(value, block);
             } else {
                 const auto resultPtr = new AllocaInst(list->getType(), 0U, "return", block);
                 new StoreInst(list, resultPtr, block);
                 const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), resultPtr->getType(), ctx.Ctx->getType(), resultPtr->getType()}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-                CallInst::Create(doFuncPtr, {self, resultPtr, ctx.Ctx, resultPtr}, "", block);
-                const auto value = new LoadInst(resultPtr, "value", block);
+                CallInst::Create(funType, doFuncPtr, {self, resultPtr, ctx.Ctx, resultPtr}, "", block);
+                const auto value = new LoadInst(list->getType(), resultPtr, "value", block);
                 map->addIncoming(value, block);
             }
             BranchInst::Create(done, block);

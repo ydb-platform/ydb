@@ -43,14 +43,14 @@ To retrieve the status of all index-building operations, use `operation list bui
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-Adding a synchronous index built on the `air_date` column to the `episodes` table [created previously](../../../../getting_started/yql.md):
+Adding a synchronous index built on the `air_date` column to the `episodes` table [created previously]({{ quickstart-path }}):
 
 ```bash
 {{ ydb-cli }} -p quickstart table index add global-sync episodes \
   --index-name idx_aired --columns air_date
 ```
 
-Adding to the [previously created](../../../../getting_started/yql.md) `series` table an asynchronous index built on the `release_date` and `title` columns, copying to the index the `series_info` column value:
+Adding to the [previously created]({{ quickstart-path }}) `series` table an asynchronous index built on the `release_date` and `title` columns, copying to the index the `series_info` column value:
 
 ```bash
 {{ ydb-cli }} -p quickstart table index add global-async series \

@@ -225,11 +225,11 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
         if (tiering) {
             result.emplace(i.first, tiering->BuildOlapTiers());
             for (auto& [pathId, pathTiering] : result) {
-                for (auto& [name, tier] : pathTiering.TierByName) {
+                for (auto& [name, tier] : pathTiering.GetTierByName()) {
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
-                        tier->Compression = NTiers::ConvertCompression(it->second.GetCompression());
-                        tier->NeedExport = it->second.NeedExport();
+                        tier->SetCompression(NTiers::ConvertCompression(it->second.GetCompression()));
+                        tier->SetNeedExport(it->second.NeedExport());
                     }
                 }
             }

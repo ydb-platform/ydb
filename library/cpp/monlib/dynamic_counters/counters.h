@@ -327,11 +327,12 @@ namespace NMonitoring {
         THistogramPtr FindNamedHistogram(const TString& name,const TString& value) const;
 
         void RemoveCounter(const TString &value);
-        void RemoveNamedCounter(const TString& name, const TString &value);
+        bool RemoveNamedCounter(const TString& name, const TString &value);
+        void RemoveSubgroupChain(const std::vector<std::pair<TString, TString>>& chain);
 
         TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value);
         TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const;
-        void RemoveSubgroup(const TString& name, const TString& value);
+        bool RemoveSubgroup(const TString& name, const TString& value);
         void ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup);
 
         // Move all counters from specified subgroup and remove the subgroup.

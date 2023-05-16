@@ -211,6 +211,7 @@ Y_UNIT_TEST_SUITE(TImmediateControlsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitImmediateControlsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         CompareControls(runtime, ITEM_CONTROLS_DEFAULT.GetConfig().GetImmediateControlsConfig());
     }
@@ -219,6 +220,7 @@ Y_UNIT_TEST_SUITE(TImmediateControlsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitImmediateControlsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         ConfigureAndWaitUpdate(runtime,
                                MakeAddAction(ITEM_CONTROLS1));
@@ -229,6 +231,7 @@ Y_UNIT_TEST_SUITE(TImmediateControlsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitImmediateControlsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         ConfigureAndWaitUpdate(runtime,
                                MakeAddAction(ITEM_CONTROLS1));
@@ -249,6 +252,7 @@ Y_UNIT_TEST_SUITE(TImmediateControlsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitImmediateControlsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         ConfigureAndWaitUpdate(runtime,
                                MakeAddAction(ITEM_CONTROLS_EXCEED_MAX));

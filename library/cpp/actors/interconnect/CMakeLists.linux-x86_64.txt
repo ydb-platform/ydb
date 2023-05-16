@@ -19,6 +19,7 @@ target_link_libraries(cpp-actors-interconnect PUBLIC
   yutil
   contrib-libs-libc_compat
   OpenSSL::OpenSSL
+  contrib-libs-xxhash
   cpp-actors-core
   cpp-actors-dnscachelib
   cpp-actors-dnsresolver

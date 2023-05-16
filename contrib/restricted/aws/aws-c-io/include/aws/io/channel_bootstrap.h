@@ -185,6 +185,7 @@ struct aws_socket_channel_bootstrap_options {
     bool enable_read_back_pressure;
     void *user_data;
     struct aws_event_loop *requested_event_loop;
+    const struct aws_host_resolution_config *host_resolution_override_config;
 };
 
 /**

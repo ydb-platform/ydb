@@ -1,6 +1,7 @@
 #include "topic_workload_run_full.h"
 
 #include "topic_workload_defines.h"
+#include "topic_workload_describe.h"
 #include "topic_workload_params.h"
 #include "topic_workload_reader.h"
 #include "topic_workload_writer.h"
@@ -8,6 +9,10 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <util/generic/guid.h>
 
@@ -66,6 +71,8 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config) {
         .StoreMappedResultT<TString>(&Codec, &TCommandWorkloadTopicParams::StrToCodec);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
+
+    config.IsNetworkIntensive = true;
 }
 
 void TCommandWorkloadTopicRunFull::Parse(TConfig& config) {
@@ -74,16 +81,21 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config) {
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
     Log = std::make_shared<TLog>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(true, true, Quiet, PrintTimestamp, WindowDurationSec, Seconds, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, ErrorFlag);
     StatsCollector->PrintHeader();
+
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, *Driver);
+    ui32 partitionCount = describeTopicResult.GetTotalPartitionsCount();
+    ui32 partitionSeed = RandomNumber<ui32>(partitionCount);
 
     std::vector<std::future<void>> threads;
 
     auto consumerStartedCount = std::make_shared<std::atomic_uint>();
-    for (ui32 readerIdx = 0; readerIdx < ConsumerCount; ++readerIdx) {
-        for (ui32 readerThreadIdx = 0; readerThreadIdx < ConsumerThreadCount; ++readerThreadIdx) {
+    for (ui32 consumerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
+        for (ui32 consumerThreadIdx = 0; consumerThreadIdx < ConsumerThreadCount; ++consumerThreadIdx) {
             TTopicWorkloadReaderParams readerParams{
                 .Seconds = Seconds,
                 .Driver = Driver.get(),
@@ -92,7 +104,8 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
                 .ErrorFlag = ErrorFlag,
                 .StartedCount = consumerStartedCount,
 
-                .ConsumerIdx = readerIdx};
+                .ConsumerIdx = consumerIdx,
+                .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(std::move(readerParams)); }));
         }
@@ -112,7 +125,9 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
 
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
             .ProducerThreadCount = ProducerThreadCount,
-            .MessageGroupId = TStringBuilder() << PRODUCER_PREFIX << "-" << CreateGuidAsString() << "-" << MESSAGE_GROUP_ID_PREFIX << '-' << writerIdx,
+            .WriterIdx = writerIdx,
+            .ProducerId = TGUID::CreateTimebased().AsGuidString(),
+            .PartitionId = (partitionSeed + writerIdx) % partitionCount,
             .MessageSize = MessageSize,
             .Codec = Codec};
 
@@ -124,24 +139,23 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
 
     StatsCollector->PrintWindowStatsLoop();
 
-    for (auto& future : threads) {
+    for (auto& future : threads)
         future.wait();
-        WRITE_LOG(Log, ELogPriority::TLOG_INFO, "All thread joined.\n");
-    }
+    WRITE_LOG(Log, ELogPriority::TLOG_INFO, "All thread joined.");
 
     StatsCollector->PrintTotalStats();
 
     if (*ErrorFlag) {
-        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "Problems occured while processing messages.\n");
+        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "Problems occured while processing messages.");
         return EXIT_FAILURE;
     }
 
     if (StatsCollector->GetTotalWriteMessages() == 0) {
-        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "No messages were written.\n");
+        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "No messages were written.");
         return EXIT_FAILURE;
     }
     if (StatsCollector->GetTotalReadMessages() == 0) {
-        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "No messages were read.\n");
+        WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "No messages were read.");
         return EXIT_FAILURE;
     }
 

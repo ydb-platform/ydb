@@ -2352,9 +2352,7 @@ public:
         auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
         request.set_table(table);
         *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-
-        // TODO: move protobuf instead of copying it!!!!111
-        *request.mutable_rows()->mutable_value() = TProtoAccessor::GetProto(rows);
+        *request.mutable_rows()->mutable_value() = std::move(rows.GetProto());
 
         auto promise = NewPromise<TBulkUpsertResult>();
 
@@ -4334,6 +4332,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         format = EChangefeedFormat::Json;
         break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON:
+        format = EChangefeedFormat::DocumentTableJson;
+        break;
     default:
         format = EChangefeedFormat::Unknown;
         break;
@@ -4396,6 +4397,9 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     switch (Format_) {
     case EChangefeedFormat::Json:
         proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+        break;
+    case EChangefeedFormat::DocumentTableJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
         break;
     case EChangefeedFormat::Unknown:
         break;

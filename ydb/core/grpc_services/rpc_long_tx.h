@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NGRpcService {
 

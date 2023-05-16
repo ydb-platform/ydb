@@ -17,7 +17,7 @@ struct TPingTaskParams {
     TString Query;
     TParams Params;
     const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> Prepare;
-    std::vector<TString> Metrics;
+    std::shared_ptr<std::vector<TString>> MeteringRecords;
 };
 
 TPingTaskParams ConstructHardPingTask(
@@ -43,6 +43,8 @@ TPingTaskParams ConstructHardPingTask(
         "SELECT `" OWNER_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
+
+    auto meteringRecords = std::make_shared<std::vector<TString>>();
 
     auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem()](const TVector<TResultSet>& resultSets) {
         TString jobId;
@@ -126,7 +128,7 @@ TPingTaskParams ConstructHardPingTask(
             if (retryLimiter.UpdateOnRetry(Now(), policy)) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
-                backoff = policy.BackoffPeriod * retryLimiter.RetryRate;
+                backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);
                 owner = "";
                 if (!transientIssues) {
                     transientIssues.ConstructInPlace();
@@ -164,6 +166,10 @@ TPingTaskParams ConstructHardPingTask(
         if (queryStatus) {
             query.mutable_meta()->set_status(*queryStatus);
             job.mutable_query_meta()->set_status(*queryStatus);
+        }
+
+        if (request.status_code() != NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            internal.set_status_code(request.status_code());   
         }
 
         if (issues) {
@@ -389,19 +395,25 @@ TPingTaskParams ConstructHardPingTask(
             *response->mutable_expired_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ttl.MilliSeconds());
         }
         const auto writeQuery = writeQueryBuilder.Build();
+
+        if (IsTerminalStatus(request.status())) {
+            try {
+                auto isBillable = IsBillablelStatus(request.status(), internal.status_code());
+                if (!isBillable) {
+                    CPS_LOG_AS_N(*actorSystem, "Query " << request.query_id().value() << " is NOT billable, status: "
+                    << FederatedQuery::QueryMeta::ComputeStatus_Name(request.status())
+                    << ", statusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(internal.status_code()));
+                }
+                auto records = GetMeteringRecords(request.statistics(), isBillable, jobId, request.scope(), HostName());
+                meteringRecords->swap(records);
+            } catch (const std::exception&) {
+                CPS_LOG_AS_E(*actorSystem, "Error on statistics meterification: " << CurrentExceptionMessage());
+            }
+        }
+
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
     };
     const auto readQuery = readQueryBuilder.Build();
-
-    std::vector<TString> meteringRecords;
-
-    if (IsTerminalStatus(request.status()) && request.statistics()) {
-        try {
-            meteringRecords = GetMeteringRecords(request.statistics(), request.query_id().value(), request.scope(), HostName());
-        } catch (const std::exception&) {
-            CPS_LOG_E("Error on statistics meterification: " << CurrentExceptionMessage());
-        }
-    }
 
     return {readQuery.Sql, readQuery.Params, prepareParams, meteringRecords};
 }
@@ -469,7 +481,7 @@ TPingTaskParams ConstructSoftPingTask(
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
     };
     const auto readQuery = readQueryBuilder.Build();
-    return {readQuery.Sql, readQuery.Params, prepareParams, std::vector<TString>{}};
+    return {readQuery.Sql, readQuery.Params, prepareParams, std::shared_ptr<std::vector<TString>>{}};
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev)
@@ -530,11 +542,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
         prepare,
         debugInfo);
 
-    success.Apply([=, actorSystem=NActors::TActivationContext::ActorSystem(), metrics=pingTaskParams.Metrics](const auto& future) {
+    success.Apply([=, actorSystem=NActors::TActivationContext::ActorSystem(), meteringRecords=pingTaskParams.MeteringRecords](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(PingTaskRequest, queryId, delta, future.GetValue());
-            for (const auto& metric : metrics) {
-                actorSystem->Send(NKikimr::NMetering::MakeMeteringServiceID(), new NKikimr::NMetering::TEvMetering::TEvWriteMeteringJson(metric));
+            if (meteringRecords) {
+                for (const auto& metric : *meteringRecords) {
+                    actorSystem->Send(NKikimr::NMetering::MakeMeteringServiceID(), new NKikimr::NMetering::TEvMetering::TEvWriteMeteringJson(metric));
+                }
             }
         });
 }

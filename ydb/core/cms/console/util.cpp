@@ -51,9 +51,14 @@ TDynBitMap KindsToBitMap(const TVector<ui32> &kinds)
     return result;
 }
 
-void ReplaceConfigItems(const NKikimrConfig::TAppConfig &from, NKikimrConfig::TAppConfig &to, const TDynBitMap &kinds)
+void ReplaceConfigItems(
+    const NKikimrConfig::TAppConfig &from,
+    NKikimrConfig::TAppConfig &to,
+    const TDynBitMap &kinds,
+    const NKikimrConfig::TAppConfig &fallback)
 {
     NKikimrConfig::TAppConfig fromCopy = from;
+    NKikimrConfig::TAppConfig fallbackCopy = fallback;
 
     auto *desc = to.GetDescriptor();
     auto *reflection = to.GetReflection();
@@ -66,10 +71,14 @@ void ReplaceConfigItems(const NKikimrConfig::TAppConfig &from, NKikimrConfig::TA
                 if (reflection->HasField(to, field)) {
                     reflection->ClearField(&to, field);
                 }
+                if (reflection->HasField(fromCopy, field)) {
+                    reflection->ClearField(&fallbackCopy, field);
+                }
             } else {
                 if (reflection->HasField(fromCopy, field)) {
                     reflection->ClearField(&fromCopy, field);
                 }
+                reflection->ClearField(&fallbackCopy, field);
             }
         } else {
             reflection->ClearField(&to, field);
@@ -78,6 +87,7 @@ void ReplaceConfigItems(const NKikimrConfig::TAppConfig &from, NKikimrConfig::TA
     }
 
     to.MergeFrom(fromCopy);
+    to.MergeFrom(fallbackCopy);
 }
 
 bool CompareConfigs(const NKikimrConfig::TAppConfig &lhs, const NKikimrConfig::TAppConfig &rhs)

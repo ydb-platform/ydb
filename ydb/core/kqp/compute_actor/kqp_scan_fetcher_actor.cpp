@@ -434,14 +434,14 @@ void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::T
     }
 }
 
-bool TKqpScanFetcherActor::SendGlobalFail(const NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssuesIds::EIssueCode issueCode, const TString& message) {
+bool TKqpScanFetcherActor::SendGlobalFail(const NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssuesIds::EIssueCode issueCode, const TString& message) const {
     for (auto&& i : ComputeActorIds) {
         Send(i, new TEvScanExchange::TEvTerminateFromFetcher(statusCode, issueCode, message));
     }
     return true;
 }
 
-bool TKqpScanFetcherActor::SendGlobalFail(const NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
+bool TKqpScanFetcherActor::SendGlobalFail(const NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) const {
     for (auto&& i : ComputeActorIds) {
         Send(i, new TEvScanExchange::TEvTerminateFromFetcher(state, statusCode, issues));
     }
@@ -821,6 +821,14 @@ void TKqpScanFetcherActor::DoAckAvailableWaiting() {
     } else {
         ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): no available computes for waiting events usage";
     }
+}
+
+void TKqpScanFetcherActor::StopOnError(const TString& errorMessage) const {
+    CA_LOG_E("unexpected problem: " << errorMessage);
+    TIssue issue(errorMessage);
+    TIssues issues;
+    issues.AddIssue(std::move(issue));
+    SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues);
 }
 
 }

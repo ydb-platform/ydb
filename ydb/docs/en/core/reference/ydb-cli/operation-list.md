@@ -1,6 +1,6 @@
-# Getting a list of long running operations
+# Getting a list of long-running operations
 
-Use the `ydb operation list` subcommand to get a list of long running operations of the specified type.
+Use the `ydb operation list` subcommand to get a list of long-running operations of the specified type.
 
 General format of the command:
 
@@ -15,7 +15,7 @@ General format of the command:
    * `export/s3`: The export operations.
    * `import/s3`: The import operations.
 
-View a description of the command to get a list of long running operations:
+View a description of the command to get a list of long-running operations:
 
 ```bash
 {{ ydb-cli }} operation list --help
@@ -33,10 +33,10 @@ View a description of the command to get a list of long running operations:
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Get a list of long running build index operations for the `series` table:
+Get a list of long-running build index operations for the `series` table:
 
 ```bash
-ydb -p db1 operation list \
+ydb -p quickstart operation list \
   buildindex
 ```
 

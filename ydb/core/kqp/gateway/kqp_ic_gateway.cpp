@@ -474,8 +474,9 @@ public:
     }
 
     TKqpExecLiteralRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
-        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params)
+        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params, ui32 txIndex)
         : Request(std::move(request))
+        , TxIndex(txIndex)
         , Parameters(params)
         , Counters(counters)
         , Promise(promise)
@@ -516,7 +517,10 @@ private:
                 result.Results.emplace_back(tx.GetMkql());
             }
             Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
-            Parameters->AddTxResults(std::move(txResults));
+
+            if (!txResults.empty()) {
+                Parameters->AddTxResults(TxIndex, std::move(txResults));
+            }
         }
         Promise.SetValue(std::move(result));
         this->PassAway();
@@ -524,6 +528,7 @@ private:
 
 private:
     IKqpGateway::TExecPhysicalRequest Request;
+    const ui32 TxIndex;
     TQueryData::TPtr Parameters;
     TKqpRequestCounters::TPtr Counters;
     TPromise<TResult> Promise;
@@ -1001,7 +1006,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) override {
+    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req, const TMaybe<TString>& requestType) override {
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1012,7 +1017,7 @@ public:
             using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
                 Ydb::Table::AlterTableResponse>;
 
-            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat());
+            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat(), requestType);
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -1844,7 +1849,7 @@ public:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
+    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
@@ -1867,7 +1872,7 @@ public:
 
         YQL_ENSURE(containOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();
-        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params);
+        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
@@ -1940,27 +1945,31 @@ public:
     }
 
     TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
-        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target) override
+        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target,
+        std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx) override
     {
         YQL_ENSURE(cluster == Cluster);
+        YQL_ENSURE(ctx);
 
-        using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
-        if (UserToken) {
-            ev->Record.SetUserToken(UserToken->GetSerializedToken());
-        }
+        auto q = query;
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            NKikimrKqp::QUERY_ACTION_EXECUTE,
+            NKikimrKqp::QUERY_TYPE_AST_SCAN,
+            target,
+            ctx,
+            TString(), //sessionId
+            std::move(q),
+            TString(), //queryId
+            nullptr, //tx_control
+            nullptr,
+            settings.CollectStats,
+            nullptr, // query_cache_policy
+            nullptr
+        );
 
-        ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
-        ev->Record.MutableRequest()->SetQuery(query);
-        ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
-
-        ActorIdToProto(target, ev->Record.MutableCancelationActor());
-
+        // TODO: Rewrite CollectParameters at kqp_host
         FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,
@@ -2161,8 +2170,8 @@ private:
     }
 
     template<typename TRpc>
-    TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token) {
-        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
+    TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token, const TMaybe<TString>& requestType = {}) {
+        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, requestType, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
             auto r = future.ExtractValue();
             NYql::TIssues issues;
             NYql::IssuesFromMessage(r.operation().issues(), issues);

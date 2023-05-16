@@ -42,10 +42,10 @@ Prepare a configuration file for {{ ydb-short-name }}:
        rack: '1'
    ```
 
-1. In the `blob_storage_config` section, update the FQDN of each node used to store the static storage group:
+1. Under `blob_storage_config`, edit the FQDNs of all the nodes accommodating your static storage group:
 
-    * in the `mirror-3-dc` mode, FQDNs for 9 nodes are needed;
-    * in the `block-4-2` mode, FQDNs for 8 nodes are needed.
+   * For the `mirror-3-dc` scheme, specify FQDNs for nine nodes.
+   * For the `block-4-2` scheme, specify FQDNs for eight nodes.
 
 1. Enable user authentication (optional).
 

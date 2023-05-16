@@ -21,7 +21,11 @@ TDynBitMap KindsToBitMap(const TVector<ui32> &kinds);
  * Replace 'kinds' in 'to' from 'from'
  * repeated items are removed
  */
-void ReplaceConfigItems(const NKikimrConfig::TAppConfig &from, NKikimrConfig::TAppConfig &to, const TDynBitMap &kinds);
+void ReplaceConfigItems(
+    const NKikimrConfig::TAppConfig &from,
+    NKikimrConfig::TAppConfig &to,
+    const TDynBitMap &kinds,
+    const NKikimrConfig::TAppConfig &fallback = {});
 
 bool CompareConfigs(const NKikimrConfig::TAppConfig &lhs, const NKikimrConfig::TAppConfig &rhs);
 

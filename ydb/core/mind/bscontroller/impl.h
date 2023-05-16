@@ -127,9 +127,10 @@ public:
     public:
         NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         bool IsReady = false;
+        bool OnlyPhantomsRemain = false;
 
     public:
-        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant) {
+        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain) {
             if (status != Status) {
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
@@ -153,6 +154,9 @@ public:
                     DropFromVSlotReadyTimestampQ();
                 }
                 const_cast<TGroupInfo&>(*Group).CalculateGroupStatus();
+            }
+            if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                OnlyPhantomsRemain = onlyPhantomsRemain;
             }
         }
 
@@ -287,7 +291,12 @@ public:
         }
 
         TString GetStatusString() const {
-            return NKikimrBlobStorage::EVDiskStatus_Name(Status);
+            TStringStream s;
+            s << NKikimrBlobStorage::EVDiskStatus_Name(Status);
+            if (Status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
+                s << "/p";
+            }
+            return s.Str();
         }
 
         bool IsOperational() const {

@@ -58,18 +58,18 @@ The profile will update with the parameters entered on the command line. Any pro
 
 ### Examples {#create-cmdline-examples}
 
-#### Creating a profile for connecting to a test database {#quickstart}
+#### Creating a profile to connect to a test database {#quickstart}
 
-You can use the `quickstart` profile to connect to a database in a single-node cluster {{ ydb-short-name }}:
+To connect to a DB in a single-node {{ ydb-short-name }} cluster, you can use the `quickstart` profile:
 
 ```bash
 ydb config profile create quickstart --endpoint grpc://localhost:2136 --database <path_database>
 ```
 
-* `path_database`: the database path. Specify one of the values:
+* `path_database`: Database path. Specify one of these values:
 
-  * `/Root/test`: If you deployed the cluster using an executable file.
-  * `/local`: If you used a Docker image.
+   * `/Root/test`: If you used an executable to deploy your cluster.
+   * `/local`: If you deployed your cluster from a Docker image.
 
 #### Creating a profile from previous connection settings {#cmdline-example-from-explicit}
 
@@ -173,7 +173,7 @@ Next, you'll be prompted to sequentially perform the following actions with each
 
 Creating a new `mydb1` profile:
 
-1. Run the command:
+1. Run this command:
 
    ```bash
    {{ ydb-cli }} config profile create mydb1
@@ -210,8 +210,6 @@ Creating a new `mydb1` profile:
      [7] Don't save authentication data for profile "mydb1"
    Please enter your numeric choice:
    ```
-
-   If you are not sure what authentication mode to choose, use the recipe from [Authentication](../../../../getting_started/auth.md) under "Getting started".
 
    All the available authentication methods are described in [{#T}](../../../../concepts/auth.md). The set of methods and text of the hints may differ from those given in this example.
 

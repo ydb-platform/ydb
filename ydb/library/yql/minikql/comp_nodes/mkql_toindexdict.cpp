@@ -27,11 +27,12 @@ public:
 
         const auto indexType = Type::getInt32Ty(context);
 
-        const auto first = GetElementPtrInst::CreateInBounds(ctx.Ctx, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "first", block);
-        const auto fourth = GetElementPtrInst::CreateInBounds(ctx.Ctx, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 3)}, "fourth", block);
+        const auto first = GetElementPtrInst::CreateInBounds(GetCompContextType(context), ctx.Ctx, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "first", block);
+        const auto fourth = GetElementPtrInst::CreateInBounds(GetCompContextType(context), ctx.Ctx, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 3)}, "fourth", block);
 
-        const auto factory = new LoadInst(first, "factory", block);
-        const auto builder = new LoadInst(fourth, "builder", block);
+        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
+        const auto factory = new LoadInst(structPtrType, first, "factory", block);
+        const auto builder = new LoadInst(structPtrType, fourth, "builder", block);
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::ToIndexDict));
 
@@ -40,15 +41,15 @@ public:
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(list->getType(), {factory->getType(), builder->getType(), list->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto result = CallInst::Create(funcPtr, {factory, builder, list}, "result", block);
+            const auto result = CallInst::Create(funType, funcPtr, {factory, builder, list}, "result", block);
             return result;
         } else {
             const auto retPtr = new AllocaInst(list->getType(), 0U, "ret_ptr", block);
             new StoreInst(list, retPtr, block);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), builder->getType(), retPtr->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            CallInst::Create(funcPtr, {factory, retPtr, builder, retPtr}, "", block);
-            const auto result = new LoadInst(retPtr, "result", block);
+            CallInst::Create(funType, funcPtr, {factory, retPtr, builder, retPtr}, "", block);
+            const auto result = new LoadInst(list->getType(), retPtr, "result", block);
             return result;
         }
     }

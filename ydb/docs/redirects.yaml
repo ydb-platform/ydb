@@ -3,7 +3,6 @@ common:
     to: /reference/ydb-cli/table-ttl-reset.md
   - from: changelog.md
     to: changelog-server.md
-ru:
   - from: /getting_started/index.md
     to: /administration/quickstart.md
   - from: /getting_started/create_db.md

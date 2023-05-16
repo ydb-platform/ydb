@@ -13,6 +13,7 @@
 #include <tuple>
 
 namespace NKikimr::NBlobCache {
+namespace {
 
 using namespace NActors;
 
@@ -727,6 +728,8 @@ private:
         }
     }
 };
+
+} // namespace
 
 NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TBlobCache(maxBytes, counters);

@@ -357,14 +357,17 @@ private:
         if (descr == TToken::GetDescriptor()) {
             const auto& token = dynamic_cast<const TToken&>(msg);
             MarkToken(token);
-        }
-
-        if (descr == TRule_lambda_body::GetDescriptor()) {
+        } else if (descr == TRule_lambda_body::GetDescriptor()) {
             Y_ENSURE(TokenIndex >= 1);
             auto prevIndex = TokenIndex - 1;
             Y_ENSURE(prevIndex < ParsedTokens.size());
             Y_ENSURE(ParsedTokens[prevIndex].Content == "{");
             MarkedTokens[prevIndex].OpeningBracket = false;
+        } else if (descr == TRule_in_atom_expr::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_in_atom_expr&>(msg);
+            if (value.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
+                AfterInAtom = true;
+            }
         }
 
         VisitAllFieldsImpl<&TVisitor::MarkTokens>(descr, msg);
@@ -398,6 +401,12 @@ private:
             PopBracket("<|");
         } else if (InsideType && str == ">") {
             PopBracket("<");
+        }
+
+        if (AfterInAtom) {
+            auto& info = MarkedTokens[TokenIndex];
+            info.OpeningBracket = false;
+            AfterInAtom = false;
         }
 
         TokenIndex++;
@@ -1986,6 +1995,7 @@ private:
     ui32 TokenIndex = 0;
     TMarkTokenStack MarkTokenStack;
     TVector<TTokenInfo> MarkedTokens;
+    bool AfterInAtom = false;
 };
 
 template <typename T>

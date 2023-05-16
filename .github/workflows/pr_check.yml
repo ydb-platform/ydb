@@ -5,11 +5,85 @@ on:
       - 'main'
     paths-ignore:
       - 'ydb/docs/**'
-      
+    types:
+      - 'opened'
+      - 'synchronize'
+      - 'reopened'
+      - 'labeled'
 jobs:
+
+  check-running-allowed:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.check-ownership-membership.outputs.result }}
+    steps:
+      - name: Check if running tests is allowed
+        id: check-ownership-membership
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            // This is used primarily in forks. Repository owner 
+            // should be allowed to run anything. 
+            const userLogin = context.payload.pull_request.user.login;
+            if (context.payload.repository.owner.login == userLogin) {
+              return true;
+            }
+
+            const response = await github.rest.orgs.checkMembershipForUser({
+              org: context.payload.organization.login,
+              username: userLogin,
+            });
+
+            // How to interpret membership status code: 
+            // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
+            if (response.status == '204') {
+              return true;  
+            }
+
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+            return okToTestLabel !== undefined;
+      - name: comment-if-waiting-on-ok
+        if: steps.check-ownership-membership.outputs.result == 'false' &&
+            github.event.action == 'opened'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
+            });
+      - name: cleanup-test-label
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            const labelToRemove = 'ok-to-test';
+            try {
+              const result = await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number: prNumber,
+                name: labelToRemove
+              });
+            } catch(e) {
+              // ignore the 404 error that arises
+              // when the label did not exist for the
+              // organization member
+              console.log(e);
+            }
   build_and_test:
+    needs:
+      - check-running-allowed
+    if: needs.check-running-allowed.outputs.result == 'true'
     uses: ./.github/workflows/build_and_test_ondemand.yml
-    if: github.event.review.state == 'approved'
     with:
       test_label_regexp: '(SMALL|MEDIUM)'
     secrets: inherit

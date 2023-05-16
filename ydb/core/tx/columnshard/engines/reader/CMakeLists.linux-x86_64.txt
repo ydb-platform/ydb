@@ -6,6 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(order_control)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(columnshard-engines-reader)
 target_compile_options(columnshard-engines-reader PRIVATE
@@ -17,17 +24,26 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-protos
-  ydb-core-formats
+  core-formats-arrow
+  columnshard-engines-predicate
+  engines-reader-order_control
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(columnshard-engines-reader PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/filter_assembler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/postfilter_assembler.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/granule.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/batch.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/conveyor_task.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/queue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/order_controller.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/description.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/filling_context.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/filter_assembler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/granule.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/postfilter_assembler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/queue.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_filter_merger.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.cpp
+)
+generate_enum_serilization(columnshard-engines-reader
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/reader/read_metadata.h
 )

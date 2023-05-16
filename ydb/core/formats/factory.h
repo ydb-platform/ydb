@@ -11,7 +11,7 @@ class IBlockBuilder {
 public:
     virtual ~IBlockBuilder() = default;
 
-    virtual bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) = 0;
+    virtual bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, ui64 maxRowsInBlock, ui64 maxBytesInBlock, TString& err) = 0;
     virtual void AddRow(const TDbTupleRef& key, const TDbTupleRef& value) = 0;
     virtual TString Finish() = 0;
     virtual size_t Bytes() const = 0;

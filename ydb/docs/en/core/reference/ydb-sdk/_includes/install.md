@@ -20,7 +20,7 @@ The build process using the source code is described in the source code reposito
 
   {% include [install/cmd_go.md](install/cmd_go.md) %}
 
-  To ensure that the installation is successful, make sure that your environment is running [Go](https://go.dev/doc/install) 1.16 or higher.
+  To ensure that the installation is successful, make sure that your environment is running [Go](https://go.dev/doc/install) 1.17 or higher.
 
 - C# (.NET)
 

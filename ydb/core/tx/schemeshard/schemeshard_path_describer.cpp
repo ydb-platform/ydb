@@ -1162,6 +1162,7 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetMode(info->Mode);
     desc.SetFormat(info->Format);
     desc.SetVirtualTimestamps(info->VirtualTimestamps);
+    desc.SetAwsRegion(info->AwsRegion);
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);

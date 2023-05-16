@@ -21,13 +21,13 @@
 // these are required in maintenance mode only:
 //
 #define PP1 <boost/preprocessor/iterate.hpp>
-#include PP1
+#error #include PP1
 #undef PP1
 #define PP1 <boost/preprocessor/enum_params.hpp>
-#include PP1
+#error #include PP1
 #undef PP1
 #define PP1 <boost/preprocessor/comma_if.hpp>
-#include PP1
+#error #include PP1
 #undef PP1
 #endif
 

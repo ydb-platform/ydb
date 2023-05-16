@@ -71,8 +71,7 @@ runs:
       TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
               --output-junit $TESTREPDIR/suites/ctest_report.xml \
-              -L '${{inputs.test_label_regexp}}' \
-              -E ydb-core-kqp-ut-spilling | \
+              -L '${{inputs.test_label_regexp}}' | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
         tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \

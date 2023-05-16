@@ -6,6 +6,8 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 namespace NKikimr {
 namespace NLongTxService {
 
@@ -166,9 +168,17 @@ namespace NLongTxService {
         {
             TEvAcquireReadSnapshot() = default;
 
-            explicit TEvAcquireReadSnapshot(const TString& databaseName) {
+            template<class... TArgs>
+            explicit TEvAcquireReadSnapshot(const TString& databaseName, TArgs&&... args) {
                 Record.SetDatabaseName(databaseName);
+                (SetOptionalArg(std::forward<TArgs>(args)), ...);
             }
+
+            void SetOptionalArg(NLWTrace::TOrbit&& orbit) {
+                Orbit = std::move(orbit);
+            }
+
+            NLWTrace::TOrbit Orbit;
         };
 
         struct TEvAcquireReadSnapshotResult
@@ -177,20 +187,24 @@ namespace NLongTxService {
             TEvAcquireReadSnapshotResult() = default;
 
             // Success
-            explicit TEvAcquireReadSnapshotResult(const TString& databaseName, const TRowVersion& snapshot) {
+            explicit TEvAcquireReadSnapshotResult(const TString& databaseName, const TRowVersion& snapshot, NLWTrace::TOrbit&& orbit) {
                 Record.SetStatus(Ydb::StatusIds::SUCCESS);
                 Record.SetSnapshotStep(snapshot.Step);
                 Record.SetSnapshotTxId(snapshot.TxId);
                 Record.SetDatabaseName(databaseName);
+                Orbit = std::move(orbit);
             }
 
             // Failure
-            explicit TEvAcquireReadSnapshotResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
+            explicit TEvAcquireReadSnapshotResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, NLWTrace::TOrbit&& orbit) {
                 Record.SetStatus(status);
                 if (issues) {
                     IssuesToMessage(issues, Record.MutableIssues());
                 }
+                Orbit = std::move(orbit);
             }
+
+            NLWTrace::TOrbit Orbit;
         };
 
         struct TEvRegisterLock

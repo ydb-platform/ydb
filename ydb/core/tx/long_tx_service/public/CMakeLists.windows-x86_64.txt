@@ -16,6 +16,7 @@ target_link_libraries(tx-long_tx_service-public PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cgiparam
+  library-cpp-lwtrace
   library-cpp-uri
   ydb-core-base
   ydb-core-protos

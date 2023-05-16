@@ -196,6 +196,16 @@ bool TDataProviderBase::IsPersistent(const TExprNode& node) {
     return false;
 }
 
+bool TDataProviderBase::IsRead(const TExprNode& node) {
+    Y_UNUSED(node);
+    return false;
+}
+
+bool TDataProviderBase::IsWrite(const TExprNode& node) {
+    Y_UNUSED(node);
+    return false;
+}
+
 bool TDataProviderBase::CanBuildResult(const TExprNode& node, TSyncMap& syncList) {
     Y_UNUSED(node);
     Y_UNUSED(syncList);

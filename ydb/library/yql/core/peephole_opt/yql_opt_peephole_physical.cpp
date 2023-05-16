@@ -1,5 +1,7 @@
 #include "yql_opt_peephole_physical.h"
 
+#include <ydb/library/yql/core/peephole_opt/yql_opt_json_peephole_physical.h>
+#include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_expr_constraint.h>
@@ -4952,9 +4954,30 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth"}))
+        if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
-            for (auto& child : node->ChildrenList()) {
+            ui32 startIndex = 0;
+            if (node->IsCallable("PgResolvedCall")) {
+                if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
+                    return true;
+                }
+
+                startIndex = 3;
+            } else if (node->IsCallable("PgResolvedOp")) {
+                if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
+                    return true;
+                }
+
+                startIndex = 2;
+            }
+
+            for (ui32 index = 0; index < startIndex; ++index) {
+                auto child = node->ChildPtr(index);
+                funcArgs.push_back(child);
+            }
+
+            for (ui32 index = startIndex; index < node->ChildrenSize(); ++index) {
+                auto child = node->ChildPtr(index);
                 if (!child->GetTypeAnn()->IsComputable()) {
                     funcArgs.push_back(child);
                 } else  if (child->IsComplete()) {
@@ -7137,6 +7160,8 @@ struct TPeepHoleRules {
         {"CheckedDiv", &ExpandCheckedDiv},
         {"CheckedMod", &ExpandCheckedMod},
         {"CheckedMinus", &ExpandCheckedMinus},
+        {"JsonValue", &ExpandJsonValue},
+        {"JsonExists", &ExpandJsonExists}
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {
@@ -7147,6 +7172,7 @@ struct TPeepHoleRules {
         {"AggregateMergeFinalize", &ExpandAggregatePeephole},
         {"AggregateMergeManyFinalize", &ExpandAggregatePeephole},
         {"AggregateFinalize", &ExpandAggregatePeephole},
+        {"JsonQuery", &ExpandJsonQuery},
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

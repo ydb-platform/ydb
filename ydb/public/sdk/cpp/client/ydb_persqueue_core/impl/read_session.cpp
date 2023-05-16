@@ -57,7 +57,14 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 }
 
 TReadSession::~TReadSession() {
-    Abort(EStatus::ABORTED, "Aborted");
+    {
+        TDeferredActions<true> deferred;
+        NYql::TIssues issues;
+        issues.AddIssue("Aborted");
+        EventsQueue->Close(TSessionClosedEvent(EStatus::ABORTED, std::move(issues)), deferred);
+    }
+
+    Abort();
     ClearAllEvents();
 
     if (Tracker) {
@@ -76,7 +83,6 @@ Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClus
 }
 
 void TReadSession::Start() {
-    ErrorHandler = MakeIntrusive<TErrorHandler<true>>(weak_from_this());
     Tracker = std::make_shared<TImplTracker>();
     EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, weak_from_this(), Tracker);
 
@@ -107,7 +113,11 @@ bool TReadSession::ValidateSettings() {
     }
 
     if (issues) {
-        Abort(EStatus::BAD_REQUEST, MakeIssueWithSubIssues("Invalid read session settings", issues));
+        {
+            TDeferredActions<true> deferred;
+            EventsQueue->Close(TSessionClosedEvent(EStatus::BAD_REQUEST, MakeIssueWithSubIssues("Invalid read session settings", issues)), deferred);
+        }
+        Abort();
         return false;
     } else {
         return true;
@@ -124,7 +134,7 @@ void TReadSession::StartClusterDiscovery() {
         ClusterDiscoveryDelayContext = nullptr;
     }
 
-    auto extractor = [errorHandler = ErrorHandler, self = weak_from_this()]
+    auto extractor = [self = weak_from_this()]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
         auto selfShared = self.lock();
         if (!selfShared) {
@@ -203,7 +213,6 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
                 Log,
                 subclient->CreateReadSessionConnectionProcessorFactory(),
                 EventsQueue,
-                ErrorHandler,
                 context,
                 partitionStreamIdStart++,
                 clusterSessionsCount,
@@ -417,12 +426,13 @@ bool TReadSession::Close(TDuration timeout) {
     return result;
 }
 
-void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<true>& deferred) {
+void TReadSession::AbortImpl(TDeferredActions<true>&) {
+
     Y_VERIFY(Lock.IsLocked());
 
     if (!Aborting) {
+        Y_VERIFY(EventsQueue->IsClosed());
         Aborting = true;
-        LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
         if (ClusterDiscoveryDelayContext) {
             ClusterDiscoveryDelayContext->Cancel();
             ClusterDiscoveryDelayContext.reset();
@@ -436,14 +446,16 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<
                 sessionInfo.Session->Abort();
             }
         }
-        EventsQueue->Close(std::move(closeEvent), deferred);
     }
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions<true>& deferred) {
     Y_VERIFY(Lock.IsLocked());
+    auto closeEvent = TSessionClosedEvent(statusCode, std::move(issues));
+    LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
 
-    AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred);
+    EventsQueue->Close(std::move(closeEvent), deferred);
+    AbortImpl(deferred);
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<true>& deferred) {
@@ -451,23 +463,14 @@ void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferr
 
     NYql::TIssues issues;
     issues.AddIssue(message);
+
     AbortImpl(statusCode, std::move(issues), deferred);
 }
 
-void TReadSession::Abort(EStatus statusCode, NYql::TIssues&& issues) {
-    Abort(TSessionClosedEvent(statusCode, std::move(issues)));
-}
-
-void TReadSession::Abort(EStatus statusCode, const TString& message) {
-    NYql::TIssues issues;
-    issues.AddIssue(message);
-    Abort(statusCode, std::move(issues));
-}
-
-void TReadSession::Abort(TSessionClosedEvent&& closeEvent) {
+void TReadSession::Abort() {
     TDeferredActions<true> deferred;
     with_lock (Lock) {
-        AbortImpl(std::move(closeEvent), deferred);
+        AbortImpl(EStatus::ABORTED, "Aborted", deferred);
     }
 }
 
@@ -480,11 +483,19 @@ NThreading::TFuture<void> TReadSession::WaitEvent() {
 }
 
 TVector<TReadSessionEvent::TEvent> TReadSession::GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) {
-    return EventsQueue->GetEvents(block, maxEventsCount, maxByteSize);
+    auto res = EventsQueue->GetEvents(block, maxEventsCount, maxByteSize);
+    if (EventsQueue->IsClosed()) {
+        Abort();
+    }
+    return res;
 }
 
 TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxByteSize) {
-    return EventsQueue->GetEvent(block, maxByteSize);
+    auto res = EventsQueue->GetEvent(block, maxByteSize);
+    if (EventsQueue->IsClosed()) {
+        Abort();
+    }
+    return res;
 }
 
 void TReadSession::StopReadingData() {

@@ -223,6 +223,20 @@ def use_in_memory_pdisks_flag():
     return os.getenv('YDB_USE_IN_MEMORY_PDISKS') == 'true'
 
 
+def default_users():
+    if not os.getenv("POSTGRES_USER") and not os.getenv("POSTGRES_PASSWORD"):
+        return None
+
+    user = os.getenv("POSTGRES_USER")
+    if not user:
+        user = "postgres"
+
+    password = os.getenv("POSTGRES_PASSWORD")
+    if not password:
+        password = ""
+    return {user: password}
+
+
 def enable_survive_restart():
     return os.getenv('YDB_LOCAL_SURVIVE_RESTART') == 'true'
 
@@ -302,6 +316,7 @@ def deploy(arguments):
         public_http_config_path=arguments.public_http_config_path,
         auth_config_path=arguments.auth_config_path,
         use_log_files=not arguments.dont_use_log_files,
+        default_users=default_users(),
         **optionals
     )
 

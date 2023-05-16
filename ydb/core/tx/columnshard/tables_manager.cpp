@@ -222,10 +222,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
 void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& version, const TTableSchema& schema, NIceDb::TNiceDb& db) {
     Y_VERIFY(SchemaPresets.contains(presetId));
     auto preset = SchemaPresets.at(presetId);
-    if (!preset.IsEmpty()) {
-        LOG_S_DEBUG("EnsureSchemaPreset for existed preset " << presetId << " at tablet " << TabletId);
-        return;
-    }
+    
     TSchemaPreset::TSchemaPresetVersionInfo versionInfo;
     versionInfo.SetId(presetId);
     versionInfo.SetSinceStep(version.Step);
@@ -272,19 +269,18 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
 void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const TTableSchema& schema) {
     NOlap::TSnapshot snapshot{version.Step, version.TxId};
     NOlap::TIndexInfo indexInfo = ConvertSchema(schema);
-
+    indexInfo.SetAllKeys();
     if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(std::move(indexInfo), TabletId);
-    } else {
-        PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
+        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
     }
+    PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
 
     for (auto& columnName : Ttl.TtlColumns()) {
         PrimaryIndex->GetIndexInfo().CheckTtlColumn(columnName);
     }
 }
 
-std::shared_ptr<NOlap::TColumnEngineChanges>  TTablesManager::StartIndexCleanup(const NOlap::TSnapshot& snapshot, ui32 maxRecords) {
+std::shared_ptr<NOlap::TColumnEngineChanges> TTablesManager::StartIndexCleanup(const NOlap::TSnapshot& snapshot, ui32 maxRecords) {
     Y_VERIFY(PrimaryIndex);
     return PrimaryIndex->StartCleanup(snapshot, PathsToDrop, maxRecords);
 }

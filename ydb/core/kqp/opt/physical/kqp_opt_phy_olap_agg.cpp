@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 

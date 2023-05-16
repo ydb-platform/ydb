@@ -351,6 +351,10 @@ private:
     const THashSet<ui64>& GetBindedTxs(ui64 tabletId);
 
     THashMap<ui64, THashSet<ui64>> BindedTxs;
+
+    void InitProcessingParams(const TActorContext& ctx);
+
+    TMaybe<NKikimrSubDomains::TProcessingParams> ProcessingParams;
 };
 
 

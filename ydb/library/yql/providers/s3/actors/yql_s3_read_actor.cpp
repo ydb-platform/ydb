@@ -2372,6 +2372,7 @@ public:
             ES3PatternType::Wildcard});
         SendPathRequest();
         Become(&TS3StreamReadActor::StateFunc);
+        Bootstrapped = true;
     }
 
     bool TryRegisterCoro() {
@@ -2583,28 +2584,33 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        LOG_D("TS3StreamReadActor", "PassAway");
-        if (Counters) {
-            QueueBlockCount->Sub(Blocks.size());
-            QueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
-            DownloadCount->Sub(QueueBufferCounter->CoroCount);
-        }
-        if (TaskCounters) {
-            TaskQueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
-            HttpInflightLimit->Sub(Gateway->GetBuffersSizePerStream() * CoroActors.size());
-            TaskDownloadCount->Sub(QueueBufferCounter->CoroCount);
-            TaskChunkDownloadCount->Sub(QueueBufferCounter->ChunkCount);
-        }
-        QueueBufferCounter.reset();
 
-        for (const auto actorId : CoroActors) {
-            Send(actorId, new NActors::TEvents::TEvPoison());
-        }
-        Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+        if (Bootstrapped) {
+            LOG_D("TS3StreamReadActor", "PassAway");
+            if (Counters) {
+                QueueBlockCount->Sub(Blocks.size());
+                QueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
+                DownloadCount->Sub(QueueBufferCounter->CoroCount);
+            }
+            if (TaskCounters) {
+                TaskQueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
+                HttpInflightLimit->Sub(Gateway->GetBuffersSizePerStream() * CoroActors.size());
+                TaskDownloadCount->Sub(QueueBufferCounter->CoroCount);
+                TaskChunkDownloadCount->Sub(QueueBufferCounter->ChunkCount);
+            }
+            QueueBufferCounter.reset();
 
-        ContainerCache.Clear();
-        ArrowTupleContainerCache.Clear();
-        ArrowRowContainerCache.Clear();
+            for (const auto actorId : CoroActors) {
+                Send(actorId, new NActors::TEvents::TEvPoison());
+            }
+            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+
+            ContainerCache.Clear();
+            ArrowTupleContainerCache.Clear();
+            ArrowRowContainerCache.Clear();
+        } else {
+            LOG_W("TS3StreamReadActor", "PassAway w/o Bootstrap");
+        }
 
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
@@ -2770,6 +2776,7 @@ private:
     std::set<NActors::TActorId> CoroActors;
     NActors::TActorId FileQueueActor;
     const ui64 FileSizeLimit;
+    bool Bootstrapped = false;
 };
 
 using namespace NKikimr::NMiniKQL;

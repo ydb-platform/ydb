@@ -54,7 +54,7 @@ target_sources(ydb-services-persqueue_v1-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/topic_service_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/demo_immediate_tx.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/demo_tx.cpp
 )
 set_property(
   TARGET

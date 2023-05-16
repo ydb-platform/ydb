@@ -26,7 +26,7 @@ A split or a merge usually takes about 500 milliseconds. During this time, the d
 
 The following table partitioning parameters are defined in the data schema:
 
-#### AUTO_PARTITIONING_BY_SIZE {#auto-part-by-load}
+#### AUTO_PARTITIONING_BY_SIZE
 
 * Type: `Enum` (`ENABLED`, `DISABLED`).
 * Default value: `ENABLED`.
@@ -148,7 +148,7 @@ Each table has a `default` column group that includes all the columns that don't
 Column groups are assigned attributes that affect data storage:
 
 * The type of the data storage device used (SSD or HDD, availability depends on the {{ ydb-short-name }} cluster configuration).
-* Data compression mode (without compression or compression using the [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)) algorithm).
+* Data compression mode (without compression or compression using the [LZ4](https://en.wikipedia.org/wiki/LZ4) algorithm).
 
 Attributes for a column group are set when creating a table (for example, they can be explicitly set for a default column group) and changed afterwards. Changes in storage attributes aren't applied to the data immediately, but later, at manual or automatic LSM compaction.
 

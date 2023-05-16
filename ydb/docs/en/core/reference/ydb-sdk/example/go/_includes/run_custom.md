@@ -22,5 +22,3 @@ For example:
 ( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && cd ydb-go-examples && \
 go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocation" )
 ```
-
-{% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}

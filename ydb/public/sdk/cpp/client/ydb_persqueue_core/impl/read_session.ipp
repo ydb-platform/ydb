@@ -48,22 +48,6 @@ void MakeCountersNotNull(TReaderCounters& counters);
 template <typename TReaderCounters>
 bool HasNullCounters(TReaderCounters& counters);
 
-template <bool UseMigrationProtocol>
-class TErrorHandler : public IErrorHandler<UseMigrationProtocol> {
-    using TReadSession = typename std::conditional_t<UseMigrationProtocol,
-        NPersQueue::TReadSession,
-        NTopic::TReadSession>;
-public:
-    TErrorHandler(std::weak_ptr<TReadSession> session)
-        : Session(std::move(session))
-    {
-    }
-
-    void AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent) override;
-
-private:
-    std::weak_ptr<TReadSession> Session;
-};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TPartitionStreamImpl
@@ -234,7 +218,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
     Settings.DecompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
     if (!Reconnect(TPlainStatus())) {
-        ErrorHandler->AbortSession(EStatus::ABORTED, "Driver is stopping");
+        AbortSession(EStatus::ABORTED, "Driver is stopping");
     }
 }
 
@@ -355,7 +339,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
     Processor = nullptr;
     RetryState = Settings.RetryPolicy_->CreateRetryState(); // Explicitly create retry state to determine whether we should connect to server again.
 
-    deferred.DeferReconnection(this->shared_from_this(), ErrorHandler, std::move(status));
+    deferred.DeferReconnection(this->shared_from_this(), std::move(status));
 }
 
 template<bool UseMigrationProtocol>
@@ -380,7 +364,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const
     TStringBuilder description;
     description << "Failed to establish connection to server. Attempts done: " << ConnectionAttemptsDone;
     if (!Reconnect(TPlainStatus(EStatus::TIMEOUT, description))) {
-        ErrorHandler->AbortSession(EStatus::TIMEOUT, description);
+        AbortSession(EStatus::TIMEOUT, description);
     }
 }
 
@@ -414,7 +398,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
     if (!st.Ok()) {
         ++*Settings.Counters_->Errors;
         if (!Reconnect(st)) {
-            ErrorHandler->AbortSession(
+            AbortSession(
                 st.Status, MakeIssueWithSubIssues(TStringBuilder() << "Failed to establish connection to server \""
                                                                    << st.Endpoint << "\" ( cluster " << ClusterName
                                                                    << "). Attempts done: " << ConnectionAttemptsDone,
@@ -629,16 +613,20 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
         CookieMapping.RemoveMapping(GetPartitionStreamId(partitionStream));
         PartitionStreams.erase(partitionStream->GetAssignId());
 
+        bool pushRes = true;
         if constexpr (UseMigrationProtocol) {
-            EventsQueue->PushEvent(partitionStream, TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
+            pushRes = EventsQueue->PushEvent(partitionStream, TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
                                    TClosedEvent(partitionStream, TClosedEvent::EReason::DestroyConfirmedByUser),
                                    deferred);
         } else {
-            EventsQueue->PushEvent(partitionStream, TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
+            pushRes = EventsQueue->PushEvent(partitionStream, TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
                                    TClosedEvent(partitionStream, TClosedEvent::EReason::StopConfirmedByUser),
                                    deferred);
         }
-
+        if (!pushRes) {
+            AbortImpl();
+            return;
+        }
         TClientMessage<UseMigrationProtocol> req;
 
         if constexpr (UseMigrationProtocol) {
@@ -890,7 +878,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NGrpc::TGrp
         ++*Settings.Counters_->Errors;
 
         if (!Reconnect(errorStatus)) {
-            ErrorHandler->AbortSession(std::move(errorStatus));
+            AbortSession(std::move(errorStatus));
         }
     }
 }
@@ -1010,8 +998,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         NextPartitionStreamId, msg.topic().path(), msg.cluster(),
         msg.partition() + 1, // Group.
         msg.partition(),     // Partition.
-        msg.assign_id(), msg.read_offset(), weak_from_this(),
-        ErrorHandler);
+        msg.assign_id(), msg.read_offset(), weak_from_this());
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
@@ -1019,19 +1006,27 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
         CookieMapping.RemoveMapping(currentPartitionStream->GetPartitionStreamId());
-        EventsQueue->PushEvent(
+        bool pushRes = EventsQueue->PushEvent(
             currentPartitionStream, weak_from_this(),
              TReadSessionEvent::TPartitionStreamClosedEvent(
                  currentPartitionStream, TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost),
             deferred);
+        if (!pushRes) {
+            AbortImpl();
+            return;
+        }
     }
     currentPartitionStream = partitionStream;
 
     // Send event to user.
-    EventsQueue->PushEvent(
+    bool pushRes = EventsQueue->PushEvent(
         partitionStream, weak_from_this(),
          TReadSessionEvent::TCreatePartitionStreamEvent(partitionStream, msg.read_offset(), msg.end_offset()),
         deferred);
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
 }
 
 template <>
@@ -1046,19 +1041,26 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         return;
     }
     TIntrusivePtr<TPartitionStreamImpl<true>> partitionStream = partitionStreamIt->second;
+    bool pushRes = true;
     if (msg.forceful_release()) {
         PartitionStreams.erase(msg.assign_id());
         CookieMapping.RemoveMapping(partitionStream->GetPartitionStreamId());
-        EventsQueue->PushEvent(partitionStream, weak_from_this(),
+        pushRes = EventsQueue->PushEvent(partitionStream, weak_from_this(),
                                 TReadSessionEvent::TPartitionStreamClosedEvent(
                                     partitionStream, TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost),
                                deferred);
     } else {
-        EventsQueue->PushEvent(
+        pushRes = EventsQueue->PushEvent(
             partitionStream, weak_from_this(),
              TReadSessionEvent::TDestroyPartitionStreamEvent(std::move(partitionStream), msg.commit_offset()),
             deferred);
     }
+
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
+
 }
 
 template <>
@@ -1079,10 +1081,14 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         }
     }
     for (auto& [id, partitionStream] : partitionStreams) {
-        EventsQueue->PushEvent(
+        bool pushRes = EventsQueue->PushEvent(
             partitionStream, weak_from_this(),
              TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, partitionStream->GetMaxCommittedOffset()),
             deferred);
+        if (!pushRes) {
+            AbortImpl();
+            return;
+        }
     }
 
     for (const auto& rangeProto : msg.offset_ranges()) {
@@ -1090,10 +1096,14 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         if (partitionStreamIt != PartitionStreams.end()) {
             auto partitionStream = partitionStreamIt->second;
             partitionStream->UpdateMaxCommittedOffset(rangeProto.end_offset());
-            EventsQueue->PushEvent(
+            bool pushRes = EventsQueue->PushEvent(
                 partitionStream, weak_from_this(),
                  TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, rangeProto.end_offset()),
                 deferred);
+            if (!pushRes) {
+                AbortImpl();
+                return;
+            }
         }
     }
 }
@@ -1109,12 +1119,16 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
-    EventsQueue->PushEvent(partitionStreamIt->second, weak_from_this(),
+    bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second, weak_from_this(),
                             TReadSessionEvent::TPartitionStreamStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
                                 0, // TODO: support read offset in status
                                 msg.end_offset(), TInstant::MilliSeconds(msg.write_watermark_ms())),
                            deferred);
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
 }
 
 //////////////
@@ -1227,25 +1241,33 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
         NextPartitionStreamId, msg.partition_session().path(), msg.partition_session().partition_id(),
         msg.partition_session().partition_session_id(), msg.committed_offset(),
-        weak_from_this(), ErrorHandler);
+        weak_from_this());
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
     TIntrusivePtr<TPartitionStreamImpl<false>>& currentPartitionStream = PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
-        EventsQueue->PushEvent(
+        bool pushRes = EventsQueue->PushEvent(
             currentPartitionStream, weak_from_this(),
              NTopic::TReadSessionEvent::TPartitionSessionClosedEvent(
                  currentPartitionStream, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
             deferred);
+        if (!pushRes) {
+            AbortImpl();
+            return;
+        }
     }
     currentPartitionStream = partitionStream;
 
     // Send event to user.
-    EventsQueue->PushEvent(partitionStream, weak_from_this(),
+    bool pushRes = EventsQueue->PushEvent(partitionStream, weak_from_this(),
                             NTopic::TReadSessionEvent::TStartPartitionSessionEvent(
                                 partitionStream, msg.committed_offset(), msg.partition_offsets().end()),
                            deferred);
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
 }
 
 template <>
@@ -1260,17 +1282,22 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         return;
     }
     TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream = partitionStreamIt->second;
+    bool pushRes = true;
     if (!msg.graceful()) {
         PartitionStreams.erase(msg.partition_session_id());
-        EventsQueue->PushEvent(partitionStream, weak_from_this(),
+        pushRes = EventsQueue->PushEvent(partitionStream, weak_from_this(),
                                 NTopic::TReadSessionEvent::TPartitionSessionClosedEvent(
                                     partitionStream, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
                                deferred);
     } else {
-        EventsQueue->PushEvent(
+        pushRes = EventsQueue->PushEvent(
             partitionStream, weak_from_this(),
              NTopic::TReadSessionEvent::TStopPartitionSessionEvent(std::move(partitionStream), msg.committed_offset()),
             deferred);
+    }
+    if (!pushRes) {
+        AbortImpl();
+        return;
     }
 }
 
@@ -1288,10 +1315,14 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         if (partitionStreamIt != PartitionStreams.end()) {
             auto partitionStream = partitionStreamIt->second;
             partitionStream->UpdateMaxCommittedOffset(rangeProto.committed_offset());
-            EventsQueue->PushEvent(partitionStream, weak_from_this(),
+            bool pushRes = EventsQueue->PushEvent(partitionStream, weak_from_this(),
                                     NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent(
                                         partitionStream, rangeProto.committed_offset()),
                                    deferred);
+            if (!pushRes) {
+                AbortImpl();
+                return;
+            }
         }
     }
 }
@@ -1307,7 +1338,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
-    EventsQueue->PushEvent(partitionStreamIt->second, weak_from_this(),
+    bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second, weak_from_this(),
                             NTopic::TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
                                 0, // TODO: support read offset in status
@@ -1315,6 +1346,10 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                                 TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(
                                     msg.write_time_high_watermark()))),
                            deferred);
+    if (!pushRes) {
+        AbortImpl();
+        return;
+    }
 }
 
 template <>
@@ -1368,9 +1403,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
     >;
 
     for (auto&& [key, partitionStream] : PartitionStreams) {
-        EventsQueue->PushEvent(partitionStream, TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
+        bool pushRes = EventsQueue->PushEvent(partitionStream, TSingleClusterReadSessionImpl<UseMigrationProtocol>::weak_from_this(),
                                 TClosedEvent(std::move(partitionStream), TClosedEvent::EReason::ConnectionLost),
                                deferred);
+        if (!pushRes) {
+            AbortImpl();
+            return;
+        }
     }
     PartitionStreams.clear();
     CookieMapping.ClearMapping();
@@ -1447,6 +1486,15 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
         AbortImpl();
     }
 }
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent) {
+    TDeferredActions<UseMigrationProtocol> deferred;
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing session to cluster: " << closeEvent.DebugString());
+
+    EventsQueue->Close(closeEvent, deferred);
+}
+
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
@@ -1732,16 +1780,16 @@ TReadSessionEventsQueue<UseMigrationProtocol>::TReadSessionEventsQueue(
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionEventsQueue<UseMigrationProtocol>::PushEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
+bool TReadSessionEventsQueue<UseMigrationProtocol>::PushEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                                                               std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> /*session*/,
                                                               typename TAReadSessionEvent<UseMigrationProtocol>::TEvent event,
                                                               TDeferredActions<UseMigrationProtocol>& deferred)
 {
-    if (TParent::Closed) {
-        return;
-    }
-
     with_lock (TParent::Mutex) {
+        if (TParent::Closed) {
+            return false;
+        }
+        //TODO: check session closed event and return false
         using TClosedEvent = std::conditional_t<
             UseMigrationProtocol,
                 NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent,
@@ -1757,6 +1805,7 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::PushEvent(TIntrusivePtr<TPar
 
         SignalReadyEventsImpl(stream, deferred);
     }
+    return true;
 }
 
 template <bool UseMigrationProtocol>
@@ -1788,19 +1837,19 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::SignalEventImpl(
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionEventsQueue<UseMigrationProtocol>::PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+bool TReadSessionEventsQueue<UseMigrationProtocol>::PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                                                   size_t batch,
                                                                   size_t message,
                                                                   TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
                                                                   std::atomic<bool>& ready)
 {
-    if (this->Closed) {
-        return;
-    }
-
     with_lock (TParent::Mutex) {
+        if (this->Closed) {
+            return false;
+        }
         partitionStream->InsertDataEvent(batch, message, parent, ready);
     }
+    return true;
 }
 
 template <bool UseMigrationProtocol>
@@ -1990,6 +2039,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxBy
             if (TParent::HasEventsImpl()) {
                 eventInfo = GetEventImpl(maxByteSize, accumulator);
             }
+
         } while (block && !eventInfo);
     }
 
@@ -2241,11 +2291,15 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
 
             task.Add(CurrentDecompressingMessage.first, CurrentDecompressingMessage.second, size, estimatedDecompressedSize);
 
-            session->GetEventsQueue()->PushDataEvent(partitionStream,
+            bool pushRes = session->GetEventsQueue()->PushDataEvent(partitionStream,
                                                      CurrentDecompressingMessage.first,
                                                      CurrentDecompressingMessage.second,
                                                      TDataDecompressionInfo::shared_from_this(),
                                                      ReadyThresholds.back().Ready);
+            if (!pushRes) {
+                session->AbortImpl();
+                return;
+            }
         }
 
         ++CurrentDecompressingMessage.second;
@@ -2528,32 +2582,31 @@ void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typena
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent) {
-    ErrorHandler = errorHandler;
+void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent) {
+    Session = session;
     SessionClosedEvent.ConstructInPlace(std::move(closeEvent));
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, EStatus statusCode, NYql::TIssues&& issues) {
-    DeferAbortSession(errorHandler, TASessionClosedEvent<UseMigrationProtocol>(statusCode, std::move(issues)));
+void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, EStatus statusCode, NYql::TIssues&& issues) {
+    DeferAbortSession(session, TASessionClosedEvent<UseMigrationProtocol>(statusCode, std::move(issues)));
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, EStatus statusCode, const TString& message) {
+void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, EStatus statusCode, const TString& message) {
     NYql::TIssues issues;
     issues.AddIssue(message);
-    DeferAbortSession(errorHandler, statusCode, std::move(issues));
+    DeferAbortSession(session, statusCode, std::move(issues));
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TPlainStatus&& status) {
-    DeferAbortSession(errorHandler, TASessionClosedEvent<UseMigrationProtocol>(std::move(status)));
+void TDeferredActions<UseMigrationProtocol>::DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, TPlainStatus&& status) {
+    DeferAbortSession(session, TASessionClosedEvent<UseMigrationProtocol>(std::move(status)));
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TPlainStatus&& status) {
+void TDeferredActions<UseMigrationProtocol>::DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, TPlainStatus&& status) {
     Session = std::move(session);
-    ErrorHandler = errorHandler;
     ReconnectionStatus = std::move(status);
 }
 
@@ -2609,17 +2662,16 @@ void TDeferredActions<UseMigrationProtocol>::StartExecutorTasks() {
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::AbortSession() {
     if (SessionClosedEvent) {
-        Y_ASSERT(ErrorHandler);
-        ErrorHandler->AbortSession(std::move(*SessionClosedEvent));
+        Y_VERIFY(Session);
+        Session->AbortSession(std::move(*SessionClosedEvent));
     }
 }
 
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::Reconnect() {
     if (Session) {
-        Y_ASSERT(ErrorHandler);
         if (!Session->Reconnect(ReconnectionStatus)) {
-            ErrorHandler->AbortSession(std::move(ReconnectionStatus));
+            Session->AbortSession(std::move(ReconnectionStatus));
         }
     }
 }
@@ -2628,13 +2680,6 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
-    }
-}
-
-template<bool UseMigrationProtocol>
-void TErrorHandler<UseMigrationProtocol>::AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent) {
-    if (auto session = Session.lock()) {
-        session->Abort(std::move(closeEvent));
     }
 }
 

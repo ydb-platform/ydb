@@ -179,6 +179,9 @@ message TSchemeLimits {
 
     optional uint64 MaxPQPartitions = 14;
     optional uint64 MaxTableCdcStreams = 15;
+
+    optional uint64 MaxExports = 16;
+    optional uint64 MaxImports = 17;
 }
 
 message TEvInitTenantSchemeShard {

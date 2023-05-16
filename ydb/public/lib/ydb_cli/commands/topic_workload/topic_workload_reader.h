@@ -19,6 +19,7 @@ namespace NYdb {
             std::shared_ptr<std::atomic_uint> StartedCount;
 
             ui32 ConsumerIdx;
+            ui64 ReaderIdx;
         };
 
         class TTopicWorkloadReader {

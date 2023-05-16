@@ -3,6 +3,8 @@ items:
   href: index.md
 - name: Selecting a primary key for maximum performance
   href: pk_scalability.md
+- name: Selecting a primary key for maximum analytical table performance
+  href: pk-olap-scalability.md
 - name: Schema design
   href: schema_design.md
   hidden: true

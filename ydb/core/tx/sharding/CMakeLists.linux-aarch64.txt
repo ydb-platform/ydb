@@ -26,4 +26,5 @@ target_sources(core-tx-sharding PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/sharding.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/xx_hash.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sharding/unboxed_reader.cpp
 )

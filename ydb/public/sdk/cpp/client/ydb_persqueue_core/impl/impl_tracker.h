@@ -72,6 +72,11 @@ public:
     };
 
 public:
+    ~TImplTracker() {
+        // to synchronize with last Decrement() in other thread
+        TGuard guard(Lock);
+    }
+
     std::shared_ptr<TWire> MakeTrackedWire() {
         return std::make_shared<TWire>(*this);
     }

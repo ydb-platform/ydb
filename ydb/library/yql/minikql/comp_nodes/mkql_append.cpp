@@ -40,7 +40,7 @@ public:
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
 
-        if (IsVoid) {
+        if constexpr (IsVoid) {
             const auto work = BasicBlock::Create(context, "work", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
             const auto result = PHINode::Create(left->getType(), 2, "result", done);
@@ -56,7 +56,7 @@ public:
             if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(left->getType(), {factory->getType(), left->getType(), right->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                const auto res = CallInst::Create(funcPtr, {factory, left, right}, "res", block);
+                const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
                 result->addIncoming(res, block);
             } else {
                 const auto retPtr = new AllocaInst(left->getType(), 0U, "ret_ptr", block);
@@ -65,8 +65,8 @@ public:
                 new StoreInst(right, itemPtr, block);
                 const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), retPtr->getType(), itemPtr->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                CallInst::Create(funcPtr, {factory, retPtr, retPtr, itemPtr}, "", block);
-                const auto res = new LoadInst(retPtr, "res", block);
+                CallInst::Create(funType, funcPtr, {factory, retPtr, retPtr, itemPtr}, "", block);
+                const auto res = new LoadInst(left->getType(), retPtr, "res", block);
                 result->addIncoming(res, block);
             }
 
@@ -78,7 +78,7 @@ public:
             if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(left->getType(), {factory->getType(), left->getType(), right->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                const auto res = CallInst::Create(funcPtr, {factory, left, right}, "res", block);
+                const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
                 return res;
             } else {
                 const auto retPtr = new AllocaInst(left->getType(), 0U, "ret_ptr", block);
@@ -87,8 +87,8 @@ public:
                 new StoreInst(right, itemPtr, block);
                 const auto funType = FunctionType::get(Type::getVoidTy(context), {factory->getType(), retPtr->getType(), retPtr->getType(), itemPtr->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-                CallInst::Create(funcPtr, {factory, retPtr, retPtr, itemPtr}, "", block);
-                const auto res = new LoadInst(retPtr, "res", block);
+                CallInst::Create(funType, funcPtr, {factory, retPtr, retPtr, itemPtr}, "", block);
+                const auto res = new LoadInst(left->getType(), retPtr, "res", block);
                 return res;
             }
         }

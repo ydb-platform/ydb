@@ -2,7 +2,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <util/generic/ptr.h>
-#include "kqp_event_ids.h"
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 

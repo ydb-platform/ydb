@@ -12,36 +12,33 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
             return;
         }
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
+        ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size());
     Y_VERIFY(!ReadyFlag);
-    Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchNo()));
+    Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchAddress().GetBatchGranuleIdx()));
     if (batch && batch->num_rows()) {
-        if (batchInfo.IsSortableInGranule()) {
-            SortableBatches.emplace_back(batch);
-        } else {
-            NonSortableBatches.emplace_back(batch);
-        }
+        RecordBatches.emplace_back(batch);
 
+        auto& indexInfo = Owner->GetReadMetadata()->GetIndexInfo();
         if (!batchInfo.IsDuplicationsAvailable()) {
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
+            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey(), false));
         } else {
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "dup_portion_on_ready");
-            Y_VERIFY_DEBUG(NArrow::IsSorted(batch, Owner->GetReadMetadata()->IndexInfo.GetReplaceKey(), false));
+            Y_VERIFY_DEBUG(NArrow::IsSorted(batch, indexInfo.GetReplaceKey(), false));
             Y_VERIFY(IsDuplicationsAvailable());
             BatchesToDedup.insert(batch.get());
         }
     }
     Owner->OnBatchReady(batchInfo, batch);
-    if (WaitBatches.empty()) {
-        ReadyFlag = true;
-        Owner->OnGranuleReady(*this);
-    }
+    CheckReady();
 }
 
-NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const ui32 batchNo, const TPortionInfo& portionInfo) {
+NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const TPortionInfo& portionInfo) {
     Y_VERIFY(!ReadyFlag);
-    WaitBatches.emplace(batchNo);
-    Batches.emplace_back(TBatch(batchNo, *this, portionInfo));
-    Y_VERIFY(GranuleBatchNumbers.emplace(batchNo).second);
+    ui32 batchGranuleIdx = Batches.size();
+    WaitBatches.emplace(batchGranuleIdx);
+    Batches.emplace_back(TBatch(TBatchAddress(GranuleIdx, batchGranuleIdx), *this, portionInfo));
+    Y_VERIFY(GranuleBatchNumbers.emplace(batchGranuleIdx).second);
     Owner->OnNewBatch(Batches.back());
     return Batches.back();
 }
@@ -61,52 +58,73 @@ bool TGranule::OnFilterReady(TBatch& batchInfo) {
     return Owner->GetSortingPolicy()->OnFilterReady(batchInfo, *this, *Owner);
 }
 
-std::deque<TBatch*> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata) {
-    std::deque<TBatch*> batches;
+std::deque<TGranule::TBatchForMerge> TGranule::SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata) {
+    std::deque<TBatchForMerge> batches;
     for (auto&& i : Batches) {
-        batches.emplace_back(&i);
+        std::shared_ptr<TSortableBatchPosition> from;
+        std::shared_ptr<TSortableBatchPosition> to;
+        i.GetPKBorders(reverse, readMetadata->GetIndexInfo(), from, to);
+        batches.emplace_back(TBatchForMerge(&i, from, to));
     }
-    const int reverseKff = reverse ? -1 : 0;
-    const auto pred = [reverseKff, readMetadata](const TBatch* l, const TBatch* r) {
-        if (l->IsSortableInGranule() && r->IsSortableInGranule()) {
-            return l->GetPortionInfo().CompareMinByPk(r->GetPortionInfo(), readMetadata->IndexInfo) * reverseKff < 0;
-        } else if (l->IsSortableInGranule()) {
-            return false;
-        } else if (r->IsSortableInGranule()) {
-            return true;
-        } else {
-            return false;
+    std::sort(batches.begin(), batches.end());
+    ui32 currentPoolId = 0;
+    std::map<TSortableBatchPosition, ui32> poolIds;
+    for (auto&& i : batches) {
+        if (!i.GetFrom() && !i.GetTo()) {
+            continue;
         }
-    };
-    std::sort(batches.begin(), batches.end(), pred);
-    bool nonCompactedSerial = true;
-    for (ui32 i = 0; i + 1 < batches.size(); ++i) {
-        if (batches[i]->IsSortableInGranule()) {
-            auto& l = *batches[i];
-            auto& r = *batches[i + 1];
-            Y_VERIFY(r.IsSortableInGranule());
-            Y_VERIFY(l.GetPortionInfo().CompareSelfMaxItemMinByPk(r.GetPortionInfo(), readMetadata->IndexInfo) * reverseKff <= 0);
-            nonCompactedSerial = false;
-        } else {
-            Y_VERIFY(nonCompactedSerial);
+        if (i.GetFrom()) {
+            auto it = poolIds.rbegin();
+            for (; it != poolIds.rend(); ++it) {
+                if (it->first.Compare(*i.GetFrom()) < 0) {
+                    break;
+                }
+            }
+            if (it != poolIds.rend()) {
+                i.SetPoolId(it->second);
+                if (i.GetTo()) {
+                    poolIds.erase(it->first);
+                    poolIds.emplace(*i.GetTo(), *i.GetPoolId());
+                } else {
+                    poolIds.erase(it->first);
+                }
+            } else if (i.GetTo()) {
+                i.SetPoolId(++currentPoolId);
+                poolIds.emplace(*i.GetTo(), *i.GetPoolId());
+            }
         }
     }
     return batches;
 }
 
 void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
-    if (!batch || !batch->num_rows()) {
+    Y_VERIFY(!NotIndexedBatchReadyFlag || !batch);
+    if (!NotIndexedBatchReadyFlag) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)("batch_no", "add_not_indexed_batch")("count", WaitBatches.size());
+    } else {
         return;
     }
-    AFL_ERROR(NKikimrServices::KQP_COMPUTE)("event", "add_not_indexed_batch");
-    Y_VERIFY(NonSortableBatches.empty());
-    Y_VERIFY(SortableBatches.empty());
-    Y_VERIFY(!NotIndexedBatch);
-    NotIndexedBatch = batch;
-    if (Owner->GetReadMetadata()->Program) {
-        NotIndexedBatchFutureFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Owner->GetReadMetadata()->Program));
+    NotIndexedBatchReadyFlag = true;
+    if (batch && batch->num_rows()) {
+        Y_VERIFY(!NotIndexedBatch);
+        NotIndexedBatch = batch;
+        if (NotIndexedBatch) {
+            RecordBatches.emplace_back(NotIndexedBatch);
+        }
+        if (Owner->GetReadMetadata()->Program) {
+            NotIndexedBatchFutureFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Owner->GetReadMetadata()->Program));
+        }
+        DuplicationsAvailableFlag = true;
     }
-    DuplicationsAvailableFlag = true;
+    CheckReady();
+    Owner->Wakeup(*this);
+}
+
+void TGranule::CheckReady() {
+    if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
+        ReadyFlag = true;
+        Owner->OnGranuleReady(*this);
+    }
 }
 
 }

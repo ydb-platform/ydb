@@ -7,8 +7,12 @@ namespace NKikimr::NOlap {
 class TFetchBlobsQueue {
 private:
     bool StoppedFlag = false;
-    YDB_ACCESSOR_DEF(std::deque<TBlobRange>, IteratorBlobsSequential);
+    std::deque<TBlobRange> IteratorBlobsSequential;
 public:
+    const std::deque<TBlobRange>& GetIteratorBlobsSequential() const noexcept {
+        return IteratorBlobsSequential;
+    }
+
     bool IsStopped() const {
         return StoppedFlag;
     }

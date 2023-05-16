@@ -19,6 +19,12 @@ get_built_tool_path(
   tools/enum_parser/enum_parser
   enum_parser
 )
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(cpp-actors-core)
 target_link_libraries(cpp-actors-core PUBLIC
@@ -84,4 +90,9 @@ generate_enum_serilization(cpp-actors-core
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor.h
   INCLUDE_HEADERS
   library/cpp/actors/core/actor.h
+)
+generate_enum_serilization(cpp-actors-core
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log_iface.h
+  INCLUDE_HEADERS
+  library/cpp/actors/core/log_iface.h
 )

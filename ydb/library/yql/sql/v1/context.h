@@ -273,7 +273,9 @@ namespace NSQLTranslationV1 {
         // see YQL-10265
         bool AnsiCurrentRow = false;
         TMaybe<bool> YsonCastToString;
-        THashMap<TString, TMaybe<std::pair<TString, TString>>> Libraries; // alias -> optional file with token
+        using TLiteralWithPosition = std::pair<TString, TPosition>;
+        using TLibraryStuff = std::tuple<TPosition, std::optional<TLiteralWithPosition>, std::optional<TLiteralWithPosition>>;
+        std::unordered_map<TString, TLibraryStuff> Libraries; // alias -> optional file with token
         THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;

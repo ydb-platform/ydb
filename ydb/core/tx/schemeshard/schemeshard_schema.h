@@ -725,6 +725,8 @@ struct Schema : NIceDb::Schema {
         struct DiskQuotaExceeded : Column<25, NScheme::NTypeIds::Bool> {};
         struct SecurityStateVersion : Column<26, NScheme::NTypeIds::Uint64> {};
         struct TableCdcStreamsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
+        struct ExportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct ImportsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -754,7 +756,9 @@ struct Schema : NIceDb::Schema {
             StateVersion,
             DiskQuotaExceeded,
             SecurityStateVersion,
-            TableCdcStreamsLimit
+            TableCdcStreamsLimit,
+            ExportsLimit,
+            ImportsLimit
         >;
     };
 
@@ -1538,9 +1542,10 @@ struct Schema : NIceDb::Schema {
         struct Mode : Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamModeInvalid; };
         struct Format : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamFormat; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamFormatInvalid; };
         struct VirtualTimestamps : Column<7, NScheme::NTypeIds::Bool> {};
+        struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format, VirtualTimestamps>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format, VirtualTimestamps, AwsRegion>;
     };
 
     struct CdcStreamAlterData : Table<96> {
@@ -1551,9 +1556,10 @@ struct Schema : NIceDb::Schema {
         struct Mode : Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamModeInvalid; };
         struct Format : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamFormat; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamFormatInvalid; };
         struct VirtualTimestamps : Column<7, NScheme::NTypeIds::Bool> {};
+        struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format, VirtualTimestamps>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format, VirtualTimestamps, AwsRegion>;
     };
 
     struct CdcStreamScanShardStatus : Table<103> {

@@ -98,7 +98,6 @@ namespace NKikimr::NSchemeShard {
         bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
         bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, IErrorCollector& errors) const;
 
-        static bool UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
         static bool IsAllowedType(ui32 typeId);
         static bool IsAllowedFirstPkType(ui32 typeId);
     };

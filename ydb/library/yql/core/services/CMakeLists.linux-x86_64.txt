@@ -36,6 +36,7 @@ target_sources(yql-core-services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/yql_eval_expr.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/yql_eval_params.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/yql_out_transformers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/yql_lineage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/yql_plan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/services/yql_transform_pipeline.cpp
 )

@@ -176,7 +176,7 @@ private:
         auto block = main;
 
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -184,8 +184,8 @@ private:
         const auto pairPtr = new AllocaInst(pairType, 0U, "pair_ptr", block);
         new StoreInst(ConstantAggregateZero::get(pairType), pairPtr, block);
 
-        const auto keyPtr = GetElementPtrInst::CreateInBounds(pairPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "key_ptr", block);
-        const auto payPtr = GetElementPtrInst::CreateInBounds(pairPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 1)}, "pay_ptr", block);
+        const auto keyPtr = GetElementPtrInst::CreateInBounds(pairType, pairPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "key_ptr", block);
+        const auto payPtr = GetElementPtrInst::CreateInBounds(pairType, pairPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 1)}, "pay_ptr", block);
 
         const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::NextPair>(statusType, container, codegen, block, keyPtr, payPtr);
 
@@ -194,11 +194,12 @@ private:
 
         SafeUnRefUnboxed(valuePtr, ctx, block);
 
-        const auto itemsPtr = new AllocaInst(PointerType::getUnqual(pairType), 0U, "items_ptr", block);
+        const auto itemsType = PointerType::getUnqual(pairType);
+        const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", block);
         const auto output = ResPair.GenNewArray(2U, itemsPtr, ctx, block);
         AddRefBoxed(output, ctx, block);
-        const auto items = new LoadInst(itemsPtr, "items", block);
-        const auto pair = new LoadInst(pairPtr, "pair", block);
+        const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
+        const auto pair = new LoadInst(pairType, pairPtr, "pair", block);
         new StoreInst(pair, items, block);
         new StoreInst(output, valuePtr, block);
         BranchInst::Create(done, block);

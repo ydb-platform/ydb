@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "scalars.h"
 
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NOlap {
@@ -13,37 +13,77 @@ struct TCompression {
     std::optional<int> Level;
 };
 
-struct TTierInfo {
+class TTierInfo {
+private:
     TString Name;
-    TInstant EvictBorder;
     TString EvictColumnName;
-    std::shared_ptr<arrow::Field> EvictColumn;
-    std::optional<TCompression> Compression;
-    ui32 TtlUnitsInSecond;
+    TInstant EvictBorder;
     bool NeedExport = false;
 
+    ui32 TtlUnitsInSecond;
+    std::optional<TCompression> Compression;
+    mutable std::shared_ptr<arrow::Scalar> Scalar;
+
+public:
     TTierInfo(const TString& tierName, TInstant evictBorder, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
-        , EvictBorder(evictBorder)
         , EvictColumnName(column)
+        , EvictBorder(evictBorder)
         , TtlUnitsInSecond(unitsInSecond)
     {
         Y_VERIFY(!Name.empty());
         Y_VERIFY(!EvictColumnName.empty());
     }
 
-    std::shared_ptr<arrow::Scalar> EvictScalar() const {
+    const TString& GetName() const {
+        return Name;
+    }
+
+    const TString& GetEvictColumnName() const {
+        return EvictColumnName;
+    }
+
+    const TInstant GetEvictBorder() const {
+        return EvictBorder;
+    }
+
+    bool GetNeedExport() const {
+        return NeedExport;
+    }
+
+    TTierInfo& SetNeedExport(const bool value) {
+        NeedExport = value;
+        return *this;
+    }
+
+    TTierInfo& SetCompression(const TCompression& value) {
+        Compression = value;
+        return *this;
+    }
+
+    const std::optional<TCompression> GetCompression() const {
+        if (NeedExport) {
+            return {};
+        }
+        return Compression;
+    }
+
+    std::shared_ptr<arrow::Field> GetEvictColumn(const std::shared_ptr<arrow::Schema>& schema) const {
+        return schema->GetFieldByName(EvictColumnName);
+    }
+
+    std::shared_ptr<arrow::Scalar> EvictScalar(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Scalar) {
             return Scalar;
         }
+        auto evictColumn = GetEvictColumn(schema);
+        Y_VERIFY(evictColumn);
 
         ui32 multiplier = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
-
-        Y_VERIFY(EvictColumn);
-        switch (EvictColumn->type()->id()) {
+        switch (evictColumn->type()->id()) {
             case arrow::Type::TIMESTAMP:
                 Scalar = std::make_shared<arrow::TimestampScalar>(
-                    EvictBorder.MicroSeconds(), arrow::timestamp(arrow::TimeUnit::MICRO));
+                EvictBorder.MicroSeconds(), arrow::timestamp(arrow::TimeUnit::MICRO));
                 break;
             case arrow::Type::UINT16: // YQL Date
                 Scalar = std::make_shared<arrow::UInt16Scalar>(EvictBorder.Days());
@@ -73,12 +113,10 @@ struct TTierInfo {
                 *Compression->Level : arrow::util::kUseDefaultCompressionLevel);
         return sb;
     }
-
-private:
-    mutable std::shared_ptr<arrow::Scalar> Scalar;
 };
 
-struct TTierRef {
+class TTierRef {
+public:
     TTierRef(const std::shared_ptr<TTierInfo>& tierInfo)
         : Info(tierInfo)
     {
@@ -86,17 +124,17 @@ struct TTierRef {
     }
 
     bool operator < (const TTierRef& b) const {
-        if (Info->EvictBorder < b.Info->EvictBorder) {
+        if (Info->GetEvictBorder() < b.Info->GetEvictBorder()) {
             return true;
-        } else if (Info->EvictBorder == b.Info->EvictBorder) {
-            return Info->Name > b.Info->Name; // add stability: smaller name is hotter
+        } else if (Info->GetEvictBorder() == b.Info->GetEvictBorder()) {
+            return Info->GetName() > b.Info->GetName(); // add stability: smaller name is hotter
         }
         return false;
     }
 
     bool operator == (const TTierRef& b) const {
-        return Info->EvictBorder == b.Info->EvictBorder
-            && Info->Name == b.Info->Name;
+        return Info->GetEvictBorder() == b.Info->GetEvictBorder()
+            && Info->GetName() == b.Info->GetName();
     }
 
     const TTierInfo& Get() const {
@@ -107,10 +145,20 @@ private:
     std::shared_ptr<TTierInfo> Info;
 };
 
-struct TTiering {
-    THashMap<TString, std::shared_ptr<TTierInfo>> TierByName;
-    TSet<TTierRef> OrderedTiers; // Tiers ordered by border
+class TTiering {
+    using TTiersMap = THashMap<TString, std::shared_ptr<TTierInfo>>;
+    TTiersMap TierByName;
+    TSet<TTierRef> OrderedTiers;
+public:
     std::shared_ptr<TTierInfo> Ttl;
+
+    const TTiersMap& GetTierByName() const {
+        return TierByName;
+    }
+
+    const TSet<TTierRef>& GetOrderedTiers() const {
+        return OrderedTiers;
+    }
 
     bool HasTiers() const {
         return !OrderedTiers.empty();
@@ -119,23 +167,23 @@ struct TTiering {
     void Add(const std::shared_ptr<TTierInfo>& tier) {
         if (HasTiers()) {
             // TODO: support different ttl columns
-            Y_VERIFY(tier->EvictColumnName == OrderedTiers.begin()->Get().EvictColumnName);
+            Y_VERIFY(tier->GetEvictColumnName() == OrderedTiers.begin()->Get().GetEvictColumnName());
         }
 
-        TierByName.emplace(tier->Name, tier);
+        TierByName.emplace(tier->GetName(), tier);
         OrderedTiers.emplace(tier);
     }
 
     TString GetHottestTierName() const {
         if (OrderedTiers.size()) {
-            return OrderedTiers.rbegin()->Get().Name; // hottest one
+            return OrderedTiers.rbegin()->Get().GetName(); // hottest one
         }
         return {};
     }
 
-    std::shared_ptr<arrow::Scalar> EvictScalar() const {
-        auto ttlTs = Ttl ? Ttl->EvictScalar() : nullptr;
-        auto tierTs = OrderedTiers.empty() ? nullptr : OrderedTiers.begin()->Get().EvictScalar();
+    std::shared_ptr<arrow::Scalar> EvictScalar(const std::shared_ptr<arrow::Schema>& schema) const {
+        auto ttlTs = Ttl ? Ttl->EvictScalar(schema) : nullptr;
+        auto tierTs = OrderedTiers.empty() ? nullptr : OrderedTiers.begin()->Get().EvictScalar(schema);
         if (!ttlTs) {
             return tierTs;
         } else if (!tierTs) {
@@ -148,7 +196,7 @@ struct TTiering {
         auto it = TierByName.find(name);
         if (it != TierByName.end()) {
             Y_VERIFY(!name.empty());
-            return it->second->Compression;
+            return it->second->GetCompression();
         }
         return {};
     }
@@ -157,7 +205,7 @@ struct TTiering {
         auto it = TierByName.find(name);
         if (it != TierByName.end()) {
             Y_VERIFY(!name.empty());
-            return it->second->NeedExport;
+            return it->second->GetNeedExport();
         }
         return false;
     }
@@ -165,10 +213,10 @@ struct TTiering {
     THashSet<TString> GetTtlColumns() const {
         THashSet<TString> out;
         if (Ttl) {
-            out.insert(Ttl->EvictColumnName);
+            out.insert(Ttl->GetEvictColumnName());
         }
         for (auto& [tierName, tier] : TierByName) {
-            out.insert(tier->EvictColumnName);
+            out.insert(tier->GetEvictColumnName());
         }
         return out;
     }

@@ -134,7 +134,7 @@ public:
         const auto slow = BasicBlock::Create(context, "slow", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        if (IsOptional) {
+        if constexpr (IsOptional) {
             const auto zero = ConstantInt::get(cache->getType(), 0ULL);
             const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, cache, zero, "check", block);
 
@@ -158,8 +158,8 @@ public:
 
         block = fast;
         const auto index = ConstantInt::get(Type::getInt32Ty(context), this->Index);
-        const auto ptr = GetElementPtrInst::CreateInBounds(elements, {index}, "ptr", block);
-        const auto item = new LoadInst(ptr, "item", block);
+        const auto ptr = GetElementPtrInst::CreateInBounds(cache->getType(), elements, {index}, "ptr", block);
+        const auto item = new LoadInst(cache->getType(), ptr, "item", block);
         ValueAddRef(this->GetRepresentation(), item, ctx, block);
         new StoreInst(item, pointer, block);
         BranchInst::Create(done, block);

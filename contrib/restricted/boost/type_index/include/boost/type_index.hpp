@@ -21,7 +21,7 @@
 #endif
 
 #if defined(BOOST_TYPE_INDEX_USER_TYPEINDEX)
-#   include BOOST_TYPE_INDEX_USER_TYPEINDEX
+#   error #include BOOST_TYPE_INDEX_USER_TYPEINDEX
 #   ifdef BOOST_HAS_PRAGMA_DETECT_MISMATCH
 #       pragma detect_mismatch( "boost__type_index__abi", "user defined type_index class is used: " BOOST_STRINGIZE(BOOST_TYPE_INDEX_USER_TYPEINDEX))
 #   endif

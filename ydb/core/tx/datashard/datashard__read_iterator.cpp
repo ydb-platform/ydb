@@ -4,7 +4,7 @@
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 
-#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
 #include <util/system/hp_timer.h>
 
@@ -20,7 +20,7 @@ constexpr ui64 MinRowsPerCheck = 1000;
 
 class TRowCountBlockBuilder : public IBlockBuilder {
 public:
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
     {
         return true;
     }
@@ -47,7 +47,7 @@ private:
 class TCellBlockBuilder : public IBlockBuilder {
 public:
     bool Start(
-        const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
         ui64 maxRowsInBlock,
         ui64 maxBytesInBlock,
         TString& err) override
@@ -76,7 +76,7 @@ public:
     TVector<TOwnedCellVec> FlushBatch() { return std::move(Rows); }
 
 private:
-    TVector<std::pair<TString, NScheme::TTypeInfo>> Columns;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
     TVector<TOwnedCellVec> Rows;
     ui64 BytesCount = 0;
@@ -1700,12 +1700,10 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         auto it = Self->ReadIterators.find(ReadId);
-        if (it == Self->ReadIterators.end()) {
-            // iterator aborted
+        if (it == Self->ReadIterators.end() && !Op) {
+            // iterator aborted before we could start operation
             return true;
         }
-
-        auto& state = *it->second;
 
         try {
             // If tablet is in follower mode then we should sync scheme
@@ -1719,13 +1717,18 @@ public:
                 }
 
                 if (status != NKikimrTxDataShard::TError::OK) {
+                    Y_VERIFY_DEBUG(!Op);
+                    if (Y_UNLIKELY(it == Self->ReadIterators.end())) {
+                        // iterator already aborted
+                        return true;
+                    }
                     std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
                     SetStatusError(
                         result->Record,
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage);
                     result->Record.SetReadId(ReadId.ReadId);
-                    SendViaSession(state.SessionId, ReadId.Sender, Self->SelfId(), result.release());
+                    SendViaSession(it->second->SessionId, ReadId.Sender, Self->SelfId(), result.release());
 
                     return true;
                 }

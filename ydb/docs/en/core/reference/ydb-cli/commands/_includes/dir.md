@@ -32,13 +32,13 @@ Examples:
 - Creating a directory at the database root
 
    ```bash
-   {{ ydb-cli }} --profile db1 scheme mkdir dir1
+   {{ ydb-cli }} --profile quickstart scheme mkdir dir1
    ```
 
 - Creating directories at the specified path from the database root
 
    ```bash
-   {{ ydb-cli }} --profile db1 scheme mkdir dir1/dir2/dir3
+   {{ ydb-cli }} --profile quickstart scheme mkdir dir1/dir2/dir3
    ```
 
 ## Deleting a directory {#rmdir}
@@ -116,13 +116,13 @@ EPathTypeDir, path state: EPathStateNoChanges, alive children: <count>
 In all CLI commands to which the object name is passed by the parameter, it can be specified with a directory, for example, in [`scheme describe`](../scheme-describe.md):
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme describe dir1/table_a
+{{ ydb-cli }} --profile quickstart scheme describe dir1/table_a
 ```
 
 The [`scheme ls`](../scheme-ls.md) command supports passing the path to the directory as a parameter:
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls dir1/dir2
+{{ ydb-cli }} --profile quickstart scheme ls dir1/dir2
 ```
 
 ## Using directories in YQL {#yql}

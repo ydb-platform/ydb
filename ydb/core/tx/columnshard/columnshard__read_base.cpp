@@ -1,151 +1,39 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard__read_base.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/formats/ssa_program_optimizer.h>
+#include <ydb/core/formats/arrow/ssa_program_optimizer.h>
 
 namespace NKikimr::NColumnShard {
 
+
 std::shared_ptr<NOlap::TReadMetadata>
-TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
+TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const NOlap::TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index,
                                  const TBatchCache& batchCache,
-                                 TString& error) const {
+                                 TString& error, const bool isReverse) const {
     Y_UNUSED(ctx);
 
     if (!insertTable || !index) {
-        return {};
+        return nullptr;
     }
 
-    if (read.PlanStep < Self->GetMinReadStep()) {
-        error = Sprintf("Snapshot %" PRIu64 ":%" PRIu64 " too old", read.PlanStep, read.TxId);
-        return {};
+    if (read.GetSnapshot().GetPlanStep() < Self->GetMinReadStep()) {
+        error = TStringBuilder() << "Snapshot too old: " << read.GetSnapshot();
+        return nullptr;
     }
 
-    const NOlap::TIndexInfo& indexInfo = index->GetIndexInfo();
-    auto spOut = std::make_shared<NOlap::TReadMetadata>(indexInfo);
-    auto& out = *spOut;
+    NOlap::TDataStorageAccessor dataAccessor(insertTable, index, batchCache);
+    auto readMetadata = std::make_shared<NOlap::TReadMetadata>(index->GetVersionedIndex(), read.GetSnapshot(), isReverse ? NOlap::TReadMetadata::ESorting::DESC : NOlap::TReadMetadata::ESorting::ASC);
 
-    out.PlanStep = read.PlanStep;
-    out.TxId = read.TxId;
-
-    // schemas
-
-    out.BlobSchema = indexInfo.ArrowSchema();
-    if (read.ColumnIds.size()) {
-        out.ResultSchema = indexInfo.ArrowSchema(read.ColumnIds);
-    } else if (read.ColumnNames.size()) {
-        out.ResultSchema = indexInfo.ArrowSchema(read.ColumnNames);
-    } else {
-        error = "Empty column list requested";
-        return {};
+    if (!readMetadata->Init(read, dataAccessor, error)) {
+        return nullptr;
     }
-
-    if (!out.BlobSchema) {
-        error = "Could not get BlobSchema.";
-        return {};
-    }
-
-    if (!out.ResultSchema) {
-        error = "Could not get ResultSchema.";
-        return {};
-    }
-
-    // insert table
-
-    out.CommittedBlobs = insertTable->Read(read.PathId, read.PlanStep, read.TxId);
-    for (auto& cmt : out.CommittedBlobs) {
-        if (auto batch = batchCache.Get(cmt.BlobId)) {
-            out.CommittedBatches.emplace(cmt.BlobId, batch);
-        }
-    }
-
-    // index
-
-    /// @note We could have column name changes between schema versions:
-    /// Add '1:foo', Drop '1:foo', Add '2:foo'. Drop should hide '1:foo' from reads.
-    /// It's expected that we have only one version on 'foo' in blob and could split them by schema {planStep:txId}.
-    /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
-    /// It's not possible for blobs with several columns. There should be a special logic for them.
-    TVector<TString> columns = read.ColumnNames;
-    if (!read.ColumnIds.empty()) {
-        columns = indexInfo.GetColumnNames(read.ColumnIds);
-    }
-    Y_VERIFY(!columns.empty(), "Empty column list");
-
-    { // Add more columns: snapshot, replace, predicate
-        // Key columns (replace, sort)
-        THashSet<TString> requiredColumns = indexInfo.GetRequiredColumns();
-
-        // Snapshot columns
-        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
-        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_TX_ID);
-
-        // Predicate columns
-        if (read.LessPredicate) {
-            for (auto& col : read.LessPredicate->ColumnNames()) {
-                requiredColumns.insert(col);
-            }
-        }
-        if (read.GreaterPredicate) {
-            for (auto& col : read.GreaterPredicate->ColumnNames()) {
-                requiredColumns.insert(col);
-            }
-        }
-
-        for (auto& col : columns) {
-            requiredColumns.erase(col);
-        }
-
-        for (auto& reqCol : requiredColumns) {
-            columns.push_back(reqCol);
-        }
-    }
-
-    out.LoadSchema = indexInfo.AddColumns(out.ResultSchema, columns);
-    if (!out.LoadSchema) {
-        return {};
-    }
-
-    if (read.LessPredicate) {
-        if (!read.LessPredicate->Good() ||
-            !read.LessPredicate->IsTo()) {
-            return {};
-        }
-        out.LessPredicate = read.LessPredicate;
-    }
-    if (read.GreaterPredicate) {
-        if (!read.GreaterPredicate->Good() ||
-            !read.GreaterPredicate->IsFrom()) {
-            return {};
-        }
-        out.GreaterPredicate = read.GreaterPredicate;
-    }
-
-    THashSet<ui32> columnIds;
-    for (auto& field : out.LoadSchema->fields()) {
-        TString column(field->name().data(), field->name().size());
-        columnIds.insert(indexInfo.GetColumnId(column));
-    }
-
-    out.Program = std::move(read.Program);
-    if (out.Program) {
-        for (auto& [id, name] : out.Program->SourceColumns) {
-            columnIds.insert(id);
-        }
-    }
-
-    if (read.ReadNothing) {
-        out.SelectInfo = std::make_shared<NOlap::TSelectInfo>();
-    } else {
-        out.SelectInfo = index->Select(read.PathId, {read.PlanStep, read.TxId}, columnIds,
-                                       out.GreaterPredicate, out.LessPredicate);
-    }
-    return spOut;
+    return readMetadata;
 }
 
 bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapProgramType programType,
-    TString serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver)
+    TString serializedProgram, NOlap::TReadDescription& read, const NOlap::IColumnResolver& columnResolver)
 {
     if (serializedProgram.empty()) {
         return true;

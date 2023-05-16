@@ -19,6 +19,12 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
+namespace NKikimr::NGRpcService {
+
+class IRequestCtxMtSafe;
+
+}
+
 namespace NKikimr::NKqp {
 
 const TStringBuf ParamNamePrefix = "%kqp%";
@@ -149,7 +155,7 @@ public:
 public:
     /* Compute */
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
-        TQueryData::TPtr params) = 0;
+        TQueryData::TPtr params, ui32 txIndex) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;
@@ -168,7 +174,8 @@ public:
         const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) = 0;
 
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
-         TQueryData::TPtr, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
+         TQueryData::TPtr, const TAstQuerySettings& settings, const NActors::TActorId& target,
+         std::shared_ptr<NGRpcService::IRequestCtxMtSafe> rpcCtx) = 0;
 };
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,

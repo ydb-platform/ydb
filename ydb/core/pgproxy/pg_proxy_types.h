@@ -40,6 +40,10 @@ struct TPGMessage {
     bool Empty() const {
         return GetDataSize() == 0;
     }
+
+    TString Dump() const {
+        return {};
+    }
 };
 
 struct TPGInitial : TPGMessage { // it's not true, because we don't receive message code from a network, but imply it on the start
@@ -119,6 +123,12 @@ struct TPGParameterStatus : TPGMessage {
         } else {
             return {};
         }
+    }
+};
+
+struct TPGSync : TPGMessage {
+    TPGSync() {
+        Message = 'S';
     }
 };
 

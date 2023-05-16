@@ -4,33 +4,31 @@
 
 namespace NKikimr::NColumnShard {
 
-class TScanCounters {
-private:
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, PortionBytes);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, FilterBytes);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, PostFilterBytes);
+struct TScanCounters {
+    NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr PostFilterBytes;
 
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, AssembleFilterCount);
+    NMonitoring::TDynamicCounters::TCounterPtr AssembleFilterCount;
 
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, FilterOnlyCount);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, FilterOnlyFetchedBytes);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, FilterOnlyUsefulBytes);
+    NMonitoring::TDynamicCounters::TCounterPtr FilterOnlyCount;
+    NMonitoring::TDynamicCounters::TCounterPtr FilterOnlyFetchedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr FilterOnlyUsefulBytes;
 
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, EmptyFilterCount);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, EmptyFilterFetchedBytes);
+    NMonitoring::TDynamicCounters::TCounterPtr EmptyFilterCount;
+    NMonitoring::TDynamicCounters::TCounterPtr EmptyFilterFetchedBytes;
 
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, OriginalRowsCount);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, FilteredRowsCount);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, SkippedBytes);
+    NMonitoring::TDynamicCounters::TCounterPtr OriginalRowsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr FilteredRowsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr SkippedBytes;
 
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, TwoPhasesCount);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, TwoPhasesFilterFetchedBytes);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, TwoPhasesFilterUsefulBytes);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, TwoPhasesPostFilterFetchedBytes);
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, TwoPhasesPostFilterUsefulBytes);
-public:
+    NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesCount;
+    NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesFilterFetchedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesFilterUsefulBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterFetchedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterUsefulBytes;
+
     TScanCounters(const TString& module = "Scan");
 };
-
 
 }

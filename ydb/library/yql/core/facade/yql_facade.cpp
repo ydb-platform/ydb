@@ -567,6 +567,53 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
     });
 }
 
+TProgram::TStatus TProgram::Lineage(const TString& username, IOutputStream* traceOut, IOutputStream* exprOut, bool withTypes) {
+    YQL_PROFILE_FUNC(TRACE);
+    auto m = &TProgram::LineageAsync;
+    return SyncExecution(this, m, username, traceOut, exprOut, withTypes);
+}
+
+TProgram::TFutureStatus TProgram::LineageAsync(const TString& username, IOutputStream* traceOut, IOutputStream* exprOut, bool withTypes) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
+    TypeCtx_->IsReadOnly = true;
+
+    Y_ENSURE(ExprRoot_, "Program not compiled yet");
+
+    ExprStream_ = exprOut;
+    Transformer_ = TTransformationPipeline(TypeCtx_)
+        .AddServiceTransformers()
+        .AddParametersEvaluation(*FunctionRegistry_)
+        .AddPreTypeAnnotation()
+        .AddExpressionEvaluation(*FunctionRegistry_)
+        .AddIOAnnotation()
+        .AddTypeAnnotation()
+        .AddPostTypeAnnotation()
+        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
+        .AddLineageOptimization(LineageStr_)
+        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
+        .Build();
+
+    TFuture<void> openSession = OpenSession(username);
+    if (!openSession.Initialized())
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+
+    SaveExprRoot();
+
+    return openSession.Apply([this](const TFuture<void>& f) {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
+        return AsyncTransformWithFallback(false);
+    });
+}
+
 TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exprOut, bool withTypes) {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::ValidateAsync;
@@ -672,9 +719,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
         .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddOptimization()
-        .Add(CreatePlanInfoTransformer(*TypeCtx_), "PlanInfo")
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
-        .Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput")
         .Build();
 
     TFuture<void> openSession = OpenSession(username);
@@ -745,6 +790,58 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 
     pipeline.Add(CreatePlanInfoTransformer(*TypeCtx_), "PlanInfo");
     pipelineConf.AfterOptimize(&pipeline);
+
+    Transformer_ = pipeline.Build();
+
+    TFuture<void> openSession = OpenSession(username);
+    if (!openSession.Initialized())
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+
+    SaveExprRoot();
+
+    return openSession.Apply([this](const TFuture<void>& f) {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
+        return AsyncTransformWithFallback(false);
+    });
+}
+
+TProgram::TStatus TProgram::LineageWithConfig(
+        const TString& username, const IPipelineConfigurator& pipelineConf)
+{
+    YQL_PROFILE_FUNC(TRACE);
+    auto m = &TProgram::LineageAsyncWithConfig;
+    return SyncExecution(this, m, username, pipelineConf);
+}
+
+TProgram::TFutureStatus TProgram::LineageAsyncWithConfig(
+        const TString& username, const IPipelineConfigurator& pipelineConf)
+{
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
+    TypeCtx_->IsReadOnly = true;
+
+    Y_ENSURE(ExprRoot_, "Program not compiled yet");
+
+    TTransformationPipeline pipeline(TypeCtx_);
+    pipelineConf.AfterCreate(&pipeline);
+    pipeline.AddServiceTransformers();
+    pipeline.AddParametersEvaluation(*FunctionRegistry_);
+    pipeline.AddPreTypeAnnotation();
+    pipeline.AddExpressionEvaluation(*FunctionRegistry_);
+    pipeline.AddIOAnnotation();
+    pipeline.AddTypeAnnotation();
+    pipeline.AddPostTypeAnnotation();
+    pipelineConf.AfterTypeAnnotation(&pipeline);
+
+    pipeline.AddLineageOptimization(LineageStr_);
 
     Transformer_ = pipeline.Build();
 
@@ -1064,7 +1161,7 @@ TMaybe<TString> TProgram::GetQueryAst() {
     return Nothing();
 }
 
-TMaybe<TString> TProgram::GetQueryPlan() {
+TMaybe<TString> TProgram::GetQueryPlan(const TPlanSettings& settings) {
     if (ExternalQueryPlan_) {
         return ExternalQueryPlan_;
     }
@@ -1074,7 +1171,7 @@ TMaybe<TString> TProgram::GetQueryPlan() {
         planStream.Reserve(DEFAULT_PLAN_BUF_SIZE);
 
         NYson::TYsonWriter writer(&planStream, OutputFormat_);
-        PlanBuilder_->WritePlan(writer, ExprRoot_);
+        PlanBuilder_->WritePlan(writer, ExprRoot_, settings);
 
         return planStream.Str();
     }
@@ -1250,6 +1347,10 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     }
     writer.OnEndMap();
     return out.Str();
+}
+
+TMaybe<TString> TProgram::GetLineage() {
+    return LineageStr_;
 }
 
 TProgram::TFutureStatus TProgram::ContinueAsync() {

@@ -27,6 +27,12 @@ public:
         CdcDataChange,
     };
 
+    struct TDocApiJsonOptions {
+        TString AwsRegion;
+        NKikimrSchemeOp::ECdcStreamMode StreamMode;
+        ui64 ShardId;
+    };
+
 public:
     ui64 GetOrder() const { return Order; }
     ui64 GetGroup() const { return Group; }
@@ -41,12 +47,14 @@ public:
     const TPathId& GetTableId() const { return TableId; }
     ui64 GetSchemaVersion() const { return SchemaVersion; }
 
-    void SerializeTo(NKikimrChangeExchange::TChangeRecord& record) const;
-    void SerializeTo(NJson::TJsonValue& json, bool virtualTimestamps) const;
+    void SerializeToProto(NKikimrChangeExchange::TChangeRecord& record) const;
+    void SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTimestamps) const;
+    void SerializeToDocApiJson(NJson::TJsonValue& json, const TDocApiJsonOptions& opts) const;
 
     TConstArrayRef<TCell> GetKey() const;
     i64 GetSeqNo() const;
     TString GetPartitionKey() const;
+    TInstant GetApproximateCreationDateTime() const;
 
     TString ToString() const;
     void Out(IOutputStream& out) const;

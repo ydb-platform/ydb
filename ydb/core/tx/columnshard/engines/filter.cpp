@@ -2,8 +2,8 @@
 #include "defs.h"
 #include "indexed_read_data.h"
 
-#include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/custom_registry.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/custom_registry.h>
 
 namespace NKikimr::NOlap {
 
@@ -11,12 +11,10 @@ class TSnapshotGetter {
 private:
     const arrow::UInt64Array::value_type* RawSteps;
     const arrow::UInt64Array::value_type* RawIds;
-    const ui64 PlanStep;
-    const ui64 TxId;
+    const TSnapshot Snapshot;
 public:
-    TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const ui64 planStep, const ui64 txId)
-        : PlanStep(planStep)
-        , TxId(txId)
+    TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const TSnapshot& snapshot)
+        : Snapshot(snapshot)
     {
         Y_VERIFY(steps);
         Y_VERIFY(ids);
@@ -28,118 +26,41 @@ public:
     }
 
     bool operator[](const ui32 idx) const {
-        return SnapLessOrEqual(RawSteps[idx], RawIds[idx], PlanStep, TxId);
+        return std::less_equal<TSnapshot>()(TSnapshot(RawSteps[idx], RawIds[idx]), Snapshot);
     }
 };
 
 NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
                                      const std::shared_ptr<arrow::Schema>& snapSchema,
-                                     ui64 planStep, ui64 txId) {
+                                     const TSnapshot& snapshot) {
     Y_VERIFY(batch);
     Y_VERIFY(snapSchema);
     Y_VERIFY(snapSchema->num_fields() == 2);
     auto steps = batch->GetColumnByName(snapSchema->fields()[0]->name());
     auto ids = batch->GetColumnByName(snapSchema->fields()[1]->name());
     NArrow::TColumnFilter result;
-    TSnapshotGetter getter(steps, ids, planStep, txId);
+    TSnapshotGetter getter(steps, ids, snapshot);
     result.Reset(steps->length(), std::move(getter));
-    return result;
-}
-
-NArrow::TColumnFilter MakeReplaceFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                    THashSet<NArrow::TReplaceKey>& keys) {
-    NArrow::TColumnFilter bits;
-    bits.Reset(batch->num_rows());
-
-    auto columns = std::make_shared<NArrow::TArrayVec>(batch->columns());
-
-    for (int i = 0; i < batch->num_rows(); ++i) {
-        NArrow::TReplaceKey key(columns, i);
-        bits.Add(keys.emplace(key).second);
-    }
-    return bits;
-}
-
-NArrow::TColumnFilter MakeReplaceFilterLastWins(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                            THashSet<NArrow::TReplaceKey>& keys) {
-    if (!batch->num_rows()) {
-        return {};
-    }
-
-    NArrow::TColumnFilter result;
-    result.Reset(batch->num_rows());
-
-    auto columns = std::make_shared<NArrow::TArrayVec>(batch->columns());
-
-    for (int i = batch->num_rows() - 1; i >= 0; --i) {
-        NArrow::TReplaceKey key(columns, i);
-        result.Add(keys.emplace(key).second);
-    }
-
     return result;
 }
 
 NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata) {
     Y_VERIFY(portion);
-    NArrow::TColumnFilter result;
-    if (readMetadata.PlanStep) {
+    NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
+    if (readMetadata.GetSnapshot().GetPlanStep()) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
-        result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.PlanStep, readMetadata.TxId));
-    }
-
-    if (readMetadata.LessPredicate) {
-        auto cmpType = readMetadata.LessPredicate->Inclusive ?
-            NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(portion, readMetadata.LessPredicate->Batch, cmpType));
-    }
-
-    if (readMetadata.GreaterPredicate) {
-        auto cmpType = readMetadata.GreaterPredicate->Inclusive ?
-            NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(portion, readMetadata.GreaterPredicate->Batch, cmpType));
+        result = result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.GetSnapshot()));
     }
 
     return result;
 }
 
 NArrow::TColumnFilter FilterNotIndexed(const std::shared_ptr<arrow::RecordBatch>& batch, const TReadMetadata& readMetadata) {
-    NArrow::TColumnFilter result;
-    if (readMetadata.LessPredicate) {
-        Y_VERIFY(NArrow::HasAllColumns(batch, readMetadata.LessPredicate->Batch->schema()));
-
-        auto cmpType = readMetadata.LessPredicate->Inclusive ?
-            NArrow::ECompareType::LESS_OR_EQUAL : NArrow::ECompareType::LESS;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(batch, readMetadata.LessPredicate->Batch, cmpType));
-    }
-
-    if (readMetadata.GreaterPredicate) {
-        Y_VERIFY(NArrow::HasAllColumns(batch, readMetadata.GreaterPredicate->Batch->schema()));
-
-        auto cmpType = readMetadata.GreaterPredicate->Inclusive ?
-            NArrow::ECompareType::GREATER_OR_EQUAL : NArrow::ECompareType::GREATER;
-        result.And(NArrow::TColumnFilter::MakePredicateFilter(batch, readMetadata.GreaterPredicate->Batch, cmpType));
-    }
-
-    return result;
+    return readMetadata.GetPKRangesFilter().BuildFilter(batch);
 }
 
 NArrow::TColumnFilter EarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch, std::shared_ptr<NSsa::TProgram> ssa) {
     return ssa->MakeEarlyFilter(batch, NArrow::GetCustomExecContext());
-}
-
-void ReplaceDupKeys(std::shared_ptr<arrow::RecordBatch>& batch,
-                    const std::shared_ptr<arrow::Schema>& replaceSchema, bool lastWins) {
-    THashSet<NArrow::TReplaceKey> replaces;
-
-    auto keyBatch = NArrow::ExtractColumns(batch, replaceSchema);
-
-    NArrow::TColumnFilter bits;
-    if (lastWins) {
-        bits = MakeReplaceFilterLastWins(keyBatch, replaces);
-    } else {
-        bits = MakeReplaceFilter(keyBatch, replaces);
-    }
-    Y_VERIFY(bits.Apply(batch));
 }
 
 }

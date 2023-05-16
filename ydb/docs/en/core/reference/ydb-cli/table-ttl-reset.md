@@ -1,6 +1,6 @@
 # Resetting TTL parameters
 
-Use the `table ttl reset` subcommand to disable [TTL](../../concepts/ttl.md) for the specified table.
+Use the `table ttl reset` subcommand to reset [TTL](../../concepts/ttl.md) for the specified table.
 
 General format of the command:
 
@@ -12,7 +12,7 @@ General format of the command:
 * `options`: [Parameters of the subcommand](#options).
 * `table path`: The table path.
 
-View a description of the TTL reset command:
+View the description of the TTL reset command:
 
 ```bash
 {{ ydb-cli }} table ttl reset --help
@@ -22,9 +22,9 @@ View a description of the TTL reset command:
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Disable TTL for the `series` table:
+Reset TTL for the `series` table:
 
 ```bash
-{{ ydb-cli }} -p db1 table ttl reset \
+{{ ydb-cli }} -p quickstart table ttl reset \
   series
 ```

@@ -1,5 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/docapi/traits.h>
+
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
@@ -1289,6 +1291,8 @@ public:
 
                                     if (to_lower(format) == "json") {
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+                                    } else if (to_lower(format) == "document_table_json") {
+                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));
@@ -1383,7 +1387,11 @@ public:
                 } else if (isColumn) {
                     future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
                 } else {
-                    future = Gateway->AlterTable(std::move(alterTableRequest), cluster);
+                    TMaybe<TString> requestType;
+                    if (!SessionCtx->Query().DocumentApiRestricted) {
+                        requestType = NKikimr::NDocApi::RequestType;
+                    }
+                    future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType);
                 }
             }
 

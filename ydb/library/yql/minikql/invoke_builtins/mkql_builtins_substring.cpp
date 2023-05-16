@@ -38,7 +38,7 @@ struct TSubString {
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(string->getType(), {string->getType(), start->getType(), count->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-            const auto result = CallInst::Create(funcPtr, {string, start, count}, "substring", block);
+            const auto result = CallInst::Create(funType, funcPtr, {string, start, count}, "substring", block);
             return result;
         } else {
             const auto ptrArg = new AllocaInst(string->getType(), 0U, "arg", block);
@@ -46,8 +46,8 @@ struct TSubString {
             new StoreInst(string, ptrArg, block);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {ptrResult->getType(), ptrArg->getType(), start->getType(), count->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-            CallInst::Create(funcPtr, {ptrResult, ptrArg, start, count}, "", block);
-            const auto result = new LoadInst(ptrResult, "substring", block);
+            CallInst::Create(funType, funcPtr, {ptrResult, ptrArg, start, count}, "", block);
+            const auto result = new LoadInst(string->getType(), ptrResult, "substring", block);
             return result;
         }
     }

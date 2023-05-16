@@ -1466,4 +1466,242 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
         TStringStream stream;
         stream << cfg;
     }
+
+    Y_UNIT_TEST(GetMetadata) {
+        {
+            TString str = R"(
+metadata:
+  version: 10
+  cluster: foo
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
+        }
+
+        {
+            TString str = R"(
+metadata:
+  version: 10
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
+            UNIT_ASSERT(!metadata.Cluster);
+        }
+
+        {
+            TString str = R"(
+metadata:
+  cluster: foo
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT(!metadata.Version);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
+        }
+
+        {
+            TString str = R"(
+metadata: {}
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT(!metadata.Version);
+            UNIT_ASSERT(!metadata.Cluster);
+        }
+
+        {
+            TString str = "foo: bar";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT(!metadata.Version);
+            UNIT_ASSERT(!metadata.Cluster);
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceMetadata) {
+        NYamlConfig::TMetadata metadata;
+        metadata.Version = 1;
+        metadata.Cluster = "test";
+
+        {
+            TString str = R"(
+# comment1
+{value: 1, array: [{test: "1"}], obj: {value: 2}} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  version: 1
+  cluster: test
+value: 1
+array:
+- test: "1"
+obj:
+  value: 2
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  version: 1
+  cluster: test
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(metadata: {version: 0, cluster: tes}
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  version: 1
+  cluster: test
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(metadata:
+  version: 0
+  cluster: tes
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  version: 1
+  cluster: test
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(metadata:
+  version: 0
+  cool: {foo: bar}
+  cluster: tes
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  version: 1
+  cluster: test
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+
+---
+metadata:
+  version: 0
+  cluster: tes
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+
+---
+metadata:
+  version: 1
+  cluster: test
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+
+---
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+
+---
+metadata:
+  version: 1
+  cluster: test
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+    }
 }

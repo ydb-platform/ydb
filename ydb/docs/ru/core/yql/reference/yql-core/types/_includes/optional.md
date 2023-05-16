@@ -32,7 +32,7 @@ select if($found is not null, unwrap($found), -1);
 
 ```text
 # column0
-0 null
+null
 ```
 
 ## Логические и арифметические операции с NULL {#null_expr}

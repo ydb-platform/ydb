@@ -18,10 +18,8 @@ target_link_libraries(restricted-boost-function INTERFACE
   restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
-  restricted-boost-integer
   restricted-boost-preprocessor
   restricted-boost-throw_exception
-  restricted-boost-type_index
   restricted-boost-type_traits
   restricted-boost-typeof
 )

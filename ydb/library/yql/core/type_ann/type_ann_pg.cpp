@@ -152,6 +152,34 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
     }
 }
 
+const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
+    auto name = type->Cast<TPgExprType>()->GetName();
+    const TDataExprType* dataType;
+    if (name == "bool") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
+    } else if (name == "int2") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int16);
+    } else if (name == "int4") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+    } else if (name == "int8") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+    } else if (name == "float4") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Float);
+    } else if (name == "float8") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+    } else if (name == "text" || name == "varchar" || name == "cstring") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Utf8);
+    } else if (name == "bytea") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    } else {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Unsupported type: " << name));
+        return nullptr;
+    }
+
+    return ctx.MakeType<TOptionalExprType>(dataType);
+}
+
 IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -171,58 +199,20 @@ IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto name = input->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
-    const TDataExprType* dataType;
-    if (name == "bool") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
-    } else if (name == "int2") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int16);
-    } else if (name == "int4") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int32);
-    } else if (name == "int8") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
-    } else if (name == "float4") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Float);
-    } else if (name == "float8") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double);
-    } else if (name == "text" || name == "varchar" || name == "cstring") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8);
-    } else if (name == "bytea") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
-    } else {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            TStringBuilder() << "Unsupported type: " << name));
+    auto resultType = FromPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr);
+    if (!resultType) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto result = ctx.Expr.MakeType<TOptionalExprType>(dataType);
-    input->SetTypeAnn(result);
+    input->SetTypeAnn(resultType);
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureComputable(input->Head(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (IsNull(input->Head())) {
-        output = input->TailPtr();
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
-        output = input->HeadPtr();
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
+const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
     bool isOptional;
     const TDataExprType* dataType;
-    if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
+    if (!EnsureDataOrOptionalOfData(pos, type, isOptional, dataType, ctx)) {
+        return nullptr;
     }
 
     TString pgType;
@@ -252,19 +242,73 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
         pgType = "text";
         break;
     default:
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << dataType->GetName()));
-        return IGraphTransformer::TStatus::Error;
+        return nullptr;
     }
 
     try {
-        auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
-        input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
+        auto result = ctx.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
+        return result;
     } catch (const yexception& e) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+        ctx.AddError(TIssue(ctx.GetPosition(pos), e.what()));
+        return nullptr;
+    }
+}
+
+IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
+
+    if (!EnsureComputable(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsNull(input->Head())) {
+        output = input->TailPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto resultType = ToPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr);
+    if (!resultType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureDependsOnTail(*input, ctx.Expr, 1)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsNull(input->Head())) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto type = input->Head().GetTypeAnn();
+    ui32 argType;
+    bool convertToPg;
+    if (!ExtractPgType(type, argType, convertToPg, input->Head().Pos(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (convertToPg) {
+        input->ChildRef(0) = ctx.Expr.NewCallable(input->Head().Pos(), "ToPg", { input->ChildPtr(0) });
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(argType);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
@@ -1133,12 +1177,18 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
         initLambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("row")
+                .Param("parent")
                 .Callable("PgResolvedCallCtx")
                     .Atom(0, transFuncDesc.Name)
                     .Atom(1, ToString(aggDesc.TransFuncId))
                     .List(2)
                     .Seal()
-                    .Add(3, initValue)
+                    .Callable(3, "PgClone")
+                        .Add(0, initValue)
+                        .Callable(1, "DependsOn")
+                            .Arg(0, "parent")
+                        .Seal()
+                    .Seal()
                     .Apply(4, lambda)
                         .With(0, "row")
                     .Seal()
@@ -1150,6 +1200,7 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
             .Lambda()
                 .Param("row")
                 .Param("state")
+                .Param("parent")
                 .Callable("Coalesce")
                     .Callable(0, "PgResolvedCallCtx")
                         .Atom(0, transFuncDesc.Name)
@@ -1158,7 +1209,12 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                         .Seal()
                         .Callable(3, "Coalesce")
                             .Arg(0, "state")
-                            .Add(1, initValue)
+                            .Callable(1, "PgClone")
+                                .Add(0, initValue)
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
+                                .Seal()
+                            .Seal()
                         .Seal()
                         .Apply(4, lambda)
                             .With(0, "row")

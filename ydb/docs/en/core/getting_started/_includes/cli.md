@@ -2,7 +2,7 @@
 
 ## Prerequisites {#prerequisites}
 
-To run commands via the CLI, you will need database connection settings you can get when [creating](../create_db.md) a database:
+To run commands via the CLI, you will need database connection settings you can retrieve when [creating](../create_db.md) a connection:
 
 * [Endpoint](../../concepts/connect.md#endpoint)
 * [Database name](../../concepts/connect.md#database)
@@ -34,17 +34,17 @@ ydb
 ...
 ```
 
-All the features of the {{ ydb-short-name }} CLI built-in help are described in [Built-in help](../../reference/ydb-cli/commands/service.md#help) of the {{ ydb-short-name }} CLI reference.
+All the features of the {{ ydb-short-name }} built-in help are described in [Built-in help](../../reference/ydb-cli/commands/service.md#help) of the {{ ydb-short-name }} CLI reference.
 
 ## Check the connection {#ping} {#scheme-ls}
 
-To test connection, you can use the command for [listing objects](../../reference/ydb-cli/commands/scheme-ls.md) in the database, `scheme ls`:
+To check the connection, use the [object list get](../../reference/ydb-cli/commands/scheme-ls.md) command in the `scheme ls` database:
 
 ```bash
 {{ ydb-cli }} -e <endpoint> -d <database> scheme ls
 ```
 
-If the command is successful, a list of objects in the database is shown in response. If you haven't created anything in the database yet, the output will only contain the `.sys` and `.sys_health` system directories with [diagnostic views of YDB](../../troubleshooting/system_views_db.md).
+If the command is successful, a list of objects in the database is shown in response. If you haven't created anything in the database yet, the output will only contain the `.sys` and `.sys_health` system directories with [diagnostic representations of YDB](../../troubleshooting/system_views_db.md).
 
 {% include [cli/ls_examples.md](cli/ls_examples.md) %}
 
@@ -52,53 +52,53 @@ If the command is successful, a list of objects in the database is shown in resp
 
 To avoid specifying connection parameters every time you call the YDB CLI, use the [profile](../../reference/ydb-cli/profile/index.md). Creating the profile described below will also let you copy subsequent commands through the clipboard without editing them regardless of which database you're using to complete the "Getting started" scenario.
 
-[Create the profile](../../reference/ydb-cli/profile/create.md) `db1` using the following command:
+[Create](../../reference/ydb-cli/profile/create.md) the `quickstart` profile using the following command:
 
 ```bash
-{{ ydb-cli }} config profile create db1 -e <endpoint> -d <database>
+{{ ydb-cli }} config profile create quickstart -e <endpoint> -d <database>
 ```
 
 Use the values checked at the [previous step](#ping) as parameters. For example, to create a connection profile to a local YDB database created using the self-hosted deployment scenario [in Docker](../self_hosted/ydb_docker.md), run the following command:
 
 ```bash
-{{ ydb-cli }} config profile create db1 -e grpc://localhost:2136 -d /local
+{{ ydb-cli }} config profile create quickstart -e grpc://localhost:2136 -d /local
 ```
 
 Check that the profile is OK with the `scheme ls` command:
 
 ```bash
-{{ ydb-cli }} -p db1 scheme ls
+{{ ydb-cli }} -p quickstart scheme ls
 ```
 
 ## Executing an YQL script {#yql}
 
-The {{ ydb-short-name }} CLI `yql` command lets you execute any command (both DDL and DML) in [YQL](../../yql/reference/index.md), an SQL dialect supported by {{ ydb-short-name }}:
+The {{ ydb-short-name }} CLI `yql` command lets you execute any command (both DDL and DML) in [YQL](../../yql/reference/index.md), a SQL dialect supported by {{ ydb-short-name }}:
 
 ```bash
 {{ ydb-cli }} -p <profile_name> yql -s <yql_request>
 ```
 
-For example:
+e.g.:
 
 * Creating a table:
 
-  ```bash
-  {{ ydb-cli }} -p db1 yql -s "create table t1( id uint64, primary key(id))"
-  ```
+   ```bash
+   {{ ydb-cli }} -p quickstart yql -s "create table t1( id uint64, primary key(id))"
+   ```
 
 * Adding a record:
 
-  ```bash
-  {{ ydb-cli }} -p db1 yql -s "insert into t1(id) values (1)"
-  ```
+   ```bash
+   {{ ydb-cli }} -p quickstart yql -s "insert into t1(id) values (1)"
+   ```
 
 * Data selects:
 
-  ```bash
-  {{ ydb-cli }} -p db1 yql -s "select * from t1"
-  ```
+   ```bash
+   {{ ydb-cli }} -p quickstart yql -s "select * from t1"
+   ```
 
-If you get the `Profile db1 does not exist` error, that means you neglected to create a profile in the [previous step](#profile).
+If you get the `Profile quickstart does not exist` error, this means that you failed to create a profile during the [previous step](#profile).
 
 ## Specialized CLI commands {#ydb-api}
 
@@ -106,6 +106,6 @@ Executing commands via `ydb yql` is a nice and easy way to get started. However,
 
 The YDB CLI supports individual commands with complete sets of options for any existing YDB API. For a full list of commands, see the [YDB CLI reference](../../reference/ydb-cli/index.md).
 
-## Next step {#next}
+## Learn more about YDB {#next}
 
-Go to [YQL - Getting started](../yql.md).
+Proceed to the [YQL - Getting started](../yql.md) article to learn more about YDB.

@@ -39,7 +39,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
             const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
             const auto& name = GetFuncNameForType<TInput>("llvm.fabs");
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();
-            const auto res = CallInst::Create(func, {arg}, "fabs", block);
+            const auto res = CallInst::Create(fnType, func, {arg}, "fabs", block);
             return res;
         } else {
             const auto zero = ConstantInt::get(arg->getType(), 0);

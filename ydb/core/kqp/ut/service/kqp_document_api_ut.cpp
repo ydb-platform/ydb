@@ -115,10 +115,16 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
             ALTER TABLE `/Root/DocumentApiTest` DROP COLUMN Value;
         )";
 
-        auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        const auto tests = TVector<std::pair<TExecSchemeQuerySettings, bool>>{
+            {TExecSchemeQuerySettings(), false},
+            {TExecSchemeQuerySettings().RequestType("_document_api_request"), true},
+        };
+
+        for (const auto& [settings, success] : tests) {
+            auto result = session.ExecuteSchemeQuery(query, settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.IsSuccess(), success);
+        }
     }
 
     Y_UNIT_TEST(RestrictDrop) {

@@ -680,7 +680,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     ui32 ignored = 0;
     ui64 size = 0;
     ui64 bytesToIndex = 0;
-    TVector<const NOlap::TInsertedData*> dataToIndex;
+    std::vector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     THashMap<ui64, ui64> overloadedPathGranules;
     for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
@@ -728,7 +728,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         << size << " bytes in " << blobs << " blobs ignored " << ignored
         << " at tablet " << TabletID());
 
-    TVector<NOlap::TInsertedData> data;
+    std::vector<NOlap::TInsertedData> data;
     THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> cachedBlobs;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
@@ -746,16 +746,13 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
-    if (Tiers) {
-        auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
-        actualIndexInfo.UpdatePathTiering(pathTiering);
-        actualIndexInfo.SetPathTiering(std::move(pathTiering));
-    }
-
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
+    if (Tiers) {
+        ev->SetTiering(Tiers->GetTiering());
+    }
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
 
@@ -781,22 +778,19 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
 
     ui64 ourdatedStep = GetOutdatedStep();
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), {ourdatedStep, 0});
+    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(ourdatedStep, 0));
     if (!indexChanges) {
         LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
-    if (Tiers) {
-        auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
-        actualIndexInfo.UpdatePathTiering(pathTiering);
-        actualIndexInfo.SetPathTiering(std::move(pathTiering));
-    }
-
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterCompaction);
+    if (Tiers) {
+        ev->SetTiering(Tiers->GetTiering());
+    }
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);
 }
 
@@ -834,13 +828,9 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
-    actualIndexInfo.UpdatePathTiering(eviction);
-
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction);
-
-    actualIndexInfo.SetPathTiering(std::move(eviction));
+    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
 
     if (!indexChanges) {
         LOG_S_DEBUG("Cannot prepare TTL at tablet " << TabletID());
@@ -854,6 +844,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     ActiveTtl = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
+    ev->SetTiering(eviction);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
 
@@ -880,7 +871,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     Y_VERIFY(changes->AppendedPortions.empty());
 
     // Filter PortionsToDrop
-    TVector<NOlap::TPortionInfo> portionsCanBedropped;
+    std::vector<NOlap::TPortionInfo> portionsCanBedropped;
     THashSet<ui64> excludedPortions;
     for (const auto& portionInfo : changes->PortionsToDrop) {
         ui64 portionId = portionInfo.Records.front().Portion;
@@ -902,7 +893,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         return {};
     }
 
-    auto actualIndexInfo = TablesManager.GetIndexInfo();
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
 #if 0 // No need for now
     if (Tiers) {
         ...
@@ -952,9 +943,9 @@ void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TS
                                TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const {
     Y_VERIFY(blobsInfo.size());
 
-    TString strBlobs;
+    TStringBuilder strBlobs;
     for (auto& [blobId, _] : blobsInfo) {
-        strBlobs += "'" + blobId.ToStringNew() + "' ";
+        strBlobs << "'" << blobId.ToStringNew() << "' ";
     }
     LOG_S_NOTICE("Export blobs " << strBlobs << "at tablet " << TabletID());
 
@@ -976,14 +967,14 @@ void TColumnShard::ForgetTierBlobs(const TActorContext& ctx, const TString& tier
 void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::TEvictedBlob>& evictedBlobs) {
     THashMap<TString, std::vector<NOlap::TEvictedBlob>> tierBlobs;
 
-    TString strBlobs;
-    TString strBlobsDelayed;
+    TStringBuilder strBlobs;
+    TStringBuilder strBlobsDelayed;
 
     for (const auto& ev : evictedBlobs) {
         auto& blobId = ev.Blob;
         if (BlobManager->BlobInUse(blobId)) {
             LOG_S_DEBUG("Blob '" << blobId.ToStringNew() << "' in use at tablet " << TabletID());
-            strBlobsDelayed += "'" + blobId.ToStringNew() + "' ";
+            strBlobsDelayed << "'" << blobId.ToStringNew() << "' ";
             continue;
         }
 
@@ -994,11 +985,11 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
             LOG_S_ERROR("Forget unknown blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
         } else if (NOlap::CouldBeExported(evict.State)) {
             Y_VERIFY(evict.Blob == blobId);
-            strBlobs += "'" + blobId.ToStringNew() + "' ";
+            strBlobs << "'" << blobId.ToStringNew() << "' ";
             tierBlobs[meta.GetTierName()].emplace_back(std::move(evict));
         } else {
             Y_VERIFY(evict.Blob == blobId);
-            strBlobsDelayed += "'" + blobId.ToStringNew() + "' ";
+            strBlobsDelayed << "'"<< blobId.ToStringNew() << "' ";
         }
     }
 

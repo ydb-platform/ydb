@@ -25,8 +25,8 @@ enum class EInitialEviction {
 
 namespace {
 
-static const TVector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
-static const TVector<std::pair<TString, TTypeInfo>> testYdbPk = TTestSchema::YdbPkSchema();
+static const std::vector<std::pair<TString, TTypeInfo>> testYdbSchema = TTestSchema::YdbSchema();
+static const std::vector<std::pair<TString, TTypeInfo>> testYdbPk = TTestSchema::YdbPkSchema();
 
 std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
     std::string name(columnName.c_str(), columnName.size());
@@ -66,16 +66,16 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
-bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const TVector<ui64>& pathIds,
+bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const std::vector<ui64>& pathIds,
                 ui64 tsSeconds, const TString& ttlColumnName) {
     TString txBody = TTestSchema::TtlTxBody(pathIds, ttlColumnName, tsSeconds);
     auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_TTL, sender, snap.TxId, txBody);
+        NKikimrTxColumnShard::TX_KIND_TTL, sender, snap.GetTxId(), txBody);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
     const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.TxId);
+    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
     UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_TTL);
     return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
 }
@@ -130,7 +130,7 @@ bool CheckSame(const TString& blob, const TString& strSchema, ui32 expectedSize,
 }
 
 std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
-                              const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
     UNIT_ASSERT(ts.size() == 2);
 
     TString data1 = MakeTestBlob({0, portionSize}, ydbSchema);
@@ -165,7 +165,7 @@ bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 10
     runtime.DispatchEvents(options);
 
     //
-    return ProposeSchemaTx(runtime, sender, txBody, {++planStep, ++txId});
+    return ProposeSchemaTx(runtime, sender, txBody, NOlap::TSnapshot(++planStep, ++txId));
 }
 
 TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead,
@@ -189,7 +189,7 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
-             const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
+             const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
 {
     std::vector<ui64> ts = {1600000000, 1620000000};
 
@@ -237,9 +237,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
     bool ok = ProposeSchemaTx(runtime, sender,
                               TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
-                              {++planStep, ++txId});
+                              NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
     if (spec.HasTiers()) {
         ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -260,9 +260,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -297,17 +297,17 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
     ok = ProposeSchemaTx(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 2, spec),
-                         {++planStep, ++txId});
+                         NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
     if (spec.HasTiers()) {
         ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
 
     if (internal) {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
     }
 
     {
@@ -327,21 +327,21 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     // Disable TTL
     ok = ProposeSchemaTx(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
-                         {++planStep, ++txId});
+                         NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
     if (spec.HasTiers()) {
         ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
     UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, blobs[0]));
     ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
     PlanCommit(runtime, sender, ++planStep, txId);
 
     if (internal) {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, {++planStep, ++txId}, {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
     }
 
     {
@@ -514,10 +514,10 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     {
         const bool ok = ProposeSchemaTx(runtime, sender,
             TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"),
-            { ++planStep, ++txId });
+            NOlap::TSnapshot(++planStep, ++txId));
         UNIT_ASSERT(ok);
     }
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
     if (specs[0].Tiers.size()) {
         ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0]));
     }
@@ -552,9 +552,9 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             {
                 const bool ok = ProposeSchemaTx(runtime, sender,
                     TTestSchema::AlterTableTxBody(tableId, version, specs[i]),
-                    { ++planStep, ++txId });
+                    NOlap::TSnapshot(++planStep, ++txId));
                 UNIT_ASSERT(ok);
-                PlanSchemaTx(runtime, sender, { planStep, txId });
+                PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
             }
         }
         if (specs[i].HasTiers()) {
@@ -573,7 +573,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         // Eviction
 
-        TriggerTTL(runtime, sender, { ++planStep, ++txId }, {}, 0, specs[i].TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
 
         Cerr << (hasColdEviction ? "Cold" : "Hot")
             << " tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
@@ -856,9 +856,9 @@ void TestDrop(bool reboots) {
     ui64 txId = 100;
 
     bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
-                              {++planStep, ++txId});
+                              NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
     //
 
@@ -884,9 +884,9 @@ void TestDrop(bool reboots) {
     }
 
     // Drop table
-    ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), {++planStep, ++txId});
+    ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -931,9 +931,9 @@ void TestDropWriteRace() {
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
 
     bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
-                              {++planStep, ++txId});
+                              NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
-    PlanSchemaTx(runtime, sender, {planStep, txId});
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
     TString data = MakeTestBlob({0, 100}, testYdbSchema);
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
@@ -945,9 +945,9 @@ void TestDropWriteRace() {
     auto commitTxId = txId;
 
     // Drop table
-    ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), {++planStep, ++txId});
+    ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), NOlap::TSnapshot(++planStep, ++txId));
     if (ok) {
-        PlanSchemaTx(runtime, sender, {planStep, txId});
+        PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
     }
 
     // Plan commit
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(CreateTable) {
         ui64 tableId = 1;
 
-        TVector<TTypeId> intTypes = {
+        std::vector<TTypeId> intTypes = {
             NTypeIds::Timestamp,
             NTypeIds::Int8,
             NTypeIds::Int16,
@@ -992,7 +992,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
 
         // TODO: support float types
-        TVector<TTypeId> floatTypes = {
+        std::vector<TTypeId> floatTypes = {
             NTypeIds::Float,
             NTypeIds::Double
         };
@@ -1005,7 +1005,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             UNIT_ASSERT(!ok);
         }
 
-        TVector<TTypeId> strTypes = {
+        std::vector<TTypeId> strTypes = {
             NTypeIds::String,
             NTypeIds::Utf8
         };
@@ -1018,7 +1018,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             UNIT_ASSERT(ok);
         }
 
-        TVector<TTypeId> xsonTypes = {
+        std::vector<TTypeId> xsonTypes = {
             NTypeIds::Yson,
             NTypeIds::Json,
             NTypeIds::JsonDocument

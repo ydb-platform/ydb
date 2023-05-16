@@ -93,10 +93,9 @@ public:
             const auto full = SetterFor<ui32>(ssize, context, block);
 
             const auto half = CastInst::Create(Instruction::Trunc, data, Type::getInt64Ty(context), "half", block);
-            const auto strPtrType = PointerType::getUnqual(StructType::get(context, {type32, type32, type32, type32}));
-            const auto strptr = CastInst::Create(Instruction::IntToPtr, half, strPtrType, "str_ptr", block);
-            const auto refptr = GetElementPtrInst::CreateInBounds(strptr, {ConstantInt::get(type32, 0), ConstantInt::get(type32, 1)}, "refptr", block);
-            const auto refs = new LoadInst(refptr, "refs", block);
+            const auto strptr = CastInst::Create(Instruction::IntToPtr, half, PointerType::getUnqual(strType), "str_ptr", block);
+            const auto refptr = GetElementPtrInst::CreateInBounds(strType, strptr, {ConstantInt::get(type32, 0), ConstantInt::get(type32, 1)}, "refptr", block);
+            const auto refs = new LoadInst(type32, refptr, "refs", block);
             const auto test = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, refs, ConstantInt::get(refs->getType(), 0), "test", block);
 
             const auto free = BasicBlock::Create(context, "free", ctx.Func);
@@ -109,7 +108,7 @@ public:
             const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, false);
             const auto name = "DeleteString";
             ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString));
-            const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+            const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
             CallInst::Create(func, {strptr}, "", block);
             result->addIncoming(full, block);
             BranchInst::Create(done, block);

@@ -91,8 +91,8 @@ struct TByteAt {
             const auto half = CastInst::Create(Instruction::Trunc, left, Type::getInt64Ty(context), "half", block);
             const auto ptr = CastInst::Create(Instruction::IntToPtr, half, PointerType::getUnqual(type) , "ptr", block);
 
-            const auto bytePtr = GetElementPtrInst::CreateInBounds(ptr, {pos}, "bptr", block);
-            const auto got = new LoadInst(bytePtr, "got", block);
+            const auto bytePtr = GetElementPtrInst::CreateInBounds(type, ptr, {pos}, "bptr", block);
+            const auto got = new LoadInst(type, bytePtr, "got", block);
             const auto make = SetterFor<ui8>(got, context, block);
             result->addIncoming(make, block);
             BranchInst::Create(done, block);

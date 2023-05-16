@@ -1,6 +1,6 @@
 # Exporting data to the file system
 
-The `tools dump` command dumps data and information about data schema objects to the client file system in the format described in the [File structure](../file_structure.md) article:
+The `tools dump` command dumps the database data and objects schema to the client file system, in the format described in the [File system](../file_structure.md):
 
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
@@ -10,44 +10,44 @@ The `tools dump` command dumps data and information about data schema objects to
 
 `[options]`: Command parameters:
 
-`-p PATH` or `--path PATH`: Path to the DB directory whose objects are to be dumped or path to the table. By default, the DB root directory. The following will be dumped: all subdirectories whose names do not begin with a dot and tables whose names do not begin with a dot inside these subdirectories. To dump such tables or the contents of such directories, you can explicitly specify their names in this parameter.
+`-p PATH` or `--path PATH`: Path to the database directory with objects or a path to the table to be dumped. The root database directory is used by default. The dump includes all subdirectories whose names don't begin with a dot and the tables in them whose names don't begin with a dot. To dump such tables or the contents of such directories, you can specify their names explicitly in this parameter.
 
-`-o PATH` or `--output PATH`: Path to the directory in the client file system that data should be dumped to. If the specified directory doesn't exist, it will be created. Anyway, the entire path to it must exist. If the specified directory does exist, it must be empty. If the parameter is not specified, a directory with a name in `backup_YYYYDDMMTHHMMSS` format will be created in the current directory, where YYYYDDMM indicates the date and HHMMSS the export start time.
+`-o PATH` or `--output PATH`: Path to the directory in the client file system to dump the data to. If such a directory doesn't exist, it will be created. The entire path to it must already exist, however. If the specified directory exists, it must be empty. If the parameter is omitted, a directory with the name `backup_YYYYDDMMTHHMMSS` will be created in the current directory, with YYYYDDMM being the date and HHMMSS: the time when the dump began.
 
-`--exclude STRING`: Pattern ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) for excluding paths from the export destination. This parameter can be specified several times for different patterns.
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 
-`--scheme-only`: Only dump information about data schema objects and no data.
+`--scheme-only`: Dump only the details about the database schema objects, without dumping their data
 
-`--consistency-level VAL`: Consistency level. Possible options:
+`--consistency-level VAL`: The consistency level. Possible options:
+- `database`: A fully consistent dump, with one snapshot taken before starting dumping. Applied by default.
+- `table`: Consistency within each dumped table, taking individual independent snapshots for each table dumped. Might run faster and have a smaller effect on the current workload processing in the database.
 
-- `database`: Fully consistent export with a single snapshot taken before starting the export operation. Applied by default.
-- `table`: Consistency within each table being dumped with separate independent snapshots taken for each such table. It can run faster and have less impact on handling the current DB load.
+`--avoid-copy`: Do not create a snapshot before dumping. The consistency snapshot taken by default might be inapplicable in some cases (for example, for tables with external blobs).
 
-`--avoid-copy`: Do not create a dump snapshot. The snapshot used by default to ensure consistency may not be applicable in some cases (such as for tables with external blobs).
-
-`--save-partial-result`: Do not delete the result of a partially completed dump. If this option is not enabled, the result will be deleted in case an error occurs when dumping data.
+`--save-partial-result`: Don't delete the result of partial dumping. Without this option, the dumps that terminated with an error are deleted.
 
 ## Examples
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
 ### Exporting a database
 
-With a directory named `backup_...` automatically created in the current directory:
+With automatic creation of the `backup_...` directory In the current directory:
 
 ```
-{{ ydb-cli }} --profile db1 tools dump 
+{{ ydb-cli }} --profile quickstart tools dump
 ```
 
-To the specified directory:
+To a specific directory:
 
 ```
-{{ ydb-cli }} --profile db1 tools dump -o ~/backup_db1
+{{ ydb-cli }} --profile quickstart tools dump -o ~/backup_quickstart
 ```
 
-### Exporting the structure of tables in the specified DB directory and its subdirectories
+### Dumping the table structure within a specified database directory (including subdirectories)
 
 ```
-{{ ydb-cli }} --profile db1 tools dump -p dir1 --scheme-only
+{{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
+
 

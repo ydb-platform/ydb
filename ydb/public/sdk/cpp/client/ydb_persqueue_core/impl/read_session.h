@@ -149,11 +149,11 @@ public:
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction task);
-    void DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
-    void DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, EStatus statusCode, NYql::TIssues&& issues);
-    void DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, EStatus statusCode, const TString& message);
-    void DeferAbortSession(const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TPlainStatus&& status);
-    void DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, const typename IErrorHandler<UseMigrationProtocol>::TPtr& errorHandler, TPlainStatus&& status);
+    void DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
+    void DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, EStatus statusCode, NYql::TIssues&& issues);
+    void DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, EStatus statusCode, const TString& message);
+    void DeferAbortSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, TPlainStatus&& status);
+    void DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session, TPlainStatus&& status);
     void DeferStartSession(std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session);
     void DeferSignalWaiter(TWaiter&& waiter);
     void DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos);
@@ -178,13 +178,12 @@ private:
     std::vector<std::pair<typename IAExecutor<UseMigrationProtocol>::TPtr, typename IAExecutor<UseMigrationProtocol>::TFunction>> ExecutorsTasks;
 
     // Abort session.
-    typename IErrorHandler<UseMigrationProtocol>::TPtr ErrorHandler;
     TMaybe<TASessionClosedEvent<UseMigrationProtocol>> SessionClosedEvent;
 
     // Waiters.
     std::vector<TWaiter> Waiters;
 
-    // Reconnection.
+    // Reconnection and abort.
     std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     TPlainStatus ReconnectionStatus;
 
@@ -569,13 +568,11 @@ public:
                          ui64 partitionId,
                          ui64 assignId,
                          ui64 readOffset,
-                         std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> parentSession,
-                         typename IErrorHandler<UseMigrationProtocol>::TPtr errorHandler)
+                         std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> parentSession)
         : Key{topicPath, cluster, partitionId}
         , AssignId(assignId)
         , FirstNotReadOffset(readOffset)
         , Session(std::move(parentSession))
-        , ErrorHandler(std::move(errorHandler))
     {
         TAPartitionStream<true>::PartitionStreamId = partitionStreamId;
         TAPartitionStream<true>::TopicPath = std::move(topicPath);
@@ -591,13 +588,11 @@ public:
                          i64 partitionId,
                          i64 assignId,
                          i64 readOffset,
-                         std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> parentSession,
-                         typename IErrorHandler<UseMigrationProtocol>::TPtr errorHandler)
+                         std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> parentSession)
         : Key{topicPath, "", static_cast<ui64>(partitionId)}
         , AssignId(static_cast<ui64>(assignId))
         , FirstNotReadOffset(static_cast<ui64>(readOffset))
         , Session(std::move(parentSession))
-        , ErrorHandler(std::move(errorHandler))
     {
         TAPartitionStream<false>::PartitionSessionId = partitionStreamId;
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
@@ -667,9 +662,6 @@ public:
                                   TReadSessionEventsQueue<UseMigrationProtocol>* queue,
                                   TDeferredActions<UseMigrationProtocol>& deferred);
 
-    const typename IErrorHandler<UseMigrationProtocol>::TPtr& GetErrorHandler() const {
-        return ErrorHandler;
-    }
 
     ui64 GetMaxReadOffset() const {
         return MaxReadOffset;
@@ -740,7 +732,6 @@ private:
     ui64 AssignId;
     ui64 FirstNotReadOffset;
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
-    typename IErrorHandler<UseMigrationProtocol>::TPtr ErrorHandler;
     TRawPartitionStreamEventQueue<UseMigrationProtocol> EventsQueue;
     ui64 MaxReadOffset = 0;
     ui64 MaxCommittedOffset = 0;
@@ -779,9 +770,11 @@ public:
         GetEvent(bool block = false,
                  size_t maxByteSize = std::numeric_limits<size_t>::max());
 
-    void Close(const TASessionClosedEvent<UseMigrationProtocol>& event, TDeferredActions<UseMigrationProtocol>& deferred) {
+    bool Close(const TASessionClosedEvent<UseMigrationProtocol>& event, TDeferredActions<UseMigrationProtocol>& deferred) {
         TWaiter waiter;
         with_lock (TParent::Mutex) {
+            if (TParent::Closed)
+                return false;
             TParent::CloseEvent = event;
             TParent::Closed = true;
             waiter = TWaiter(TParent::Waiter.ExtractPromise(), this);
@@ -789,8 +782,8 @@ public:
 
         TReadSessionEventInfo<UseMigrationProtocol> info(event);
         ApplyHandler(info, deferred);
-
-        waiter.Signal();
+        deferred.DeferSignalWaiter(std::move(waiter));
+        return true;
     }
 
     bool TryApplyCallbackToEventImpl(typename TParent::TEvent& event,
@@ -802,14 +795,14 @@ public:
 
     void GetDataEventCallbackSettings(size_t& maxMessagesBytes);
 
-    // Push usual event.
-    void PushEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+    // Push usual event. Returns false if queue is closed
+    bool PushEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                    std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
                    typename TAReadSessionEvent<UseMigrationProtocol>::TEvent event,
                    TDeferredActions<UseMigrationProtocol>& deferred);
 
-    // Push data event.
-    void PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
+    // Push data event. Returns false if queue is closed
+    bool PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                        size_t batch,
                        size_t message,
                        TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
@@ -946,7 +939,6 @@ public:
         const TLog& log,
         std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
-        typename IErrorHandler<UseMigrationProtocol>::TPtr errorHandler,
         NGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
         ui64 partitionStreamIdStep,
@@ -961,9 +953,8 @@ public:
         , PartitionStreamIdStep(partitionStreamIdStep)
         , ConnectionFactory(std::move(connectionFactory))
         , EventsQueue(std::move(eventsQueue))
-        , ErrorHandler(std::move(errorHandler))
         , ClientContext(std::move(clientContext))
-        , CookieMapping(ErrorHandler)
+        , CookieMapping()
         , ReadSizeBudget(GetCompressedDataSizeLimit())
         , ReadSizeServerDelta(0)
         , Tracker(std::move(tracker))
@@ -990,6 +981,21 @@ public:
     void Abort();
     void AbortImpl();
     void Close(std::function<void()> callback);
+    void AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
+
+    void AbortSession(EStatus statusCode, NYql::TIssues&& issues) {
+        AbortSession(TASessionClosedEvent<UseMigrationProtocol>(statusCode, std::move(issues)));
+    }
+
+    void AbortSession(EStatus statusCode, const TString& message) {
+        NYql::TIssues issues;
+        issues.AddIssue(message);
+        AbortSession(statusCode, std::move(issues));
+    }
+
+    void AbortSession(TPlainStatus&& status) {
+        AbortSession(TASessionClosedEvent<UseMigrationProtocol>(std::move(status)));
+    }
 
     bool Reconnect(const TPlainStatus& status);
 
@@ -1106,8 +1112,7 @@ private:
             size_t UncommittedMessagesLeft = 0;
         };
 
-        explicit TPartitionCookieMapping(typename IErrorHandler<UseMigrationProtocol>::TPtr errorHandler)
-            : ErrorHandler(std::move(errorHandler))
+        explicit TPartitionCookieMapping()
         {
         }
 
@@ -1132,7 +1137,6 @@ private:
         THashMap<typename TCookie::TKey, typename TCookie::TPtr, typename TCookie::TKey::THash> Cookies;
         THashMap<std::pair<ui64, ui64>, typename TCookie::TPtr> UncommittedOffsetToCookie; // (Partition stream id, Offset) -> Cookie.
         THashMultiMap<ui64, typename TCookie::TPtr> PartitionStreamIdToCookie;
-        typename IErrorHandler<UseMigrationProtocol>::TPtr ErrorHandler;
         size_t CommitInflight = 0; // Commit inflight to server.
     };
 
@@ -1158,7 +1162,6 @@ private:
     ui64 PartitionStreamIdStep;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
-    typename IErrorHandler<UseMigrationProtocol>::TPtr ErrorHandler;
     NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NGrpc::IQueueClientContextPtr ConnectContext;
     NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
@@ -1258,7 +1261,7 @@ public:
     void StopReadingData() override;
     void ResumeReadingData() override;
 
-    void Abort(TSessionClosedEvent&& closeEvent);
+    void Abort();
 
     void ClearAllEvents();
 
@@ -1276,11 +1279,7 @@ private:
     void RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions<true>& deferred);
     void CreateClusterSessionsImpl(TDeferredActions<true>& deferred);
 
-
-    // Shutdown.
-    void Abort(EStatus statusCode, NYql::TIssues&& issues);
-    void Abort(EStatus statusCode, const TString& message);
-
+    void AbortImpl(TDeferredActions<true>& deferred);
     void AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions<true>& deferred);
     void AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions<true>& deferred);
     void AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<true>& deferred);
@@ -1298,7 +1297,6 @@ private:
     TLog Log;
     std::shared_ptr<TPersQueueClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    typename IErrorHandler<true>::TPtr ErrorHandler;
     TDbDriverStatePtr DbDriverState;
     TAdaptiveLock Lock;
     std::shared_ptr<TReadSessionEventsQueue<true>> EventsQueue;

@@ -89,6 +89,8 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
 
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " killed");
+    if (ReadSession)
+        ReadSession->Close();
     ReadSession = nullptr;
     PartitionStream = nullptr;
     CredentialsProvider = nullptr;
@@ -441,7 +443,9 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
             Queue.pop_back();
         }
     }
-
+    if (ReadSession) {
+        ReadSession->Close();
+    }
     ReadSession.reset();
     PartitionStream.Reset();
 
@@ -459,6 +463,9 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     });
 
     try {
+        if (ReadSession) {
+            ReadSession->Close();
+        }
         ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
     } catch(...) {
         ProcessError(ctx, TStringBuilder() << "got an exception during the creation read session: " << CurrentExceptionMessage());
@@ -514,6 +521,8 @@ void TMirrorer::AddMessagesToQueue(TVector<TPersQueueReadEvent::TDataReceivedEve
 
 void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     LastInitStageTimestamp = ctx.Now();
+    if (ReadSession)
+        ReadSession->Close();
     ReadSession = nullptr;
     PartitionStream = nullptr;
     ReadFuturesInFlight = 0;

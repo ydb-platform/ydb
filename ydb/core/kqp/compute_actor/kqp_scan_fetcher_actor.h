@@ -82,10 +82,10 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
-                    Y_FAIL("unexpected message");
+                    StopOnError("unexpected message on data fetching: " + ::ToString(ev->GetTypeRewrite()));
             }
-        } catch (const yexception& e) {
-            Y_FAIL("UNEXPECTED EXCEPTION: %s", e.what());
+        } catch (...) {
+            StopOnError("unexpected exception: " + CurrentExceptionMessage());
         }
     }
 
@@ -97,9 +97,10 @@ private:
 
     std::vector<NActors::TActorId> ComputeActorIds;
 
-    bool SendGlobalFail(const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message);
+    void StopOnError(const TString& errorMessage) const;
+    bool SendGlobalFail(const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
 
-    bool SendGlobalFail(const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
+    bool SendGlobalFail(const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
 
     bool ProvideDataToCompute(TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state);
 

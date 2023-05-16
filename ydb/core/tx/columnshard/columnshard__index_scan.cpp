@@ -16,20 +16,20 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
         const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
         WaitCommitted.emplace(cmtBlob, batchNo);
     }
-    // Read all committed blobs
-    for (const auto& cmtBlob : ReadMetadata->CommittedBlobs) {
-        auto& blobId = cmtBlob.BlobId;
-        FetchBlobsQueue.emplace_back(TBlobRange(blobId, 0, blobId.BlobSize()));
-    }
     IndexedData.InitRead(batchNo);
     // Add cached batches without read
     for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
-        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
+        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, NOlap::TSnapshot::Zero() });
         Y_VERIFY(!cmt.empty());
 
         const NOlap::TCommittedBlob& cmtBlob = cmt.key();
         ui32 batchNo = cmt.mapped();
-        IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.PlanStep, cmtBlob.TxId);
+        IndexedData.AddNotIndexed(batchNo, batch, cmtBlob.GetSnapshot());
+    }
+    // Read all remained committed blobs
+    for (const auto& [cmtBlob, _] : WaitCommitted) {
+        auto& blobId = cmtBlob.GetBlobId();
+        FetchBlobsQueue.emplace_front(TBlobRange(blobId, 0, blobId.BlobSize()));
     }
 
     Y_VERIFY(ReadMetadata->IsSorted());
@@ -44,13 +44,11 @@ void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data
     if (IndexedData.IsIndexedBlob(blobRange)) {
         IndexedData.AddIndexed(blobRange, data);
     } else {
-        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, 0, 0 });
-        if (cmt.empty()) {
-            return; // ignore duplicates from another read metadata ranges
-        }
+        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{ blobId, NOlap::TSnapshot::Zero() });
+        Y_VERIFY(!cmt.empty());
         const NOlap::TCommittedBlob& cmtBlob = cmt.key();
         ui32 batchNo = cmt.mapped();
-        IndexedData.AddNotIndexed(batchNo, data, cmtBlob.PlanStep, cmtBlob.TxId);
+        IndexedData.AddNotIndexed(batchNo, data, cmtBlob.GetSnapshot());
     }
 }
 

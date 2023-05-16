@@ -4,6 +4,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 class TWriteActor : public TActorBootstrapped<TWriteActor> {
 public:
@@ -191,13 +192,13 @@ public:
         auto indexChanges = WriteIndexEv->IndexChanges;
         LOG_S_DEBUG("Writing " << WriteIndexEv->Blobs.size() << " blobs at " << TabletId);
 
-        const TVector<TString>& blobs = WriteIndexEv->Blobs;
+        const std::vector<TString>& blobs = WriteIndexEv->Blobs;
         Y_VERIFY(blobs.size() > 0);
         size_t blobsPos = 0;
 
         // Send accumulated data and update records with the blob Id
         auto fnFlushAcummultedBlob = [this, &ctx] (TString& accumulatedBlob, NOlap::TPortionInfo& portionInfo,
-            TVector<std::pair<size_t, TString>>& recordsInBlob)
+            std::vector<std::pair<size_t, TString>>& recordsInBlob)
         {
             Y_VERIFY(accumulatedBlob.size() > 0);
             Y_VERIFY(recordsInBlob.size() > 0);
@@ -222,7 +223,7 @@ public:
         };
 
         TString accumulatedBlob;
-        TVector<std::pair<size_t, TString>> recordsInBlob;
+        std::vector<std::pair<size_t, TString>> recordsInBlob;
 
         Y_VERIFY(indexChanges->AppendedPortions.empty() || indexChanges->PortionsToEvict.empty());
         size_t portionsToWrite = indexChanges->AppendedPortions.size() + indexChanges->PortionsToEvict.size();
@@ -320,6 +321,8 @@ private:
         }
     }
 };
+
+} // namespace
 
 IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,

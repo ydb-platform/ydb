@@ -102,28 +102,12 @@ TMaybe<TCondenseInputResult> CondenseInput(const TExprBase& input, TExprContext&
     stageInputs.push_back(input);
     stageArguments.push_back(arg);
 
-    auto condense = Build<TCoCondense>(ctx, input.Pos())
-        .Input(arg)
-        .State<TCoList>()
-            .ListType<TCoTypeOf>()
-                .Value(input)
-                .Build()
-            .Build()
-        .SwitchHandler()
-            .Args({"item", "state"})
-            .Body(MakeBool<false>(input.Pos(), ctx))
-            .Build()
-        .UpdateHandler()
-            .Args({"item", "state"})
-            .Body<TCoAppend>()
-                .List("state")
-                .Item("item")
-                .Build()
-            .Build()
+    auto squeeze = Build<TCoSqueezeToList>(ctx, input.Pos())
+        .Stream(arg)
         .Done();
 
     return TCondenseInputResult {
-        .Stream = condense,
+        .Stream = squeeze,
         .StageInputs = stageInputs,
         .StageArgs = stageArguments
     };

@@ -39,6 +39,8 @@ struct TSslHelpers {
         if (ctx) {
             SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_SSLv2);
             SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_SSLv3);
+            SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_TLSv1);
+            SSL_CTX_set_options(ctx.Get(), SSL_OP_NO_TLSv1_1);
             SSL_CTX_set_options(ctx.Get(), SSL_OP_MICROSOFT_SESS_ID_BUG);
             SSL_CTX_set_options(ctx.Get(), SSL_OP_NETSCAPE_CHALLENGE_BUG);
         }

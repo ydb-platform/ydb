@@ -4,6 +4,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 class TReadActor : public TActorBootstrapped<TReadActor> {
 private:
@@ -285,6 +286,8 @@ private:
         return NArrow::SerializeSchema(*batch->schema());
     }
 };
+
+} // namespace
 
 IActor* CreateReadActor(ui64 tabletId,
                         const TActorId& dstActor,

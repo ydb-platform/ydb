@@ -5,6 +5,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 class TExportActor : public TActorBootstrapped<TExportActor> {
 public:
@@ -108,6 +109,8 @@ private:
         Die(ctx);
     }
 };
+
+} // namespace
 
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev) {
     return new TExportActor(tabletId, dstActor, ev);

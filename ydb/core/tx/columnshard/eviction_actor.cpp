@@ -4,6 +4,7 @@
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 using NOlap::TBlobRange;
 
@@ -129,7 +130,7 @@ private:
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
             NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering);
             TxEvent->Blobs = evictionLogic.Apply(TxEvent->IndexChanges);
-            
+
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK;
             }
@@ -141,6 +142,8 @@ private:
         //Die(ctx); // It's alive till tablet's death
     }
 };
+
+} // namespace
 
 IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent) {
     return new TEvictionActor(tabletId, parent);

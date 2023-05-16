@@ -4,6 +4,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 class TWriteActor : public TActorBootstrapped<TWriteActor> {
 public:
@@ -320,6 +321,8 @@ private:
         }
     }
 };
+
+} // namespace
 
 IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,

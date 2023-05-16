@@ -4,6 +4,7 @@
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 class TIndexingActor : public TActorBootstrapped<TIndexingActor> {
 public:
@@ -136,6 +137,8 @@ private:
         //Die(ctx); // It's alive till tablet's death
     }
 };
+
+} // namespace
 
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent) {
     return new TIndexingActor(tabletId, parent);

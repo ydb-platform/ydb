@@ -4,6 +4,7 @@
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 using NOlap::TBlobRange;
 
@@ -145,6 +146,8 @@ private:
         //Die(ctx); // It's alive till tablet's death
     }
 };
+
+} // namespace
 
 IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent) {
     return new TCompactionActor(tabletId, parent);

@@ -1283,6 +1283,7 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
+    optional bool EnableSequentialHints = 38 [default = false];
 };
 
 // Config describes immediate controls and allows

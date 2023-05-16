@@ -3664,6 +3664,35 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         }
     }
 
+    Y_UNIT_TEST(DqSourceSequentialLimit) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
+        appConfig.MutableTableServiceConfig()->SetEnableSequentialHints(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NKikimrTxDataShard::TEvRead evread;
+        evread.SetMaxRowsInResult(2);
+        InjectRangeEvReadSettings(evread);
+
+        NKikimrTxDataShard::TEvReadAck evreadack;
+        InjectRangeEvReadAckSettings(evreadack);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard` ORDER BY Key LIMIT 1;
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(DqSourceLocksEffects) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;

@@ -1469,7 +1469,7 @@ private:
                 }
 
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
-                    HasStreamLookup = true;
+                    UnknownAffectedShardCount = true;
                 case NKqpProto::TKqpPhyConnection::kMap: {
                     partitionsCount = originStageInfo.Tasks.size();
                     break;
@@ -1667,7 +1667,11 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            readActors += BuildScanTasksFromSource(stageInfo, LockTxId);
+                            if (auto actors = BuildScanTasksFromSource(stageInfo, LockTxId)) {
+                                readActors += *actors;
+                            } else {
+                                UnknownAffectedShardCount = true;
+                            }
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
                             BuildReadTasksFromSource(stageInfo);
@@ -1763,7 +1767,7 @@ private:
         auto datashardTxs = BuildDatashardTxs(datashardTasks, topicTxs);
 
         // Single-shard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + readActors) <= 1 && !HasStreamLookup;
+        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + readActors) <= 1 && !UnknownAffectedShardCount;
 
         if (ImmediateTx) {
             // Transaction cannot be both immediate and volatile
@@ -2324,7 +2328,7 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     bool StreamResult = false;
 
-    bool HasStreamLookup = false;
+    bool UnknownAffectedShardCount = false;
 
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;

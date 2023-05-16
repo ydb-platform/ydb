@@ -2,8 +2,11 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include "probes.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
 namespace NDataShard {
@@ -96,8 +99,10 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
 
         DataShard.FillExecutionStats(op->GetExecutionProfile(), *result);
 
-        if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId()))
+        if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
+            result->Orbit = std::move(op->Orbit);
             DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
+        }
     }
 
     Pipeline.RemoveCompletingOp(op);

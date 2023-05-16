@@ -2,6 +2,9 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include "probes.h"
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
 namespace NDataShard {
@@ -180,6 +183,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
     DataShard.IncCounter(COUNTER_TX_RESULT_SIZE, res->Record.GetTxResult().size());
 
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
+        LWTRACK(ProposeTransactionSendResult, op->Orbit);
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
             DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie());
         } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {

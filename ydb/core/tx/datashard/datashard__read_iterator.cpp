@@ -3,12 +3,15 @@
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+#include "probes.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
 #include <util/system/hp_timer.h>
 
 #include <utility>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr::NDataShard {
 
@@ -1077,6 +1080,7 @@ public:
             }
         }
 
+        LWTRACK(ReadExecute, state.Orbit);
         if (!Read(txc, ctx, state))
             return EExecutionStatus::Restart;
 
@@ -1407,6 +1411,7 @@ public:
         Reader->FillResult(*Result, state);
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {
+            LWTRACK(ReadSendResult, state.Orbit);
             Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
         }
     }
@@ -1953,6 +1958,7 @@ public:
             AppData()->MonotonicTimeProvider->Now(),
             Self));
 
+        LWTRACK(ReadExecute, state.Orbit);
         if (Reader->Read(txc, ctx)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
@@ -2082,6 +2088,7 @@ public:
             << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
 
         Reader->FillResult(*Result, state);
+        LWTRACK(ReadSendResult, state.Orbit);
         Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
 
         if (Reader->HasUnreadQueries()) {
@@ -2116,6 +2123,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
+    LWTRACK(ReadRequest, request->Orbit, record.GetReadId());
+
     TReadIteratorId readId(ev->Sender, record.GetReadId());
     if (!Pipeline.HandleWaitingReadIterator(readId, request)) {
         // This request has been cancelled
@@ -2147,6 +2156,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     if (MediatorStateWaiting) {
+        LWTRACK(ReadWaitMediatorState, request->Orbit);
         Pipeline.RegisterWaitingReadIterator(readId, request);
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
@@ -2240,6 +2250,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
                 auto prioritizedMvccSnapshotReads = GetEnablePrioritizedMvccSnapshotReads();
                 TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
                 if (readVersion >= unreadableEdge) {
+                    LWTRACK(ReadWaitSnapshot, request->Orbit, readVersion.Step, readVersion.TxId);
                     Pipeline.AddWaitingReadIterator(readVersion, std::move(ev), ctx);
                     return;
                 }
@@ -2328,7 +2339,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     ReadIterators.emplace(
         readId,
-        new TReadIteratorState(sessionId, isHeadRead, AppData()->MonotonicTimeProvider->Now()));
+        new TReadIteratorState(sessionId, isHeadRead, AppData()->MonotonicTimeProvider->Now(), std::move(request->Orbit)));
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 
@@ -2386,6 +2397,8 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
 
         return;
     }
+
+    LWTRACK(ReadAck, state.Orbit);
 
     // We received ACK on message we hadn't sent yet
     if (state.SeqNo < record.GetSeqNo()) {
@@ -2449,6 +2462,8 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
         IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, delta.MilliSeconds());
         IncCounter(COUNTER_READ_ITERATOR_CANCEL);
     }
+
+    LWTRACK(ReadCancel, state->Orbit);
 
     DeleteReadIterator(it);
 }

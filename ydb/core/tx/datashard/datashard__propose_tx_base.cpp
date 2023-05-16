@@ -1,9 +1,12 @@
 #include "datashard_txs.h"
 #include "datashard_failpoints.h"
 #include "operation.h"
+#include "probes.h"
 
 #include <ydb/core/util/pb.h>
 #include <ydb/core/base/wilson.h>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
 namespace NDataShard {
@@ -89,6 +92,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
+                LWTRACK(ProposeTransactionParsed, op->Orbit, false);
                 Y_VERIFY(op->Result());
 
                 if (ProposeTransactionSpan) {
@@ -97,6 +101,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 ctx.Send(op->GetTarget(), op->Result().Release());
                 return true;
             }
+
+            LWTRACK(ProposeTransactionParsed, op->Orbit, true);
 
             op->BuildExecutionPlan(false);
             if (!op->IsExecutionPlanFinished())

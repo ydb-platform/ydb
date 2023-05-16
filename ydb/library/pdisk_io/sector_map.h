@@ -118,7 +118,7 @@ private:
         if (size == 0) {
             return;
         }
-        
+
         ui64 beginSector = offset / NSectorMap::SECTOR_SIZE;
         ui64 endSector = (offset + size + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE;
         ui64 midSector = (beginSector + endSector) / 2;
@@ -222,20 +222,22 @@ public:
         ui64 dataOffset = offset;
         THPTimer timer;
 
-        TGuard<TTicketLock> guard(MapLock);
-        for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
-            if (auto it = Map.find(offset); it == Map.end()) {
-                memset(data, 0x33, NSectorMap::SECTOR_SIZE);
-            } else {
-                char tmp[4 * NSectorMap::SECTOR_SIZE];
-                int processed = LZ4_decompress_safe(it->second.data(), tmp, it->second.size(), 4 * NSectorMap::SECTOR_SIZE);
-                Y_VERIFY_S(processed == NSectorMap::SECTOR_SIZE, "processed# " << processed);
-                memcpy(data, tmp, NSectorMap::SECTOR_SIZE);
+        {
+            TGuard<TTicketLock> guard(MapLock);
+            for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
+                if (auto it = Map.find(offset); it == Map.end()) {
+                    memset(data, 0x33, NSectorMap::SECTOR_SIZE);
+                } else {
+                    char tmp[4 * NSectorMap::SECTOR_SIZE];
+                    int processed = LZ4_decompress_safe(it->second.data(), tmp, it->second.size(), 4 * NSectorMap::SECTOR_SIZE);
+                    Y_VERIFY_S(processed == NSectorMap::SECTOR_SIZE, "processed# " << processed);
+                    memcpy(data, tmp, NSectorMap::SECTOR_SIZE);
+                }
+                offset += NSectorMap::SECTOR_SIZE;
+                data += NSectorMap::SECTOR_SIZE;
             }
-            offset += NSectorMap::SECTOR_SIZE;
-            data += NSectorMap::SECTOR_SIZE;
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
@@ -257,18 +259,19 @@ public:
                 Y_VERIFY_S(written > 0, "written# " << written);
                 TString str = TString::Uninitialized(written);
                 memcpy(str.Detach(), tmp, written);
-                if (auto it = Map.find(offset); it != Map.end()) {
+
+                auto [it, inserted] = Map.emplace(offset, str);
+                if (!inserted) {
                     AllocatedBytes.fetch_sub(it->second.size());
-                    it->second = str;
-                } else {
-                    Map[offset] = str;
+                    it->second = std::move(str);
                 }
-                AllocatedBytes.fetch_add(Map[offset].size());
+
+                AllocatedBytes.fetch_add(it->second.size());
                 offset += NSectorMap::SECTOR_SIZE;
                 data += NSectorMap::SECTOR_SIZE;
             }
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }

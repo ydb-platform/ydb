@@ -10,11 +10,6 @@ namespace NMonotonic {
         virtual TMonotonic Now() = 0;
     };
 
-    class IBootTimeProvider: public TThrRefBase {
-    public:
-        virtual TBootTime Now() = 0;
-    };
-
     class TMonotonicOperator {
     public:
         static void RegisterProvider(TIntrusivePtr<IMonotonicTimeProvider> provider);
@@ -22,7 +17,6 @@ namespace NMonotonic {
     };
 
     TIntrusivePtr<IMonotonicTimeProvider> CreateDefaultMonotonicTimeProvider();
-    TIntrusivePtr<IBootTimeProvider> CreateDefaultBootTimeProvider();
 
 }
 

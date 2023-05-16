@@ -190,7 +190,6 @@ namespace NActors {
         class TExecutorPoolStub;
         class TTimeProvider;
         class TMonotonicTimeProvider;
-        class TBootTimeProvider;
 
         enum class EEventAction {
             PROCESS,
@@ -233,10 +232,8 @@ namespace NActors {
         void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority);
         TIntrusivePtr<ITimeProvider> GetTimeProvider();
         TIntrusivePtr<IMonotonicTimeProvider> GetMonotonicTimeProvider();
-        TIntrusivePtr<IBootTimeProvider> GetBootTimeProvider();
         TInstant GetCurrentTime() const;
         TMonotonic GetCurrentMonotonicTime() const;
-        TBootTime GetCurrentBootTime() const;
         void UpdateCurrentTime(TInstant newTime);
         void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0);
@@ -552,7 +549,6 @@ namespace NActors {
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
         TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
-        TIntrusivePtr<IBootTimeProvider> BootTimeProvider;
 
     protected:
         struct TNodeDataBase: public TThrRefBase {

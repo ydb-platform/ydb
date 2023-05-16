@@ -4,63 +4,22 @@
 
 namespace NMonotonic {
 
-    template <class TDerived>
-    class TMonotonicBase: public TTimeBase<TDerived> {
-        using TBase = TTimeBase<TDerived>;
-
-    public:
-        using TBase::TBase;
-
-        using TBase::Days;
-        using TBase::Hours;
-        using TBase::MicroSeconds;
-        using TBase::MilliSeconds;
-        using TBase::Minutes;
-        using TBase::Seconds;
-
-        static constexpr TDerived Max() noexcept {
-            return TDerived::FromValue(::Max<ui64>());
-        }
-
-        static constexpr TDerived Zero() noexcept {
-            return TDerived::FromValue(0);
-        }
-
-        static constexpr TDerived MicroSeconds(ui64 us) noexcept {
-            return TDerived::FromValue(TInstant::MicroSeconds(us).GetValue());
-        }
-
-        static constexpr TDerived MilliSeconds(ui64 ms) noexcept {
-            return TDerived::FromValue(TInstant::MilliSeconds(ms).GetValue());
-        }
-
-        static constexpr TDerived Seconds(ui64 s) noexcept {
-            return TDerived::FromValue(TInstant::Seconds(s).GetValue());
-        }
-
-        static constexpr TDerived Minutes(ui64 m) noexcept {
-            return TDerived::FromValue(TInstant::Minutes(m).GetValue());
-        }
-
-        static constexpr TDerived Hours(ui64 h) noexcept {
-            return TDerived::FromValue(TInstant::Hours(h).GetValue());
-        }
-
-        static constexpr TDerived Days(ui64 d) noexcept {
-            return TDerived::FromValue(TInstant::Days(d).GetValue());
-        }
-    };
-
     /**
      * Returns current monotonic time in microseconds
+     *
+     * On Linux uses CLOCK_BOOTTIME under the hood, so it includes time passed
+     * during suspend and makes it safe for measuring lease times.
      */
     ui64 GetMonotonicMicroSeconds();
 
     /**
      * Similar to TInstant, but measuring monotonic time
+     *
+     * On Linux uses CLOCK_BOOTTIME under the hood, so it includes time passed
+     * during suspend and makes it safe for measuring lease times.
      */
-    class TMonotonic: public TMonotonicBase<TMonotonic> {
-        using TBase = TMonotonicBase<TMonotonic>;
+    class TMonotonic: public TTimeBase<TMonotonic> {
+        using TBase = TTimeBase<TMonotonic>;
 
     protected:
         constexpr explicit TMonotonic(TValue value) noexcept
@@ -87,6 +46,38 @@ namespace NMonotonic {
         using TBase::Minutes;
         using TBase::Seconds;
 
+        static constexpr TMonotonic Max() noexcept {
+            return TMonotonic::FromValue(::Max<ui64>());
+        }
+
+        static constexpr TMonotonic Zero() noexcept {
+            return TMonotonic::FromValue(0);
+        }
+
+        static constexpr TMonotonic MicroSeconds(ui64 us) noexcept {
+            return TMonotonic::FromValue(TInstant::MicroSeconds(us).GetValue());
+        }
+
+        static constexpr TMonotonic MilliSeconds(ui64 ms) noexcept {
+            return TMonotonic::FromValue(TInstant::MilliSeconds(ms).GetValue());
+        }
+
+        static constexpr TMonotonic Seconds(ui64 s) noexcept {
+            return TMonotonic::FromValue(TInstant::Seconds(s).GetValue());
+        }
+
+        static constexpr TMonotonic Minutes(ui64 m) noexcept {
+            return TMonotonic::FromValue(TInstant::Minutes(m).GetValue());
+        }
+
+        static constexpr TMonotonic Hours(ui64 h) noexcept {
+            return TMonotonic::FromValue(TInstant::Hours(h).GetValue());
+        }
+
+        static constexpr TMonotonic Days(ui64 d) noexcept {
+            return TMonotonic::FromValue(TInstant::Days(d).GetValue());
+        }
+
         template <class T>
         inline TMonotonic& operator+=(const T& t) noexcept {
             return (*this = (*this + t));
@@ -98,70 +89,15 @@ namespace NMonotonic {
         }
     };
 
-    /**
-     * Returns current CLOCK_BOOTTIME time in microseconds
-     */
-    ui64 GetBootTimeMicroSeconds();
-
-    /**
-     * Similar to TInstant, but measuring CLOCK_BOOTTIME time
-     */
-    class TBootTime: public TMonotonicBase<TBootTime> {
-        using TBase = TMonotonicBase<TBootTime>;
-
-    protected:
-        constexpr explicit TBootTime(TValue value) noexcept
-            : TBase(value)
-        {
-        }
-
-    public:
-        constexpr TBootTime() noexcept {
-        }
-
-        static constexpr TBootTime FromValue(TValue value) noexcept {
-            return TBootTime(value);
-        }
-
-        static inline TBootTime Now() {
-            return TBootTime::MicroSeconds(GetBootTimeMicroSeconds());
-        }
-
-        using TBase::Days;
-        using TBase::Hours;
-        using TBase::MicroSeconds;
-        using TBase::MilliSeconds;
-        using TBase::Minutes;
-        using TBase::Seconds;
-
-        template <class T>
-        inline TBootTime& operator+=(const T& t) noexcept {
-            return (*this = (*this + t));
-        }
-
-        template <class T>
-        inline TBootTime& operator-=(const T& t) noexcept {
-            return (*this = (*this - t));
-        }
-    };
-
 } // namespace NMonotonic
 
 Y_DECLARE_PODTYPE(NMonotonic::TMonotonic);
-Y_DECLARE_PODTYPE(NMonotonic::TBootTime);
 
 namespace std {
     template <>
     struct hash<NMonotonic::TMonotonic> {
         size_t operator()(const NMonotonic::TMonotonic& key) const noexcept {
             return hash<NMonotonic::TMonotonic::TValue>()(key.GetValue());
-        }
-    };
-
-    template <>
-    struct hash<NMonotonic::TBootTime> {
-        size_t operator()(const NMonotonic::TBootTime& key) const noexcept {
-            return hash<NMonotonic::TBootTime::TValue>()(key.GetValue());
         }
     };
 }
@@ -180,20 +116,6 @@ namespace NMonotonic {
     constexpr TMonotonic operator-(const TMonotonic& l, const TDuration& r) {
         TInstant result = TInstant::FromValue(l.GetValue()) - r;
         return TMonotonic::FromValue(result.GetValue());
-    }
-
-    constexpr TDuration operator-(const TBootTime& l, const TBootTime& r) {
-        return TInstant::FromValue(l.GetValue()) - TInstant::FromValue(r.GetValue());
-    }
-
-    constexpr TBootTime operator+(const TBootTime& l, const TDuration& r) {
-        TInstant result = TInstant::FromValue(l.GetValue()) + r;
-        return TBootTime::FromValue(result.GetValue());
-    }
-
-    constexpr TBootTime operator-(const TBootTime& l, const TDuration& r) {
-        TInstant result = TInstant::FromValue(l.GetValue()) - r;
-        return TBootTime::FromValue(result.GetValue());
     }
 
 } // namespace NMonotonic

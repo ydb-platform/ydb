@@ -678,7 +678,7 @@ namespace NKikimr::NBsController {
                                 }
                             }
                         }
-                        out << "<div/>";
+                        out << "</div>";
                     }
                 }
 

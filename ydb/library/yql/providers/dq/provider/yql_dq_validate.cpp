@@ -1,5 +1,6 @@
 #include "yql_dq_validate.h"
 
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -32,7 +33,7 @@ bool ValidateDqStage(const TExprNode& node, const TTypeAnnotationContext& typeCt
     }
     VisitExpr(TDqStageBase(&node).Program().Body().Ptr(),
         [](const TExprNode::TPtr& n) {
-            return !TDqConnection::Match(n.Get()) && !TDqPhyPrecompute::Match(n.Get());
+            return !TDqConnection::Match(n.Get()) && !TDqPhyPrecompute::Match(n.Get()) && !TDqReadWrapBase::Match(n.Get());
         },
         [&hasErrors, &ctx](const TExprNode::TPtr& n) {
             if (TCoScriptUdf::Match(n.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(n->Head().Content()))) {
@@ -111,6 +112,8 @@ bool ValidateDqExecution(const TExprNode& node, const TTypeAnnotationContext& ty
                 return false;
             } else if (TDqConnection::Match(&n)) {
                 dqNodes.insert(&n);
+                return false;
+            } else if (TDqReadWrapBase::Match(&n)) {
                 return false;
             }
             return true;

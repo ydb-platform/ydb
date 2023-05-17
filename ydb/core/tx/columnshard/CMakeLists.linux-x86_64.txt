@@ -7,6 +7,7 @@
 
 
 add_subdirectory(engines)
+add_subdirectory(kqp)
 add_subdirectory(ut_rw)
 add_subdirectory(ut_schema)
 get_built_tool_path(
@@ -36,6 +37,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
   tx-columnshard-engines
+  tx-columnshard-kqp
   core-tx-tiering
   tx-conveyor-usage
   tx-long_tx_service-public

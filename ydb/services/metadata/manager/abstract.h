@@ -14,11 +14,11 @@
 
 namespace NYql {
 class TObjectSettingsImpl {
+public:
+    using TFeatures = std::map<TString, TString>;
 private:
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
-
-    using TFeatures = std::map<TString, TString>;
     YDB_READONLY_DEF(TFeatures, Features);
 public:
     template <class T>
@@ -148,8 +148,7 @@ public:
     class TExternalModificationContext {
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
-    public:
-        TExternalModificationContext() = default;
+        YDB_ACCESSOR_DEF(TString, Database);
     };
 
     class TInternalModificationContext {

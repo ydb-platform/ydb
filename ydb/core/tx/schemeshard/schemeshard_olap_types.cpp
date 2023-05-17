@@ -111,9 +111,9 @@ namespace NKikimr::NSchemeShard {
         return true;
     }
 
-    bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTable& alterRequest, IErrorCollector& errors) {
+    bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         TSet<TString> columnNames;
-        for (auto& columnSchema : alterRequest.GetAlterSchema().GetColumns()) {
+        for (auto& columnSchema : alterRequest.GetColumns()) {
             TOlapColumnSchema column;
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
@@ -202,6 +202,7 @@ namespace NKikimr::NSchemeShard {
             }
             KeyColumnIds.swap(keyColumnIds);
         }
+        ++Version;
         return true;
     }
 
@@ -397,6 +398,10 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapStoreSchemaPreset::ParseFromRequest(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, IErrorCollector& errors) {
+        if (presetProto.HasId()) {
+            errors.AddError("Schema preset id cannot be specified explicitly");
+            return false;
+        }
         if (!presetProto.GetName()) {
             errors.AddError("Schema preset name cannot be empty");
             return false;

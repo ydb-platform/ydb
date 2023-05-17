@@ -4446,7 +4446,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 NKikimrSchemeOp::TColumnStoreSharding sharding;
                 Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::OlapStores::Sharding>()));
 
-                Self->OlapStores[pathId] = new TOlapStoreInfo(alterVersion, std::move(description), std::move(sharding));
+                TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo(alterVersion, std::move(sharding));
+                storeInfo->ParseFromLocalDB(description);
+                Self->OlapStores[pathId] = storeInfo;
                 Self->IncrementPathDbRefCount(pathId);
                 Self->SetPartitioning(pathId, Self->OlapStores[pathId]);
 
@@ -4478,7 +4480,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->OlapStores.contains(pathId),
                     "Cannot load alter for olap store " << pathId);
 
-                Self->OlapStores[pathId]->AlterData = new TOlapStoreInfo(alterVersion, std::move(description), std::move(sharding), std::move(alterBody));
+                TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo(alterVersion, std::move(sharding), std::move(alterBody));
+                storeInfo->ParseFromLocalDB(description);
+                Self->OlapStores[pathId]->AlterData = storeInfo;
 
                 if (!rowset.Next()) {
                     return false;

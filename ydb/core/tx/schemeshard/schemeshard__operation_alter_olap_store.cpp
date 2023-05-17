@@ -1,199 +1,65 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_olap_types.h"
 
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TOlapStoreInfo::TPtr ParseParams(
-        const TPath& path, const TOlapStoreInfo::TPtr& storeInfo,
+TOlapStoreInfo::TPtr ParseParams(const TOlapStoreInfo::TPtr& storeInfo,
         const NKikimrSchemeOp::TAlterColumnStore& alter,
-        NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
+        IErrorCollector& errors)
 {
-    Y_UNUSED(path);
-    Y_UNUSED(context);
-
-    // Make a copy of the current store and increment its version
-    TOlapStoreInfo::TPtr alterData = new TOlapStoreInfo(*storeInfo);
-    alterData->AlterVersion++;
-    alterData->AlterBody.ConstructInPlace(alter);
-
-    for (const auto& removeSchemaPreset : alter.GetRemoveSchemaPresets()) {
-        Y_UNUSED(removeSchemaPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "Removing schema presets is not supported yet";
+    if (!alter.GetRemoveSchemaPresets().empty()) {
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "Removing schema presets is not supported yet");
         return nullptr;
-    }
-
-    THashSet<TString> alteredSchemaPresets;
-    for (const auto& alterSchemaPreset : alter.GetAlterSchemaPresets()) {
-#if 0
-        const TString& presetName = alterSchemaPreset.GetName();
-        if (alteredSchemaPresets.contains(presetName)) {
-            status = NKikimrScheme::StatusInvalidParameter;
-            errStr = TStringBuilder() << "Cannot alter schema preset '" << presetName << "' multiple times";
-            return nullptr;
-        }
-        if (!alterData->SchemaPresetByName.contains(presetName)) {
-            status = NKikimrScheme::StatusInvalidParameter;
-            errStr = TStringBuilder() << "Cannot alter unknown schema preset '" << presetName << "'";
-            return nullptr;
-        }
-
-        const ui32 presetId = alterData->SchemaPresetByName.at(presetName);
-        auto& preset = alterData->SchemaPresets.at(presetId);
-        auto& presetProto = *alterData->Description.MutableSchemaPresets(preset.GetProtoIndex());
-        auto& schemaProto = *presetProto.MutableSchema();
-
-        const auto& alterSchema = alterSchemaPreset.GetAlterSchema();
-
-        THashSet<ui32> droppedColumns;
-        for (const auto& dropColumn : alterSchema.GetDropColumns()) {
-            const TString& columnName = dropColumn.GetName();
-            const auto* column = preset.GetColumnByName(columnName);
-            if (!column) {
-                status = NKikimrScheme::StatusInvalidParameter;
-                errStr = TStringBuilder() << "Cannot drop non-existant column '" << columnName << "'";
-                return nullptr;
-            }
-            const ui32 columnId = column->Id;
-            if (column->IsKeyColumn()) {
-                status = NKikimrScheme::StatusInvalidParameter;
-                errStr = TStringBuilder() << "Cannot drop key column '" << columnName << "'";
-                return nullptr;
-            }
-            preset.ColumnsByName.erase(columnName);
-            preset.Columns.erase(columnId);
-            droppedColumns.insert(columnId);
-        }
-        if (droppedColumns) {
-            auto* columns = schemaProto.MutableColumns();
-            for (int src = 0, dst = 0; src < columns->size(); ++src) {
-                const auto& srcProto = columns->Get(src);
-                const ui32 columnId = srcProto.GetId();
-                if (droppedColumns.contains(columnId)) {
-                    // skip dropped columns
-                    continue;
-                }
-                if (src != dst) {
-                    // auto& column = preset.Columns.at(columnId);
-                    // column.ProtoIndex = dst;
-                    columns->SwapElements(src, dst);
-                }
-                ++dst;
-            }
-        }
-
-        for (const auto& alterColumn : alterSchema.GetAlterColumns()) {
-            Y_UNUSED(alterColumn);
-            status = NKikimrScheme::StatusInvalidParameter;
-            errStr = "Altering existing columns is not supported yet";
-            return nullptr;
-        }
-
-        const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
-
-        for (const auto& addColumn : alterSchema.GetAddColumns()) {
-            auto& columnProto = *schemaProto.AddColumns();
-            columnProto = addColumn;
-            const TString& columnName = columnProto.GetName();
-            if (columnName.empty()) {
-                status = NKikimrScheme::StatusInvalidParameter;
-                errStr = "Columns cannot have an empty name";
-                return nullptr;
-            }
-            if (preset.ColumnsByName.contains(columnName)) {
-                status = NKikimrScheme::StatusInvalidParameter;
-                errStr = TStringBuilder() << "Cannot add duplicate column '" << columnName << "'";
-                return nullptr;
-            }
-            if (columnProto.HasId()) {
-                status = NKikimrScheme::StatusInvalidParameter;
-                errStr = TStringBuilder() << "New column '" << columnName << "' cannot have an Id specified";
-                return nullptr;
-            }
-            if (columnProto.HasTypeId()) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Cannot set TypeId for column '" << columnName << "', use Type";
-                return nullptr;
-            }
-            if (!columnProto.HasType()) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Missing Type for column '" << columnName << "'";
-                return nullptr;
-            }
-
-            const ui32 columnId = preset.NextColumnId++;
-            Y_VERIFY(!preset.Columns.contains(columnId));
-            columnProto.SetId(columnId);
-            auto& column = preset.Columns[columnId];
-            column.Id = columnId;
-            column.Name = columnName;
-            preset.ColumnsByName[columnName] = columnId;
-
-            auto typeName = NMiniKQL::AdaptLegacyYqlType(columnProto.GetType());
-            const NScheme::IType* type = typeRegistry->GetType(typeName);
-            if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                status = NKikimrScheme::StatusSchemeError;
-                errStr = TStringBuilder() << "Type '" << columnProto.GetType() << "' specified for column '" << columnName << "' is not supported";
-                return nullptr;
-            }
-            columnProto.SetTypeId(type->GetTypeId());
-            column.TypeId = type->GetTypeId();
-            schemaProto.SetNextColumnId(preset.NextColumnId);
-        }
-
-        for (const auto& addKeyColumnName : alterSchema.GetAddKeyColumnNames()) {
-            Y_UNUSED(addKeyColumnName);
-            status = NKikimrScheme::StatusInvalidParameter;
-            errStr = "Adding key columns is not supported yet";
-            return nullptr;
-        }
-
-        preset.Version++;
-        schemaProto.SetVersion(preset.Version);
-
-        alteredSchemaPresets.insert(presetName);
-#else
-        Y_UNUSED(alterSchemaPreset);
-        Y_UNUSED(alteredSchemaPresets);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "Altering schema presets is not supported yet";
-        return nullptr;
-#endif
     }
 
     for (const auto& addSchemaPreset : alter.GetAddSchemaPresets()) {
         Y_UNUSED(addSchemaPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "Adding schema presets is not supported yet";
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "Adding schema presets is not supported yet");
         return nullptr;
     }
 
     for (const auto& removeTtlSettingsPreset : alter.GetRESERVED_RemoveTtlSettingsPresets()) {
         Y_UNUSED(removeTtlSettingsPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "TTL presets are not supported");
         return nullptr;
     }
 
     for (const auto& alterTtlSettingsPreset : alter.GetRESERVED_AlterTtlSettingsPresets()) {
         Y_UNUSED(alterTtlSettingsPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "TTL presets are not supported");
         return nullptr;
     }
 
     for (const auto& addTtlSettingsPreset : alter.GetRESERVED_AddTtlSettingsPresets()) {
         Y_UNUSED(addTtlSettingsPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
+        errors.AddError(NKikimrScheme::StatusInvalidParameter, "TTL presets are not supported");
         return nullptr;
     }
 
-    storeInfo->AlterData = alterData;
+    auto alterData = TOlapStoreInfo::BuildStoreWithAlter(*storeInfo, alter);
+    THashSet<TString> alteredSchemaPresets;
+    for (const auto& alterProto : alter.GetAlterSchemaPresets()) {
+        const TString& presetName = alterProto.GetName();
+        if (alteredSchemaPresets.contains(presetName)) {
+            errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Cannot alter schema preset '" << presetName << "' multiple times");
+            return nullptr;
+        }
+
+        if (!storeInfo->SchemaPresetByName.contains(presetName)) {
+            errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Cannot alter unknown schema preset '" << presetName << "'");
+        }
+
+        TOlapSchemaUpdate schemaUpdate;
+        if (!schemaUpdate.Parse(alterProto.GetAlterSchema(), errors)) {
+            return nullptr;
+        }
+        alterData->UpdatePreset(presetName, schemaUpdate, errors);
+    }
     return alterData;
 }
 
@@ -234,7 +100,7 @@ public:
         txState->ClearShardsInProgress();
 
         TVector<ui32> droppedSchemaPresets;
-        for (const auto& presetProto : storeInfo->Description.GetSchemaPresets()) {
+        for (const auto& presetProto : storeInfo->GetDescription().GetSchemaPresets()) {
             const ui32 presetId = presetProto.GetId();
             if (!alterData->SchemaPresets.contains(presetId)) {
                 droppedSchemaPresets.push_back(presetId);
@@ -264,7 +130,7 @@ public:
             for (ui32 id : droppedSchemaPresets) {
                 alter->AddDroppedSchemaPresets(id);
             }
-            for (const auto& presetProto : storeInfo->Description.GetSchemaPresets()) {
+            for (const auto& presetProto : alterData->GetDescription().GetSchemaPresets()) {
                 if (updatedSchemaPresets.contains(presetProto.GetId())) {
                     *alter->AddSchemaPresets() = presetProto;
                 }
@@ -623,7 +489,7 @@ public:
             return result;
         }
 
-        if (storeInfo->AlterVersion == 0) {
+        if (storeInfo->GetAlterVersion() == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Store is not created yet");
             return result;
         }
@@ -632,19 +498,19 @@ public:
             return result;
         }
 
-        NKikimrScheme::EStatus status;
-        TOlapStoreInfo::TPtr alterData = ParseParams(path, storeInfo, alter, status, errStr, context);
+        TProposeErrorCollector errors(*result);
+        TOlapStoreInfo::TPtr alterData = ParseParams(storeInfo, alter, errors);
         if (!alterData) {
-            result->SetError(status, errStr);
             return result;
         }
+        storeInfo->AlterData = alterData;
 
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterOlapStore, path->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        for (auto shardIdx : storeInfo->ColumnShards) {
+        for (auto shardIdx : storeInfo->GetColumnShards()) {
             Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
             txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
 

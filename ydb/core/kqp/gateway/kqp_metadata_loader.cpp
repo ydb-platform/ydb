@@ -1,5 +1,5 @@
 #include "kqp_metadata_loader.h"
-#include "kqp_ic_gateway_actors.h"
+#include "actors/kqp_ic_gateway_actors.h"
 
 #include <ydb/core/base/path.h>
 

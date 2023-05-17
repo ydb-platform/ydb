@@ -3108,12 +3108,12 @@ void TSchemeShard::PersistOlapStore(NIceDb::TNiceDb& db, TPathId pathId, const T
 
     TString serialized;
     TString serializedSharding;
-    Y_VERIFY(storeInfo.Description.SerializeToString(&serialized));
+    Y_VERIFY(storeInfo.GetDescription().SerializeToString(&serialized));
     Y_VERIFY(storeInfo.Sharding.SerializeToString(&serializedSharding));
 
     if (isAlter) {
         db.Table<Schema::OlapStoresAlters>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::OlapStoresAlters::AlterVersion>(storeInfo.AlterVersion),
+            NIceDb::TUpdate<Schema::OlapStoresAlters::AlterVersion>(storeInfo.GetAlterVersion()),
             NIceDb::TUpdate<Schema::OlapStoresAlters::Description>(serialized),
             NIceDb::TUpdate<Schema::OlapStoresAlters::Sharding>(serializedSharding));
         if (storeInfo.AlterBody) {
@@ -3124,7 +3124,7 @@ void TSchemeShard::PersistOlapStore(NIceDb::TNiceDb& db, TPathId pathId, const T
         }
     } else {
         db.Table<Schema::OlapStores>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::OlapStores::AlterVersion>(storeInfo.AlterVersion),
+            NIceDb::TUpdate<Schema::OlapStores::AlterVersion>(storeInfo.GetAlterVersion()),
             NIceDb::TUpdate<Schema::OlapStores::Description>(serialized),
             NIceDb::TUpdate<Schema::OlapStores::Sharding>(serializedSharding));
     }
@@ -3823,7 +3823,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
             case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
                 Y_VERIFY_S(OlapStores.contains(pathId),
                            "no olap store with id: " << pathId << ", at schemeshard: " << SelfTabletId());
-                result.SetColumnStoreVersion(OlapStores.at(pathId)->AlterVersion);
+                result.SetColumnStoreVersion(OlapStores.at(pathId)->GetAlterVersion());
                 generalVersion += result.GetColumnStoreVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: {
@@ -6325,7 +6325,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, const TVector<TShardIdx>& par
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
-    SetPartitioning(pathId, storeInfo->ColumnShards);
+    SetPartitioning(pathId, storeInfo->GetColumnShards());
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo) {

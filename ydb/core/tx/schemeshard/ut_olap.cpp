@@ -569,7 +569,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "comment" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusAccepted});
     }
 
     Y_UNIT_TEST(AlterTtl) {

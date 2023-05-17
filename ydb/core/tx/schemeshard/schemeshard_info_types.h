@@ -863,6 +863,14 @@ public:
 class TColumnTablesLayout;
 
 struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
+private:
+    TString Name;
+    ui64 NextSchemaPresetId = 1;
+    ui64 NextTtlSettingsPresetId = 1;
+    NKikimrSchemeOp::TColumnStorageConfig StorageConfig;
+    NKikimrSchemeOp::TColumnStoreDescription Description;
+    ui64 AlterVersion = 0;
+public:
     using TPtr = TIntrusivePtr<TOlapStoreInfo>;
 
     class ILayoutPolicy {
@@ -883,11 +891,13 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     protected:
         virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
     };
-
-    ui64 AlterVersion = 0;
+   
     TPtr AlterData;
 
-    NKikimrSchemeOp::TColumnStoreDescription Description;
+    const NKikimrSchemeOp::TColumnStoreDescription& GetDescription() const {
+        return Description;
+    }
+
     NKikimrSchemeOp::TColumnStoreSharding Sharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody;
 
@@ -901,9 +911,40 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     TAggregatedStats Stats;
 
     TOlapStoreInfo() = default;
-    TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description,
+    TOlapStoreInfo(ui64 alterVersion,
             NKikimrSchemeOp::TColumnStoreSharding&& sharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
+
+    static TOlapStoreInfo::TPtr BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody);
+
+    const NKikimrSchemeOp::TColumnStorageConfig& GetStorageConfig() const {
+        return StorageConfig;
+    }
+
+    const TVector<TShardIdx>& GetColumnShards() const {
+        return ColumnShards;
+    }
+
+    ui64 GetAlterVersion() const {
+        return AlterVersion;
+    }
+
+    void ApplySharding(const TVector<TShardIdx>& shardsIndexes) {
+        Y_VERIFY(ColumnShards.size() == shardsIndexes.size());
+        Sharding.ClearColumnShards();
+        for (ui64 i = 0; i < ColumnShards.size(); ++i) {
+            const auto& idx = shardsIndexes[i];
+            ColumnShards[i] = idx;
+            auto* shardInfoProto = Sharding.AddColumnShards();
+            shardInfoProto->SetOwnerId(idx.GetOwnerId());
+            shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
+        }
+    }
+    
+    void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
+    void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
+    bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);
+    bool UpdatePreset(const TString& presetName, const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
 
     const TAggregatedStats& GetStats() const {
         return Stats;
@@ -946,6 +987,8 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
     }
+
+    static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
 
     bool IsStandalone() const {
         return !OwnedColumnShards.empty();

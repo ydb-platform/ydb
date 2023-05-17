@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -4193,7 +4194,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             }
         };
 
-        class TColumnTable {
+        class TColumnTableBase {
             YDB_ACCESSOR_DEF(TString, Name);
             YDB_ACCESSOR_DEF(TVector<TColumnSchema>, Schema);
             YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
@@ -4201,9 +4202,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
         public:
             TString BuildQuery() const {
-                auto str = TStringBuilder() << "CREATE TABLE `" << Name << "`";
+                auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
                 str << " (" << BuildColumnsStr(Schema) <<  ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << "))";
-                str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
+                if (!Sharding.empty()) {
+                    str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
+                }
                 str << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount << ");";
                 return str;
             }
@@ -4217,6 +4220,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             }
 
         private:
+            virtual TString GetObjectType() const = 0;
             TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
                 TVector<TString> columnStr;
                 for (auto&& c : clumns) {
@@ -4272,15 +4276,31 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             }
         };
 
+        class TColumnTable : public TColumnTableBase {
+        private:
+            TString GetObjectType() const override {
+                return "TABLE";
+            }
+        };
+
+        class TColumnTableStore : public TColumnTableBase {
+        private:
+            TString GetObjectType() const override {
+                return "TABLESTORE";
+            }
+        };
+
     private:
+        TKikimrRunner Kikimr;
         NYdb::NTable::TTableClient TableClient;
         NYdb::NLongTx::TClient LongTxClient;
         NYdb::NTable::TSession Session;
 
     public:
-        TTestHelper(const TKikimrRunner& kikimr)
-            : TableClient(kikimr.GetTableClient())
-            , LongTxClient(kikimr.GetDriver())
+        TTestHelper(const TKikimrSettings& settings)
+            : Kikimr(settings)
+            , TableClient(Kikimr.GetTableClient())
+            , LongTxClient(Kikimr.GetDriver())
             , Session(TableClient.CreateSession().GetValueSync().GetSession())
         {}
 
@@ -4288,7 +4308,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             return Session;
         }
 
-        void CreateTable(const TColumnTable& table) {
+        void CreateTable(const TColumnTableBase& table) {
+            std::cerr << (table.BuildQuery()) << std::endl;
             auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -4315,12 +4336,27 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TString result = StreamResultToYson(it);
             UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
         }
+
+        void RebootTablets(const TString& tableName) {
+            auto runtime = Kikimr.GetTestServer().GetRuntime();
+            TActorId sender = runtime->AllocateEdgeActor();
+            TVector<ui64> shards;
+            {
+                auto describeResult = DescribeTable(&Kikimr.GetTestServer(), sender, tableName);
+                for (auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
+                    shards.push_back(shard);
+                }
+            }
+            for (auto shard : shards) {
+                RebootTablet(*runtime, shard, sender);
+            }
+        }
     };
 
     Y_UNIT_TEST(AddColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        TKikimrRunner kikimr(runnerSettings);
+        TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -4328,7 +4364,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
         
-        TTestHelper testHelper(kikimr);
         TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
@@ -4376,10 +4411,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT new_column FROM `/Root/ColumnTableTest`", "[[#];[#];[[200u]]]");
     }
 
-    Y_UNIT_TEST(AddColumnErrors) {
+    Y_UNIT_TEST(AddColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        TKikimrRunner kikimr(runnerSettings);
+        TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -4387,7 +4422,70 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
         
-        TTestHelper testHelper(kikimr);
+        TTestHelper::TColumnTableStore testTableStore;
+
+        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTableStore);
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
+            testHelper.InsertData(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+
+        {
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            auto alterQuery = TStringBuilder() << "ALTER OBJECT `" << testTableStore.GetName() << "` (TYPE TABLESTORE) SET (ACTION=NEW_COLUMN, NAME=new_column, TYPE=Uint64);";
+            
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto settings = TDescribeTableSettings().WithTableStatistics(true);
+            auto describeResult = testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& description = describeResult.GetTableDescription();
+            auto columns = description.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+        }
+      
+        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
+        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[#]]");
+        testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[[\"test_res_1\"]]]");
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(3).Add("test_res_3").Add(123).Add<uint64_t>(200);
+            testHelper.InsertData(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[3;[123];[200u];[\"test_res_3\"]]]");
+        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[[200u]]]");
+        testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[[\"test_res_3\"]]]");
+        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
+
+    //    testHelper.RebootTablets(testTable.GetName());
+    //    testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest`", "[[#];[#];[[200u]]]");
+    }
+
+    Y_UNIT_TEST(AddColumnErrors) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
         TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);

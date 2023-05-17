@@ -1057,11 +1057,6 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
     return request;
 }
 
-void InitRoot(Tests::TServer::TPtr server,
-    TActorId sender) {
-    server->SetupRootStoragePools(sender);
-}
-
 static THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
         NKikimrSchemeOp::EOperationType type,
         const TString& workingDir = {})
@@ -1225,35 +1220,6 @@ ui64 AsyncCreateCopyTable(
     desc.SetCopyFromTable(from);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
-}
-
-NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server,
-                                                     TActorId sender,
-                                                     const TString &path)
-{
-    auto &runtime = *server->GetRuntime();
-    TAutoPtr<IEventHandle> handle;
-    TVector<ui64> shards;
-
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-    request->Record.MutableDescribePath()->SetPath(path);
-    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-
-    return *reply->MutableRecord();
-}
-
-TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
-                             TActorId sender,
-                             const TString &path)
-{
-    TVector<ui64> shards;
-    auto lsResult = DescribeTable(server, sender, path);
-    for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
-
-    return shards;
 }
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(

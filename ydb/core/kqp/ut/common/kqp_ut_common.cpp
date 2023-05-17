@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/library/yql/core/yql_data_provider.h>
@@ -103,7 +104,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
-
+  
     if (settings.FeatureFlags.GetEnableKqpImmediateEffects()) {
         Tests::TServerSettings::TControls controls;
         controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
@@ -1018,6 +1019,41 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
 
     return THolder(response);
 }
+
+ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server,
+                                                        TActorId sender,
+                                                        const TString &path)
+{
+    auto &runtime = *server->GetRuntime();
+    TAutoPtr<IEventHandle> handle;
+    TVector<ui64> shards;
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+    return *reply->MutableRecord();
+}
+
+TVector<ui64> GetTableShards(Tests::TServer* server,
+                            TActorId sender,
+                            const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
+        shards.push_back(part.GetDatashardId());
+
+    return shards;
+}
+
+TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
+                                TActorId sender,
+                                const TString &path) {
+    return GetTableShards(server.Get(), sender, path);
+ }
 
 } // namspace NKqp
 } // namespace NKikimr

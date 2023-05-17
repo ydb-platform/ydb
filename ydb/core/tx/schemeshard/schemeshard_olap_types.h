@@ -56,7 +56,7 @@ namespace NKikimr::NSchemeShard {
 
     public:
         bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
-        bool Parse(const NKikimrSchemeOp::TAlterColumnTable& alterRequest, IErrorCollector& errors);
+        bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };
 
     class TOlapSchema {
@@ -72,7 +72,7 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TVector<ui32>, KeyColumnIds);
 
         YDB_READONLY(ui32, NextColumnId, 1);
-        YDB_READONLY(ui32, Version, 1);
+        YDB_READONLY(ui32, Version, 0);
 
     public:
         const TOlapColumnSchema* GetColumnByName(const TString& name) const noexcept {

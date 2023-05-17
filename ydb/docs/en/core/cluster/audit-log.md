@@ -49,10 +49,10 @@ The information about each operation is saved to the audit log as a separate eve
 
 ## Enabling audit log {#enabling-audit-log}
 
-Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) or their combination:
+Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) or their combination:
 
 ```yaml
-audit:
+audit_config:
   file_backend:
     format: audit_log_format
     file_path: "path_to_log_file"
@@ -75,7 +75,7 @@ audit:
 Sample configuration that saves the audit log text to `/var/log/ydb-audit.log`:
 
 ```yaml
-audit:
+audit_config:
   file_backend:
     format: TXT
     file_path: "/var/log/ydb-audit.log"
@@ -84,7 +84,7 @@ audit:
 Sample configuration that saves the audit log text to Yandex Unified Agent with the `audit` label and outputs it to `stderr` in JSON format:
 
 ```yaml
-audit:
+audit_config:
   unified_agent_backend:
     format: TXT
     log_name: audit

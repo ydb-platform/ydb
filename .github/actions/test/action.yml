@@ -47,7 +47,6 @@ runs:
   - name: Install Testmo CLI
     shell: bash
     run: npm install -g @testmo/testmo-cli
-
   - name: Test history run create
     id: th
     if: inputs.testman_token

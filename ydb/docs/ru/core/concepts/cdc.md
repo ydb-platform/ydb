@@ -57,6 +57,8 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 В зависимости от [параметров потока](../yql/reference/syntax/alter_table.md#changefeed-options) структура записи может отличаться.
 
+### JSON-формат {#json-record-structure}
+
 Запись в формате [JSON](https://en.wikipedia.org/wiki/JSON) имеет следующую структуру:
 
 ```json
@@ -135,6 +137,18 @@ Change Data Capture (CDC) обеспечивает захват изменени
 * Если в записи присутствует поле `erase` (то есть запись соответствует операции удаления), то это всегда пустой JSON-объект (`{}`).
 
 {% endnote %}
+
+### JSON-формат для документных таблиц {#document-table-json-record-structure}
+
+Для документных таблиц, совместимых с [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html), {{ ydb-short-name }} может генерировать записи об изменениях в формате, совместимом с [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html).
+
+Структура записи соответствует [структуре записей Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_Record.html):
+* `awsRegion` — содержит строку, переданную в параметре `AWS_REGION` при создании потока изменений.
+* `dynamodb` — [StreamRecord](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_StreamRecord.html).
+* `eventID` — уникальный идентификатор записи.
+* `eventName` — `INSERT`, `MODIFY` или `REMOVE`. Значение `INSERT` допустимо только в режиме `NEW_AND_OLD_IMAGES`.
+* `eventSource` — содержит строку `ydb:document-table`.
+* `eventVersion` — содержит строку `1.0`.
 
 ## Время хранения записей {#retention-period}
 

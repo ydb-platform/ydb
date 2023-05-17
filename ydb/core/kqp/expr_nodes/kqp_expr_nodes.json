@@ -123,6 +123,14 @@
             ]
         },
         {
+            "Name": "TKqlReadTableIndexRanges",
+            "Base": "TKqlReadTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "TKqlReadTableIndexRanges"},
+            "Children": [
+                {"Index": 5, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpReadOlapTableRanges",
             "Base": "TKqpReadOlapTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqpReadOlapTableRanges"}

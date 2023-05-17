@@ -18,6 +18,12 @@ void TSchemePrinterBase::Print() {
     PrintDirectoryRecursive(Settings.Path, "");
 }
 
+bool TSchemePrinterBase::IsDirectoryLike(const NScheme::TSchemeEntry& entry) {
+    return entry.Type == NScheme::ESchemeEntryType::Directory
+        || entry.Type == NScheme::ESchemeEntryType::SubDomain
+        || entry.Type == NScheme::ESchemeEntryType::ColumnStore;
+}
+
 void TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath) {
     NScheme::TListDirectoryResult result = SchemeClient.ListDirectory(
         fullPath,
@@ -25,10 +31,7 @@ void TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const 
     ).GetValueSync();
     ThrowOnError(result);
 
-    if (relativePath
-        || result.GetEntry().Type == NScheme::ESchemeEntryType::Directory
-        || result.GetEntry().Type == NScheme::ESchemeEntryType::SubDomain)
-    {
+    if (relativePath || IsDirectoryLike(result.GetEntry())) {
         PrintDirectory(relativePath, result);
     } else {
         PrintEntry(relativePath, result.GetEntry());
@@ -38,7 +41,7 @@ void TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const 
         for (const auto& child : result.GetChildren()) {
             TString childRelativePath = relativePath + (relativePath ? "/" : "") + child.Name;
             TString childFullPath = fullPath + "/" + child.Name;
-            if (child.Type == NScheme::ESchemeEntryType::Directory) {
+            if (IsDirectoryLike(child)) {
                 PrintDirectoryRecursive(childFullPath, childRelativePath);
             } else {
                 PrintEntry(childRelativePath, child);

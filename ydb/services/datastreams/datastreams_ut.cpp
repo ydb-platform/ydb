@@ -1965,7 +1965,9 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
     Y_UNIT_TEST(TestGetRecordsStreamWithSingleShard) {
         TInsecureDatastreamsTestServer testServer;
+
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+
         {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
@@ -1989,6 +1991,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         TString shardIterator;
+
         {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
@@ -2078,12 +2081,15 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             shardIterator = result.GetResult().shard_iterator();
         }
 
+        //
+        // in order to be sure that the value of WriteTimestampMs will be greater than the current time
+        //
+        Sleep(TDuration::Seconds(1));
+
         {
             auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -2092,7 +2098,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), recordsCount);
         }
-
     }
 
     Y_UNIT_TEST(TestGetRecordsWithoutPermission) {

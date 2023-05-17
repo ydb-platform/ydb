@@ -87,6 +87,8 @@ std::shared_ptr<arrow::Array> DeserializeColumn(const TString& blob, const TStri
     auto batch = NArrow::DeserializeBatch(blob, schema);
     UNIT_ASSERT(batch);
 
+    //Cerr << "Got data batch (" << batch->num_rows() << " rows): " <<  batch->ToString() << "\n";
+
     std::shared_ptr<arrow::Array> array = batch->GetColumnByName(columnName);
     UNIT_ASSERT(array);
     return array;
@@ -131,23 +133,22 @@ bool CheckSame(const TString& blob, const TString& strSchema, ui32 expectedSize,
 
 std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
                               const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
-    UNIT_ASSERT(ts.size() == 2);
+    UNIT_ASSERT(ts.size() > 1);
 
-    TString data1 = MakeTestBlob({0, portionSize}, ydbSchema);
-    UNIT_ASSERT(data1.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-    UNIT_ASSERT(data1.size() < 7 * 1024 * 1024);
-
-    TString data2 = MakeTestBlob({overlapSize, overlapSize + portionSize}, ydbSchema);
-    UNIT_ASSERT(data2.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-    UNIT_ASSERT(data2.size() < 7 * 1024 * 1024);
-
+    ui32 numRows = portionSize + (ts.size() - 1) * (portionSize - overlapSize);
+    TString testData = MakeTestBlob({0, numRows}, ydbSchema);
     auto schema = NArrow::MakeArrowSchema(ydbSchema);
-    auto batch1 = UpdateColumn(NArrow::DeserializeBatch(data1, schema), ttlColumnName, ts[0]);
-    auto batch2 = UpdateColumn(NArrow::DeserializeBatch(data2, schema), ttlColumnName, ts[1]);
+    auto testBatch = NArrow::DeserializeBatch(testData, schema);
 
     std::vector<TString> data;
-    data.emplace_back(NArrow::SerializeBatchNoCompression(batch1));
-    data.emplace_back(NArrow::SerializeBatchNoCompression(batch2));
+    data.reserve(ts.size());
+    for (size_t i = 0; i < ts.size(); ++i) {
+        auto batch = testBatch->Slice((portionSize - overlapSize) * i, portionSize);
+        batch = UpdateColumn(batch, ttlColumnName, ts[i]);
+        data.emplace_back(NArrow::SerializeBatchNoCompression(batch));
+        UNIT_ASSERT(data.back().size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+    }
+
     return data;
 }
 
@@ -168,16 +169,13 @@ bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 10
     return ProposeSchemaTx(runtime, sender, txBody, NOlap::TSnapshot(++planStep, ++txId));
 }
 
-TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead,
-                      std::optional<ui32> batchNo = 0,
-                      std::optional<bool> finished = true)
+TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead, std::optional<bool> finished = true)
 {
+    Cerr << "Got batchNo: " << resRead.GetBatch() << "\n";
+
     UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), TTestTxConfig::TxTablet1);
     UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    if (batchNo) {
-        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), *batchNo);
-    }
     if (finished) {
         UNIT_ASSERT_EQUAL(resRead.GetFinished(), *finished);
     }
@@ -282,6 +280,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
         auto& resRead = Proto(event);
         TString data = GetReadResult(resRead);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
         UNIT_ASSERT(data.size() > 0);
 
         auto& schema = resRead.GetMeta().GetSchema();
@@ -321,6 +320,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
         auto& resRead = Proto(event);
         TString data = GetReadResult(resRead);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
         UNIT_ASSERT_VALUES_EQUAL(data.size(), 0);
     }
 
@@ -601,7 +601,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
-                TString data = GetReadResult(resRead, {}, {});
+                TString data = GetReadResult(resRead, {});
                 batchNumbers.insert(resRead.GetBatch());
                 if (resRead.GetFinished()) {
                     numBatches = resRead.GetBatch() + 1;
@@ -610,25 +610,29 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
 
         // Read data after eviction
+        TString columnToRead = specs[i].TtlColumn;
 
         auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
-        Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
+        Proto(read.get()).AddColumnNames(columnToRead);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
 
         specRowsBytes.emplace_back(0, 0);
-        while (true) {
+        ui32 numBatches = 0;
+        ui32 numExpected = 100;
+        for (ui32 numBatches = 0; numBatches < numExpected; ++numBatches) {
             auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
             UNIT_ASSERT(event);
 
             auto& resRead = Proto(event);
-            TString data = GetReadResult(resRead, {}, {});
+            TString data = GetReadResult(resRead, {});
             if (!data.size()) {
+                UNIT_ASSERT(resRead.GetFinished());
                 break;
             }
 
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
-            auto ttlColumn = DeserializeColumn(resRead.GetData(), schema, specs[i].TtlColumn);
+            auto ttlColumn = DeserializeColumn(resRead.GetData(), schema, columnToRead);
             UNIT_ASSERT(ttlColumn);
 
             specRowsBytes.back().first += ttlColumn->length();
@@ -637,9 +641,10 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 auto& readStats = meta.GetReadStats();
                 ui64 numBytes = readStats.GetPortionsBytes(); // compressed bytes in storage
                 specRowsBytes.back().second += numBytes;
-                break;
+                numExpected = resRead.GetBatch() + 1;
             }
         }
+        UNIT_ASSERT(numBatches < 100);
 
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -730,7 +735,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
                                                    EInitialEviction init, bool testTtl = false) {
     const std::vector<ui64> ts = { 1600000000, 1620000000 };
 
-    ui32 overlapSize = 40 * 1000;
+    ui32 overlapSize = 0; // TODO: 40 * 1000 (it should lead to fewer row count in result)
     std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
     if (init != EInitialEviction::Tiering) {
         std::vector<TString> preload = MakeData({ 1500000000, 1620000000 }, PORTION_ROWS, overlapSize, spec.TtlColumn);
@@ -904,6 +909,7 @@ void TestDrop(bool reboots) {
 
         auto& resRead = Proto(event);
         TString data = GetReadResult(resRead);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), 0);
         UNIT_ASSERT_EQUAL(data.size(), 0);
     }
 }

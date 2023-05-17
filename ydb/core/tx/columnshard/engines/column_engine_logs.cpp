@@ -34,8 +34,8 @@ bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& por
                 goodCompacted.insert(portionInfo.Portion());
             }
 
-            NArrow::TReplaceKey start = portionInfo.EffKeyStart();
-            NArrow::TReplaceKey end = portionInfo.EffKeyEnd();
+            const NArrow::TReplaceKey& start = portionInfo.IndexKeyStart();
+            const NArrow::TReplaceKey& end = portionInfo.IndexKeyEnd();
 
             points[start].push_back(&portionInfo);
             points[end].push_back(nullptr);
@@ -103,13 +103,13 @@ bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& por
 
         // Prevent merge of compacted portions with no intersections
         if (filtered.contains(curPortion)) {
-            auto start = portionInfo.EffKeyStart();
+            const auto& start = portionInfo.IndexKeyStart();
             borders.emplace_back(TMark(start));
         } else {
             // nextToGood borders potentially split good compacted portions into 2 parts:
             // the first one without intersections and the second with them
             if (goodCompacted.contains(curPortion) || nextToGood.contains(curPortion)) {
-                auto start = portionInfo.EffKeyStart();
+                const auto& start = portionInfo.IndexKeyStart();
                 borders.emplace_back(TMark(start));
             }
 
@@ -758,6 +758,8 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         Y_VERIFY(changes->ApplySnapshot == snapshot);
     }
 
+    const auto& indexInfo = GetIndexInfo();
+
     // Update tmp granules with real ids
     auto granuleRemap = changes->TmpToNewGranules(LastGranule);
     ui64 portion = LastPortion;
@@ -772,11 +774,11 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
                 TPortionMeta::COMPACTED : TPortionMeta::SPLIT_COMPACTED;
         }
 
-        portionInfo.UpdateRecordsMeta(produced);
+        portionInfo.UpdateRecordsMeta(indexInfo, produced);
     }
 
     for (auto& [portionInfo, _] : changes->PortionsToEvict) {
-        portionInfo.UpdateRecordsMeta(TPortionMeta::EVICTED);
+        portionInfo.UpdateRecordsMeta(indexInfo, TPortionMeta::EVICTED);
     }
 
     for (auto& [_, id] : changes->PortionsToMove) {
@@ -905,7 +907,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             auto& granuleStart = Granules[granule]->Record.Mark;
 
             if (!apply) { // granule vs portion minPK
-                auto portionStart = portionInfo.EffKeyStart();
+                const auto& portionStart = portionInfo.IndexKeyStart();
                 if (portionStart < granuleStart) {
                     LOG_S_ERROR("Cannot update invalid portion " << portionInfo
                         << " start: " << TMark(portionStart).ToString()
@@ -1022,7 +1024,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
                 ? Granules[granule]->Record.Mark
                 : changes.NewGranules.find(granule)->second.second.GetBorder();
 
-            auto portionStart = portionInfo.EffKeyStart();
+            const auto& portionStart = portionInfo.IndexKeyStart();
             if (portionStart < granuleStart) {
                 LOG_S_ERROR("Cannot insert invalid portion " << portionInfo
                     << " start: " << TMark(portionStart).ToString()
@@ -1219,9 +1221,9 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
     std::optional<TMap<TMark, ui64>::const_iterator> previousIterator;
-    for (auto&& i : pkRangesFilter) {
-        std::optional<NArrow::TReplaceKey> keyFrom = i.GetPredicateFrom().ExtractKey(GetIndexKey());
-        std::optional<NArrow::TReplaceKey> keyTo = i.GetPredicateTo().ExtractKey(GetIndexKey());
+    for (auto&& filter : pkRangesFilter) {
+        std::optional<NArrow::TReplaceKey> keyFrom = filter.KeyFrom(GetIndexKey());
+        std::optional<NArrow::TReplaceKey> keyTo = filter.KeyTo(GetIndexKey());
         auto it = pathGranules.begin();
         if (keyFrom) {
             it = pathGranules.upper_bound(TMark(*keyFrom));
@@ -1297,7 +1299,7 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
         }
 
         if (pkEqual) {
-            const auto [minPkCurrent, maxPkCurrent] = info.MinMaxValue(info.FirstPkColumn);
+            const auto [minPkCurrent, maxPkCurrent] = info.MinMaxIndexKeyValue();
             // Check that all pks equal to each other.
             if ((pkEqual = bool(minPkCurrent) && bool(maxPkCurrent))) {
                 if (minPk0 && maxPk0) {

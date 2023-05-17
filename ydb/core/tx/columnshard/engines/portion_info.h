@@ -32,7 +32,7 @@ public:
         , Snapshot(snapshot)
     {
     }
-    
+
     int GetFieldIndex(const ui32 columnId) const override {
         TString columnName = IndexInfo.GetColumnName(columnId);
         std::string name(columnName.data(), columnName.size());
@@ -64,7 +64,7 @@ public:
     TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::vector<ui32>& columnIds)
         : TFilteredSnapshotSchema(originalSnapshot, std::set(columnIds.begin(), columnIds.end()))
     {}
-    
+
     TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<ui32>& columnIds)
         : OriginalSnapshot(originalSnapshot)
         , ColumnIds(columnIds)
@@ -78,7 +78,7 @@ public:
         }
         Schema = std::make_shared<arrow::Schema>(schemaFields);
     }
-    
+
     int GetFieldIndex(const ui32 columnId) const override {
         if (!ColumnIds.contains(columnId)) {
             return -1;
@@ -129,6 +129,28 @@ struct TPortionMeta {
 
     EProduced Produced{UNSPECIFIED};
     THashMap<ui32, TColumnMeta> ColumnMeta;
+    ui32 FirstPkColumn = 0;
+    std::optional<NArrow::TReplaceKey> IndexKeyStart;
+    std::optional<NArrow::TReplaceKey> IndexKeyEnd;
+
+    bool HasMinMax(ui32 columnId) const {
+        if (!ColumnMeta.contains(columnId)) {
+            return false;
+        }
+        return ColumnMeta.find(columnId)->second.HasMinMax();
+    }
+
+    bool HasPkMinMax() const {
+        return HasMinMax(FirstPkColumn);
+    }
+
+    ui32 NumRows() const {
+        if (FirstPkColumn) {
+            Y_VERIFY(ColumnMeta.contains(FirstPkColumn));
+            return ColumnMeta.find(FirstPkColumn)->second.NumRows;
+        }
+        return 0;
+    }
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionMeta& info) {
         out << "reason" << (ui32)info.Produced;
@@ -147,15 +169,15 @@ struct TPortionInfo {
 
     std::vector<TColumnRecord> Records;
     TPortionMeta Meta;
-    ui32 FirstPkColumn = 0;
     TString TierName;
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
-    bool Valid() const { return !Empty() && Produced() && HasMinMax(FirstPkColumn); }
+    bool Valid() const { return !Empty() && Produced() && Meta.HasPkMinMax(); }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
+    bool IsEvicted() const { return Meta.Produced == TPortionMeta::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
-    bool CanIntersectOthers() const { return !Valid() || IsInserted(); }
+    bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumRecords() const { return Records.size(); }
 
     bool AllowEarlyFilter() const {
@@ -237,10 +259,10 @@ struct TPortionInfo {
         }
     }
 
-    void UpdateRecordsMeta(TPortionMeta::EProduced produced) {
+    void UpdateRecordsMeta(const TIndexInfo& indexInfo, TPortionMeta::EProduced produced) {
         Meta.Produced = produced;
         for (auto& record : Records) {
-            record.Metadata = GetMetadata(record);
+            record.Metadata = GetMetadata(indexInfo, record);
         }
     }
 
@@ -255,34 +277,32 @@ struct TPortionInfo {
         LoadMetadata(indexInfo, rec);
     }
 
-    TString GetMetadata(const TColumnRecord& rec) const;
+    TString GetMetadata(const TIndexInfo& indexInfo, const TColumnRecord& rec) const;
     void LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord& rec);
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                      const TString& tierName);
     void AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted);
 
+    std::tuple<std::shared_ptr<arrow::Scalar>, std::shared_ptr<arrow::Scalar>> MinMaxIndexKeyValue() const {
+        return MinMaxValue(Meta.FirstPkColumn);
+    }
+
     std::tuple<std::shared_ptr<arrow::Scalar>, std::shared_ptr<arrow::Scalar>> MinMaxValue(const ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
 
-    NArrow::TReplaceKey EffKeyStart() const {
-        Y_VERIFY(FirstPkColumn);
-        Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
-        return NArrow::TReplaceKey::FromScalar(MinValue(FirstPkColumn));
+    const NArrow::TReplaceKey& IndexKeyStart() const {
+        Y_VERIFY(Meta.IndexKeyStart);
+        return *Meta.IndexKeyStart;
     }
 
-    NArrow::TReplaceKey EffKeyEnd() const {
-        Y_VERIFY(FirstPkColumn);
-        Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
-        return NArrow::TReplaceKey::FromScalar(MaxValue(FirstPkColumn));
+    const NArrow::TReplaceKey& IndexKeyEnd() const {
+        Y_VERIFY(Meta.IndexKeyEnd);
+        return *Meta.IndexKeyEnd;
     }
 
     ui32 NumRows() const {
-        if (FirstPkColumn) {
-            Y_VERIFY(Meta.ColumnMeta.contains(FirstPkColumn));
-            return Meta.ColumnMeta.find(FirstPkColumn)->second.NumRows;
-        }
-        return 0;
+        return Meta.NumRows();
     }
 
     ui64 RawBytesSum() const {
@@ -293,12 +313,6 @@ struct TPortionInfo {
         return sum;
     }
 
-    bool HasMinMax(ui32 columnId) const {
-        if (!Meta.ColumnMeta.contains(columnId)) {
-            return false;
-        }
-        return Meta.ColumnMeta.find(columnId)->second.HasMinMax();
-    }
 private:
     class TMinGetter {
     public:

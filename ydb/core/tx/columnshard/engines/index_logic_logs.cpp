@@ -535,11 +535,11 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
     }
     // Order compacted portions by primary key.
     std::sort(compacted.begin(), compacted.end(), [](const TPortionInfo* a, const TPortionInfo* b) {
-        return a->EffKeyStart() < b->EffKeyStart();
+        return a->IndexKeyStart() < b->IndexKeyStart();
     });
     // Check that there are no gaps between two adjacent portions in term of primary key range.
     for (size_t i = 0; i < compacted.size() - 1; ++i) {
-        if (compacted[i]->EffKeyEnd() >= compacted[i + 1]->EffKeyStart()) {
+        if (compacted[i]->IndexKeyEnd() >= compacted[i + 1]->IndexKeyStart()) {
             return 0;
         }
     }
@@ -551,7 +551,7 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
         ui32 rows = portionInfo->NumRows();
         Y_VERIFY(rows);
         numRows += rows;
-        tsIds.emplace_back((counter ? TMark(portionInfo->EffKeyStart()) : ts0), counter + 1);
+        tsIds.emplace_back((counter ? TMark(portionInfo->IndexKeyStart()) : ts0), counter + 1);
         toMove.emplace_back(std::move(*portionInfo), counter);
         ++counter;
         // Ensure that std::move will take an effect.

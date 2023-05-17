@@ -78,7 +78,7 @@ runs:
 
       testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
       testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
-      testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name $TESTMO_RUN_NAME \
+      testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "$TESTMO_RUN_NAME" \
         --source "${{inputs.log_suffix}}" --resources testmo.json \
         --tags "$GITHUB_REF_NAME" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT

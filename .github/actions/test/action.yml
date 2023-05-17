@@ -56,6 +56,7 @@ runs:
       PR_NUMBER: ${{ github.event.number }}
     run: |
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      BRANCH_TAG="$GITHUB_REF_NAME"
 
       case $GITHUB_EVENT_NAME in
         workflow_dispatch)
@@ -65,6 +66,7 @@ runs:
         pull_request | pull_request_target)
           TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
           EXTRA_TAG="pr"
+          BRANCH_TAG=""
           ;;
         schedule)
           TESTMO_RUN_NAME="${{ github.run_id }} schedule"
@@ -80,7 +82,7 @@ runs:
       testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
       testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "$TESTMO_RUN_NAME" \
         --source "${{inputs.log_suffix}}" --resources testmo.json \
-        --tags "$GITHUB_REF_NAME" --tags "$EXTRA_TAG"  | \
+        --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
   - name: Test

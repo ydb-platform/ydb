@@ -601,47 +601,57 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
         LastPeriodicBackActivation = TInstant::Now();
     }
 
-    const TActorContext& ctx = ActorContext();
     SendPeriodicStats();
 
-    if (activity.IndexationOnly()) {
-        if (auto event = SetupIndexation()) {
-            ctx.Send(IndexingActor, event.release());
-        }
+    if (!TablesManager.HasPrimaryIndex()) {
+        LOG_S_NOTICE("Background activities cannot be started: no index at tablet " << TabletID());
         return;
     }
 
-    // Preventing conflicts between indexing and compaction leads to election between them.
-    // Indexing vs compaction probability depends on index and insert table overload status.
-    // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
-    if (activity.HasIndexation() && activity.HasCompaction()) {
-        ui32 mask = IndexOverloaded() ? 0x1 : 0x3;
-        if (InsertTableOverloaded()) {
-            mask = 0x0F;
-        }
-        bool preferIndexing = (++BackgroundActivation) & mask;
+    const TActorContext& ctx = ActorContext();
+    // Schedule either indexing or compaction.
+    if (activity.HasIndexation() || activity.HasCompaction()) {
+        [&] {
+            if (ActiveIndexingOrCompaction) {
+                LOG_S_DEBUG("Indexing or compaction already in progress at tablet " << TabletID());
+                return;
+            }
+            // Preventing conflicts between indexing and compaction leads to election between them.
+            // Indexing vs compaction probability depends on index and insert table overload status.
+            // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
+            const ui32 mask = InsertTableOverloaded() ? 0xF : (IndexOverloaded() ? 0x1 : 0x3);
+            const bool preferIndexing = BackgroundActivation & mask;
 
-        if (preferIndexing) {
-            if (auto evIdx = SetupIndexation()) {
-                ctx.Send(IndexingActor, evIdx.release());
-            } else if (auto event = SetupCompaction()) {
-                ctx.Send(CompactionActor, event.release());
+            if (preferIndexing) {
+                if (activity.HasIndexation()) {
+                    if (auto event = SetupIndexation()) {
+                        BackgroundActivation++;
+                        ctx.Send(IndexingActor, event.release());
+                        return;
+                    }
+                }
+                if (activity.HasCompaction()) {
+                    if (auto event = SetupCompaction()) {
+                        ctx.Send(CompactionActor, event.release());
+                        return;
+                    }
+                }
+            } else {
+                if (activity.HasCompaction()) {
+                    if (auto event = SetupCompaction()) {
+                        BackgroundActivation++;
+                        ctx.Send(CompactionActor, event.release());
+                        return;
+                    }
+                }
+                if (activity.HasIndexation()) {
+                    if (auto event = SetupIndexation()) {
+                        ctx.Send(IndexingActor, event.release());
+                        return;
+                    }
+                }
             }
-        } else {
-            if (auto event = SetupCompaction()) {
-                ctx.Send(CompactionActor, event.release());
-            } else if (auto evIdx = SetupIndexation()) {
-                ctx.Send(IndexingActor, evIdx.release());
-            }
-        }
-    } else if (activity.HasIndexation()) {
-        if (auto evIdx = SetupIndexation()) {
-            ctx.Send(IndexingActor, evIdx.release());
-        }
-    } else if (activity.HasCompaction()) {
-        if (auto event = SetupCompaction()) {
-            ctx.Send(CompactionActor, event.release());
-        }
+        }();
     }
 
     if (activity.HasCleanup()) {
@@ -667,14 +677,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
 }
 
 std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
-    if (ActiveIndexingOrCompaction) {
-        LOG_S_DEBUG("Indexing/compaction already in progress at tablet " << TabletID());
-        return {};
-    }
-    if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_NOTICE("Indexing not started: no index at tablet " << TabletID());
-        return {};
-    }
+    Y_VERIFY_DEBUG(!ActiveIndexingOrCompaction);
 
     ui32 blobs = 0;
     ui32 ignored = 0;
@@ -757,14 +760,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
 }
 
 std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
-    if (ActiveIndexingOrCompaction) {
-        LOG_S_DEBUG("Compaction/indexing already in progress at tablet " << TabletID());
-        return {};
-    }
-    if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_NOTICE("Compaction not started: no index at tablet " << TabletID());
-        return {};
-    }
+    Y_VERIFY_DEBUG(!ActiveIndexingOrCompaction);
 
     TablesManager.MutablePrimaryIndex().UpdateCompactionLimits(CompactionLimits.Get());
     auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(LastCompactedGranule);
@@ -802,10 +798,6 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
     if (ActiveEvictions) {
         LOG_S_DEBUG("Do not start TTL while eviction is in progress at tablet " << TabletID());
-        return {};
-    }
-    if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_NOTICE("TTL not started. No index for TTL at tablet " << TabletID());
         return {};
     }
 
@@ -851,10 +843,6 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     if (ActiveCleanup) {
         LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
-        return {};
-    }
-    if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_NOTICE("Cleanup not started. No index for cleanup at tablet " << TabletID());
         return {};
     }
 

@@ -70,7 +70,7 @@ namespace NInterconnect {
 
         virtual void Request(NActors::TPollerToken& token, bool read, bool write);
 
-        virtual bool ExpectingCertainWrite() const;
+        virtual size_t ExpectedWriteLength() const;
     };
 
     class TSecureSocketContext {
@@ -123,7 +123,7 @@ namespace NInterconnect {
         bool WantRead() const;
         bool WantWrite() const;
         void Request(NActors::TPollerToken& token, bool read, bool write) override;
-        bool ExpectingCertainWrite() const override;
+        size_t ExpectedWriteLength() const override;
     };
 
     class TDatagramSocket: public TSocket {

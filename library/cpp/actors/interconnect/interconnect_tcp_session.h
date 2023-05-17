@@ -570,7 +570,7 @@ namespace NActors {
         size_t OutgoingOffset = 0;
         size_t XdcOffset = 0;
         size_t OutgoingIndex = 0; // index into current packet in SendQueue
-        bool ForceCurrentPacket = false;
+        size_t ForcedWriteLength = 0;
 
         ui64 XdcBytesSent = 0;
 

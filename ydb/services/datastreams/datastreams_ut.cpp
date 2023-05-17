@@ -2248,19 +2248,23 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 {
                     TString id = Sprintf("%04u", i);
                     NYDS_V1::TDataRecord dataRecord{{data.begin(), data.end()}, id, ""};
+                    //
+                    // we make sure that the value of WriteTimestampMs is between neighboring timestamps
+                    //
                     timestamps.push_back(TInstant::Now().MilliSeconds());
+                    Sleep(TDuration::MilliSeconds(500));
                     auto result = testServer.DataStreamsClient->PutRecord(streamName, dataRecord).ExtractValueSync();
                     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
                     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 }
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::MilliSeconds(500));
             }
         }
 
         for (ui32 i = 0; i < recordsCount; ++i) {
             TString shardIterator;
+
             {
-                TString id = Sprintf("%04u", i);
                 auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
                     YDS_V1::ShardIteratorType::AT_TIMESTAMP,
                      NYDS_V1::TGetShardIteratorSettings().Timestamp(timestamps[i])).ExtractValueSync();

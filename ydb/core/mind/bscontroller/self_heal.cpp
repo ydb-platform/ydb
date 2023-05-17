@@ -163,6 +163,11 @@ namespace NKikimr::NBsController {
                 return Finish(false, "Reassigner ProcessResult quorum checker failed"); // this change will render group unusable
             }
 
+            if (!VDiskToReplace && *FailedGroupDisks) {
+                STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH10, "Cannot sanitize group with non-operational disks", (GroupId, GroupId));
+                return Finish(false, "Cannot sanitize group with non-operational disks");
+            }
+
             auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
             ev->SelfHeal = true;
             auto& record = ev->Record;
@@ -372,12 +377,25 @@ namespace NKikimr::NBsController {
             if (GroupLayoutSanitizerEnabled) {
                 for (auto it = GroupsWithInvalidLayout.begin(); it != GroupsWithInvalidLayout.end(); ) {
                     TGroupRecord& group = *it++;
+                    bool allDisksAreFullyOperational = true;
+                    for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
+                        if (vdisk.Bad || vdisk.Faulty || vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
+                            // don't sanitize groups with non-operational or replicating disks
+                            allDisksAreFullyOperational = false;
+                            break;
+                        }
+                    }
+
+                    if (!allDisksAreFullyOperational) {
+                        continue;
+                    }
+
                     Y_VERIFY(!group.LayoutValid);
                     if (group.ReassignerActorId || now < group.NextRetryTimestamp) {
                         // nothing to do
                     } else {
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
-                                "Start sanitizing GroupId# " << group.GroupId);
+                                "Start sanitizing GroupId# " << group.GroupId << " GroupGeneration# " << group.Content.Generation);
                         group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content, std::nullopt));
                     }
                 }

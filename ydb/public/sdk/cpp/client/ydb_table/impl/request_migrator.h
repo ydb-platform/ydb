@@ -51,13 +51,13 @@ public:
     // Returns false if session is not suitable or unable to get lock to start migration
     // Returns true if session is suitable in this case Unlink methos on the session is called
     // This methos is thread safe.
-    bool DoCheckAndMigrate(TSession::TImpl* session);
+    bool DoCheckAndMigrate(const TSession::TImpl* session);
 
     // Reset migrator to initiall state if migration was not started and returns true
     // Returns false if migration was started
     bool Reset();
 private:
-    bool IsOurSession(TSession::TImpl* session) const;
+    bool IsOurSession(const TSession::TImpl* session) const;
 
     ui64 CurHost_ = 0;
 

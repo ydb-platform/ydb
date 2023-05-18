@@ -76,6 +76,10 @@ static bool ConvertColumn(const NScheme::TTypeInfo colType, std::shared_ptr<arro
         case NScheme::NTypeIds::JsonDocument: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
                 auto value = binaryArray.Value(i);
+                if (!value.size()) {
+                    Y_VERIFY(builder.AppendNull().ok());
+                    continue;
+                }
                 const auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(value.data(), value.size()));
                 if (!binaryJson.Defined() || !builder.Append(binaryJson->Data(), binaryJson->Size()).ok()) {
                     return false;

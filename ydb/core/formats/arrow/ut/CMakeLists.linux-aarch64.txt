@@ -41,6 +41,7 @@ target_link_options(ydb-core-formats-arrow-ut PRIVATE
 target_sources(ydb-core-formats-arrow-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_arrow.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_program_step.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_dictionary.cpp
 )
 set_property(
   TARGET

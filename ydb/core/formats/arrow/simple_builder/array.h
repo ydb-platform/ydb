@@ -1,0 +1,72 @@
+#pragma once
+#include <ydb/library/accessor/accessor.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_dict.h>
+#include <util/generic/string.h>
+
+namespace NKikimr::NArrow {
+
+class IArrayBuilder {
+private:
+    YDB_READONLY_DEF(TString, FieldName)
+protected:
+    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const = 0;
+public:
+    using TPtr = std::shared_ptr<IArrayBuilder>;
+    virtual ~IArrayBuilder() = default;
+    std::shared_ptr<arrow::Array> BuildArray(const ui32 recordsCount) const {
+        return DoBuildArray(recordsCount);
+    }
+
+    IArrayBuilder(const TString& fieldName)
+        : FieldName(fieldName) {
+
+    }
+};
+
+template <class TFiller>
+class TSimpleArrayConstructor: public IArrayBuilder {
+private:
+    using TBase = IArrayBuilder;
+    using TBuilder = typename arrow::TypeTraits<typename TFiller::TValue>::BuilderType;
+    const TFiller Filler;
+protected:
+    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
+        TBuilder fBuilder = TBuilder();
+        Y_VERIFY(fBuilder.Reserve(recordsCount).ok());
+        for (ui32 i = 0; i < recordsCount; ++i) {
+            Y_VERIFY(fBuilder.Append(Filler.GetValue(i)).ok());
+        }
+        return *fBuilder.Finish();
+    }
+public:
+    TSimpleArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
+        : TBase(fieldName)
+        , Filler(filler) {
+
+    }
+};
+
+template <class TFiller>
+class TDictionaryArrayConstructor: public IArrayBuilder {
+private:
+    using TBase = IArrayBuilder;
+    const TFiller Filler;
+protected:
+    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
+        auto fBuilder = std::make_shared<arrow::DictionaryBuilder<typename TFiller::TValue>>(std::make_shared<typename TFiller::TValue>());
+        Y_VERIFY(fBuilder->Reserve(recordsCount).ok());
+        for (ui32 i = 0; i < recordsCount; ++i) {
+            Y_VERIFY(fBuilder->Append(Filler.GetValue(i)).ok());
+        }
+        return *fBuilder->Finish();
+    }
+public:
+    TDictionaryArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
+        : TBase(fieldName)
+        , Filler(filler) {
+
+    }
+};
+}

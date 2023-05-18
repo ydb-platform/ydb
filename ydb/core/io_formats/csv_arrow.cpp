@@ -162,7 +162,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
             return {};
         }
 
-        auto buffer = std::make_shared<NArrow::TBufferOverString>(csv);
+        auto buffer = std::make_shared<arrow::Buffer>((const ui8*)csv.data(), csv.size());
         auto input = std::make_shared<arrow::io::BufferReader>(buffer);
         auto res = arrow::csv::StreamingReader::Make(arrow::io::default_io_context(), input,
                                                      ReadOptions, ParseOptions, ConvertOptions);

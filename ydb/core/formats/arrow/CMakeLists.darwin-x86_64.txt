@@ -6,6 +6,11 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(dictionary)
+add_subdirectory(serializer)
+add_subdirectory(simple_builder)
+add_subdirectory(switch)
 add_subdirectory(ut)
 
 add_library(core-formats-arrow)
@@ -20,6 +25,9 @@ target_link_libraries(core-formats-arrow PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-scheme
+  formats-arrow-serializer
+  formats-arrow-simple_builder
+  formats-arrow-dictionary
   ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber

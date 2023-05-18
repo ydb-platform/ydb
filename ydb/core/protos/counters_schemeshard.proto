@@ -520,5 +520,5 @@ enum ETxTypes {
     TXTYPE_CDC_STREAM_SCAN_PROGRESS = 82                  [(TxTypeOpts) = {Name: "TxCdcStreamScanProgress"}];
 
     TXTYPE_PERSQUEUE_PROPOSE_RESULT = 83                  [(TxTypeOpts) = {Name: "TxPersQueueProposeResult"}];
-    TXTYPE_READSETDATA = 84                               [(TxTypeOpts) = {Name: "TxReadSetData"}];
+    TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT = 84           [(TxTypeOpts) = {Name: "TxProposeTransactionAttachResult"}];
 }

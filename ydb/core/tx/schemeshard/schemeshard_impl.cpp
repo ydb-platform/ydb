@@ -4381,7 +4381,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
-        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -4949,36 +4949,25 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
-void TSchemeShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
+void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
 {
-    auto sendReadSetAck = [&]() {
-        auto ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID()); 
-        ctx.Send(ev->Sender, ack.release());
-    };
-
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvTxProcessing::TEvReadSet"
-                   << " for unknown txId " << txId
-                   << " message " << ev->Get()->Record.ShortDebugString());
-
-        sendReadSetAck();
-
+                   "Got TEvPersQueue::TEvProposeTransactionAttachResult"
+                   << " for unknown txId: " << txId
+                   << " message: " << ev->Get()->Record.ShortDebugString());
         return;
     }
 
-    const TTabletId tabletId(ev->Get()->Record.GetTabletSource());
-    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
+    TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvProposeTransactionResult but partId is unknown"
+                   "Got TEvPersQueue::TEvProposeTransactionAttachResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());
-
-        sendReadSetAck();
-
         return;
     }
 

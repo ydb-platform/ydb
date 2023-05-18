@@ -6,6 +6,7 @@
 #include <library/cpp/actors/core/actorid.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 namespace NKikimr {
@@ -241,5 +242,8 @@ struct TEvPersQueue {
 
     struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {
     };
+
+    using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
+    using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
 };
 } //NKikimr

@@ -76,7 +76,7 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
                               const NKikimrPQ::TEvProposeTransaction& event,
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
 {
-    ctx.Send(ActorIdFromProto(event.GetActor()),
+    ctx.Send(ActorIdFromProto(event.GetSourceActor()),
              MakeReplyPropose(event, statusCode).Release());
 }
 
@@ -1998,7 +1998,7 @@ void TPartition::ScheduleReplyError(const ui64 dst,
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                       NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
 {
-    Replies.emplace_back(ActorIdFromProto(event.GetActor()),
+    Replies.emplace_back(ActorIdFromProto(event.GetSourceActor()),
                          MakeReplyPropose(event,
                                           statusCode).Release());
 }

@@ -686,7 +686,6 @@ public:
                                                      databaseId,
                                                      databasePath,
                                                      txState->TxType,
-                                                     ssId,
                                                      context);
                 } else {
                     event = MakeEvUpdateConfig(OperationId.GetTxId(),
@@ -851,7 +850,6 @@ private:
                                  const TString& databaseId,
                                  const TString& databasePath,
                                  TTxState::ETxType txType,
-                                 TTabletId ssId,
                                  const TOperationContext& context);
     static THolder<TEvPersQueue::TEvUpdateConfig>
         MakeEvUpdateConfig(TTxId txId,
@@ -885,7 +883,7 @@ public:
     }
 
     bool HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override;
-    bool HandleReply(TEvTxProcessing::TEvReadSet::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context) override;
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
@@ -945,18 +943,18 @@ public:
     }
 
 private:
+    bool CanPersistState(const TTxState& txState,
+                         TOperationContext& context);
+    void PersistState(const TTxState& txState,
+                      TOperationContext& context) const;
     bool TryPersistState(TOperationContext& context);
-    void SendEvReadSetAck(TOperationContext& context);
+    void SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
+                                        TOperationContext& context);
 
     void PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context);
 
-    struct TReadSetAck {
-        THolder<TEvTxProcessing::TEvReadSetAck> Event;
-        TActorId Receiver;
-    };
-
-    THashMap<ui64, TReadSetAck> ReadSetAcks;
-    size_t ReadSetCount = 0;
+    TPathId PathId;
+    TPathElement::TPtr Path;
 };
 
 } // NPQState

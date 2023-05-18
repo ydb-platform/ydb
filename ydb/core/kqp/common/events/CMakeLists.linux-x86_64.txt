@@ -23,10 +23,12 @@ target_link_libraries(kqp-common-events PUBLIC
   kqp-common-compilation
   yql-dq-actors
   api-protos
+  public-lib-operation_id
   cpp-actors-core
 )
 target_sources(kqp-common-events PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/events/process_response.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/events/events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/events/query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/events/script_executions.cpp
 )

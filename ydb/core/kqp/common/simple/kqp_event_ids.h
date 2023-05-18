@@ -122,5 +122,14 @@ struct TKqpSpillingEvents {
     };
 };
 
+struct TKqpScriptExecutionEvents {
+    enum EKqpScriptExecutionEvents {
+        EvGetScriptExecutionOperation = EventSpaceBegin(TKikimrEvents::ES_KQP) + 500,
+        EvGetScriptExecutionOperationResponse,
+        EvListScriptExecutionOperations,
+        EvListScriptExecutionOperationsResponse,
+    };
+};
+
 } // namespace NKqp
 } // namespace NKikimr

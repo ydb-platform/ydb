@@ -27,7 +27,7 @@ public:
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteScriptResult ExecuteScript(const TString& script,
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId,

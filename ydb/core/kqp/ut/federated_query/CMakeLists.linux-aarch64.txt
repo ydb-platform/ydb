@@ -23,6 +23,8 @@ target_link_libraries(ydb-core-kqp-ut-federated_query PUBLIC
   libs-aws-sdk-cpp-aws-cpp-sdk-s3
   kqp-ut-common
   yql-sql-pg_dummy
+  cpp-client-ydb_operation
+  client-ydb_types-operation
 )
 target_link_options(ydb-core-kqp-ut-federated_query PRIVATE
   -ldl

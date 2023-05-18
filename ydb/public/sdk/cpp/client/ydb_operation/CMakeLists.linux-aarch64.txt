@@ -14,6 +14,7 @@ target_link_libraries(cpp-client-ydb_operation PUBLIC
   yutil
   api-grpc
   public-lib-operation_id
+  client-draft-ydb_query
   client-ydb_common_client-impl
   cpp-client-ydb_driver
   cpp-client-ydb_export

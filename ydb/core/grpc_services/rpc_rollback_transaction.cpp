@@ -99,5 +99,10 @@ void DoRollbackTransactionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacil
     f.RegisterActor(new TRollbackTransactionRPC(p.release()));
 }
 
+template<>
+IActor* TEvRollbackTransactionRequest::CreateRpcActor(IRequestOpCtx* msg) {
+    return new TRollbackTransactionRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

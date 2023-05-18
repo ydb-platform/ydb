@@ -9,6 +9,8 @@
 #include <aws/s3/S3Client.h>
 
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <fmt/format.h>
 
@@ -63,6 +65,19 @@ void CreateBucketWithObject(const TString& bucket, const TString& object, const 
     }
 }
 
+NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
+    NYdb::NOperation::TOperationClient client(ydbDriver);
+    NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
+    do {
+        if (!op.Initialized()) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId);
+        UNIT_ASSERT_C(op.GetValueSync().Status().IsSuccess(), op.GetValueSync().Status().GetStatus() << ":" << op.GetValueSync().Status().GetIssues().ToString());
+    } while (!op.GetValueSync().Ready());
+    return op.GetValueSync();
+}
+
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(ExecuteScript) {
         CreateBucketWithObject("test_bucket", "Root/test_object", TEST_CONTENT);
@@ -76,24 +91,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
-        auto executeScrptsResult = db.ExecuteScript(R"(
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
             PRAGMA s3.AtomicUploadCommit = "1";  --Check that pragmas are OK
             SELECT * FROM bindings.test_binding;
         )").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(executeScrptsResult.Status().GetStatus(), EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
-        UNIT_ASSERT(executeScrptsResult.Metadata().ExecutionId);
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
 
-        TMaybe<TFetchScriptResultsResult> results;
-        do {
-            Sleep(TDuration::MilliSeconds(50));
-            TAsyncFetchScriptResultsResult future = db.FetchScriptResults(executeScrptsResult.Metadata().ExecutionId);
-            results.ConstructInPlace(future.ExtractValueSync());
-            if (!results->IsSuccess()) {
-                UNIT_ASSERT_C(results->GetStatus() == NYdb::EStatus::BAD_REQUEST, results->GetStatus() << ": " << results->GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(results->GetIssues().ToOneLineString(), "Results are not ready");
-            }
-        } while (!results->HasResultSet());
-        TResultSetParser resultSet(results->ExtractResultSet());
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
 
@@ -143,23 +153,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto db = kikimr.GetQueryClient();
-        auto executeScrptsResult = db.ExecuteScript(fmt::format(R"(
+        auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
             SELECT * FROM `{external_table}`
         )", "external_table"_a=externalDataSourceName)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(executeScrptsResult.Status().GetStatus(), EStatus::SUCCESS, executeScrptsResult.Status().GetIssues().ToString());
-        UNIT_ASSERT(executeScrptsResult.Metadata().ExecutionId);
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
 
-        TMaybe<TFetchScriptResultsResult> results;
-        do {
-            Sleep(TDuration::MilliSeconds(50));
-            TAsyncFetchScriptResultsResult future = db.FetchScriptResults(executeScrptsResult.Metadata().ExecutionId);
-            results.ConstructInPlace(future.ExtractValueSync());
-            if (!results->IsSuccess()) {
-                UNIT_ASSERT_C(results->GetStatus() == NYdb::EStatus::BAD_REQUEST, results->GetStatus() << ": " << results->GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(results->GetIssues().ToOneLineString(), "Results are not ready");
-            }
-        } while (!results->HasResultSet());
-        TResultSetParser resultSet(results->ExtractResultSet());
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
 

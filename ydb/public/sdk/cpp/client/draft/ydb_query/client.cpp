@@ -29,13 +29,13 @@ public:
         return TExecQueryImpl::ExecuteQuery(Connections_, DbDriverState_, query, settings);
     }
 
-    TAsyncExecuteScriptResult ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
         using namespace Ydb::Query;
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
         request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
         request.mutable_script_content()->set_text(script);
 
-        auto promise = NThreading::NewPromise<TExecuteScriptResult>();
+        auto promise = NThreading::NewPromise<TScriptExecutionOperation>();
 
         auto responseCb = [promise]
             (Ydb::Operations::Operation* response, TPlainStatus status) mutable {
@@ -45,9 +45,9 @@ public:
                         NYql::IssuesFromMessage(response->issues(), opIssues);
                         TStatus executeScriptStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
                             status.Endpoint, std::move(status.Metadata)});
-                        promise.SetValue(TExecuteScriptResult(TStatus(std::move(executeScriptStatus)), std::move(*response)));
+                        promise.SetValue(TScriptExecutionOperation(TStatus(std::move(executeScriptStatus)), std::move(*response)));
                     } else {
-                        promise.SetValue(TExecuteScriptResult(TStatus(std::move(status))));
+                        promise.SetValue(TScriptExecutionOperation(TStatus(std::move(status))));
                     }
                 } catch (...) {
                     promise.SetException(std::current_exception());
@@ -137,7 +137,7 @@ TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const TString& query
     return Impl_->StreamExecuteQuery(query, settings);
 }
 
-TAsyncExecuteScriptResult TQueryClient::ExecuteScript(const TString& script,
+NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const TString& script,
     const TExecuteScriptSettings& settings)
 {
     return Impl_->ExecuteScript(script, settings);

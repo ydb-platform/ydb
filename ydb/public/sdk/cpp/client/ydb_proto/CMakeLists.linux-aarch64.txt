@@ -16,6 +16,8 @@ target_link_libraries(cpp-client-ydb_proto PUBLIC
   api-grpc-draft
   api-protos
   lib-operation_id-protos
+  cpp-client-ydb_params
+  cpp-client-ydb_value
   public-issue-protos
 )
 target_sources(cpp-client-ydb_proto PRIVATE

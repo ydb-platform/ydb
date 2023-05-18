@@ -408,8 +408,6 @@ protected:
             label->SetValue(value);
         }
 
-        RunConfig.ClusterName = ClusterName;
-
         // static node
         if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
             if (!NodeId) {
@@ -738,6 +736,8 @@ protected:
             RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
             AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
         }
+
+        RunConfig.ClusterName = RunConfig.AppConfig.GetNameserviceConfig().GetClusterUUID();
     }
 
     inline bool LoadConfigFromCMS() {

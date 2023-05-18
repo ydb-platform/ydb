@@ -31,6 +31,10 @@
         GROUPS("DataShard"),                                                   \
         TYPES(bool),                                                           \
         NAMES("success"))                                                      \
+    PROBE(ProposeTransactionSendPrepared,                                      \
+        GROUPS("DataShard"),                                                   \
+        TYPES(),                                                               \
+        NAMES())                                                               \
     PROBE(ProposeTransactionKqpDataExecute,                                    \
         GROUPS("DataShard"),                                                   \
         TYPES(),                                                               \

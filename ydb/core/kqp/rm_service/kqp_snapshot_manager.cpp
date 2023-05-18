@@ -46,12 +46,13 @@ private:
         ClientActorId = ev->Sender;
         Tables = ev->Get()->Tables;
         MvccSnapshot = ev->Get()->MvccSnapshot;
+        Orbit = std::move(ev->Get()->Orbit);
 
         LOG_D("KqpSnapshotManager: got snapshot request from " << ClientActorId);
 
         if (MvccSnapshot) {
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(Orbit)));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
@@ -91,6 +92,7 @@ private:
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         Y_VERIFY(MvccSnapshot);
         Y_VERIFY(Tables.empty());
+        Orbit = std::move(ev->Get()->Orbit);
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
@@ -99,7 +101,7 @@ private:
             LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " acquired");
 
             bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}));
+                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)));
             Y_VERIFY_DEBUG(sent);
 
             PassAway();
@@ -126,7 +128,7 @@ private:
             LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created");
 
             bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}));
+                Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)));
             Y_VERIFY_DEBUG(sent);
 
             Become(&TThis::StateRefreshing);
@@ -224,7 +226,7 @@ private:
     void ReplyErrorAndDie(NKikimrIssues::TStatusIds::EStatusCode status, NYql::TIssues&& issues) {
         if (CurrentStateFunc() == &TThis::StateAwaitCreation || CurrentStateFunc() == &TThis::StateAwaitAcquireResult) {
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                IKqpGateway::TKqpSnapshot::InvalidSnapshot, status, std::move(issues)));
+                IKqpGateway::TKqpSnapshot::InvalidSnapshot, status, std::move(issues), std::move(Orbit)));
         } else {
             SendDiscard();
         }
@@ -236,6 +238,7 @@ private:
     TVector<TString> Tables;
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
+    NLWTrace::TOrbit Orbit;
 
     bool MvccSnapshot = false;
 

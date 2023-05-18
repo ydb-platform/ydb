@@ -504,7 +504,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables());
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
@@ -523,7 +523,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>();
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
     }
 
@@ -544,6 +544,10 @@ public:
     void HandleExecute(TEvKqpSnapshot::TEvCreateSnapshotResponse::TPtr& ev) {
         TTimerGuard timer(this);
         auto *response = ev->Get();
+
+        if (QueryState) {
+            QueryState->Orbit = std::move(response->Orbit);
+        }
 
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
             auto& issues = response->Issues;

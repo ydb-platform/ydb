@@ -183,7 +183,12 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
     DataShard.IncCounter(COUNTER_TX_RESULT_SIZE, res->Record.GetTxResult().size());
 
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
-        LWTRACK(ProposeTransactionSendResult, op->Orbit);
+        if (res->IsPrepared()) {
+            LWTRACK(ProposeTransactionSendPrepared, op->Orbit);
+        } else {
+            LWTRACK(ProposeTransactionSendResult, op->Orbit);
+            res->Orbit = std::move(op->Orbit);
+        }
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
             DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie());
         } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {

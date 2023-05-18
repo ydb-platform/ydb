@@ -4,13 +4,64 @@
 #include "scalars.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NOlap {
 
 struct TCompression {
-    arrow::Compression::type Codec{arrow::Compression::LZ4_FRAME};
+private:
+    arrow::Compression::type Codec = arrow::Compression::LZ4_FRAME;
     std::optional<int> Level;
+    TCompression() = default;
+public:
+
+    bool DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& compression) {
+        if (compression.HasCompressionCodec()) {
+            switch (compression.GetCompressionCodec()) {
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
+                    Codec = arrow::Compression::UNCOMPRESSED;
+                    break;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+                    Codec = arrow::Compression::LZ4_FRAME;
+                    break;
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
+                    Codec = arrow::Compression::ZSTD;
+                    break;
+            }
+        }
+
+        if (compression.HasCompressionLevel()) {
+            Level = compression.GetCompressionLevel();
+        }
+        return true;
+    }
+
+    static const TCompression& Default() {
+        static TCompression result;
+        return result;
+    }
+
+    explicit TCompression(const arrow::Compression::type codec, std::optional<int> level = {})
+        : Codec(codec)
+        , Level(level)
+    {
+
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << arrow::util::Codec::GetCodecAsString(Codec) << ":" << Level.value_or(arrow::util::kUseDefaultCompressionLevel);
+        return sb;
+    }
+
+    std::unique_ptr<arrow::util::Codec> BuildArrowCodec() const {
+        return NArrow::TStatusValidator::GetValid(
+            arrow::util::Codec::Create(
+                Codec, Level.value_or(arrow::util::kUseDefaultCompressionLevel)));
+    }
+
 };
 
 class TTierInfo {
@@ -107,10 +158,12 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << EvictColumnName << "' "
-            << arrow::util::Codec::GetCodecAsString(Compression ? Compression->Codec : TCompression().Codec)
-            << ":" << ((Compression && Compression->Level) ?
-                *Compression->Level : arrow::util::kUseDefaultCompressionLevel);
+        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << EvictColumnName << "' ";
+        if (Compression) {
+            sb << Compression->DebugString();
+        } else {
+            sb << TCompression::Default().DebugString();
+        }
         return sb;
     }
 };

@@ -5,7 +5,8 @@
 #include "index_info.h"
 
 #include <ydb/core/formats/arrow/replace_key.h>
-
+#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/dictionary/conversion.h>
 
 namespace NKikimr::NOlap {
 
@@ -14,6 +15,23 @@ public:
     using TPtr = std::shared_ptr<ISnapshotSchema>;
 
     virtual ~ISnapshotSchema() {}
+    virtual std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const = 0;
+    std::shared_ptr<TColumnLoader> GetColumnLoader(const TString& columnName) const {
+        return GetColumnLoader(std::string(columnName.data(), columnName.size()));
+    }
+    std::shared_ptr<TColumnLoader> GetColumnLoader(const std::string& columnName) const {
+        return GetColumnLoader(GetColumnId(columnName));
+    }
+
+    virtual TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const = 0;
+    TColumnSaver GetColumnSaver(const TString& columnName, const TSaverContext& context) const {
+        return GetColumnSaver(GetColumnId(columnName), context);
+    }
+    TColumnSaver GetColumnSaver(const std::string& columnName, const TSaverContext& context) const {
+        return GetColumnSaver(TString(columnName.data(), columnName.size()), context);
+    }
+
+    virtual ui32 GetColumnId(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
     virtual std::shared_ptr<arrow::Field> GetField(const int index) const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
@@ -21,7 +39,8 @@ public:
     virtual const TSnapshot& GetSnapshot() const = 0;
 };
 
-class TSnapshotSchema : public ISnapshotSchema {
+class TSnapshotSchema: public ISnapshotSchema {
+private:
     TIndexInfo IndexInfo;
     std::shared_ptr<arrow::Schema> Schema;
     TSnapshot Snapshot;
@@ -33,7 +52,19 @@ public:
     {
     }
 
-    int GetFieldIndex(const ui32 columnId) const override {
+    virtual TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const override {
+        return IndexInfo.GetColumnSaver(columnId, context);
+    }
+
+    virtual std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const override {
+        return IndexInfo.GetColumnLoader(columnId);
+    }
+
+    virtual ui32 GetColumnId(const std::string& columnName) const override {
+        return IndexInfo.GetColumnId(columnName);
+    }
+
+    virtual int GetFieldIndex(const ui32 columnId) const override {
         TString columnName = IndexInfo.GetColumnName(columnId);
         std::string name(columnName.data(), columnName.size());
         return Schema->GetFieldIndex(name);
@@ -56,7 +87,7 @@ public:
     }
 };
 
-class TFilteredSnapshotSchema : public ISnapshotSchema {
+class TFilteredSnapshotSchema: public ISnapshotSchema {
     ISnapshotSchema::TPtr OriginalSnapshot;
     std::shared_ptr<arrow::Schema> Schema;
     std::set<ui32> ColumnIds;
@@ -77,6 +108,20 @@ public:
             schemaFields.emplace_back(i);
         }
         Schema = std::make_shared<arrow::Schema>(schemaFields);
+    }
+
+    virtual TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const override {
+        Y_VERIFY(ColumnIds.contains(columnId));
+        return OriginalSnapshot->GetColumnSaver(columnId, context);
+    }
+
+    virtual std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const override {
+        Y_VERIFY(ColumnIds.contains(columnId));
+        return OriginalSnapshot->GetColumnLoader(columnId);
+    }
+
+    virtual ui32 GetColumnId(const std::string& columnName) const override {
+        return OriginalSnapshot->GetColumnId(columnName);
     }
 
     int GetFieldIndex(const ui32 columnId) const override {
@@ -382,44 +427,47 @@ public:
             return Data;
         }
 
-        std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(std::shared_ptr<arrow::Schema> schema) const {
+        std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const {
             if (NullRowsCount) {
                 Y_VERIFY(!Data);
-                return NArrow::MakeEmptyBatch(schema, NullRowsCount);
+                return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
             } else {
-                Y_VERIFY(Data);
-                return NArrow::DeserializeBatch(Data, schema);
+                auto result = loader.Apply(Data);
+                if (!result.ok()) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString());
+                    return nullptr;
+                }
+                return NArrow::DictionaryToArray(*result);
             }
         }
     };
 
     class TPreparedColumn {
     private:
-        ui32 ColumnId = 0;
-        std::shared_ptr<arrow::Field> Field;
+        std::shared_ptr<TColumnLoader> Loader;
         std::vector<TAssembleBlobInfo> Blobs;
     public:
-        ui32 GetColumnId() const noexcept {
-            return ColumnId;
+        ui32 GetColumnId() const {
+            return Loader->GetColumnId();
         }
 
         const std::string& GetName() const {
-            return Field->name();
+            return Loader->GetExpectedSchema()->field(0)->name();
         }
 
         std::shared_ptr<arrow::Field> GetField() const {
-            return Field;
+            return Loader->GetExpectedSchema()->field(0);
         }
 
-        TPreparedColumn(const std::shared_ptr<arrow::Field>& field, std::vector<TAssembleBlobInfo>&& blobs, const ui32 columnId)
-            : ColumnId(columnId)
-            , Field(field)
+        TPreparedColumn(std::vector<TAssembleBlobInfo>&& blobs, const std::shared_ptr<TColumnLoader>& loader)
+            : Loader(loader)
             , Blobs(std::move(blobs))
         {
-
+            Y_VERIFY(Loader);
+            Y_VERIFY(Loader->GetExpectedSchema()->num_fields() == 1);
         }
 
-        std::shared_ptr<arrow::ChunkedArray> Assemble(const ui32 needCount, const bool reverse) const;
+        std::shared_ptr<arrow::ChunkedArray> Assemble() const;
     };
 
     class TPreparedBatchData {
@@ -430,18 +478,8 @@ public:
 
     public:
         struct TAssembleOptions {
-            const bool ForwardAssemble = true;
-            std::optional<ui32> RecordsCountLimit;
             std::optional<std::set<ui32>> IncludedColumnIds;
             std::optional<std::set<ui32>> ExcludedColumnIds;
-
-            TAssembleOptions() noexcept
-                : TAssembleOptions(true)
-            {}
-
-            explicit TAssembleOptions(bool forward) noexcept
-                : ForwardAssemble(forward)
-            {}
 
             bool IsAcceptedColumn(const ui32 columnId) const {
                 if (IncludedColumnIds && !IncludedColumnIds->contains(columnId)) {
@@ -484,9 +522,8 @@ public:
 
         Y_VERIFY(!Meta.ColumnMeta.empty());
         const ui32 rowsCount = Meta.ColumnMeta.begin()->second.NumRows;
-        const auto& indexInfo = resultSchema.GetIndexInfo();
         for (auto&& field : resultSchema.GetSchema()->fields()) {
-            columns.emplace_back(TPreparedColumn(field, {TAssembleBlobInfo(rowsCount)}, indexInfo.GetColumnId(field->name())));
+            columns.emplace_back(TPreparedColumn({ TAssembleBlobInfo(rowsCount) }, resultSchema.GetColumnLoader(field->name())));
         }
 
         TMap<size_t, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks
@@ -529,7 +566,7 @@ public:
             }
 
             Y_VERIFY(pos < columns.size());
-            columns[pos] = TPreparedColumn(resultField, std::move(blobs), indexInfo.GetColumnId(resultField->name()));
+            columns[pos] = TPreparedColumn(std::move(blobs), dataSchema.GetColumnLoader(resultField->name()));
         }
 
         return TPreparedBatchData(std::move(columns), resultSchema.GetSchema(), rowsCount);
@@ -543,12 +580,12 @@ public:
 
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
                                    const std::shared_ptr<arrow::Field>& field,
-                                   const arrow::ipc::IpcWriteOptions& writeOptions);
+                                   const TColumnSaver saver);
 
     TString AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
                               const std::shared_ptr<arrow::Field>& field,
                               TColumnRecord&& record,
-                              const arrow::ipc::IpcWriteOptions& writeOptions,
+                              const TColumnSaver saver,
                               ui32 limitBytes = BLOB_BYTES_LIMIT);
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {

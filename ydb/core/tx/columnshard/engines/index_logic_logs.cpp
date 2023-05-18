@@ -13,27 +13,6 @@ std::shared_ptr<arrow::RecordBatch> TIndexLogicBase::GetEffectiveKey(const std::
     return resBatch;
 }
 
-arrow::ipc::IpcWriteOptions WriteOptions(const TCompression& compression) {
-    auto& codec = compression.Codec;
-
-    arrow::ipc::IpcWriteOptions options(arrow::ipc::IpcWriteOptions::Defaults());
-    Y_VERIFY(arrow::util::Codec::IsAvailable(codec));
-    arrow::Result<std::unique_ptr<arrow::util::Codec>> resCodec;
-    if (compression.Level) {
-        resCodec = arrow::util::Codec::Create(codec, *compression.Level);
-        if (!resCodec.ok()) {
-            resCodec = arrow::util::Codec::Create(codec);
-        }
-    } else {
-        resCodec = arrow::util::Codec::Create(codec);
-    }
-    Y_VERIFY(resCodec.ok());
-
-    options.codec.reset((*resCodec).release());
-    options.use_threads = false;
-    return options;
-}
-
 std::shared_ptr<arrow::RecordBatch> TIndexationLogic::AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                 const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
     auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot());
@@ -64,16 +43,17 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
     auto blobSchema = IndexInfo.GetSchema(undo.GetSnapshot());
     auto resultSchema = IndexInfo.GetLastSchema();
     auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, srcBlobs);
-    auto writeOptions = WriteOptions(*compression);
 
     size_t undoSize = newBlobs.size();
-
+    TSaverContext saverContext;
+    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);
     for (auto& rec : portionInfo.Records) {
         auto pos = resultSchema->GetFieldIndex(rec.ColumnId);
         Y_VERIFY(pos >= 0);
         auto field = resultSchema->GetField(pos);
+        auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
 
-        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(field->name()), field, writeOptions);
+        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(field->name()), field, columnSaver);
         if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
             portionInfo = undo;
             newBlobs.resize(undoSize);
@@ -102,7 +82,7 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
     std::vector<TPortionInfo> out;
 
     TString tierName;
-    TCompression compression = resultSchema->GetIndexInfo().GetDefaultCompression();
+    std::optional<TCompression> compression;
     if (pathId) {
         if (auto* tiering = GetTieringMap().FindPtr(pathId)) {
             tierName = tiering->GetHottestTierName();
@@ -111,7 +91,8 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
             }
         }
     }
-    const auto writeOptions = WriteOptions(compression);
+    TSaverContext saverContext;
+    saverContext.SetTierName(tierName).SetExternalCompression(compression);
 
     std::shared_ptr<arrow::RecordBatch> portionBatch = batch;
     for (i32 pos = 0; pos < batch->num_rows();) {
@@ -127,12 +108,12 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
         bool ok = true;
         for (const auto& field : resultSchema->GetSchema()->fields()) {
             const auto& name = field->name();
-            ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(TString(name.data(), name.size()));
+            ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(name);
 
             /// @warnign records are not valid cause of empty BlobId and zero Portion
             TColumnRecord record = TColumnRecord::Make(granule, columnId, minSnapshot, 0);
-            auto blob = portionInfo.AddOneChunkColumn(portionBatch->GetColumnByName(name), field, std::move(record),
-                                                        writeOptions);
+            auto columnSaver = resultSchema->GetColumnSaver(name, saverContext);
+            auto blob = portionInfo.AddOneChunkColumn(portionBatch->GetColumnByName(name), field, std::move(record), columnSaver);
             if (!blob.size()) {
                 ok = false;
                 break;

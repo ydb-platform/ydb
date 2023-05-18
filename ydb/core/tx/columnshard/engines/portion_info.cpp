@@ -5,22 +5,21 @@
 namespace NKikimr::NOlap {
 
 TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array,
-                                      const std::shared_ptr<arrow::Field>& field,
-                                      const arrow::ipc::IpcWriteOptions& writeOptions)
-{
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
-    auto batch = arrow::RecordBatch::Make(schema, array->length(), {array});
+    const std::shared_ptr<arrow::Field>& field,
+    const TColumnSaver saver) {
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
+    auto batch = arrow::RecordBatch::Make(schema, array->length(), { array });
     Y_VERIFY(batch);
 
-    return NArrow::SerializeBatch(batch, writeOptions);
+    return saver.Apply(batch);
 }
 
 TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
                                         const std::shared_ptr<arrow::Field>& field,
                                         TColumnRecord&& record,
-                                        const arrow::ipc::IpcWriteOptions& writeOptions,
+                                        const TColumnSaver saver,
                                         const ui32 limitBytes) {
-    auto blob = SerializeColumn(array, field, writeOptions);
+    auto blob = SerializeColumn(array, field, saver);
     if (blob.size() >= limitBytes) {
         return {};
     }
@@ -240,42 +239,14 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return Meta.ColumnMeta.find(columnId)->second.Max;
 }
 
-std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(const ui32 needCount, const bool reverse) const {
+std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_VERIFY(!Blobs.empty());
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ Field });
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(Blobs.size());
-    ui32 count = 0;
-    if (!reverse) {
-        for (auto& blob : Blobs) {
-            batches.push_back(blob.BuildRecordBatch(schema));
-            Y_VERIFY(batches.back());
-            if (count + batches.back()->num_rows() >= needCount) {
-                Y_VERIFY(count <= needCount);
-                batches.back() = batches.back()->Slice(0, needCount - count);
-            }
-            count += batches.back()->num_rows();
-            Y_VERIFY(count <= needCount);
-            if (count == needCount) {
-                break;
-            }
-        }
-    } else {
-        for (auto it = Blobs.rbegin(); it != Blobs.rend(); ++it) {
-            batches.push_back(it->BuildRecordBatch(schema));
-            Y_VERIFY(batches.back());
-            if (count + batches.back()->num_rows() >= needCount) {
-                Y_VERIFY(count <= needCount);
-                batches.back() = batches.back()->Slice(batches.back()->num_rows() - (needCount - count), needCount - count);
-            }
-            count += batches.back()->num_rows();
-            Y_VERIFY(count <= needCount);
-            if (count == needCount) {
-                break;
-            }
-        }
-        std::reverse(batches.begin(), batches.end());
+    for (auto& blob : Blobs) {
+        batches.push_back(blob.BuildRecordBatch(*Loader));
+        Y_VERIFY(batches.back());
     }
 
     auto res = arrow::Table::FromRecordBatches(batches);
@@ -286,12 +257,11 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(con
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector< std::shared_ptr<arrow::Field>> fields;
-    ui64 limit = options.RecordsCountLimit ? *options.RecordsCountLimit : Max<ui64>();
     for (auto&& i : Columns) {
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
         }
-        columns.emplace_back(i.Assemble(limit, !options.ForwardAssemble));
+        columns.emplace_back(i.Assemble());
         fields.emplace_back(i.GetField());
     }
 

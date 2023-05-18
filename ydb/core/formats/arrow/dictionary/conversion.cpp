@@ -92,6 +92,27 @@ std::shared_ptr<arrow::DictionaryArray> ArrayToDictionary(const std::shared_ptr<
     return result;
 }
 
+std::shared_ptr<arrow::RecordBatch> ArrayToDictionary(const std::shared_ptr<arrow::RecordBatch>& data) {
+    if (!data) {
+        return data;
+    }
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    ui32 idx = 0;
+    for (auto&& i : data->schema()->fields()) {
+        if (i->type()->id() == arrow::Type::DICTIONARY) {
+            fields.emplace_back(i);
+            columns.emplace_back(data->column(idx));
+        } else {
+            columns.emplace_back(ArrayToDictionary(data->column(idx)));
+            fields.emplace_back(std::make_shared<arrow::Field>(i->name(), columns.back()->type()));
+        }
+        ++idx;
+    }
+    std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(fields);
+    return arrow::RecordBatch::Make(schema, data->num_rows(), columns);
+}
+
 bool IsDictionableArray(const std::shared_ptr<arrow::Array>& data) {
     Y_VERIFY(data);
     bool result = false;

@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/formats/arrow/serializer/batch_only.h>
 
 namespace NKikimr::NOlap {
 
@@ -66,7 +67,7 @@ bool TIndexInfo::IsSpecialColumn(const ui32 fieldId) {
 
 ui32 TIndexInfo::GetColumnId(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    Y_VERIFY(!!id);
+    Y_VERIFY(!!id, "undefined column %s", name.data());
     return *id;
 }
 
@@ -329,6 +330,34 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
         return false;
     }
     return MinMaxIdxColumnsIds.contains(it->second);
+}
+
+TColumnSaver TIndexInfo::GetColumnSaver(const ui32 /*columnId*/, const TSaverContext& context) const {
+    arrow::ipc::IpcWriteOptions options;
+    if (context.GetExternalCompression()) {
+        options.codec = context.GetExternalCompression()->BuildArrowCodec();
+    } else {
+        options.codec = DefaultCompression.BuildArrowCodec();
+    }
+    options.use_threads = false;
+    return TColumnSaver(nullptr, std::make_shared<NArrow::NSerialization::TBatchPayloadSerializer>(options));
+}
+
+std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) const {
+    return std::make_shared<TColumnLoader>(nullptr,
+        std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(GetColumnSchema(columnId)),
+        GetColumnSchema(columnId), columnId);
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
+    std::shared_ptr<arrow::Schema> schema = Schema;
+    if (IsSpecialColumn(columnId)) {
+        schema = ArrowSchemaSnapshot();
+    }
+    auto field = schema->GetFieldByName(GetColumnName(columnId));
+    Y_VERIFY(field);
+    std::vector<std::shared_ptr<arrow::Field>> fields = { field };
+    return std::make_shared<arrow::Schema>(fields);
 }
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials) {

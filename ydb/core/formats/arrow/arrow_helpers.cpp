@@ -8,6 +8,7 @@
 
 #include <ydb/core/util/yverify_stream.h>
 #include <util/system/yassert.h>
+#include <util/string/join.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
@@ -158,6 +159,8 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
     if (result.ok()) {
         return *result;
     } else {
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())
+            ("schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
         return nullptr;
     }
 }

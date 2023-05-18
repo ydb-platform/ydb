@@ -516,7 +516,7 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
     }
 
     try {
-        const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
+        const auto& aggDesc = NPg::LookupAggregation(TString(name), argTypes);
         if (aggDesc.Kind != NPg::EAggKind::Normal) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 "Only normal aggregation supported"));
@@ -1114,7 +1114,7 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    const auto& aggDesc = NPg::LookupAggregation(func, argTypes);
+    const auto& aggDesc = NPg::LookupAggregation(TString(func), argTypes);
     if (aggDesc.Kind != NPg::EAggKind::Normal) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             "Only normal aggregation supported"));

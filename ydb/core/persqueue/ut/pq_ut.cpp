@@ -1288,7 +1288,20 @@ Y_UNIT_TEST(TestWriteSplit) {
 Y_UNIT_TEST(TestLowWatermark) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
+        return [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) -> bool {
+            const auto name = event->GetTypeName();
+            return name == "NKikimr::TEvTabletPipe::TEvClientConnected" ||
+                   name == "NKikimr::TEvTabletPipe::TEvClientDestroyed" ||
+                   name == "NKikimr::TEvTabletPipe::TEvServerConnected" ||
+                   name == "NKikimr::NPDisk::TEvLog" ||
+                   name == "NKikimr::NPDisk::TEvLogResult" ||
+                   name == "NKikimr::TEvKeyValue::TEvCollect" ||
+                   name == "NKikimr::TEvKeyValue::TEvCompleteGC" ||
+                   name == "NKikimr::TEvKeyValue::TEvIntermediate" ||
+                   name == "NKikimr::TEvKeyValue::TEvPartialCompleteGC" ||
+                   name == "NKikimr::TEvPQ::TEvPartitionLabeledCounters" ||
+                   name == "NKikimr::TEvPQ::TEvProxyResponse";
+        };
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);

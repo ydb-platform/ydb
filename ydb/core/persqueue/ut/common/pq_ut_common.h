@@ -42,6 +42,7 @@ public:
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
         Y_UNUSED(runtime);
         Y_UNUSED(event);
+
         return false;
     }
 };

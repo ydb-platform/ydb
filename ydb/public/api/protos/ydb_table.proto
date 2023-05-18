@@ -140,7 +140,7 @@ message ChangefeedFormat {
         // Change record in JSON format for common (row oriented) tables
         FORMAT_JSON = 1;
         // Change record in JSON format for document (DynamoDB-compatible) tables
-        FORMAT_DOCUMENT_TABLE_JSON = 2;
+        FORMAT_DYNAMODB_STREAMS_JSON = 2;
     }
 }
 

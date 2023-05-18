@@ -2656,8 +2656,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         switch (format) {
         case EChangefeedFormat::Json:
             return "JSON";
-        case EChangefeedFormat::DocumentTableJson:
-            return "DOCUMENT_TABLE_JSON";
+        case EChangefeedFormat::DynamoDBStreamsJson:
+            return "DYNAMODB_STREAMS_JSON";
         case EChangefeedFormat::Unknown:
             UNIT_ASSERT(false);
             return "";
@@ -2675,7 +2675,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 .AddNullableColumn("Value", EPrimitiveType::String)
                 .SetPrimaryKeyColumn("Key");
 
-            if (format == EChangefeedFormat::DocumentTableJson) {
+            if (format == EChangefeedFormat::DynamoDBStreamsJson) {
                 builder.AddAttribute("__document_api_version", "1");
             }
 
@@ -2684,7 +2684,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         auto execOpts = TExecSchemeQuerySettings();
-        if (format == EChangefeedFormat::DocumentTableJson) {
+        if (format == EChangefeedFormat::DynamoDBStreamsJson) {
             execOpts.RequestType("_document_api_request");
         }
 
@@ -2729,7 +2729,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 switch (format) {
                 case EChangefeedFormat::Unknown:
                     continue;
-                case EChangefeedFormat::DocumentTableJson:
+                case EChangefeedFormat::DynamoDBStreamsJson:
                     if (mode == EChangefeedMode::Updates) {
                         continue;
                     }
@@ -2859,7 +2859,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/document-table` ADD CHANGEFEED `feed` WITH (
-                    MODE = 'UPDATES', FORMAT = 'DOCUMENT_TABLE_JSON'
+                    MODE = 'UPDATES', FORMAT = 'DYNAMODB_STREAMS_JSON'
                 );
             )";
 

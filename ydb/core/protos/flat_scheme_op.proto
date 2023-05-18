@@ -715,7 +715,7 @@ enum ECdcStreamFormat {
     ECdcStreamFormatInvalid = 0;
     ECdcStreamFormatProto = 1;
     ECdcStreamFormatJson = 2;
-    ECdcStreamFormatDocApiJson = 3;
+    ECdcStreamFormatDynamoDBStreamsJson = 3;
 }
 
 message TCdcStreamDescription {
@@ -727,7 +727,7 @@ message TCdcStreamDescription {
     optional ECdcStreamState State = 4;
     optional uint64 SchemaVersion = 5;
     repeated TUserAttribute UserAttributes = 8;
-    // AwsRegion used to mark records in DynamoDB-compatible mode (FormatDocApiJson)
+    // AwsRegion used to mark records in DynamoDB-compatible mode (FormatDynamoDBStreamsJson)
     optional string AwsRegion = 9;
 }
 

@@ -466,8 +466,8 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
             changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
             break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDocApiJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
+            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
             break;
         default:
             break;
@@ -511,8 +511,8 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson);
         break;
-    case Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON:
-        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDocApiJson);
+    case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson);
         break;
     default:
         status = Ydb::StatusIds::BAD_REQUEST;

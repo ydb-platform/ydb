@@ -1291,8 +1291,8 @@ public:
 
                                     if (to_lower(format) == "json") {
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
-                                    } else if (to_lower(format) == "document_table_json") {
-                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
+                                    } else if (to_lower(format) == "dynamodb_streams_json") {
+                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));

@@ -179,9 +179,9 @@ public:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
             break;
         case NKikimrSchemeOp::ECdcStreamModeUpdate:
-            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDocApiJson) {
+            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DocApiJson format incompatible with specified stream mode");
+                    "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode");
                 return result;
             }
             break;
@@ -200,10 +200,10 @@ public:
                 return result;
             }
             break;
-        case NKikimrSchemeOp::ECdcStreamFormatDocApiJson:
+        case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (tablePath.Base()->DocumentApiVersion < 1) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DocApiJson format incompatible with non-document table");
+                    "DYNAMODB_STREAMS_JSON format incompatible with non-document table");
                 return result;
             }
             break;

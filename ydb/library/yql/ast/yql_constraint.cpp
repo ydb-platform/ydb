@@ -41,6 +41,8 @@ const TTypeAnnotationNode* TConstraintNode::GetSubTypeByPath(const TPathType& pa
     switch (type.GetKind()) {
         case ETypeAnnotationKind::Optional:
             return GetSubTypeByPath(path, *type.Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::List: // TODO: Remove later: temporary stub for single AsList in FlatMap and same cases.
+            return GetSubTypeByPath(path, *type.Cast<TListExprType>()->GetItemType());
         case ETypeAnnotationKind::Struct:
             if (const auto itemType = type.Cast<TStructExprType>()->FindItemType(path.front()))
                 return GetSubTypeByPath(tail(path), *itemType);
@@ -2143,6 +2145,20 @@ void Out<NYql::TConstraintNode::TPathType>(IOutputStream& out, const NYql::TCons
             out.Write(c);
         }
     }
+}
+
+template<>
+void Out<NYql::TConstraintNode::TSetType>(IOutputStream& out, const NYql::TConstraintNode::TSetType& c) {
+    out.Write('{');
+    bool first = true;
+    for (const auto& path : c) {
+        if (first)
+            first = false;
+        else
+            out.Write(',');
+        out << path;
+    }
+    out.Write('}');
 }
 
 template<>

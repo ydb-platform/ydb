@@ -252,14 +252,14 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     Self->TablesManager.MutablePrimaryIndex().FreeLocks(changes);
 
     if (changes->IsInsert()) {
-        Self->ActiveIndexingOrCompaction = false;
+        Self->ActiveIndexing = false;
 
         Self->IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
         Self->IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
         Self->IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
         Self->IncCounter(COUNTER_INDEXING_TIME, Ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCompaction()) {
-        Self->ActiveIndexingOrCompaction = false;
+        Self->ActiveCompaction--;
 
         Y_VERIFY(changes->CompactionInfo);
         bool inGranule = changes->CompactionInfo->InGranule;

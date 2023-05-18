@@ -11,7 +11,7 @@
 - Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk)
 - Java [https://github.com/ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk)
 - Node.js [https://github.com/ydb-platform/ydb-nodejs-sdk](https://github.com/ydb-platform/ydb-nodejs-sdk)
-- PHP [https://github.com/yandex-cloud/ydb-php-sdk](https://github.com/yandex-cloud/ydb-php-sdk)
+- PHP [https://github.com/ydb-platform/ydb-php-sdk](https://github.com/ydb-platform/ydb-php-sdk)
 - Python [https://github.com/ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk)
 - Rust [https://github.com/ydb-platform/ydb-rs-sdk](https://github.com/ydb-platform/ydb-rs-sdk)
 

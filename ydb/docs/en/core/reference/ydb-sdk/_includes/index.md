@@ -5,7 +5,6 @@
 OpenSource SDKs in the following programming languages are available to work with YDB:
 
 {% if oss %}
-
 - C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp)
 {% endif %}
 - C# (.NET) [https://github.com/ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk)
@@ -23,4 +22,3 @@ The SDK documentation contains the following sections:
 - [Test app](../example/index.md)
 - [Code recipes](../recipes/index.md)
 - [Comparison of SDK features](../feature-parity.md)
-

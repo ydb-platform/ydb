@@ -4,7 +4,7 @@
 #include <ydb/services/metadata/initializer/common.h>
 #include <ydb/services/metadata/abstract/initialization.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NKqp {
 
 class TTableStoreInitializer: public NMetadata::NInitializer::IInitializationBehaviour {
 protected:

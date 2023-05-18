@@ -8,7 +8,7 @@
 
 #include <util/string/type.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NKqp {
 
 class ITableStoreOperation {
 public:
@@ -70,14 +70,14 @@ public:
         {
             auto it = features.find("NAME");
             if (it == features.end()) {
-                return NMetadata::NModifications::TObjectOperatorResult("can't find column name (NAME)");
+                return NMetadata::NModifications::TObjectOperatorResult("can't find  alter parameter NAME");
             }
             ColumnName = it->second;
         }
         {
             auto it = features.find("TYPE");
             if (it == features.end()) {
-                return NMetadata::NModifications::TObjectOperatorResult("can't find column name (TYPE)");
+                return NMetadata::NModifications::TObjectOperatorResult("can't find alter parameter TYPE");
             }
             ColumnType = it->second;
         }

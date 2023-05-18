@@ -2,7 +2,7 @@
 
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NKqp {
 
 class TTableStoreConfig {
 public:

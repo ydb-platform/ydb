@@ -7,11 +7,11 @@
 
 
 
-add_library(tx-columnshard-kqp)
-target_compile_options(tx-columnshard-kqp PRIVATE
+add_library(gateway-behaviour-tablestore)
+target_compile_options(gateway-behaviour-tablestore PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(tx-columnshard-kqp PUBLIC
+target_link_libraries(gateway-behaviour-tablestore PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -19,16 +19,16 @@ target_link_libraries(tx-columnshard-kqp PUBLIC
   services-metadata-abstract
   kqp-gateway-actors
 )
-target_sources(tx-columnshard-kqp PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/kqp/manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/kqp/initializer.cpp
+target_sources(gateway-behaviour-tablestore PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/initializer.cpp
 )
 
-add_global_library_for(tx-columnshard-kqp.global tx-columnshard-kqp)
-target_compile_options(tx-columnshard-kqp.global PRIVATE
+add_global_library_for(gateway-behaviour-tablestore.global gateway-behaviour-tablestore)
+target_compile_options(gateway-behaviour-tablestore.global PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(tx-columnshard-kqp.global PUBLIC
+target_link_libraries(gateway-behaviour-tablestore.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -36,6 +36,6 @@ target_link_libraries(tx-columnshard-kqp.global PUBLIC
   services-metadata-abstract
   kqp-gateway-actors
 )
-target_sources(tx-columnshard-kqp.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/kqp/behaviour.cpp
+target_sources(gateway-behaviour-tablestore.global PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/behaviour.cpp
 )

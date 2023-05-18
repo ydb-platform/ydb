@@ -2,7 +2,7 @@
 #include "manager.h"
 #include "initializer.h"
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NKqp {
 
 TTableStoreBehaviour::TFactory::TRegistrator<TTableStoreBehaviour> TTableStoreBehaviour::Registrator(TTableStoreConfig::GetTypeId());
 

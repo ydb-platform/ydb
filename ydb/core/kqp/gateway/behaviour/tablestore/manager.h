@@ -4,7 +4,7 @@
 
 #include <ydb/services/metadata/manager/generic_manager.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NKqp {
 
 class TTableStoreManager: public NMetadata::NModifications::IOperationsManager {
 protected:

@@ -30,16 +30,10 @@ class ConnectionsCache(_ConnectionsCache):
         else:
             await asyncio.wait_for(self._event.wait(), timeout=wait_timeout)
 
-        if (
-            preferred_endpoint is not None
-            and preferred_endpoint.node_id in self.connections_by_node_id
-        ):
+        if preferred_endpoint is not None and preferred_endpoint.node_id in self.connections_by_node_id:
             return self.connections_by_node_id[preferred_endpoint.node_id]
 
-        if (
-            preferred_endpoint is not None
-            and preferred_endpoint.endpoint in self.connections
-        ):
+        if preferred_endpoint is not None and preferred_endpoint.endpoint in self.connections:
             return self.connections[preferred_endpoint]
 
         for conn_lst in self.conn_lst_order:
@@ -156,17 +150,11 @@ class Discovery:
                 endpoint,
                 endpoint_options,
             ) in resolved_endpoint.endpoints_with_options():
-                if self._cache.size >= self._max_size or self._cache.already_exists(
-                    endpoint
-                ):
+                if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
                     continue
 
-                ready_connection = Connection(
-                    endpoint, self._driver_config, endpoint_options=endpoint_options
-                )
-                await ready_connection.connection_ready(
-                    ready_timeout=self._ready_timeout
-                )
+                ready_connection = Connection(endpoint, self._driver_config, endpoint_options=endpoint_options)
+                await ready_connection.connection_ready(ready_timeout=self._ready_timeout)
 
                 self._cache.add(ready_connection, preferred)
 
@@ -186,15 +174,9 @@ class Discovery:
             if successful:
                 self._cache.complete_discovery(None)
             else:
-                self._cache.complete_discovery(
-                    issues.ConnectionFailure(str(self.discovery_debug_details()))
-                )
+                self._cache.complete_discovery(issues.ConnectionFailure(str(self.discovery_debug_details())))
 
-            interval = (
-                self._discovery_interval()
-                if successful
-                else self._emergency_retry_interval()
-            )
+            interval = self._discovery_interval() if successful else self._emergency_retry_interval()
 
             try:
                 await asyncio.wait_for(self._wake_up_event.wait(), timeout=interval)
@@ -218,9 +200,7 @@ class ConnectionPool(IConnectionPool):
         self._stopped = False
         self._discovery = Discovery(self._store, self._driver_config)
 
-        self._discovery_task = asyncio.get_event_loop().create_task(
-            self._discovery.run()
-        )
+        self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
 
     async def stop(self, timeout=10):
         self._discovery.stop()
@@ -263,9 +243,7 @@ class ConnectionPool(IConnectionPool):
     ):
         wait_timeout = settings.timeout if settings else 10
         try:
-            connection = await self._store.get(
-                preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout
-            )
+            connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
         except Exception:
             self._discovery.notify_disconnected()
             raise

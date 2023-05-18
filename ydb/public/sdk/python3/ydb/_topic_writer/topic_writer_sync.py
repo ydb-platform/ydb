@@ -49,9 +49,7 @@ class WriterSync:
         async def create_async_writer():
             return WriterAsyncIO(driver, settings)
 
-        self._async_writer = self._caller.safe_call_with_result(
-            create_async_writer(), None
-        )
+        self._async_writer = self._caller.safe_call_with_result(create_async_writer(), None)
         self._parent = _parent
 
     def __enter__(self):
@@ -69,9 +67,7 @@ class WriterSync:
 
         self._closed = True
 
-        self._caller.safe_call_with_result(
-            self._async_writer.close(flush=flush), timeout
-        )
+        self._caller.safe_call_with_result(self._async_writer.close(flush=flush), timeout)
 
     def _check_closed(self):
         if self._closed:
@@ -95,9 +91,7 @@ class WriterSync:
     def wait_init(self, *, timeout: TimeoutType = None) -> PublicWriterInitInfo:
         self._check_closed()
 
-        return self._caller.unsafe_call_with_result(
-            self._async_writer.wait_init(), timeout
-        )
+        return self._caller.unsafe_call_with_result(self._async_writer.wait_init(), timeout)
 
     def write(
         self,
@@ -114,9 +108,7 @@ class WriterSync:
     ) -> Future[Union[PublicWriteResult, List[PublicWriteResult]]]:
         self._check_closed()
 
-        return self._caller.unsafe_call_with_future(
-            self._async_writer.write_with_ack(messages)
-        )
+        return self._caller.unsafe_call_with_future(self._async_writer.write_with_ack(messages))
 
     def write_with_ack(
         self,
@@ -125,6 +117,4 @@ class WriterSync:
     ) -> Union[PublicWriteResult, List[PublicWriteResult]]:
         self._check_closed()
 
-        return self._caller.unsafe_call_with_result(
-            self._async_writer.write_with_ack(messages), timeout=timeout
-        )
+        return self._caller.unsafe_call_with_result(self._async_writer.write_with_ack(messages), timeout=timeout)

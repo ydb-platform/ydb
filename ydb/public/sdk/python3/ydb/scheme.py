@@ -79,17 +79,7 @@ class SchemeEntry(object):
         "size_bytes",
     )
 
-    def __init__(
-        self,
-        name,
-        owner,
-        type,
-        effective_permissions,
-        permissions,
-        size_bytes,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, name, owner, type, effective_permissions, permissions, size_bytes, *args, **kwargs):
         """
         Represents a scheme entry.
         :param name: A name of a scheme entry
@@ -140,17 +130,7 @@ class SchemeEntry(object):
 class Directory(SchemeEntry):
     __slots__ = ("children",)
 
-    def __init__(
-        self,
-        name,
-        owner,
-        type,
-        effective_permissions,
-        permissions,
-        children,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, name, owner, type, effective_permissions, permissions, children, *args, **kwargs):
         """
         Represents a directory scheme entry.
         :param name: A name of a scheme entry
@@ -160,9 +140,7 @@ class Directory(SchemeEntry):
         :param permissions: A list of permissions applied to this scheme entry
         :param children: A list of children
         """
-        super(Directory, self).__init__(
-            name, owner, type, effective_permissions, permissions, 0
-        )
+        super(Directory, self).__init__(name, owner, type, effective_permissions, permissions, 0)
         self.children = children
 
 
@@ -213,16 +191,12 @@ class ModifyPermissionsSettings(settings_impl.BaseRequestSettings):
 
     def grant_permissions(self, subject, permission_names):
         permission_action = self._pb.actions.add()
-        permission_action.grant.MergeFrom(
-            Permissions(subject, permission_names).to_pb()
-        )
+        permission_action.grant.MergeFrom(Permissions(subject, permission_names).to_pb())
         return self
 
     def revoke_permissions(self, subject, permission_names):
         permission_action = self._pb.actions.add()
-        permission_action.revoke.MergeFrom(
-            Permissions(subject, permission_names).to_pb()
-        )
+        permission_action.revoke.MergeFrom(Permissions(subject, permission_names).to_pb())
         return self
 
     def set_permissions(self, subject, permission_names):
@@ -283,10 +257,7 @@ def _wrap_permissions(permissions):
     :param permissions: A protocol buffer representation of permissions
     :return: A iterable of permissions
     """
-    return tuple(
-        Permissions(permission.subject, permission.permission_names)
-        for permission in permissions
-    )
+    return tuple(Permissions(permission.subject, permission.permission_names) for permission in permissions)
 
 
 def _wrap_scheme_entry(entry_pb, scheme_entry_cls=None, *args, **kwargs):

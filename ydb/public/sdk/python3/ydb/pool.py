@@ -25,11 +25,7 @@ class ConnectionsCache(object):
         self.preferred = collections.OrderedDict()
         self.logger = logging.getLogger(__name__)
         self.use_all_nodes = use_all_nodes
-        self.conn_lst_order = (
-            (self.connections,)
-            if self.use_all_nodes
-            else (self.preferred, self.connections)
-        )
+        self.conn_lst_order = (self.connections,) if self.use_all_nodes else (self.preferred, self.connections)
         self.fast_fail_subscriptions = set()
 
     def add(self, connection, preferred=False):
@@ -129,16 +125,10 @@ class ConnectionsCache(object):
     @tracing.with_trace()
     def get(self, preferred_endpoint=None) -> Connection:
         with self.lock:
-            if (
-                preferred_endpoint is not None
-                and preferred_endpoint.node_id in self.connections_by_node_id
-            ):
+            if preferred_endpoint is not None and preferred_endpoint.node_id in self.connections_by_node_id:
                 return self.connections_by_node_id[preferred_endpoint.node_id]
 
-            if (
-                preferred_endpoint is not None
-                and preferred_endpoint.endpoint in self.connections
-            ):
+            if preferred_endpoint is not None and preferred_endpoint.endpoint in self.connections:
                 return self.connections[preferred_endpoint]
 
             for conn_lst in self.conn_lst_order:
@@ -245,10 +235,7 @@ class Discovery(threading.Thread):
                     endpoint,
                     endpoint_options,
                 ) in resolved_endpoint.endpoints_with_options():
-                    if (
-                        self._cache.size >= self._max_size
-                        or self._cache.already_exists(endpoint)
-                    ):
+                    if self._cache.size >= self._max_size or self._cache.already_exists(endpoint):
                         continue
 
                     ready_connection = connection_impl.Connection.ready_factory(
@@ -277,18 +264,12 @@ class Discovery(threading.Thread):
                 if successful:
                     self._cache.complete_discovery(None)
                 else:
-                    self._cache.complete_discovery(
-                        issues.ConnectionFailure(str(self.discovery_debug_details()))
-                    )
+                    self._cache.complete_discovery(issues.ConnectionFailure(str(self.discovery_debug_details())))
 
                 if self._should_stop.is_set():
                     break
 
-                interval = (
-                    self._discovery_interval()
-                    if successful
-                    else self._emergency_retry_interval()
-                )
+                interval = self._discovery_interval() if successful else self._emergency_retry_interval()
                 self.condition.wait(interval)
 
             self._cache.cleanup()
@@ -365,13 +346,9 @@ class ConnectionPool(IConnectionPool):
         :param driver_config: An instance of DriverConfig
         """
         self._driver_config = driver_config
-        self._store = ConnectionsCache(
-            driver_config.use_all_nodes, driver_config.tracer
-        )
+        self._store = ConnectionsCache(driver_config.use_all_nodes, driver_config.tracer)
         self.tracer = driver_config.tracer
-        self._grpc_init = connection_impl.Connection(
-            self._driver_config.endpoint, self._driver_config
-        )
+        self._grpc_init = connection_impl.Connection(self._driver_config.endpoint, self._driver_config)
         self._discovery_thread = Discovery(self._store, self._driver_config)
         self._discovery_thread.start()
         self._stopped = False
@@ -452,9 +429,7 @@ class ConnectionPool(IConnectionPool):
 
         :return: A result of computation
         """
-        tracing.trace(
-            self.tracer, {"request": request, "stub": stub, "rpc_name": rpc_name}
-        )
+        tracing.trace(self.tracer, {"request": request, "stub": stub, "rpc_name": rpc_name})
         try:
             connection = self._store.get(preferred_endpoint)
         except Exception:
@@ -470,9 +445,7 @@ class ConnectionPool(IConnectionPool):
             wrap_args,
             lambda: self._on_disconnected(connection),
         )
-        tracing.trace(
-            self.tracer, {"response": res}, trace_level=tracing.TraceLevel.DEBUG
-        )
+        tracing.trace(self.tracer, {"response": res}, trace_level=tracing.TraceLevel.DEBUG)
         return res
 
     @_utilities.wrap_async_call_exceptions

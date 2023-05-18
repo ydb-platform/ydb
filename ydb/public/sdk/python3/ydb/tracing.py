@@ -65,11 +65,7 @@ def with_trace(span_name=None):
     def decorator(f):
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
-            name = (
-                span_name
-                if span_name is not None
-                else self.__class__.__name__ + "." + f.__name__
-            )
+            name = span_name if span_name is not None else self.__class__.__name__ + "." + f.__name__
             with self.tracer.trace(name):
                 return f(self, *args, **kwargs)
 

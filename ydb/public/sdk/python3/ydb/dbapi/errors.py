@@ -77,8 +77,7 @@ def _get_messages(issue, max_depth=100, indent=2, depth=0, root=False):
             pre_message = ""
 
         children_messages = [
-            _get_messages(iss, max_depth=max_depth, indent=indent, depth=depth + 1)
-            for iss in issue.issues
+            _get_messages(iss, max_depth=max_depth, indent=indent, depth=depth + 1) for iss in issue.issues
         ]
 
         if None in children_messages:

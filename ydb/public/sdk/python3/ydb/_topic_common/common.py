@@ -68,9 +68,7 @@ class CallFromSyncToAsync:
     def __init__(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
 
-    def unsafe_call_with_future(
-        self, coro: typing.Coroutine
-    ) -> concurrent.futures.Future:
+    def unsafe_call_with_future(self, coro: typing.Coroutine) -> concurrent.futures.Future:
         """
         returned result from coro may be lost
         """

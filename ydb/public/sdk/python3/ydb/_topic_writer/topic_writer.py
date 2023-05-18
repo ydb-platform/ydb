@@ -33,12 +33,8 @@ class PublicWriterSettings:
     auto_seqno: bool = True
     auto_created_at: bool = True
     codec: Optional[PublicCodec] = None  # default mean auto-select
-    encoder_executor: Optional[
-        concurrent.futures.Executor
-    ] = None  # default shared client executor pool
-    encoders: Optional[
-        typing.Mapping[PublicCodec, typing.Callable[[bytes], bytes]]
-    ] = None
+    encoder_executor: Optional[concurrent.futures.Executor] = None  # default shared client executor pool
+    encoders: Optional[typing.Mapping[PublicCodec, typing.Callable[[bytes], bytes]]] = None
     update_token_interval: Union[int, float] = 3600
 
     def __post_init__(self):
@@ -182,9 +178,7 @@ class TopicWriterRepeatableError(TopicWriterError):
 
 class TopicWriterStopped(TopicWriterError):
     def __init__(self):
-        super(TopicWriterStopped, self).__init__(
-            "topic writer was stopped by call close"
-        )
+        super(TopicWriterStopped, self).__init__("topic writer was stopped by call close")
 
 
 def default_serializer_message_content(data: Any) -> bytes:
@@ -261,9 +255,7 @@ def _split_messages_by_size_with_default_overhead(
     def get_message_size(msg: InternalMessage):
         return len(msg.data) + _message_data_overhead
 
-    return _split_messages_by_size(
-        messages, connection._DEFAULT_MAX_GRPC_MESSAGE_SIZE, get_message_size
-    )
+    return _split_messages_by_size(messages, connection._DEFAULT_MAX_GRPC_MESSAGE_SIZE, get_message_size)
 
 
 def _split_messages_by_size(

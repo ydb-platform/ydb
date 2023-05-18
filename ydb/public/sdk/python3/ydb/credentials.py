@@ -124,12 +124,8 @@ class AbstractExpiringTokenCredentials(Credentials):
             )
 
     def _update_expiration_info(self, auth_metadata):
-        self._expires_in = time.time() + min(
-            self._hour, auth_metadata["expires_in"] / 2
-        )
-        self._refresh_in = time.time() + min(
-            self._hour / 2, auth_metadata["expires_in"] / 4
-        )
+        self._expires_in = time.time() + min(self._hour, auth_metadata["expires_in"] / 2)
+        self._refresh_in = time.time() + min(self._hour / 2, auth_metadata["expires_in"] / 4)
 
     def _refresh(self):
         current_time = time.time()
@@ -171,8 +167,7 @@ class AbstractExpiringTokenCredentials(Credentials):
                     )
                 )
             raise issues.ConnectionError(
-                "%s: %s.\n%s"
-                % (self.__class__.__name__, self.last_error, self.extra_error_message)
+                "%s: %s.\n%s" % (self.__class__.__name__, self.last_error, self.extra_error_message)
             )
         return cached_token
 
@@ -196,21 +191,15 @@ class StaticCredentials(AbstractExpiringTokenCredentials):
         self.request_timeout = 10
 
     def _make_token_request(self):
-        conn = connection.Connection.ready_factory(
-            self.driver_config.endpoint, self.driver_config
-        )
-        assert conn is not None, (
-            "Failed to establish connection in to %s" % self.driver_config.endpoint
-        )
+        conn = connection.Connection.ready_factory(self.driver_config.endpoint, self.driver_config)
+        assert conn is not None, "Failed to establish connection in to %s" % self.driver_config.endpoint
         try:
             result = conn(
                 ydb_auth_pb2.LoginRequest(user=self.user, password=self.password),
                 ydb_auth_v1_pb2_grpc.AuthServiceStub,
                 "Login",
                 _wrap_static_credentials_response,
-                settings_impl.BaseRequestSettings()
-                .with_timeout(self.request_timeout)
-                .with_need_rpc_auth(False),
+                settings_impl.BaseRequestSettings().with_timeout(self.request_timeout).with_need_rpc_auth(False),
             )
         finally:
             conn.close()

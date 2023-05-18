@@ -53,9 +53,7 @@ class SessionPoolImpl(object):
             self._should_stop.set()
             self._terminating = True
 
-            self._logger.debug(
-                "Session pool is under stop, cancelling all in flight waiters."
-            )
+            self._logger.debug("Session pool is under stop, cancelling all in flight waiters.")
             while True:
                 try:
                     _, waiter = self._waiters.popitem(last=False)
@@ -197,9 +195,7 @@ class SessionPoolImpl(object):
                 self._logger.debug("Replying to waiter with a session %s", session)
             except KeyError:
                 priority = time.time() + 10 * 60
-                tracing.trace(
-                    self.tracer, {"put.to_pool": True, "session.new_priority": priority}
-                )
+                tracing.trace(self.tracer, {"put.to_pool": True, "session.new_priority": priority})
                 self._active_queue.put((priority, session))
 
     def _on_session_create(self, session, f):
@@ -261,9 +257,7 @@ class SessionPoolImpl(object):
                 tracing.trace(self.tracer, {"acquire.found_free_session": True})
                 return _utilities.wrap_result_in_future(session)
             except queue.Empty:
-                self._logger.debug(
-                    "Active session queue is empty, subscribe waiter for a session"
-                )
+                self._logger.debug("Active session queue is empty, subscribe waiter for a session")
                 waiter = _utilities.future()
                 self._logger.debug("Subscribe waiter %s", waiter)
                 if self._should_stop.is_set():
@@ -341,6 +335,10 @@ class SessionPoolImpl(object):
             self._destroy(session, "keep-alive-error")
 
     def acquire(self, blocking=True, timeout=None):
+        if self._should_stop.is_set():
+            self._logger.error("Take session from closed session pool")
+            raise ValueError("Take session from closed session pool.")
+
         waiter = self.subscribe()
         has_result = False
         if blocking:

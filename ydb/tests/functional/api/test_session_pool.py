@@ -182,15 +182,14 @@ class TestSessionPool(object):
             )
         )
 
-        after_stop_session = pool.acquire()
-        assert_that(
-            after_stop_session.initialized(),
-            is_(
-                False
-            )
-        )
+        has_exception = False
+        try:
+            pool.acquire().initialized()
+        except ValueError:
+            has_exception = True
 
-        pool.release(after_stop_session)
+        assert_that(has_exception, is_(True))
+
         pool.unsubscribe(waiter)
         pool.release(session)
 
@@ -251,12 +250,13 @@ class TestSessionPool(object):
             )
         )
 
-        assert_that(
-            pool.acquire().initialized(),
-            is_(
-                False
-            )
-        )
+        has_exception = False
+        try:
+            pool.acquire().initialized()
+        except ValueError:
+            has_exception = True
+
+        assert_that(has_exception, is_(True))
 
     def test_session_pool_min_size_feature(self):
         pool = ydb.SessionPool(self.driver, size=10, min_pool_size=10)

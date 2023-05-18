@@ -242,7 +242,7 @@ public:
         }
 
         if (TxCtx->HasUncommittedChangesRead) {
-            YQL_ENSURE(AppData()->FeatureFlags.GetEnableKqpImmediateEffects());
+            YQL_ENSURE(TxCtx->EnableImmediateEffects);
 
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);

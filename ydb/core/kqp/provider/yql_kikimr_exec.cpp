@@ -1817,7 +1817,6 @@ private:
 
     std::pair<bool, TIssues> ApplyTableOperations(const TString& cluster, const TVector<NKqpProto::TKqpTableOp>& tableOps)
     {
-        bool enableImmediateEffects = SessionCtx->Config().FeatureFlags.GetEnableKqpImmediateEffects();
         auto queryType = SessionCtx->Query().Type;
         TVector<NKqpProto::TKqpTableInfo> tableInfo;
 
@@ -1830,11 +1829,11 @@ private:
         }
 
         if (!SessionCtx->HasTx()) {
-            TKikimrTransactionContextBase emptyCtx;
-            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, enableImmediateEffects, queryType);
+            TKikimrTransactionContextBase emptyCtx(SessionCtx->Config().EnableKqpImmediateEffects);
+            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, queryType);
         }
 
-        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, enableImmediateEffects, queryType);
+        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, queryType);
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,

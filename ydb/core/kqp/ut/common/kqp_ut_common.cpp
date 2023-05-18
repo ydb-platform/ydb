@@ -104,15 +104,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
-  
-    if (settings.FeatureFlags.GetEnableKqpImmediateEffects()) {
-        Tests::TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
-
-        ServerSettings->SetControls(controls);
-    }
 
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));

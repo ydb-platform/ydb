@@ -788,7 +788,7 @@ message TFeatureFlags {
     optional bool EnableChangefeedInitialScan = 77 [default = false];
     reserved 78; // EnableKqpScanQuerySourceRead
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
-    optional bool EnableKqpImmediateEffects = 80 [default = false];
+    reserved 80; // EnableKqpImmediateEffect
     optional bool EnableDataShardGenericReadSets = 81 [default = false];
     // enable alter database operation to create subdomain's system tablets
     // directly in subdomain's hive
@@ -804,6 +804,7 @@ message TFeatureFlags {
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
     optional bool EnableScriptExecutionOperations = 92 [default = false];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
+    optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
 }
 
 
@@ -1284,6 +1285,7 @@ message TTableServiceConfig {
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     optional bool EnableSequentialHints = 38 [default = false];
+    optional bool EnableKqpImmediateEffects = 39 [default = false];
 };
 
 // Config describes immediate controls and allows

@@ -123,8 +123,9 @@ private:
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-        : Implicit(implicit)
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider, bool enableImmediateEffects)
+        : NYql::TKikimrTransactionContextBase(enableImmediateEffects)
+        , Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
     {
         CreationTime = TInstant::Now();
@@ -223,7 +224,7 @@ public:
 
     bool ShouldExecuteDeferredEffects() const {
         if (HasUncommittedChangesRead) {
-            YQL_ENSURE(AppData()->FeatureFlags.GetEnableKqpImmediateEffects());
+            YQL_ENSURE(EnableImmediateEffects);
             return !DeferredEffects.Empty();
         }
 
@@ -231,8 +232,8 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead) {
-            YQL_ENSURE(AppData()->FeatureFlags.GetEnableKqpImmediateEffects());
+        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
+            YQL_ENSURE(EnableImmediateEffects);
             return false;
         }
 

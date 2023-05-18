@@ -57,8 +57,9 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     Y_UNIT_TEST(Upsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -113,8 +114,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertDuplicates) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -146,8 +148,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertExistingKey) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -192,8 +195,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Replace) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -248,8 +252,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ReplaceDuplicates) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -281,8 +286,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ReplaceExistingKey) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -327,8 +333,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Insert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -383,8 +390,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InsertDuplicates) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -410,8 +418,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InsertExistingKey) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -436,8 +445,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateOn) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -488,8 +498,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Delete) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -536,8 +547,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateAfterUpsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -565,8 +577,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteAfterUpsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -603,8 +616,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateAfterInsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -632,8 +646,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteAfterInsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -671,8 +686,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertAfterInsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -696,8 +712,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertAfterInsertWithIndex) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -771,8 +788,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteOnAfterInsertWithIndex) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -832,8 +850,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(MultipleEffectsWithIndex) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -872,8 +891,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InsertConflictTxAborted) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -912,8 +932,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertConflictInteractiveTxAborted) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -984,8 +1005,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(MultiShardUpsertAfterRead) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1016,8 +1038,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(TxWithReadAtTheEnd) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1059,8 +1082,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InteractiveTxWithReadAtTheEnd) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1121,8 +1145,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(TxWithWriteAtTheEnd) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1163,8 +1188,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InteractiveTxWithWriteAtTheEnd) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1224,8 +1250,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UnobservedUncommittedChangeConflict) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1302,8 +1329,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(AlreadyBrokenImmediateEffects) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1389,8 +1417,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(WriteThenReadWithCommit) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1439,8 +1468,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyR1WR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1496,8 +1526,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyR1RWR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1557,8 +1588,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyR1WRR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1618,8 +1650,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1RR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1675,8 +1708,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1WR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1730,8 +1764,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1RWR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1786,8 +1821,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyW1WRR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1842,8 +1878,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1RR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1903,8 +1940,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1WR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -1959,8 +1997,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1RWR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -2016,8 +2055,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ConflictingKeyRW1WRR2) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();

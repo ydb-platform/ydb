@@ -43,9 +43,10 @@ int TCommandWorkloadTopicInit::Run(TConfig& config) {
     }
 
     NYdb::NTopic::TCreateTopicSettings settings;
+    settings.PartitioningSettings(PartitionCount, PartitionCount);
+
     for (ui32 consumerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
-        settings.PartitioningSettings(PartitionCount, PartitionCount)
-            .BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(consumerIdx))
+        settings.BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(consumerIdx))
             .EndAddConsumer();
     }
 

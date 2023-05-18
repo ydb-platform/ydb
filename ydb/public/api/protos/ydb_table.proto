@@ -159,6 +159,8 @@ message Changefeed {
     bool initial_scan = 6;
     // Attributes. Total size is limited to 10 KB.
     map<string, string> attributes = 7 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
+    // Value that will be emitted in the `awsRegion` field of the record in DOCUMENT_TABLE_JSON format
+    string aws_region = 8 [(length).le = 128];
 }
 
 message ChangefeedDescription {
@@ -189,6 +191,8 @@ message ChangefeedDescription {
     bool virtual_timestamps = 5;
     // Attributes
     map<string, string> attributes = 6;
+    // Value that will be emitted in the `awsRegion` field of the record in DOCUMENT_TABLE_JSON format
+    string aws_region = 7;
 }
 
 message StoragePool {

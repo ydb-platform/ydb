@@ -2868,6 +2868,42 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ChangefeedAwsRegion) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.CreateTable("/Root/table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddAttribute("__document_api_version", "1")
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'DOCUMENT_TABLE_JSON', AWS_REGION = 'aws:region'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query, TExecSchemeQuerySettings().RequestType("_document_api_request")).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0).GetAwsRegion(), "aws:region");
+        }
+    }
+
     Y_UNIT_TEST(DropChangefeedNegative) {
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();

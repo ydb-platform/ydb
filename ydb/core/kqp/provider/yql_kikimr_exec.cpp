@@ -1325,7 +1325,12 @@ public:
                                     const auto duration = TDuration::FromValue(value);
                                     auto& retention = *add_changefeed->mutable_retention_period();
                                     retention.set_seconds(duration.Seconds());
-                                    retention.set_nanos(duration.NanoSecondsOfSecond());
+                                } else if (name == "aws_region") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_aws_region(value);
                                 } else if (name == "local") {
                                     // nop
                                 } else {

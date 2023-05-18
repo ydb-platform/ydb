@@ -449,6 +449,7 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 
         changefeed->set_name(stream.GetName());
         changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
+        changefeed->set_aws_region(stream.GetAwsRegion());
 
         switch (stream.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
@@ -492,6 +493,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
+    out.SetAwsRegion(in.aws_region());
 
     switch (in.mode()) {
     case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:

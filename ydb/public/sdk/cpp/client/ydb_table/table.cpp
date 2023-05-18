@@ -4395,6 +4395,11 @@ TChangefeedDescription& TChangefeedDescription::SetAttributes(THashMap<TString, 
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const TString& value) {
+    AwsRegion_ = value;
+    return *this;
+}
+
 const TString& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -4421,6 +4426,10 @@ bool TChangefeedDescription::GetInitialScan() const {
 
 const THashMap<TString, TString>& TChangefeedDescription::GetAttributes() const {
     return Attributes_;
+}
+
+const TString& TChangefeedDescription::GetAwsRegion() const {
+    return AwsRegion_;
 }
 
 template <typename TProto>
@@ -4464,6 +4473,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
     }
+    if (!proto.aws_region().empty()) {
+        ret.WithAwsRegion(proto.aws_region());
+    }
 
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
         switch (proto.state()) {
@@ -4493,6 +4505,7 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     proto.set_name(Name_);
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_initial_scan(InitialScan_);
+    proto.set_aws_region(AwsRegion_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -4553,6 +4566,10 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
         o << ", retention_period: " << *RetentionPeriod_;
     }
 
+    if (AwsRegion_) {
+        o << ", aws_region: " << AwsRegion_;
+    }
+
     o << " }";
 }
 
@@ -4560,7 +4577,8 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
     return lhs.GetName() == rhs.GetName()
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
-        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps();
+        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
+        && lhs.GetAwsRegion() == rhs.GetAwsRegion();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

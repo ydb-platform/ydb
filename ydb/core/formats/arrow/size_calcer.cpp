@@ -190,8 +190,9 @@ bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch,
         TSerializedBatch localSbR = TSerializedBatch::Build(batch->Slice(delta, length - delta));
         if (localSbL.GetSize() > sizeLimit || localSbR.GetSize() > sizeLimit) {
             if (errorMessage) {
-                *errorMessage = TStringBuilder() << "original batch too big: " << sb.GetSize() << " and after 2 parts split we have: " <<
-                    localSbL.GetSize() << " / " << localSbR.GetSize() << " part sizes. Its unexpected";
+                *errorMessage = TStringBuilder() << "original batch too big: " << sb.GetSize() << " and after 2 parts split we have: "
+                    << localSbL.GetSize() << "(" << localSbL.GetRowsCount() << ")" << " / "
+                    << localSbR.GetSize() << "(" << localSbR.GetRowsCount() << ")" << " part sizes. Its unexpected for limit " << sizeLimit;
             }
             return false;
         }

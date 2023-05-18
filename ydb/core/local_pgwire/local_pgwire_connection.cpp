@@ -169,10 +169,15 @@ public:
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
         BLOG_D("TEvQuery " << ev->Sender);
-
-        TActorSystem* actorSystem = TActivationContext::ActorSystem();
+        auto query(ev->Get()->Message->GetQuery());
+        if (IsQueryEmpty(query)) {
+            auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
+            response->EmptyQuery = true;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
         Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(ev->Get()->Message->GetQuery()));
+        request.set_script(ToPgSyntax(query));
         TString database;
         if (ConnectionParams.count("database")) {
             database = ConnectionParams["database"];
@@ -182,6 +187,7 @@ public:
             token = ConnectionParams["ydb-serialized-token"];
         }
         using TRpcEv = NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, token, actorSystem);
         rpcFuture.Subscribe([actorSystem, ev](NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse> future) {
             auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
@@ -269,6 +275,16 @@ public:
         Send(ev->Sender, bindComplete.release());
     }
 
+    void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
+        auto closeData = ev->Get()->Message->GetCloseData();
+        ParsedStatements.erase(closeData.StatementName);
+        CurrentStatement.clear();
+        BLOG_D("TEvClose CurrentStatement changed to <empty>");
+
+        auto closeComplete = ev->Get()->Reply();
+        Send(ev->Sender, closeComplete.release());
+    }
+
     struct TConvertedQuery {
         TString Query;
         NYdb::TParams Params;
@@ -298,6 +314,24 @@ public:
             .Query = injectedQuery + queryData.Query,
             .Params = paramsBuilder.Build(),
         };
+    }
+
+    inline static bool IsWhitespaceASCII(char c)
+    {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+    }
+
+    static bool IsWhitespace(TStringBuf query) {
+        for (char c : query) {
+            if (!IsWhitespaceASCII(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool IsQueryEmpty(TStringBuf query) {
+        return IsWhitespace(query);
     }
 
     void Handle(NPG::TEvPGEvents::TEvDescribe::TPtr& ev) {
@@ -399,6 +433,13 @@ public:
             return;
         }
 
+        if (IsQueryEmpty(it->second.QueryData.Query)) {
+            auto response = std::make_unique<NPG::TEvPGEvents::TEvExecuteResponse>();
+            response->EmptyQuery = true;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
+
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         auto query = ConvertQuery(it->second);
         Ydb::Scripting::ExecuteYqlRequest request;
@@ -480,6 +521,7 @@ public:
             hFunc(NPG::TEvPGEvents::TEvBind, Handle);
             hFunc(NPG::TEvPGEvents::TEvDescribe, Handle);
             hFunc(NPG::TEvPGEvents::TEvExecute, Handle);
+            hFunc(NPG::TEvPGEvents::TEvClose, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

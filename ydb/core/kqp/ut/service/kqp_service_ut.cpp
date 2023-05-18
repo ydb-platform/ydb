@@ -287,6 +287,47 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
+
+    // YQL-15582
+    Y_UNIT_TEST_TWIN(RangeCache, UseCache) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(true);
+        size_t cacheSize = UseCache ? 1_MB : 0;
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
+        auto kikimr = TKikimrRunner{settings};
+        auto driver = kikimr.GetDriver();
+
+        size_t InFlight = 1; // use >1 to reproduce data race in Range* computation nodes
+        NPar::LocalExecutor().RunAdditionalThreads(InFlight);
+        NPar::LocalExecutor().ExecRange([&driver](int /*id*/) {
+            TTimer t;
+            NYdb::NTable::TTableClient db(driver);
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto query = TStringBuilder()
+                << Q_(R"(
+                    DECLARE $in AS List<Uint64>;
+                    SELECT Key, Value FROM `/Root/KeyValue`
+                    WHERE Value = "One" AND Key IN $in
+                )");
+            for (ui32 i = 0; i < 200; ++i) {
+                auto params = TParamsBuilder();
+                auto& pl = params.AddParam("$in").BeginList();
+                for (auto v : {1, 2, 3, 42, 50, 100}) {
+                    pl.AddListItem().Uint64(v);
+                }
+                pl.EndList().Build();
+
+
+                auto result = session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build()).ExtractValueSync();
+                AssertSuccessResult(result);
+
+                CompareYson(
+                    R"([[[1u];["One"]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+    }
 }
 
 } // namspace NKqp

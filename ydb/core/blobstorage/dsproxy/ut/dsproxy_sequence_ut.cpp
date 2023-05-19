@@ -1178,6 +1178,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                     q.Shift = shift;
                     q.Size = size;
                 }
+                SetPredictedDelaysForAllQueues({});
                 runtime.Send(
                     new IEventHandle(
                         proxy, sender, new TEvBlobStorage::TEvGet(

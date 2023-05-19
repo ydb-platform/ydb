@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     int const GROUP_START_ID = 1200;
-    int const VCARD_START_ID = 5500;
+    int const VCARD_START_ID = 124;
 
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
@@ -96,6 +96,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto group = pbConfig->add_group();
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
+            group->set_erasurespecies("block-4-2");
 
             group->clear_vslotid();
             for (int j = 0; j < vslotCount; j++) {
@@ -131,6 +132,48 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 state->mutable_vdiskid()->set_groupid(groupId);
             }
             groupId++;
+        }
+    }
+
+    void AddVSlotInVDiskStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, TVector<Ydb::Monitoring::StatusFlag::Status> vdiskStatuses) {
+        auto& pbRecord = (*ev)->Get()->Record;
+
+        auto sample = pbRecord.vdiskstateinfo(0);
+        pbRecord.clear_vdiskstateinfo();
+
+        auto groupId = GROUP_START_ID;
+        auto vslotId = VCARD_START_ID;
+
+        for (auto status: vdiskStatuses) {
+            switch (status) {
+            case Ydb::Monitoring::StatusFlag::RED: {
+                auto state = pbRecord.add_vdiskstateinfo();
+                state->CopyFrom(sample);
+                state->mutable_vdiskid()->set_vdisk(vslotId++);
+                state->mutable_vdiskid()->set_groupid(groupId); 
+                state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::PDiskError);
+                break;
+            }
+            case Ydb::Monitoring::StatusFlag::BLUE: {
+                auto state = pbRecord.add_vdiskstateinfo();
+                state->CopyFrom(sample);
+                state->mutable_vdiskid()->set_vdisk(vslotId++);
+                state->mutable_vdiskid()->set_groupid(groupId); 
+                state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+                state->set_replicated(false);
+                break;
+            }
+            case Ydb::Monitoring::StatusFlag::YELLOW: {
+                auto state = pbRecord.add_vdiskstateinfo();
+                state->CopyFrom(sample);
+                state->mutable_vdiskid()->set_vdisk(vslotId++);
+                state->mutable_vdiskid()->set_groupid(groupId); 
+                state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
+                break;
+            }
+            default:
+                break;
+            }
         }
     }
 
@@ -212,6 +255,61 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(issueVdiscCount, issueVdiscNumber);
+    }
+
+    Y_UNIT_TEST(OrangeGroupWhenRedBlueVdisks) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime &runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResult(x);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerSelectGroupsResult: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr*>(&ev);
+                    AddGroupsInControllerSelectGroupsResult(x, 1);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerConfigResponse: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
+                    AddGroupVSlotInControllerConfigResponse(x, 1, 2);
+                    break;
+                }
+                case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse: {
+                    auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    AddVSlotInVDiskStateResponse(x, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+
+        for (const auto& issue_log : result->Result.Getissue_log()) {
+            if (issue_log.type() == "STORAGE_GROUP" && issue_log.location().storage().pool().name() == "/Root:test") {
+                UNIT_ASSERT_VALUES_EQUAL((int)issue_log.status(), (int)Ydb::Monitoring::StatusFlag::ORANGE);
+            }
+        }
     }
 
     Y_UNIT_TEST(IssuesGroupsListing) {

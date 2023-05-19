@@ -82,11 +82,11 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
   * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные.
   * `JSON` — записывать данные в формате [JSON](../../../../concepts/cdc#json-record-structure).
-  * `DOCUMENT_TABLE_JSON` — записывать данные в формате [JSON для документных таблиц](../../../../concepts/cdc#document-table-json-record-structure).
+  * `DYNAMODB_STREAMS_JSON` — записывать данные в [JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure).
 * `VIRTUAL_TIMESTAMPS` — включение-выключение [виртуальных меток времени](../../../../concepts/cdc#virtual-timestamps). По умолчанию выключено.
 * `RETENTION_PERIOD` — [время хранения записей](../../../../concepts/cdc#retention-period). Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `INITIAL_SCAN` — включение-выключение [первоначального сканирования](../../../../concepts/cdc#initial-scan) таблицы. По умолчанию выключено.
-* `AWS_REGION` — значение, которое будет записано в поле `awsRegion`. Применимо только совместно с форматом `DOCUMENT_TABLE_JSON`.
+* `AWS_REGION` — значение, которое будет записано в поле `awsRegion`. Применимо только совместно с форматом `DYNAMODB_STREAMS_JSON`.
 
 Приведенный ниже код добавит поток изменений с именем `updates_feed`, в который будут выгружаться значения изменившихся столбцов таблицы в формате JSON:
 

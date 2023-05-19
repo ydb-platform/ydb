@@ -138,7 +138,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 {% endnote %}
 
-### JSON-формат для документных таблиц {#document-table-json-record-structure}
+### JSON-формат, совместимый с Amazon DynamoDB Streams {#dynamodb-streams-json-record-structure}
 
 Для документных таблиц, совместимых с [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html), {{ ydb-short-name }} может генерировать записи об изменениях в формате, совместимом с [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html).
 

@@ -1937,6 +1937,47 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    Y_UNIT_TEST(TestUpdateChannelValues) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 2);
+
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        CreateLocal(runtime, 0);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TChannelsBindings channels = BINDED_CHANNELS;
+        for (auto& bind : channels) {
+            bind.SetSize(1000);
+        }
+        TAutoPtr<TEvHive::TEvCreateTablet> createTablet(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, channels));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, createTablet, 0, true);
+
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        for (auto& bind : channels) {
+            bind.SetSize(1001);
+        }
+        channels[0].SetStoragePoolName("def2");
+        channels[1].SetStoragePoolName("def1");
+        TAutoPtr<TEvHive::TEvCreateTablet> updateTablet(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, channels));
+        tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, updateTablet, 0, true);
+
+        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveStorageStats());
+        TAutoPtr<IEventHandle> handle;
+        TEvHive::TEvResponseHiveStorageStats* storageStats = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveStorageStats>(handle);
+
+        for (const auto& pool : storageStats->Record.GetPools()) {
+            for (const auto& group : pool.GetGroups()) {
+                if (group.GetAcquiredSize() != 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.GetAcquiredSize(), 1001);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestDeleteTablet) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);

@@ -535,8 +535,8 @@ public:
         if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto* typeDesc = typeInfo.GetTypeDesc();
             auto* pg = ydbType.mutable_pg_type();
-            pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-            pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
         } else {
             auto& item = notNull
                 ? ydbType

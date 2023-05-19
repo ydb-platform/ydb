@@ -2505,6 +2505,14 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("PgClone", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
+        if (IsNull(node.Head())) {
+            return input;
+        }
+
+        if (NPg::LookupType(node.GetTypeAnn()->Cast<TPgExprType>()->GetId()).PassByValue) {
+            return input;
+        }
+
         TVector<TRuntimeNode> dependentNodes;
         for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
             dependentNodes.push_back(MkqlBuildExpr(*node.Child(i), ctx));

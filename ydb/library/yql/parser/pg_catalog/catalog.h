@@ -206,6 +206,7 @@ const TOperDesc& LookupOper(ui32 operId);
 
 bool HasAggregation(const TString& name);
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds);
+const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType);
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId);
 const TOpClassDesc* LookupDefaultOpClass(EOpClassMethod method, ui32 typeId);

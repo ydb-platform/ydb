@@ -96,6 +96,26 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
 TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
 {
     auto name = node->Head().Content();
+    if (name.StartsWith("pg_")) {
+        auto func = name.SubStr(3);
+        auto itemType = node->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        TVector<ui32> argTypes;
+        bool needRetype = false;
+        auto status = ExtractPgTypesFromMultiLambda(node->ChildRef(2), argTypes, needRetype, Ctx);
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
+        const NPg::TAggregateDesc* aggDescPtr;
+        if (node->Content().EndsWith("State")) {
+            auto stateType = node->Child(2)->GetTypeAnn()->Cast<TPgExprType>()->GetId();
+            auto resultType = node->GetTypeAnn()->Cast<TPgExprType>()->GetId();
+            aggDescPtr = &NPg::LookupAggregation(TString(func), stateType, resultType);
+        } else {
+            aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
+        }
+
+        return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, false, node->ChildPtr(2), argTypes, itemType, Ctx);
+    }
+
     auto exportsPtr = TypesCtx.Modules->GetModule("/lib/yql/aggregate.yql");
     YQL_ENSURE(exportsPtr);
     const auto& exports = exportsPtr->Symbols();

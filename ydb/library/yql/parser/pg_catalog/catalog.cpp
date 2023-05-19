@@ -1475,6 +1475,20 @@ bool ValidateAggregateArgs(const TAggregateDesc& d, const TVector<ui32>& argType
     return ValidateArgs(d.ArgTypes, argTypeIds);
 }
 
+bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultType) {
+    auto expectedStateType = LookupProc(d.SerializeFuncId ? d.SerializeFuncId : d.TransFuncId).ResultType;
+    if (stateType != expectedStateType) {
+        return false;
+    }
+
+    auto expectedResultType = LookupProc(d.FinalFuncId ? d.FinalFuncId : d.TransFuncId).ResultType;
+    if (resultType != expectedResultType) {
+        return false;
+    }
+
+    return true;
+}
+
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
@@ -1494,6 +1508,28 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 
     throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
         << ArgTypesList(argTypeIds);
+}
+
+const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
+    const auto& catalog = TCatalog::Instance();
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
+    if (!aggIdPtr) {
+        throw yexception() << "No such aggregate: " << name;
+    }
+
+    for (const auto& id : *aggIdPtr) {
+        const auto& d = catalog.Aggregations.FindPtr(id);
+        Y_ENSURE(d);
+        if (!ValidateAggregateArgs(*d, stateType, resultType)) {
+            continue;
+        }
+
+        return *d;
+    }
+
+    throw yexception() << "Unable to find an overload for aggregate " << name << " with given state type: " <<
+        NPg::LookupType(stateType).Name << " and result type: " <<
+        NPg::LookupType(resultType).Name;
 }
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId) {

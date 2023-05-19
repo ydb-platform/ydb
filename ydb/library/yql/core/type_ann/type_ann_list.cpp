@@ -8,6 +8,8 @@
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
@@ -21,29 +23,39 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
-    bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
-        if (!EnsureStructType(input->Pos(), *originalExtractorType, ctx)) {
-            return false;
+    const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+        if (!EnsureStructType(pos, *originalExtractorType, ctx)) {
+            return nullptr;
         }
 
         auto structType = originalExtractorType->Cast<TStructExprType>();
         if (structType->GetSize() != 1) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
                 TStringBuilder() << "Expected struct with one member"));
+            return nullptr;
+        }
+
+        auto type = structType->GetItems()[0]->GetItemType();
+        if (isMany) {
+            if (type->GetKind() != ETypeAnnotationKind::Optional) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos),
+                    TStringBuilder() << "Expected optional state"));
+                return nullptr;
+            }
+
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        return type;
+    }
+
+    bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+        auto type = GetOriginalResultType(input->Pos(), isMany, originalExtractorType, ctx);
+        if (!type) {
             return false;
         }
 
-        input->SetTypeAnn(structType->GetItems()[0]->GetItemType());
-        if (isMany) {
-            if (input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected optional state"));
-                return false;
-            }
-
-            input->SetTypeAnn(input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
-        }
-
+        input->SetTypeAnn(type);
         return true;
     }
 
@@ -5360,6 +5372,61 @@ namespace {
             input->SetTypeAnn(retType);
         } else if (name == "some") {
             input->SetTypeAnn(lambda->GetTypeAnn());
+        } else if (name.StartsWith("pg_")) {
+            auto func = name;
+            func.SkipPrefix("pg_");
+            TVector<ui32> argTypes;
+            bool needRetype = false;
+            if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr);
+                status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+
+            if (overState && !hasOriginalType) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Partial aggregation of " << name << " is not supported"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const TTypeAnnotationNode* originalResultType = nullptr;
+            if (hasOriginalType) {
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                originalResultType = GetOriginalResultType(input->Pos(), isMany, originalExtractorType, ctx.Expr);
+                if (!originalResultType) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            const NPg::TAggregateDesc* aggDescPtr;
+            try {
+                if (overState) {
+                    if (argTypes.size() != 1) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                            "Expected only one argument")); 
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes[0], originalResultType->Cast<TPgExprType>()->GetId());
+                } else {
+                    aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
+                }
+                if (aggDescPtr->Kind != NPg::EAggKind::Normal) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        "Only normal aggregation supported"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } catch (const yexception& e) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (overState) {
+                input->SetTypeAnn(originalResultType);
+            } else {
+                const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
+                const auto& finalDesc = NPg::LookupProc(aggDesc.FinalFuncId ? aggDesc.FinalFuncId : aggDesc.TransFuncId);
+                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(finalDesc.ResultType));
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));

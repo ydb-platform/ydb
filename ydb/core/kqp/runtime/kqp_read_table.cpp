@@ -266,7 +266,7 @@ public:
                     {ConstantInt::get(indexType, i)},
                     (TString("loadPtr_") += ToString(i)).c_str(),
                     block);
-                return new LoadInst(loadPtr, "load", block);
+                return new LoadInst(valueType, loadPtr, "load", block);
             };
         }
 
@@ -291,7 +291,7 @@ public:
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto result = CallInst::Create(funcPtr, { self, ctx.Ctx, fields }, "fetch", block);
+        const auto result = CallInst::Create(funcType, funcPtr, { self, ctx.Ctx, fields }, "fetch", block);
 
         return {result, std::move(getters)};
     }
@@ -403,7 +403,7 @@ public:
                     {ConstantInt::get(indexType, i)},
                     (TString("loadPtr_") += ToString(i)).c_str(),
                     block);
-                return new LoadInst(loadPtr, "load", block);
+                return new LoadInst(valueType, loadPtr, "load", block);
             };
         }
 
@@ -428,7 +428,7 @@ public:
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto result = CallInst::Create(funcPtr, { self, ctx.Ctx, fields }, "fetch", block);
+        const auto result = CallInst::Create(funcType, funcPtr, { self, ctx.Ctx, fields }, "fetch", block);
 
         return {result, std::move(getters)};
     }

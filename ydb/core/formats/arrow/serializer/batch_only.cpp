@@ -10,21 +10,6 @@
 #include <library/cpp/actors/core/log.h>
 namespace NKikimr::NArrow::NSerialization {
 
-namespace {
-// Arrow internally keeps references to Buffer objects with the data
-// This helper class implements arrow::Buffer over TString that owns
-// the actual memory
-class TBufferOverString: public arrow::Buffer {
-    TString Str;
-public:
-    explicit TBufferOverString(TString str)
-        : arrow::Buffer((const unsigned char*)str.data(), str.size())
-        , Str(str) {
-        Y_VERIFY(data() == (const unsigned char*)Str.data());
-    }
-};
-}
-
 arrow::Result<std::shared_ptr<arrow::RecordBatch>> TBatchPayloadDeserializer::DoDeserialize(const TString& data) const {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();

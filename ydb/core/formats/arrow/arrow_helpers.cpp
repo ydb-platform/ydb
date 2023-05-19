@@ -5,6 +5,7 @@
 #include "merging_sorted_input_stream.h"
 #include "serializer/batch_only.h"
 #include "serializer/abstract.h"
+#include "serializer/stream.h"
 
 #include <ydb/core/util/yverify_stream.h>
 #include <util/system/yassert.h>
@@ -133,7 +134,7 @@ TString SerializeSchema(const arrow::Schema& schema) {
 }
 
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
-    auto buffer = std::make_shared<arrow::Buffer>((const ui8*)str.data(), str.size());
+    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<NSerialization::TBufferOverString>(str));
     arrow::io::BufferReader reader(buffer);
     arrow::ipc::DictionaryMemo dictMemo;
     auto schema = ReadSchema(&reader, &dictMemo);

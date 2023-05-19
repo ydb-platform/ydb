@@ -3,8 +3,23 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
 #include <util/generic/string.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 
 namespace NKikimr::NArrow::NSerialization {
+
+// Arrow internally keeps references to Buffer objects with the data
+// This helper class implements arrow::Buffer over TString that owns
+// the actual memory
+// Its use for no-compression mode, where RecordBatch dont own memory
+class TBufferOverString: public arrow::Buffer {
+    TString Str;
+public:
+    explicit TBufferOverString(TString str)
+        : arrow::Buffer((const unsigned char*)str.data(), str.size())
+        , Str(str) {
+        Y_VERIFY(data() == (const unsigned char*)Str.data());
+    }
+};
 
 class TFixedStringOutputStream final: public arrow::io::OutputStream {
 public:

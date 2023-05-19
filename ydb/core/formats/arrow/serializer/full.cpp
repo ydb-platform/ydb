@@ -14,9 +14,9 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TFullDataDeserializer::DoDese
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
 
-    arrow::Buffer buffer((const ui8*)data.data(), data.size());
-    arrow::io::BufferReader bufferReader(buffer);
-    auto reader = TStatusValidator::GetValid(arrow::ipc::RecordBatchStreamReader::Open(&bufferReader));
+    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
+    arrow::io::BufferReader readerStream(buffer);
+    auto reader = TStatusValidator::GetValid(arrow::ipc::RecordBatchStreamReader::Open(&readerStream));
 
     std::shared_ptr<arrow::RecordBatch> batch;
     auto readResult = reader->ReadNext(&batch);

@@ -1142,7 +1142,7 @@ void TestCompactionInGranuleImpl(bool reboots,
         UNIT_ASSERT(readStats.GetIndexBatches() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-        UNIT_ASSERT(readStats.GetIndexPortions() <= 2 * TSettings::MAX_ACTIVE_COMPACTIONS); // got compaction
+        UNIT_ASSERT(readStats.GetIndexPortions() <= 2); // got compaction
 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
@@ -2210,7 +2210,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT(readStats.GetIndexBatches() > 0);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3 * TSettings::MAX_ACTIVE_COMPACTIONS); // got 2 split compactions per worker
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
                 }
 
@@ -2603,7 +2603,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         --planStep;
         --txId;
 
-        UNIT_ASSERT_VALUES_EQUAL(compactionsHappened, 3 * TSettings::MAX_ACTIVE_COMPACTIONS); // we catch it three times per action
+        UNIT_ASSERT_VALUES_EQUAL(compactionsHappened, 3); // we catch it three times per action
 
         ui64 previousCompactionsHappened = compactionsHappened;
         ui64 previousCleanupsHappened = cleanupsHappened;

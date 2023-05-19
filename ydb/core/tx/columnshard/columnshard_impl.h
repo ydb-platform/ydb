@@ -44,7 +44,7 @@ IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui6
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 
 struct TSettings {
-    static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 1;
+    static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 2;
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
 

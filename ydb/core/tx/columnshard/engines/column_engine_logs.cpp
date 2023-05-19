@@ -524,6 +524,8 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     if (changes->CompactionInfo->InGranule) {
         const TSnapshot completedSnap = std::max(LastSnapshot, outdatedSnapshot);
         if (!InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, Limits, completedSnap, changes->MergeBorders)) {
+            // Return granule to Compation list. This is equal to single compaction worker behaviour.
+            CompactionGranules.insert(granule);
             return {};
         }
     } else {
@@ -796,6 +798,12 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     }
 
     if (!ApplyChanges(db, *changes, snapshot, false)) { // validate only
+        if (changes->IsCompaction()) {
+            // Return granule to Compation list. This is equal to single compaction worker behaviour.
+            for (const auto& portionInfo : changes->SwitchedPortions) {
+                CompactionGranules.insert(portionInfo.Granule());
+            }
+        }
         return false;
     }
     bool ok = ApplyChanges(db, *changes, snapshot, true);
@@ -1337,9 +1345,8 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
 
     ui64 granule = 0;
     bool inGranule = true;
-    auto it = CompactionGranules.upper_bound(lastCompactedGranule);
 
-    while (!CompactionGranules.empty()) {
+    for (auto it = CompactionGranules.upper_bound(lastCompactedGranule); !CompactionGranules.empty();) {
         // Start from the beggining if the end is reached.
         if (it == CompactionGranules.end()) {
             it = CompactionGranules.begin();
@@ -1353,9 +1360,11 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
         if (NeedSplit(gi->second->Portions, Limits, inserted)) {
             inGranule = false;
             granule = *it;
+            CompactionGranules.erase(it);
             break;
         } else if (inserted) {
             granule = *it;
+            CompactionGranules.erase(it);
             break;
         }
 

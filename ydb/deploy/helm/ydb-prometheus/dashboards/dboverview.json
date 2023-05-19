@@ -124,13 +124,13 @@
             "uid": "$ds"
           },
           "editorMode": "code",
-          "expr": "sum(HC_Root) by (MESSAGE, STATUS, DATABASE)",
-          "legendFormat": "Health {{STATUS}} at {{ DATABASE }} ({{MESSAGE}})",
+          "expr": "count(HC_Root{counter=\"healthcheck\"}) by (MESSAGE, STATUS, DATABASE)",
+          "legendFormat": "{{STATUS}} at {{ DATABASE }} ({{MESSAGE}})",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Cluster Health",
+      "title": "Cluster Health (Storage)",
       "type": "timeseries"
     },
     {
@@ -216,13 +216,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(HC_Root{DATABASE=\"$database\"}) by (instance,STATUS)",
-          "legendFormat": "{{STATUS}} on {{ instance }}",
+          "expr": "count(HC_Root{DATABASE=\"$database\", counter=\"healthcheck-dynamic\"}) by (MESSAGE,STATUS,TYPE)",
+          "legendFormat": "{{STATUS}} at {{ DATABASE }} ({{MESSAGE}})",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Database Health",
+      "title": "Cluster Health (Compute)",
       "type": "timeseries"
     },
     {

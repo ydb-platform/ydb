@@ -21,12 +21,16 @@ public:
         // TODO: Drain sessions.
     }
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TExecuteQuerySettings& settings) {
-        return TExecQueryImpl::StreamExecuteQuery(Connections_, DbDriverState_, query, settings);
+    TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
+        const TExecuteQuerySettings& settings)
+    {
+        return TExecQueryImpl::StreamExecuteQuery(Connections_, DbDriverState_, query, txControl, settings);
     }
 
-    TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TExecuteQuerySettings& settings) {
-        return TExecQueryImpl::ExecuteQuery(Connections_, DbDriverState_, query, settings);
+    TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
+        const TExecuteQuerySettings& settings)
+    {
+        return TExecQueryImpl::ExecuteQuery(Connections_, DbDriverState_, query, txControl, settings);
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
@@ -126,15 +130,15 @@ TQueryClient::TQueryClient(const TDriver& driver, const TClientSettings& setting
 }
 
 TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const TString& query,
-    const TExecuteQuerySettings& settings)
+    const TTxControl& txControl, const TExecuteQuerySettings& settings)
 {
-    return Impl_->ExecuteQuery(query, settings);
+    return Impl_->ExecuteQuery(query, txControl, settings);
 }
 
 TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const TString& query,
-    const TExecuteQuerySettings& settings)
+    const TTxControl& txControl, const TExecuteQuerySettings& settings)
 {
-    return Impl_->StreamExecuteQuery(query, settings);
+    return Impl_->StreamExecuteQuery(query, txControl, settings);
 }
 
 NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const TString& script,

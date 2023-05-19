@@ -1,6 +1,7 @@
 #pragma once
 
 #include "query.h"
+#include "tx.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
@@ -21,10 +22,10 @@ class TQueryClient {
 public:
     TQueryClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
 
-    TAsyncExecuteQueryResult ExecuteQuery(const TString& query,
+    TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query,
+    TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,

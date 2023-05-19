@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto it = db.StreamExecuteQuery(R"(
             SELECT 1;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         ui64 count = 0;
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto result = db.ExecuteQuery(R"(
             SELECT 1;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto it = db.StreamExecuteQuery(R"(
             SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         ui64 count = 0;
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto result = db.ExecuteQuery(R"(
             SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto result = db.ExecuteQuery(R"(
             SELECT COUNT(*) FROM EightShard;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto result = db.ExecuteQuery(R"(
             SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
             SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto result = db.ExecuteQuery(R"(
             SELECT COUNT(*) FROM EightShard;
             SELECT COUNT(*) FROM TwoShard;
-        )").ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));

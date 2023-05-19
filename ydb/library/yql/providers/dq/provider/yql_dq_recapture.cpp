@@ -78,17 +78,9 @@ public:
 
             Statistics_["DqAnalyzerOn"]++;
 
-            ui64 dataSize = 0;
             bool good = true;
-            bool hasJoin = false;
             TNodeSet visited;
-            Scan(*input, ctx, good, dataSize, visited, hasJoin);
-
-            if (good && hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB)) {
-                Statistics_["DqAnalyzerBigJoin"]++;
-                AddInfo(ctx, TStringBuilder() << "too big join input: " << dataSize);
-                good = false;
-            }
+            Scan(*input, ctx, good, visited);
 
             if (good) {
                 Statistics_["DqAnalyzerOk"]++;
@@ -99,7 +91,6 @@ public:
             if (!good) {
                 YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
                 State_->AbortHidden();
-                YQL_CLOG(DEBUG, ProviderDq) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize;
                 return TStatus::Ok;
             }
         }
@@ -128,21 +119,17 @@ private:
         ctx.IssueManager.RaiseIssue(info);
     }
 
-    void Scan(const TExprNode& node, TExprContext& ctx, bool& good, ui64& dataSize, TNodeSet& visited, bool& hasJoin) const {
+    void Scan(const TExprNode& node, TExprContext& ctx, bool& good, TNodeSet& visited) const {
         if (!visited.insert(&node).second) {
             return;
         }
 
         TExprBase expr(&node);
-        if (TMaybeNode<TCoEquiJoin>(&node)) {
-            hasJoin = true;
-        }
-
 
         if (TCoCommit::Match(&node)) {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                 if (i != TCoCommit::idx_DataSink) {
-                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
+                    Scan(*node.Child(i), ctx, good, visited);
                 }
             }
         } else if (auto datasource = TMaybeNode<TCoDataSource>(&node).Category()) {
@@ -165,11 +152,10 @@ private:
                 YQL_ENSURE(datasource);
                 auto dqIntegration = (*datasource)->GetDqIntegration();
                 if (dqIntegration) {
-                    TMaybe<ui64> size;
-                    bool pragmas = true;
-                    if ((pragmas = dqIntegration->CheckPragmas(node, ctx, false)) && (size = dqIntegration->CanRead(State_->Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob), State_->Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage), node, ctx, /*skipIssues = */ false))) {
-                        dataSize += *size;
-                    } else {
+                    bool pragmas = dqIntegration->CheckPragmas(node, ctx, false);
+                    bool canRead = pragmas && dqIntegration->CanRead(node, ctx, /*skipIssues = */ false);
+
+                    if (!pragmas || !canRead) {
                         good = false;
                         if (!pragmas) {
                             State_->TypeCtx->PureResultDataSource.clear();
@@ -184,7 +170,7 @@ private:
             }
 
             if (good) {
-                Scan(node.Head(), ctx,good, dataSize, visited, hasJoin);
+                Scan(node.Head(), ctx,good, visited);
             }
         } else if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
             && !TCoCommit::Match(&node)
@@ -205,7 +191,7 @@ private:
             }
             if (good) {
                 for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
-                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
+                    Scan(*node.Child(i), ctx, good, visited);
                 }
             }
         }
@@ -216,13 +202,13 @@ private:
             }
             if (good) {
                 for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
-                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
+                    Scan(*node.Child(i), ctx, good, visited);
                 }
             }
         }
         else {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
-                Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
+                Scan(*node.Child(i), ctx, good, visited);
             }
         }
     }

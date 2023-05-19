@@ -7,6 +7,7 @@
 
 
 add_subdirectory(common)
+add_subdirectory(compression)
 add_subdirectory(dictionary)
 add_subdirectory(serializer)
 add_subdirectory(simple_builder)

@@ -6,63 +6,12 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/compression/object.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NOlap {
 
-struct TCompression {
-private:
-    arrow::Compression::type Codec = arrow::Compression::LZ4_FRAME;
-    std::optional<int> Level;
-    TCompression() = default;
-public:
-
-    bool DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& compression) {
-        if (compression.HasCompressionCodec()) {
-            switch (compression.GetCompressionCodec()) {
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                    Codec = arrow::Compression::UNCOMPRESSED;
-                    break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                    Codec = arrow::Compression::LZ4_FRAME;
-                    break;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                    Codec = arrow::Compression::ZSTD;
-                    break;
-            }
-        }
-
-        if (compression.HasCompressionLevel()) {
-            Level = compression.GetCompressionLevel();
-        }
-        return true;
-    }
-
-    static const TCompression& Default() {
-        static TCompression result;
-        return result;
-    }
-
-    explicit TCompression(const arrow::Compression::type codec, std::optional<int> level = {})
-        : Codec(codec)
-        , Level(level)
-    {
-
-    }
-
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << arrow::util::Codec::GetCodecAsString(Codec) << ":" << Level.value_or(arrow::util::kUseDefaultCompressionLevel);
-        return sb;
-    }
-
-    std::unique_ptr<arrow::util::Codec> BuildArrowCodec() const {
-        return NArrow::TStatusValidator::GetValid(
-            arrow::util::Codec::Create(
-                Codec, Level.value_or(arrow::util::kUseDefaultCompressionLevel)));
-    }
-
-};
+using TCompression = NArrow::TCompression;
 
 class TTierInfo {
 private:

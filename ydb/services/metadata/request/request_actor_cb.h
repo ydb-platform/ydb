@@ -10,6 +10,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/conclusion/result.h>
 
 namespace NKikimr::NMetadata::NRequest {
 
@@ -63,15 +64,15 @@ private:
     std::shared_ptr<TNextController> NextController;
     const NACLib::TUserToken UserToken;
 protected:
-    TMaybeResult<typename TNextController::TDialogPolicy::TRequest> BuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const {
+    TConclusion<typename TNextController::TDialogPolicy::TRequest> BuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const {
         return DoBuildNextRequest(std::move(result));
     }
 
-    virtual TMaybeResult<typename TNextController::TDialogPolicy::TRequest> DoBuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const = 0;
+    virtual TConclusion<typename TNextController::TDialogPolicy::TRequest> DoBuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const = 0;
 public:
     using TDialogPolicy = TCurrentDialogPolicy;
     virtual void OnRequestResult(typename TCurrentDialogPolicy::TResponse&& result) override {
-        TMaybeResult<typename TNextController::TDialogPolicy::TRequest> nextRequest = BuildNextRequest(std::move(result));
+        TConclusion<typename TNextController::TDialogPolicy::TRequest> nextRequest = BuildNextRequest(std::move(result));
         if (!nextRequest) {
             OnRequestFailed(nextRequest.GetErrorMessage());
         } else {
@@ -97,14 +98,14 @@ private:
     using TBase = IChainController<TDialogCreateSession, IExternalController<TDialogPolicy>>;
     TRequest ProtoRequest;
 protected:
-    virtual TMaybeResult<typename TDialogPolicy::TRequest> DoBuildNextRequest(TDialogCreateSession::TResponse&& response) const override {
+    virtual TConclusion<typename TDialogPolicy::TRequest> DoBuildNextRequest(TDialogCreateSession::TResponse&& response) const override {
         auto result = ProtoRequest;
         Ydb::Table::CreateSessionResponse currentFullReply = std::move(response);
         Ydb::Table::CreateSessionResult session;
         currentFullReply.operation().result().UnpackTo(&session);
         const TString sessionId = session.session_id();
         if (!sessionId) {
-            return "cannot build session for request";
+            return TConclusionStatus::Fail("cannot build session for request");
         }
         result.set_session_id(sessionId);
         return result;

@@ -112,44 +112,6 @@ public:
     }
 };
 
-template <class TResult>
-class TMaybeResult {
-private:
-    YDB_READONLY_DEF(TString, ErrorMessage);
-    YDB_ACCESSOR_DEF(TResult, Result);
-public:
-    TMaybeResult(const TString& errorMessage)
-        : ErrorMessage(errorMessage) {
-
-    }
-
-    TMaybeResult(const char* errorMessage)
-        : ErrorMessage(errorMessage) {
-
-    }
-
-    TMaybeResult(TResult&& result)
-        : Result(std::move(result)) {
-
-    }
-
-    TMaybeResult(const TResult& result)
-        : Result(result) {
-
-    }
-
-    const TResult& operator*() const {
-        Y_ENSURE(!ErrorMessage, yexception() << "incorrect object for result request");
-        return Result;
-    }
-
-    bool operator!() const {
-        return !!ErrorMessage;
-    }
-
-
-};
-
 template <class TDialogPolicy>
 class TEvRequestResult: public NActors::TEventLocal<TEvRequestResult<TDialogPolicy>, TDialogPolicy::EvResult> {
 private:

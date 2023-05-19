@@ -399,7 +399,7 @@ protected:
         RunConfig.Labels["node_type"] = NodeType;
         // will be replaced with proper version info
         RunConfig.Labels["branch"] = GetBranch();
-        RunConfig.Labels["rev"] = ToString(GetProgramSvnRevision());
+        RunConfig.Labels["rev"] = GetProgramCommitId();
         RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
 
         for (const auto& [name, value] : RunConfig.Labels) {

@@ -900,6 +900,10 @@ TUniqueConstraintNodeBase<Distinct>::RenameFields(TExprContext& ctx, const TPath
                     newSets.back().insert_unique(newPath);
                 }
             }
+
+            // TODO: Fix it by use sets of duplicated columns.
+            if (newSets.size() > 42U)
+                return nullptr;
         }
         if (set.size() == newSets.front().size())
             sets.insert_unique(newSets.cbegin(), newSets.cend());

@@ -77,7 +77,7 @@ private:
 
     static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
 
-    using ProgressCallbackFunc = std::function<void (size_t)>;
+    using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
 
     void SetupUpsertSettingsCsv(const TImportFileSettings& settings);
     TStatus UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,

@@ -274,10 +274,10 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     bool isStdoutInteractive = IsStdoutInteractive();
     size_t filePathsSize = filePaths.size();
     std::mutex progressWriteLock;
-    std::atomic<size_t> globalProgress{0};
+    std::atomic<ui64> globalProgress{0};
 
     auto writeProgress = [&]() {
-        auto globalProgressValue = globalProgress.load();
+        ui64 globalProgressValue = globalProgress.load();
         std::lock_guard<std::mutex> lock(progressWriteLock);
         Cout << "Progress " << (globalProgressValue / filePathsSize) << '%' << "\r";
         Cout.Flush();
@@ -293,7 +293,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     for (const auto& filePath : filePaths) {
         auto func = [&, this] {
             std::unique_ptr<TFileInput> fileInput;
-            std::optional<i64> fileSizeHint;
+            std::optional<ui64> fileSizeHint;
 
             if (!filePath.empty()) {
                 const TFsPath dataFile(filePath);
@@ -310,7 +310,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
 
                 TFile file(filePath, OpenExisting | RdOnly | Seq);
                 i64 fileLength = file.GetLength();
-                if (fileLength) {
+                if (fileLength && fileLength >= 0) {
                     fileSizeHint = fileLength;
                 }
 
@@ -321,9 +321,10 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
 
             if (isStdoutInteractive)
             {
-                size_t oldProgress = 0;
-                progressCallback = [&, oldProgress](size_t progress) mutable {
-                    size_t progressDiff = progress - oldProgress;
+                ui64 oldProgress = 0;
+                progressCallback = [&, oldProgress](ui64 current, ui64 total) mutable {
+                    ui64 progress = static_cast<ui64>((static_cast<double>(current) / total) * 100.0);
+                    ui64 progressDiff = progress - oldProgress;
                     globalProgress.fetch_add(progressDiff);
                     oldProgress = progress;
                     writeProgress();
@@ -331,6 +332,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
             }
 
             IInputStream& input = fileInput ? *fileInput : Cin;
+
             switch (settings.Format_) {
                 case EOutputFormat::Default:
                 case EOutputFormat::Csv:
@@ -348,6 +350,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
                     return UpsertParquet(filePath, dbPath, settings, progressCallback);
                 default: ;
             }
+
             return MakeStatus(EStatus::BAD_REQUEST,
                         TStringBuilder() << "Unsupported format #" << (int) settings.Format_);
         };
@@ -472,10 +475,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
             continue;
         }
 
-        if (inputSizeHint && progressCallback)
-        {
-            double progress = static_cast<double>(readBytes) / *inputSizeHint;
-            progressCallback(static_cast<size_t>(progress * 100));
+        if (inputSizeHint && progressCallback) {
+            progressCallback(readBytes, *inputSizeHint);
         }
 
         auto asyncUpsertCSV = [&, buffer = std::move(buffer)]() {
@@ -619,10 +620,8 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
         batchBytes += size;
         readBytes += size;
 
-        if (inputSizeHint && progressCallback)
-        {
-            double progress = static_cast<double>(readBytes) / *inputSizeHint;
-            progressCallback(static_cast<size_t>(progress * 100));
+        if (inputSizeHint && progressCallback) {
+            progressCallback(readBytes, *inputSizeHint);
         }
 
         if (batchBytes < settings.BytesPerRequest_) {
@@ -698,13 +697,12 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
 
     THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
 
-    std::atomic<size_t> uploadedRows = 0;
-    auto uploadedRowsCallback = [&](size_t rows) {
-        size_t uploadedRowsValue = uploadedRows.fetch_add(rows);
+    std::atomic<ui64> uploadedRows = 0;
+    auto uploadedRowsCallback = [&](ui64 rows) {
+        ui64 uploadedRowsValue = uploadedRows.fetch_add(rows);
 
         if (progressCallback) {
-            double progress = static_cast<double>(uploadedRowsValue + rows) / numRows;
-            progressCallback(static_cast<size_t>(progress * 100));
+            progressCallback(uploadedRowsValue + rows, numRows);
         }
     };
 
@@ -747,6 +745,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
                     if (rowsBatch->num_rows() == 0) {
                         continue;
                     }
+
                     // Logarithmic approach to find number of rows fit into the byte limit.
                     if (rowsBatch->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rowsBatch) < settings.BytesPerRequest_) {
                         // Single row or fits into the byte limit.
@@ -758,8 +757,9 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
                         uploadedRowsCallback(rowsBatch->num_rows());
                     } else {
                         // Split current slice.
-                        rowsToSendBatches.push(rowsBatch->Slice(rowsBatch->num_rows() / 2));
-                        rowsToSendBatches.push(rowsBatch->Slice(0, rowsBatch->num_rows() / 2));
+                        i64 halfLen = rowsBatch->num_rows() / 2;
+                        rowsToSendBatches.push(rowsBatch->Slice(halfLen));
+                        rowsToSendBatches.push(rowsBatch->Slice(0, halfLen));
                     }
                 } while (!rowsToSendBatches.empty());
             };

@@ -43,16 +43,19 @@ std::pair<TNavigate::TEntry, TString> CreateNavigateEntry(const std::pair<TIndex
     return {entry, pair.second};
 }
 
-std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry(const TString& path) {
+std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry(const TString& path, bool externalDataSource) {
     TNavigate::TEntry entry;
     entry.Path = SplitPath(path);
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
+    if (externalDataSource) {
+        entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
+    }
     entry.SyncVersion = true;
     return {{entry, path}};
 }
 
-std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry(const std::pair<TIndexId, TString>& pair) {
-    Y_UNUSED(pair);
+std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry(const std::pair<TIndexId, TString>& pair, bool externalDataSource) {
+    Y_UNUSED(pair, externalDataSource);
     return {};
 }
 
@@ -202,6 +205,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
         );
     }
 
+    tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;
     tableMeta->ExternalSource.Type = description.GetSourceType();
     tableMeta->ExternalSource.TableLocation = description.GetLocation();
     tableMeta->ExternalSource.TableContent = description.GetContent();
@@ -223,10 +227,12 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
 
     tableMeta->Attributes = entry.Attributes;
 
+    tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalDataSource;
     tableMeta->ExternalSource.Type = description.GetSourceType();
     tableMeta->ExternalSource.DataSourceLocation = description.GetLocation();
     tableMeta->ExternalSource.DataSourceInstallation = description.GetInstallation();
     tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
+    tableMeta->ExternalSource.DataSourcePath = tableName;
     return result;
 }
 
@@ -514,8 +520,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
 
-    const auto entry = CreateNavigateEntry(id, settings);
-    const auto externalEntry = CreateNavigateExternalEntry(id);
+    const auto externalEntryItem = CreateNavigateExternalEntry(id, settings.WithExternalDatasources_);
+    Y_VERIFY(!settings.WithExternalDatasources_ || externalEntryItem, "External data source must be resolved using path only");
+    const auto entry = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(id, settings);
+    const auto externalEntry = settings.WithExternalDatasources_ ? std::optional<std::pair<TNavigate::TEntry, TString>>{} : externalEntryItem;
     const ui64 expectedSchemaVersion = GetExpectedVersion(id);
 
     LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load table metadata from cache by path, request" << GetDebugString(id));
@@ -582,6 +590,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             promise.SetValue(externalTableMetadata);
                             return;
                         }
+                        settings.WithExternalDatasources_ = true;
                         LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
                             .Apply([promise, externalTableMetadata](const TFuture<TTableMetadataResult>& result) mutable
                         {

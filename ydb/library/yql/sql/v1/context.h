@@ -138,6 +138,10 @@ namespace NSQLTranslationV1 {
                     normalizedClusterName = cluster;
                     return TString(NYql::KikimrProviderName);
                 }
+                if (Settings.DynamicClusterProvider) {
+                    normalizedClusterName = cluster;
+                    return Settings.DynamicClusterProvider;
+                }
                 return Nothing();
             }
 

@@ -3190,7 +3190,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )"));
 
             result = session.ExecuteDataQuery(query2, TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
 
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(yson, "[]");

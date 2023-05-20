@@ -12,8 +12,8 @@ namespace NKikimr::NArrow {
 
 class TCompressionDiff {
 private:
-    YDB_READONLY_DEF(std::optional<arrow::Compression::type>, Codec);
-    YDB_READONLY_DEF(std::optional<int>, Level);
+    std::optional<arrow::Compression::type> Codec;
+    std::optional<int> Level;
 public:
     bool IsEmpty() const {
         return !Level && !Codec;
@@ -21,5 +21,11 @@ public:
     NKikimrSchemeOp::TCompressionOptions SerializeToProto() const;
     bool DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
     TConclusionStatus DeserializeFromRequestFeatures(const std::map<TString, TString>& features);
+    const std::optional<arrow::Compression::type>& GetCodec() const {
+        return Codec;
+    }
+    const std::optional<int>& GetLevel() const {
+        return Level;
+    }
 };
 }

@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             AlterSchemaPresets {
                 Name: "default"
                 AlterSchema {
-                    Columns { Name: "comment" Type: "Utf8" }
+                    AddColumns { Name: "comment" Type: "Utf8" }
                 }
             }
         )", {NKikimrScheme::StatusAccepted});

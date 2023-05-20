@@ -143,7 +143,7 @@ private:
 
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
-            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddColumns();
+            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
             if (!ParseFromDSRequest(dsColumn, *olapColumn, errors)) {
                 return false;
             }

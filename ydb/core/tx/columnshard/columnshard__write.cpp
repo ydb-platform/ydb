@@ -189,7 +189,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             }
 
             LOG_S_INFO("Write (overload) " << data.size() << " bytes into pathId " << tableId
-                << (ShardOverloaded()? " [shard]" : "") << (tableOverload? " [table]" : "")
+                << (ShardOverloaded() ? " [shard]" : "") << (tableOverload? " [table]" : "")
                 << " at tablet " << TabletID());
         }
 

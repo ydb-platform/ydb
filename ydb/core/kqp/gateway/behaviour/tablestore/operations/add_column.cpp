@@ -29,7 +29,7 @@ NMetadata::NModifications::TObjectOperatorResult TAddColumnOperation::DoDeserial
 
 void TAddColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const {
     auto schemaData = presetProto.MutableAlterSchema();
-    auto column = schemaData->AddColumns();
+    auto column = schemaData->AddAddColumns();
     column->SetName(ColumnName);
     column->SetType(ColumnType);
     column->SetNotNull(NotNull);

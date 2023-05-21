@@ -3,28 +3,28 @@
 
 namespace NKikimr::NKqp {
 
-NMetadata::NModifications::TObjectOperatorResult TAddColumnOperation::DoDeserialize(const NYql::TObjectSettingsImpl::TFeatures& features) {
+TConclusionStatus TAddColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) {
     {
-        auto it = features.find("NAME");
-        if (it == features.end()) {
-            return NMetadata::NModifications::TObjectOperatorResult("can't find  alter parameter NAME");
+        auto fValue = features.Extract("NAME");
+        if (!fValue) {
+            return TConclusionStatus::Fail("can't find  alter parameter NAME");
         }
-        ColumnName = it->second;
+        ColumnName = *fValue;
     }
     {
-        auto it = features.find("TYPE");
-        if (it == features.end()) {
-            return NMetadata::NModifications::TObjectOperatorResult("can't find alter parameter TYPE");
+        auto fValue = features.Extract("TYPE");
+        if (!fValue) {
+            return TConclusionStatus::Fail("can't find alter parameter TYPE");
         }
-        ColumnType = it->second;
+        ColumnType = *fValue;
     }
     {
-        auto it = features.find("NOT_NULL");
-        if (it != features.end()) {
-            NotNull = IsTrue(it->second);
+        auto fValue = features.Extract("NOT_NULL");
+        if (!!fValue) {
+            NotNull = IsTrue(*fValue);
         }
     }
-    return NMetadata::NModifications::TObjectOperatorResult(true);
+    return TConclusionStatus::Success();
 }
 
 void TAddColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const {

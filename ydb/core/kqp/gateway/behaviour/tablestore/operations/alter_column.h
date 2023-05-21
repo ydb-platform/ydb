@@ -16,7 +16,7 @@ private:
     NArrow::TCompressionDiff CompressionDiff;
     std::optional<bool> LowCardinality;
 public:
-    NMetadata::NModifications::TObjectOperatorResult DoDeserialize(const NYql::TObjectSettingsImpl::TFeatures& features) override;
+    TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 
     void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const override;
 };

@@ -11,32 +11,32 @@
 
 namespace NKikimr::NKqp {
 
-NThreading::TFuture<NMetadata::NModifications::TObjectOperatorResult> TTableStoreManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
+NThreading::TFuture<TConclusionStatus> TTableStoreManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         NMetadata::IClassBehaviour::TPtr manager, TInternalModificationContext& context) const {
             Y_UNUSED(nodeId);
             Y_UNUSED(manager);
-        auto promise = NThreading::NewPromise<NMetadata::NModifications::TObjectOperatorResult>();
+        auto promise = NThreading::NewPromise<TConclusionStatus>();
         auto result = promise.GetFuture();
 
         switch (context.GetActivityType()) {
             case EActivityType::Create:
             case EActivityType::Drop:
             case EActivityType::Undefined:
-                return NThreading::MakeFuture<NMetadata::NModifications::TObjectOperatorResult>(NMetadata::NModifications::TObjectOperatorResult("not impelemented"));
+                return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail("not implemented"));
             case EActivityType::Alter:
             try {
-                auto actionIt = settings.GetFeatures().find("ACTION");
-                if (actionIt == settings.GetFeatures().end()) {
-                    return NThreading::MakeFuture<NMetadata::NModifications::TObjectOperatorResult>(NMetadata::NModifications::TObjectOperatorResult("can't find ACTION"));
+                auto actionName = settings.GetFeaturesExtractor().Extract("ACTION");
+                if (!actionName) {
+                    return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail("can't find ACTION parameter"));
                 }
-                ITableStoreOperation::TPtr operation(ITableStoreOperation::TFactory::Construct(actionIt->second));
+                ITableStoreOperation::TPtr operation(ITableStoreOperation::TFactory::Construct(*actionName));
                 if (!operation) {
-                    return NThreading::MakeFuture<NMetadata::NModifications::TObjectOperatorResult>(NMetadata::NModifications::TObjectOperatorResult("invalid ACTION: " + actionIt->second));
+                    return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail("invalid ACTION: " + *actionName));
                 }
                 {
                     auto parsingResult = operation->Deserialize(settings);
-                    if (!parsingResult.IsSuccess()) {
-                        return NThreading::MakeFuture<NMetadata::NModifications::TObjectOperatorResult>(parsingResult);
+                    if (!parsingResult) {
+                        return NThreading::MakeFuture<TConclusionStatus>(parsingResult);
                     }
                 }
                 auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
@@ -51,17 +51,14 @@ NThreading::TFuture<NMetadata::NModifications::TObjectOperatorResult> TTableStor
                 TActivationContext::AsActorContext().Register(new NKqp::TSchemeOpRequestHandler(ev.Release(), promiseScheme, false));
                 return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
-                        NMetadata::NModifications::TObjectOperatorResult localResult(true);
-                        return localResult;
+                        return TConclusionStatus::Success();
                     } else if (f.HasValue()) {
-                        NMetadata::NModifications::TObjectOperatorResult localResult(f.GetValue().Issues().ToString());
-                        return localResult;
+                        return TConclusionStatus::Fail(f.GetValue().Issues().ToString());
                     }
-                    NMetadata::NModifications::TObjectOperatorResult localResult(false);
-                    return localResult;
-                    });
+                    return TConclusionStatus::Fail("no value in result");
+                });
             } catch (yexception& e) {
-                return NThreading::MakeFuture<NMetadata::NModifications::TObjectOperatorResult>(NMetadata::NModifications::TObjectOperatorResult(e.what()));
+                return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail(e.what()));
             }
         }
         return result;

@@ -3,23 +3,30 @@
 
 namespace NKikimr::NKqp {
 
-NKikimr::NMetadata::NModifications::TObjectOperatorResult ITableStoreOperation::Deserialize(const NYql::TObjectSettingsImpl& settings) {
+TConclusionStatus ITableStoreOperation::Deserialize(const NYql::TObjectSettingsImpl& settings) {
     std::pair<TString, TString> pathPair;
     {
         TString error;
         if (!NYql::IKikimrGateway::TrySplitTablePath(settings.GetObjectId(), pathPair, error)) {
-            return NMetadata::NModifications::TObjectOperatorResult(error);
+            return TConclusionStatus::Fail(error);
         }
         WorkingDir = pathPair.first;
         StoreName = pathPair.second;
     }
     {
-        auto it = settings.GetFeatures().find("PRESET_NAME");
-        if (it != settings.GetFeatures().end()) {
-            PresetName = it->second;
+        auto presetName = settings.GetFeaturesExtractor().Extract("PRESET_NAME");
+        if (presetName) {
+            PresetName = *presetName;
         }
     }
-    return DoDeserialize(settings.GetFeatures());
+    auto serializationResult = DoDeserialize(settings.GetFeaturesExtractor());
+    if (!serializationResult) {
+        return serializationResult;
+    }
+    if (!settings.GetFeaturesExtractor().IsFinished()) {
+        return TConclusionStatus::Fail("there are undefined parameters: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
+    }
+    return TConclusionStatus::Success();
 }
 
 void ITableStoreOperation::SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme) const {

@@ -2,29 +2,29 @@
 
 namespace NKikimr::NKqp::NColumnshard {
 
-NKikimr::NMetadata::NModifications::TObjectOperatorResult TAlterColumnOperation::DoDeserialize(const NYql::TObjectSettingsImpl::TFeatures& features) {
+TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) {
     {
-        auto it = features.find("NAME");
-        if (it == features.end()) {
-            return NMetadata::NModifications::TObjectOperatorResult("can't find alter parameter NAME");
+        auto fValue = features.Extract("NAME");
+        if (!fValue) {
+            return TConclusionStatus::Fail("can't find alter parameter NAME");
         }
-        ColumnName = it->second;
+        ColumnName = *fValue;
     }
     {
-        auto it = features.find("LOW_CARDINALITY");
-        if (it != features.end()) {
+        auto fValue = features.Extract("LOW_CARDINALITY");
+        if (fValue) {
             bool value;
-            if (!TryFromString<bool>(it->second, value)) {
-                return NMetadata::NModifications::TObjectOperatorResult("cannot parse LOW_CARDINALITY as bool");
+            if (!TryFromString<bool>(*fValue, value)) {
+                return TConclusionStatus::Fail("cannot parse LOW_CARDINALITY as bool");
             }
             LowCardinality = value;
         }
     }
     auto result = CompressionDiff.DeserializeFromRequestFeatures(features);
     if (!result) {
-        return NMetadata::NModifications::TObjectOperatorResult(result.GetErrorMessage());
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
-    return NMetadata::NModifications::TObjectOperatorResult(true);
+    return TConclusionStatus::Success();
 }
 
 void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const {

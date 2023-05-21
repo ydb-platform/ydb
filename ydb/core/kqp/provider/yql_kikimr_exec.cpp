@@ -133,18 +133,18 @@ namespace {
         return dropGroupSettings;
     }
 
-    TString GetOrDefault(const std::map<TString, TString>& container, const TString& key, const TString& defaultValue = TString{}) {
-        auto it = container.find(key);
-        return it == container.end() ? defaultValue : it->second;
+    TString GetOrDefault(const TCreateObjectSettings& container, const TString& key, const TString& defaultValue = TString{}) {
+        auto fValue = container.GetFeaturesExtractor().Extract(key);
+        return fValue ? *fValue : defaultValue;
     }
 
     TCreateExternalDataSourceSettings ParseCreateExternalDataSourceSettings(const TCreateObjectSettings& settings) {
         TCreateExternalDataSourceSettings out;
         out.ExternalDataSource = settings.GetObjectId();
-        out.SourceType = GetOrDefault(settings.GetFeatures(), "source_type");
-        out.AuthMethod = GetOrDefault(settings.GetFeatures(), "auth_method");
-        out.Installation = GetOrDefault(settings.GetFeatures(), "installation");
-        out.Location = GetOrDefault(settings.GetFeatures(), "location");
+        out.SourceType = GetOrDefault(settings, "source_type");
+        out.AuthMethod = GetOrDefault(settings, "auth_method");
+        out.Installation = GetOrDefault(settings, "installation");
+        out.Location = GetOrDefault(settings, "location");
         return out;
     }
 

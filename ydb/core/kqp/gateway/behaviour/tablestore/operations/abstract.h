@@ -14,11 +14,11 @@ private:
 public:
     virtual ~ITableStoreOperation() {};
 
-    NMetadata::NModifications::TObjectOperatorResult Deserialize(const NYql::TObjectSettingsImpl& settings);
+    TConclusionStatus Deserialize(const NYql::TObjectSettingsImpl& settings);
 
     void SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme) const;
 private:
-    virtual NMetadata::NModifications::TObjectOperatorResult DoDeserialize(const NYql::TObjectSettingsImpl::TFeatures& features) = 0;
+    virtual TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) = 0;
     virtual void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& scheme) const = 0;
 };
 

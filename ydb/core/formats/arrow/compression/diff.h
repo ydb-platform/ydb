@@ -4,6 +4,7 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/services/metadata/abstract/request_features.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <optional>
 #include <map>
@@ -20,7 +21,7 @@ public:
     }
     NKikimrSchemeOp::TCompressionOptions SerializeToProto() const;
     bool DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
-    TConclusionStatus DeserializeFromRequestFeatures(const std::map<TString, TString>& features);
+    TConclusionStatus DeserializeFromRequestFeatures(NYql::TFeaturesExtractor& features);
     const std::optional<arrow::Compression::type>& GetCodec() const {
         return Codec;
     }

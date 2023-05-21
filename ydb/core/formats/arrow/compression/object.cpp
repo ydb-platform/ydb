@@ -11,7 +11,9 @@ TConclusionStatus NKikimr::NArrow::TCompression::Validate() const {
         const int levelMin = codec->minimum_compression_level();
         const int levelMax = codec->maximum_compression_level();
         if (Level && (*Level < levelMin || levelMax < *Level)) {
-            return TConclusionStatus::Fail("incorrect level for codec");
+            TStringBuilder sb;
+            sb << "incorrect level for codec. have to be: [" << levelMin << ":" << levelMax << "]";
+            return TConclusionStatus::Fail(sb);
         }
     }
     return TConclusionStatus::Success();

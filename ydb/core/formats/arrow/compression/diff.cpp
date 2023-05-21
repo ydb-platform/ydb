@@ -15,21 +15,21 @@ NKikimrSchemeOp::TCompressionOptions TCompressionDiff::SerializeToProto() const 
     return result;
 }
 
-TConclusionStatus TCompressionDiff::DeserializeFromRequestFeatures(const std::map<TString, TString>& features) {
+TConclusionStatus TCompressionDiff::DeserializeFromRequestFeatures(NYql::TFeaturesExtractor& features) {
     {
-        auto it = features.find("COMPRESSION.TYPE");
-        if (it != features.end()) {
-            Codec = NArrow::CompressionFromString(it->second);
+        auto fValue = features.Extract("COMPRESSION.TYPE");
+        if (fValue) {
+            Codec = NArrow::CompressionFromString(*fValue);
             if (!Codec) {
                 return TConclusionStatus::Fail("cannot parse COMPRESSION.TYPE as arrow::Compression");
             }
         }
     }
     {
-        auto it = features.find("COMPRESSION.LEVEL");
-        if (it != features.end()) {
+        auto fValue = features.Extract("COMPRESSION.LEVEL");
+        if (fValue) {
             ui32 level;
-            if (!TryFromString<ui32>(it->second, level)) {
+            if (!TryFromString<ui32>(*fValue, level)) {
                 return TConclusionStatus::Fail("cannot parse COMPRESSION.LEVEL as ui32");
             }
             Level = level;

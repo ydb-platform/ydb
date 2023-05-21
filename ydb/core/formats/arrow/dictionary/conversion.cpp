@@ -118,7 +118,7 @@ bool IsDictionableArray(const std::shared_ptr<arrow::Array>& data) {
     bool result = false;
     SwitchType(data->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
-        result = arrow::has_c_type<typename TWrap::T>::value;
+        result = arrow::has_string_view<typename TWrap::T>::value;
         return true;
     });
     return result;

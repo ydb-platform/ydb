@@ -37,6 +37,7 @@ runs:
       for suite in $(echo */ | sed 's/\///g'); do
         suite_find=$(echo $bad_suites | grep "$suite")
         if [[ $suite_find == '' ]]; then
+            echo "$suite" 1>&2
             suites+=$suite;
             suites+=$'\n'
         fi
@@ -45,7 +46,7 @@ runs:
         suites="${{inputs.test_label_regexp}}"
       fi
       echo "$suites" 1>&2
-      echo -n "$suites" | parallel -j32 "pytest -o junit_logging=log -o junit_log_passing_tests=False
+      echo -n "$suites" | parallel -j32 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/{}/res.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
         tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-stdout.gz) | \

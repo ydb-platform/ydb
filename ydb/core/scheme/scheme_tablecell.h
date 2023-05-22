@@ -325,7 +325,7 @@ private:
     public:
         TData() = default;
 
-        void operator delete(void* mem);
+        void operator delete(void* mem) noexcept;
     };
 
     struct TInit {
@@ -334,7 +334,7 @@ private:
         size_t DataSize;
     };
 
-    TOwnedCellVec(TInit init)
+    TOwnedCellVec(TInit init) noexcept
         : TCellVec(std::move(init.Cells))
         , Data(std::move(init.Data))
         , DataSize_(init.DataSize)
@@ -347,7 +347,7 @@ private:
     }
 
 public:
-    TOwnedCellVec()
+    TOwnedCellVec() noexcept
         : TCellVec()
         , DataSize_(0)
     { }
@@ -360,13 +360,13 @@ public:
         return TOwnedCellVec(Allocate(cells));
     }
 
-    TOwnedCellVec(const TOwnedCellVec& rhs)
+    TOwnedCellVec(const TOwnedCellVec& rhs) noexcept
         : TCellVec(rhs)
         , Data(rhs.Data)
         , DataSize_(rhs.DataSize_)
     { }
 
-    TOwnedCellVec(TOwnedCellVec&& rhs)
+    TOwnedCellVec(TOwnedCellVec&& rhs) noexcept
         : TCellVec(rhs)
         , Data(std::move(rhs.Data))
         , DataSize_(rhs.DataSize_)
@@ -375,7 +375,7 @@ public:
         rhs.DataSize_ = 0;
     }
 
-    TOwnedCellVec& operator=(const TOwnedCellVec& rhs) {
+    TOwnedCellVec& operator=(const TOwnedCellVec& rhs) noexcept {
         if (Y_LIKELY(this != &rhs)) {
             Data = rhs.Data;
             DataSize_ = rhs.DataSize_;
@@ -385,7 +385,7 @@ public:
         return *this;
     }
 
-    TOwnedCellVec& operator=(TOwnedCellVec&& rhs) {
+    TOwnedCellVec& operator=(TOwnedCellVec&& rhs) noexcept {
         if (Y_LIKELY(this != &rhs)) {
             Data = std::move(rhs.Data);
             DataSize_ = rhs.DataSize_;
@@ -405,6 +405,11 @@ private:
     TIntrusivePtr<TData> Data;
     size_t DataSize_;
 };
+
+static_assert(std::is_nothrow_destructible_v<TOwnedCellVec>, "Expected TOwnedCellVec to be nothrow destructible");
+static_assert(std::is_nothrow_copy_constructible_v<TOwnedCellVec>, "Expected TOwnedCellVec to be nothrow copy constructible");
+static_assert(std::is_nothrow_move_constructible_v<TOwnedCellVec>, "Expected TOwnedCellVec to be nothrow move constructible");
+static_assert(std::is_nothrow_default_constructible_v<TOwnedCellVec>, "Expected TOwnedCellVec to be nothrow default constructible");
 
 // Used to store/load a vector of TCell in bytes array
 // When loading from a buffer the cells will point to the buffer contents

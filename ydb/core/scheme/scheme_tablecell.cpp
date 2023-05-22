@@ -5,7 +5,7 @@
 
 namespace NKikimr {
 
-void TOwnedCellVec::TData::operator delete(void* mem) {
+void TOwnedCellVec::TData::operator delete(void* mem) noexcept {
     ::free(mem);
 }
 
@@ -30,6 +30,9 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
     }
 
     void* mem = ::malloc(size);
+    if (Y_UNLIKELY(!mem)) {
+        throw std::bad_alloc();
+    }
 
     TCell* ptrCell = (TCell*)((TData*)mem + 1);
     char* ptrData = (char*)(ptrCell + cellCount);

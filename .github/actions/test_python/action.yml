@@ -31,13 +31,13 @@ runs:
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
-      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed 's/ignore=//g')
+      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed -e 's/ignore=//g')
       echo "$bad_suites" 1>&2
       suites=""
-      for suite in $(echo */ | sed 's/\///g'); do
-        suite_find=$(echo $bad_suites | grep "$suite")
+      for suite in $(echo */ | sed -e 's/\///g'); do
+        suite_find=$(echo $bad_suites | grep -E "$suite")
+        echo "$suite" 1>&2
         if [[ $suite_find == '' ]]; then
-            echo "$suite" 1>&2
             suites+=$suite;
             suites+=$'\n'
         fi

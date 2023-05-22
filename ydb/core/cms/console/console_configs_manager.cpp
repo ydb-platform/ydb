@@ -362,7 +362,9 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     if (!yamlConfigRowset.EndOfSet()) {
         YamlVersion = yamlConfigRowset.template GetValue<Schema::YamlConfig::Version>();
         YamlConfig = yamlConfigRowset.template GetValue<Schema::YamlConfig::Config>();
-        YamlDropped = yamlConfigRowset.template GetValue<Schema::YamlConfig::Dropped>();
+        // ignore this as deprecated
+        // now used only for disabling new config layout for older console
+        YamlDropped = false;
     }
 
     while (!configItemRowset.EndOfSet()) {

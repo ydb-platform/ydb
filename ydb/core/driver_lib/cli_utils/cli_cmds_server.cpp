@@ -771,7 +771,8 @@ protected:
                                                              NodeType,
                                                              DeduceNodeDomain(),
                                                              AppConfig.GetAuthConfig().GetStaffApiUserToken(),
-                                                             true);
+                                                             true,
+                                                             1);
 
                 if (result.IsSuccess()) {
                     auto appConfig = result.GetConfig();
@@ -1307,7 +1308,8 @@ protected:
                                                      NodeType,
                                                      DeduceNodeDomain(),
                                                      AppConfig.GetAuthConfig().GetStaffApiUserToken(),
-                                                     true);
+                                                     true,
+                                                     1);
 
         if (!result.IsSuccess()) {
             error = result.GetErrorMessage();

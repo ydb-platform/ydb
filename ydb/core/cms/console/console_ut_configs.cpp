@@ -3917,7 +3917,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
             NKikimrConfig::TAppConfig(),
             0,
-            true);
+            true,
+            1);
         runtime.Register(subscriber, 1);
 
         TDispatchOptions options1;
@@ -4018,6 +4019,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.MutableOptions()->SetTenant("tenant-1");
         event->Record.MutableOptions()->SetNodeType("type1");
         event->Record.SetServeYaml(true);
+        event->Record.SetYamlApiVersion(1);
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
 
@@ -4092,6 +4094,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.MutableOptions()->SetTenant("tenant-1");
         event->Record.MutableOptions()->SetNodeType("type1");
         event->Record.SetServeYaml(true);
+        event->Record.SetYamlApiVersion(1);
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
 
@@ -4140,6 +4143,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             event->Record.MutableOptions()->SetTenant("tenant-1");
             event->Record.MutableOptions()->SetNodeType("type1");
             event->Record.SetServeYaml(true);
+            event->Record.SetYamlApiVersion(1);
             event->Record.SetYamlVersion(1);
             event->Record.MutableKnownVersion()->CopyFrom(config1.GetVersion());
             return event;

@@ -31,7 +31,7 @@ runs:
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
-      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-\n]*' pytest.ini | sed 's/ignore=//g')
+      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed 's/ignore=//g')
       suites=""
       for suite in $(echo */ | sed 's/\///g'); do
         suite_find=$(echo $bad_suites | grep "$suite")
@@ -43,6 +43,7 @@ runs:
       if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
         suites="${{inputs.test_label_regexp}}"
       fi
+      echo "$suites"
       echo -n "$suites" | parallel -j32 --line-buffer "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/{}/res.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \

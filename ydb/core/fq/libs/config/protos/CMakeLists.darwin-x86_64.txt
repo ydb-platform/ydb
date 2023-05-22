@@ -270,6 +270,18 @@ get_built_tool_path(
   contrib/tools/protoc/plugins/cpp_styleguide
   cpp_styleguide
 )
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
 
 add_library(libs-config-protos)
 target_link_libraries(libs-config-protos PUBLIC
@@ -285,6 +297,7 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/audit.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/checkpoint_coordinator.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/common.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/compute.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/control_plane_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/control_plane_storage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/config/protos/db_pool.proto

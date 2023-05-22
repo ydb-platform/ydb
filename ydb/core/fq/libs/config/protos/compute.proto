@@ -1,0 +1,23 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/fq/libs/config/protos/storage.proto";
+
+////////////////////////////////////////////////////////////
+
+message TInPlaceCompute {
+}
+
+message TYdbCompute {
+    TYdbStorageConfig Connection = 1;
+}
+
+message TComputeConfig {
+    oneof type {
+        TInPlaceCompute InPlace = 1;
+        TYdbCompute Ydb = 2;
+    }
+}

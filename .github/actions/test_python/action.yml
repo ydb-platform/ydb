@@ -43,7 +43,7 @@ runs:
       if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
         suites="${{inputs.test_label_regexp}}"
       fi
-      echo "$suites"
+      echo "$suites" 1>&2
       echo -n "$suites" | parallel -j32 --line-buffer "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/{}/res.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \

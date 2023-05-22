@@ -15,6 +15,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
 namespace arrow {
 
@@ -1608,9 +1609,9 @@ struct TEvDataShard {
 
     struct TEvGetOpenTxsResult : public TEventLocal<TEvGetOpenTxsResult, EvGetOpenTxsResult> {
         TPathId PathId;
-        TVector<ui64> OpenTxs;
+        absl::flat_hash_set<ui64> OpenTxs;
 
-        TEvGetOpenTxsResult(const TPathId& pathId, TVector<ui64> openTxs)
+        TEvGetOpenTxsResult(const TPathId& pathId, absl::flat_hash_set<ui64> openTxs)
             : PathId(pathId)
             , OpenTxs(std::move(openTxs))
         { }

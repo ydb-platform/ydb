@@ -4041,9 +4041,9 @@ public:
         auto it = pathId ? Self->GetUserTables().find(pathId.LocalPathId) : Self->GetUserTables().begin();
         Y_VERIFY(it != Self->GetUserTables().end());
 
-        auto txs = txc.DB.GetOpenTxs(it->second->LocalTid);
+        auto openTxs = txc.DB.GetOpenTxs(it->second->LocalTid);
 
-        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(txs));
+        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(openTxs));
         return true;
     }
 

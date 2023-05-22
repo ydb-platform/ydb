@@ -172,7 +172,8 @@ public:
     bool HasCommittedTx(ui64 txId) const;
     bool HasRemovedTx(ui64 txId) const;
 
-    TVector<ui64> GetOpenTxs() const;
+    const absl::flat_hash_set<ui64>& GetOpenTxs() const;
+    size_t GetOpenTxCount() const;
 
     TPartView GetPartView(const TLogoBlobID &bundle) const
     {
@@ -345,6 +346,7 @@ private:
     TRowVersionRanges RemovedRowVersions;
 
     absl::flat_hash_map<ui64, size_t> TxRefs;
+    absl::flat_hash_set<ui64> OpenTxs;
     absl::flat_hash_set<ui64> CheckTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
@@ -371,12 +373,22 @@ private:
         ui64 TxId;
     };
 
+    struct TRollbackAddOpenTx {
+        ui64 TxId;
+    };
+
+    struct TRollbackRemoveOpenTx {
+        ui64 TxId;
+    };
+
     using TRollbackOp = std::variant<
         TRollbackRemoveTxRef,
         TRollbackAddCommittedTx,
         TRollbackRemoveCommittedTx,
         TRollbackAddRemovedTx,
-        TRollbackRemoveRemovedTx>;
+        TRollbackRemoveRemovedTx,
+        TRollbackAddOpenTx,
+        TRollbackRemoveOpenTx>;
 
     struct TRollbackState {
         TEpoch Epoch;

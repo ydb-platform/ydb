@@ -374,9 +374,14 @@ bool TDatabase::HasRemovedTx(ui32 table, ui64 txId) const
     return Require(table)->HasRemovedTx(txId);
 }
 
-TVector<ui64> TDatabase::GetOpenTxs(ui32 table) const
+const absl::flat_hash_set<ui64>& TDatabase::GetOpenTxs(ui32 table) const
 {
     return Require(table)->GetOpenTxs();
+}
+
+size_t TDatabase::GetOpenTxCount(ui32 table) const
+{
+    return Require(table)->GetOpenTxCount();
 }
 
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)

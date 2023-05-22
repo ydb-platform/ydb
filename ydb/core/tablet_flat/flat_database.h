@@ -129,11 +129,18 @@ public:
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     /**
-     * Returns a list of open transactions in the provided table. This only
+     * Returns a set of open transactions in the provided table. This only
      * includes transactions with changes that are neither committed nor
      * removed.
      */
-    TVector<ui64> GetOpenTxs(ui32 table) const;
+    const absl::flat_hash_set<ui64>& GetOpenTxs(ui32 table) const;
+
+    /**
+     * Returns a number of open transactions in the provided table. This only
+     * includes transactions with changes that are neither committed nor
+     * removed.
+     */
+    size_t GetOpenTxCount(ui32 table) const;
 
     /**
      * Remove row versions [lower, upper) from the given table

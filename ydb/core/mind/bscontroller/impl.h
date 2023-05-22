@@ -1558,6 +1558,7 @@ private:
 
     TVSlotInfo* FindVSlot(TVDiskID id) { // GroupGeneration may be zero
         if (TGroupInfo *group = FindGroup(id.GroupID); group && !group->VDisksInGroup.empty()) {
+            Y_VERIFY(group->Topology->IsValidId(id));
             const ui32 index = group->Topology->GetOrderNumber(id);
             const TVSlotInfo *slot = group->VDisksInGroup[index];
             Y_VERIFY(slot->GetShortVDiskId() == TVDiskIdShort(id)); // sanity check

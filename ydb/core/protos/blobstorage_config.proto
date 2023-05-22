@@ -477,7 +477,10 @@ message TBoxStoragePoolId {
 
 message TAllocateVirtualGroup {
     string Name = 1;
-    uint64 HiveId = 2;
+    oneof HiveDesignator {
+        uint64 HiveId = 2;
+        string Database = 7;
+    }
     oneof StoragePool {
         string StoragePoolName = 3;
         TBoxStoragePoolId StoragePoolId = 4;
@@ -488,7 +491,10 @@ message TAllocateVirtualGroup {
 
 message TDecommitGroups {
     repeated uint32 GroupIds = 1; // group ids to decommit
-    uint64 HiveId = 2; // hive under which it is required to create blob depot tablets
+    oneof HiveDesignator {
+        uint64 HiveId = 2; // hive under which it is required to create blob depot tablets
+        string Database = 4; // database path
+    }
     repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 3; // where to store decommitted groups' data
 }
 

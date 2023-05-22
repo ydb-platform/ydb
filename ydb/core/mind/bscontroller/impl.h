@@ -535,6 +535,7 @@ public:
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
         TMaybe<Table::HiveId::Type> HiveId;
+        TMaybe<Table::Database::Type> Database;
         TMaybe<Table::BlobDepotConfig::Type> BlobDepotConfig;
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
@@ -605,6 +606,7 @@ public:
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
                     Table::HiveId,
+                    Table::Database,
                     Table::BlobDepotConfig,
                     Table::BlobDepotId,
                     Table::ErrorReason,
@@ -626,6 +628,7 @@ public:
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::HiveId,
+                    &TGroupInfo::Database,
                     &TGroupInfo::BlobDepotConfig,
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,

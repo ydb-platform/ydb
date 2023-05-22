@@ -40,8 +40,8 @@ runs:
             suites+=$'\n'
         fi
       done
-      if [[ ${{inputs.test_label_regexp}} != '' ]]; then
-        suites=${{inputs.test_label_regexp}}
+      if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
+        suites="${{inputs.test_label_regexp}}"
       fi
       echo -n "$suites" | parallel -j32 --group "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/{}/res.xml {}" | \

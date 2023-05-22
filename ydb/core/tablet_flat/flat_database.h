@@ -103,6 +103,10 @@ public:
             ui32 table, TRawVals key, ui64 readFlags = 0,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;
+    TSelectRowVersionResult SelectRowVersion(
+            ui32 table, TArrayRef<const TCell> key, ui64 readFlags = 0,
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     bool Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,

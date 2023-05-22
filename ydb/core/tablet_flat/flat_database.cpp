@@ -241,6 +241,14 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
 
+TSelectRowVersionResult TDatabase::SelectRowVersion(
+        ui32 table, TArrayRef<const TCell> key, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
+}
+
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                                   EDirection direction, TRowVersion snapshot)

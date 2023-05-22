@@ -1183,9 +1183,27 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
-    Y_VERIFY(ColdParts.empty(), "Cannot select with cold parts");
-
     const TCelled key(key_, *Scheme->Keys, true);
+
+    return SelectRowVersion(key, env, readFlags, visible, observer);
+}
+
+TSelectRowVersionResult TTable::SelectRowVersion(
+        TArrayRef<const TCell> key_, IPages* env, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    const TCelled key(key_, *Scheme->Keys, true);
+
+    return SelectRowVersion(key, env, readFlags, visible, observer);
+}
+
+TSelectRowVersionResult TTable::SelectRowVersion(
+        const TCelled& key, IPages* env, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    Y_VERIFY(ColdParts.empty(), "Cannot select with cold parts");
 
     const TRemap remap(*Scheme, { });
 

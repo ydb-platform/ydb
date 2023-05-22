@@ -152,6 +152,14 @@ public:
             TRawVals key, IPages* env, ui64 readFlags,
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const noexcept;
+    TSelectRowVersionResult SelectRowVersion(
+            TArrayRef<const TCell> key, IPages* env, ui64 readFlags,
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+    TSelectRowVersionResult SelectRowVersion(
+            const TCelled& key, IPages* env, ui64 readFlags,
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,

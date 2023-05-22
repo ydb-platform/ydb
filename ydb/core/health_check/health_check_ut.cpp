@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, int groupCount, int vslotCount) {
+    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, int groupCount, int vslotCount, TString erasurespecies = NHealthCheck::TSelfCheckRequest::BLOCK_4_2) {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
 
@@ -88,6 +88,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto vslotIdSample = pbConfig->group(0).vslotid(0);
         pbConfig->clear_group();
         pbConfig->clear_vslot();
+        pbConfig->clear_pdisk();
 
         auto groupId = GROUP_START_ID;
         auto vslotId = VCARD_START_ID;
@@ -96,7 +97,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto group = pbConfig->add_group();
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
-            group->set_erasurespecies("block-4-2");
+            group->set_erasurespecies(erasurespecies);
 
             group->clear_vslotid();
             for (int j = 0; j < vslotCount; j++) {
@@ -135,7 +136,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    void AddVSlotInVDiskStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, TVector<Ydb::Monitoring::StatusFlag::Status> vdiskStatuses) {
+    void AddVSlotInVDiskStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses) {
         auto& pbRecord = (*ev)->Get()->Record;
 
         auto sample = pbRecord.vdiskstateinfo(0);
@@ -151,6 +152,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 state->CopyFrom(sample);
                 state->mutable_vdiskid()->set_vdisk(vslotId++);
                 state->mutable_vdiskid()->set_groupid(groupId); 
+                state->set_pdiskid(100);
                 state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::PDiskError);
                 break;
             }
@@ -159,6 +161,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 state->CopyFrom(sample);
                 state->mutable_vdiskid()->set_vdisk(vslotId++);
                 state->mutable_vdiskid()->set_groupid(groupId); 
+                state->set_pdiskid(100);
                 state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
                 state->set_replicated(false);
                 break;
@@ -168,6 +171,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 state->CopyFrom(sample);
                 state->mutable_vdiskid()->set_vdisk(vslotId++);
                 state->mutable_vdiskid()->set_groupid(groupId); 
+                state->set_pdiskid(100);
                 state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
                 break;
             }
@@ -188,7 +192,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
-        TTestActorRuntime &runtime = *server.GetRuntime();
+        TTestActorRuntime& runtime = *server.GetRuntime();
 
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
@@ -257,7 +261,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(issueVdiscCount, issueVdiscNumber);
     }
 
-    Y_UNIT_TEST(OrangeGroupWhenRedBlueVdisks) {
+    void CheckGroupStatusDependsOnVdisks(TString erasurespecies, const Ydb::Monitoring::StatusFlag::Status expectiongGroupStatus, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -268,7 +272,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
-        TTestActorRuntime &runtime = *server.GetRuntime();
+        TTestActorRuntime& runtime = *server.GetRuntime();
 
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
@@ -287,12 +291,70 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponse(x, 1, 2);
+                    AddGroupVSlotInControllerConfigResponse(x, 1, vdiskStatuses.size(), erasurespecies);
                     break;
                 }
                 case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse: {
                     auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
-                    AddVSlotInVDiskStateResponse(x, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+                    AddVSlotInVDiskStateResponse(x, vdiskStatuses);
+                    break;
+                }
+                case NNodeWhiteboard::TEvWhiteboard::EvPDiskStateResponse: {
+                    auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    (*x)->Get()->Record.clear_pdiskstateinfo();
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+        int groupIssuesCount = 0;
+        for (const auto& issue_log : result->Result.Getissue_log()) {
+            if (issue_log.type() == "STORAGE_GROUP" && issue_log.location().storage().pool().name() == "/Root:test") {
+                UNIT_ASSERT_VALUES_EQUAL((int)issue_log.status(), (int)expectiongGroupStatus);
+                groupIssuesCount++;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(groupIssuesCount, 1);
+    }
+
+    void ChangeUsageDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size, ui64 quota) {
+        auto record = (*ev)->Get()->MutableRecord();
+        auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
+        pool->set_name("/Root:test");
+        pool->set_kind("kind");
+
+        auto domain = record->mutable_pathdescription()->mutable_domaindescription();
+        domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
+        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
+    }
+
+     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResult(x, usage, quota);
                     break;
                 }
             }
@@ -305,11 +367,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
+        int storageIssuesCount = 0;
         for (const auto& issue_log : result->Result.Getissue_log()) {
-            if (issue_log.type() == "STORAGE_GROUP" && issue_log.location().storage().pool().name() == "/Root:test") {
-                UNIT_ASSERT_VALUES_EQUAL((int)issue_log.status(), (int)Ydb::Monitoring::StatusFlag::ORANGE);
+            if (issue_log.type() == "STORAGE" && issue_log.reason_size() == 0 && issue_log.status() == status) {
+                storageIssuesCount++;
             }
         }
+
+        UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
     }
 
     Y_UNIT_TEST(IssuesGroupsListing) {
@@ -355,59 +420,73 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(IssuesGroupsVCardDeleting) {
         ListingTest(100, 100);
     }
-
-    void ChangeUsageDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size, ui64 quota) {
-        auto record = (*ev)->Get()->MutableRecord();
-        auto pool = record->mutable_pathdescription()->mutable_domaindescription()->add_storagepools();
-        pool->set_name("/Root:test");
-        pool->set_kind("kind");
-
-        auto domain = record->mutable_pathdescription()->mutable_domaindescription();
-        domain->mutable_diskspaceusage()->mutable_tables()->set_totalsize(size);
-        domain->mutable_databasequotas()->set_data_stream_reserved_storage_quota(quota);
+    
+    Y_UNIT_TEST(NoneRedGroupWhenRedVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::NONE, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::RED});
     }
-
-     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-        ui16 grpcPort = tp.GetPort(2135);
-        auto settings = TServerSettings(port)
-                .SetNodeCount(2)
-                .SetUseRealThreads(false)
-                .SetDomainName("Root");
-        TServer server(settings);
-        server.EnableGRpc(grpcPort);
-        TClient client(settings);
-        TTestActorRuntime &runtime = *server.GetRuntime();
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
-
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvSchemeShard::EvDescribeSchemeResult: {
-                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
-                    ChangeDescribeSchemeResult(x, usage, quota);
-                    break;
-                }
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        runtime.SetObserverFunc(observerFunc);
-
-        auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
-        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
-
-        int storageIssuesCount = 0;
-        for (const auto& issue_log : result->Result.Getissue_log()) {
-            if (issue_log.type() == "STORAGE" && issue_log.reason_size() == 0 && issue_log.status() == status) {
-                storageIssuesCount++;
-            }
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
+    
+    Y_UNIT_TEST(NoneRedGroupWhenBlueVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::NONE, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(NoneYellowGroupWhenYellowVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::NONE, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::YELLOW});
+    }
+    
+    Y_UNIT_TEST(Block42RedGroupWhen3RedVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+    }
+    
+    Y_UNIT_TEST(Block42RedGroupWhen2RedBlueVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(Block42OrangeGroupWhen2RedVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::ORANGE, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+    }
+    
+    Y_UNIT_TEST(Block42OrangeGroupWhenRedBlueVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::ORANGE, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(Block42YellowGroupWhenRedVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED});
+    }
+    
+    Y_UNIT_TEST(Block42BlueGroupWhenBlueVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::BLUE, {Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(Block42YellowGroupWhenYellowVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::YELLOW});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcYellowGroupWhen3RedVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcYellowGroupWhen2RedBlueVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcYellowGroupWhen2RedVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcYellowGroupWhenRedBlueVdisks) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcYellowGroupWhenRedVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcBlueGroupWhenBlueVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::BLUE, {Ydb::Monitoring::StatusFlag::BLUE});
+    }
+    
+    Y_UNIT_TEST(Mirrot3dcYellowGroupWhenYellowVdisk) {
+        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::YELLOW});
     }
 
     Y_UNIT_TEST(StorageLimit95) {

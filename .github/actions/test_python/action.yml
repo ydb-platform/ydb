@@ -35,8 +35,8 @@ runs:
       echo "$bad_suites"
       suites=""
       for suite in $(echo */ | sed -e 's/\///g'); do
-        echo $bad_suites | grep -E "$suite"
-        suite_find=$(echo $bad_suites | grep -E "$suite")
+        echo "$bad_suites" | grep -E "$suite"
+        suite_find=$(echo "$bad_suites" | grep -E "$suite")
         echo "$suite"
         if [[ $suite_find == '' ]]; then
             suites+=$suite;

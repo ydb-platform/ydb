@@ -102,6 +102,8 @@ public:
 
     const arrow::Array& Column(int i) const {
         Y_VERIFY_DEBUG(Columns);
+        Y_VERIFY_DEBUG((size_t)i < Columns->size());
+        Y_VERIFY_DEBUG((*Columns)[i]);
         return *(*Columns)[i];
     }
 

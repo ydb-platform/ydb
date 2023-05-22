@@ -222,7 +222,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
 void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& version, const TTableSchema& schema, NIceDb::TNiceDb& db) {
     Y_VERIFY(SchemaPresets.contains(presetId));
     auto preset = SchemaPresets.at(presetId);
-    
+
     TSchemaPreset::TSchemaPresetVersionInfo versionInfo;
     versionInfo.SetId(presetId);
     versionInfo.SetSinceStep(version.Step);
@@ -272,6 +272,9 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const TTable
     indexInfo.SetAllKeys();
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
+    } else {
+        Y_VERIFY(PrimaryIndex->GetIndexInfo().GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
+        Y_VERIFY(PrimaryIndex->GetIndexInfo().GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
     PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
 
@@ -289,7 +292,7 @@ NOlap::TIndexInfo TTablesManager::ConvertSchema(const TTableSchema& schema) {
     Y_VERIFY(schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
     ui32 indexId = 0;
-    NOlap::TIndexInfo indexInfo("", indexId);
+    NOlap::TIndexInfo indexInfo("", indexId, schema.GetCompositeMarks());
 
     for (const auto& col : schema.GetColumns()) {
         const ui32 id = col.GetId();

@@ -1228,23 +1228,40 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     }
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
-    std::optional<TMap<TMark, ui64>::const_iterator> previousIterator;
+    std::optional<TMarksMap::const_iterator> previousIterator;
+    const bool compositeMark = GetIndexKey()->num_fields() > 1;
+
     for (auto&& filter : pkRangesFilter) {
-        std::optional<NArrow::TReplaceKey> keyFrom = filter.KeyFrom(GetIndexKey());
-        std::optional<NArrow::TReplaceKey> keyTo = filter.KeyTo(GetIndexKey());
+        std::optional<NArrow::TReplaceKey> indexKeyFrom = filter.KeyFrom(GetIndexKey());
+        std::optional<NArrow::TReplaceKey> indexKeyTo = filter.KeyTo(GetIndexKey());
+
+        std::shared_ptr<arrow::Scalar> keyFrom;
+        std::shared_ptr<arrow::Scalar> keyTo;
+        if (indexKeyFrom) {
+            keyFrom = NArrow::TReplaceKey::ToScalar(*indexKeyFrom, 0);
+        }
+        if (indexKeyTo) {
+            keyTo = NArrow::TReplaceKey::ToScalar(*indexKeyTo, 0);
+        }
+
         auto it = pathGranules.begin();
         if (keyFrom) {
-            it = pathGranules.upper_bound(TMark(*keyFrom));
-            --it;
+            it = pathGranules.lower_bound(*keyFrom);
+            if (it != pathGranules.begin()) {
+                if (it == pathGranules.end() || compositeMark || *keyFrom != it->first) {
+                    // TODO: better check if we really need an additional granule before the range
+                    --it;
+                }
+            }
         }
+
         if (previousIterator && (previousIterator == pathGranules.end() || it->first < (*previousIterator)->first)) {
             it = *previousIterator;
         }
         for (; it != pathGranules.end(); ++it) {
             auto& mark = it->first;
             ui64 granule = it->second;
-
-            if (keyTo && *keyTo < mark.GetBorder()) {
+            if (keyTo && mark > *keyTo) {
                 break;
             }
 
@@ -1269,11 +1286,13 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         }
                     }
                     Y_VERIFY(outPortion.Produced());
-                    if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portionInfo->Portion());
+                    if (!compositeMark && !pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
+                            ("granule", granule)("portion", portionInfo->Portion());
                         continue;
                     } else {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portionInfo->Portion());
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
+                            ("granule", granule)("portion", portionInfo->Portion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));
                     granuleHasDataForSnaphsot = true;
@@ -1294,9 +1313,8 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
     ui64 sumSize = 0;
     ui64 sumMaxSize = 0;
     size_t activeCount = 0;
-    std::shared_ptr<arrow::Scalar> minPk0;
-    std::shared_ptr<arrow::Scalar> maxPk0;
-    bool pkEqual = true;
+    THashSet<NArrow::TReplaceKey> borders;
+    bool differentBorders = false;
 
     for (const auto& [_, info] : portions) {
         // We need only actual portions here (with empty XPlanStep:XTxId)
@@ -1306,19 +1324,11 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
             continue;
         }
 
-        if (pkEqual) {
-            const auto [minPkCurrent, maxPkCurrent] = info.MinMaxIndexKeyValue();
-            // Check that all pks equal to each other.
-            if ((pkEqual = bool(minPkCurrent) && bool(maxPkCurrent))) {
-                if (minPk0 && maxPk0) {
-                    pkEqual = arrow::ScalarEquals(*minPk0, *minPkCurrent) && arrow::ScalarEquals(*maxPk0, *maxPkCurrent);
-                } else {
-                    pkEqual = arrow::ScalarEquals(*minPkCurrent, *maxPkCurrent);
-
-                    minPk0 = minPkCurrent;
-                    maxPk0 = maxPkCurrent;
-                }
-            }
+        // Find at least 2 unique borders
+        if (!differentBorders) {
+            borders.insert(info.IndexKeyStart());
+            borders.insert(info.IndexKeyEnd());
+            differentBorders = (borders.size() > 1);
         }
 
         auto sizes = info.BlobsSizes();
@@ -1335,7 +1345,7 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
         return false;
     }
 
-    return !pkEqual && (sumMaxSize >= limits.GranuleBlobSplitSize || sumSize >= limits.GranuleOverloadSize);
+    return differentBorders && (sumMaxSize >= limits.GranuleBlobSplitSize || sumSize >= limits.GranuleOverloadSize);
 }
 
 std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {

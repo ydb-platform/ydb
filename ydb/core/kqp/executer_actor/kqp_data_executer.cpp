@@ -1601,15 +1601,12 @@ private:
         limits.MkqlLightProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(500_MB, Request.MkqlMemoryLimit) : 500_MB;
         limits.MkqlHeavyProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(2_GB, Request.MkqlMemoryLimit) : 2_GB;
 
-        auto id = SelfId();
-        limits.AllocateMemoryFn = [TxId = TxId, actorId = id](auto /* txId */, ui64 taskId, ui64 memory) {
-            auto SelfId = [actorId] () {
-                return actorId;
-            };
-            LOG_E("Data query task cannot allocate additional memory during executing."
-                      << " Task: " << taskId << ", memory: " << memory);
-            return false;
-        };
+        auto& taskOpts = taskDesc.GetProgram().GetSettings();
+        auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
+            ? limits.MkqlHeavyProgramMemoryLimit
+            : limits.MkqlLightProgramMemoryLimit;
+
+        limits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(limit, limit);
 
         auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), AsyncIoFactory,
             AppData()->FunctionRegistry, settings, limits);

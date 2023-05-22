@@ -7,8 +7,7 @@ namespace NYql {
 
 NActors::IActor* CreateComputeActor(
     const NYql::NDqs::TLocalWorkerManagerOptions& options,
-    NDq::TAllocateMemoryCallback allocateMemoryFn,
-    NDq::TFreeMemoryCallback freeMemoryFn,
+    NDq::IMemoryQuotaManager::TPtr memoryQuotaManager,
     const NActors::TActorId& executerId,
     const TString& operationId,
     NYql::NDqProto::TDqTask&& task,

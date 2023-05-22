@@ -16,8 +16,7 @@ using namespace NDqs;
 
 IActor* CreateComputeActor(
     const TLocalWorkerManagerOptions& options,
-    NDq::TAllocateMemoryCallback allocateMemoryFn,
-    NDq::TFreeMemoryCallback freeMemoryFn,
+    NDq::IMemoryQuotaManager::TPtr memoryQuotaManager,
     const TActorId& executerId,
     const TString& operationId,
     NYql::NDqProto::TDqTask&& task,
@@ -31,8 +30,7 @@ IActor* CreateComputeActor(
     memoryLimits.MkqlLightProgramMemoryLimit = options.MkqlInitialMemoryLimit;
     memoryLimits.MkqlHeavyProgramMemoryLimit = options.MkqlInitialMemoryLimit;
     memoryLimits.MkqlProgramHardMemoryLimit = options.MkqlProgramHardMemoryLimit;
-    memoryLimits.AllocateMemoryFn = allocateMemoryFn;
-    memoryLimits.FreeMemoryFn = freeMemoryFn;
+    memoryLimits.MemoryQuotaManager = memoryQuotaManager;
     // min alloc size == min free size to simplify api
     memoryLimits.MinMemAllocSize = options.MkqlMinAllocSize;
     memoryLimits.MinMemFreeSize = options.MkqlMinAllocSize;

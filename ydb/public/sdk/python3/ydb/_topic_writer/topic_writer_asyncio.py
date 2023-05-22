@@ -65,7 +65,11 @@ class WriterAsyncIO:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
+        try:
+            await self.close()
+        except BaseException:
+            if exc_val is None:
+                raise
 
     def __del__(self):
         if self._closed or self._loop.is_closed():
@@ -330,7 +334,7 @@ class WriterAsyncIOReconnector:
 
     def _check_stop(self):
         if self._stop_reason.done():
-            raise self._stop_reason.result()
+            raise self._stop_reason.exception()
 
     async def _connection_loop(self):
         retry_settings = RetrySettings()  # todo
@@ -543,7 +547,7 @@ class WriterAsyncIOReconnector:
         if self._stop_reason.done():
             return
 
-        self._stop_reason.set_result(reason)
+        self._stop_reason.set_exception(reason)
 
         for f in self._messages_future:
             f.set_exception(reason)

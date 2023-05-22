@@ -429,6 +429,9 @@ class ConnectionPool(IConnectionPool):
 
         :return: A result of computation
         """
+        if self._stopped:
+            raise issues.Error("Driver was stopped")
+
         tracing.trace(self.tracer, {"request": request, "stub": stub, "rpc_name": rpc_name})
         try:
             connection = self._store.get(preferred_endpoint)

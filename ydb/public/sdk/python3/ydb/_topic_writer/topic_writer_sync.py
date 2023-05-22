@@ -56,7 +56,11 @@ class WriterSync:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        try:
+            self.close()
+        except BaseException:
+            if exc_val is None:
+                raise
 
     def __del__(self):
         self.close(flush=False)

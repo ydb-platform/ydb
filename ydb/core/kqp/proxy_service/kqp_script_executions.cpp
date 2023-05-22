@@ -1,22 +1,20 @@
- #include "kqp_script_executions.h"
+#include "kqp_script_executions.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -85,12 +83,8 @@ NYql::TIssues DeserializeIssues(const TString& issuesSerialized) {
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
-        EvDataQueryResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCreateSessionResult,
-        EvDeleteSessionResult,
-        EvCreateScriptOperationResponse,
+        EvCreateScriptOperationResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCreateTableResponse,
-        EvRollbackTransactionResponse,
 
         EvEnd
     };
@@ -98,66 +92,6 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
-    static NYql::TIssues IssuesFromOperation(const Ydb::Operations::Operation& operation) {
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(operation.issues(), issues);
-        return issues;
-    }
-
-    struct TEvDataQueryResult : public NActors::TEventLocal<TEvDataQueryResult, EvDataQueryResult> {
-        TEvDataQueryResult(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {
-        }
-
-        TEvDataQueryResult(const Ydb::Table::ExecuteDataQueryResponse& resp)
-            : TEvDataQueryResult(resp.operation().status(), IssuesFromOperation(resp.operation()))
-        {
-            resp.operation().result().UnpackTo(&Result);
-        }
-
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-        Ydb::Table::ExecuteQueryResult Result;
-    };
-
-    struct TEvCreateSessionResult : public NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
-        TEvCreateSessionResult(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {
-        }
-
-        TEvCreateSessionResult(const Ydb::Table::CreateSessionResponse& resp)
-            : TEvCreateSessionResult(resp.operation().status(), IssuesFromOperation(resp.operation()))
-        {
-            Ydb::Table::CreateSessionResult result;
-            resp.operation().result().UnpackTo(&result);
-            SessionId = result.session_id();
-        }
-
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-        TString SessionId;
-    };
-
-    struct TEvDeleteSessionResult : public NActors::TEventLocal<TEvDeleteSessionResult, EvDeleteSessionResult> {
-        TEvDeleteSessionResult(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {
-        }
-
-        TEvDeleteSessionResult(const Ydb::Table::DeleteSessionResponse& resp)
-            : TEvDeleteSessionResult(resp.operation().status(), IssuesFromOperation(resp.operation()))
-        {
-        }
-
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-    };
-
     struct TEvCreateScriptOperationResponse : public NActors::TEventLocal<TEvCreateScriptOperationResponse, EvCreateScriptOperationResponse> {
         TEvCreateScriptOperationResponse(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues)
             : Status(statusCode)
@@ -179,22 +113,14 @@ struct TEvPrivate {
     struct TEvCreateTableResponse : public NActors::TEventLocal<TEvCreateTableResponse, EvCreateTableResponse> {
         TEvCreateTableResponse() = default;
     };
+};
 
-    struct TEvRollbackTransactionResponse : public NActors::TEventLocal<TEvRollbackTransactionResponse, EvRollbackTransactionResponse> {
-        TEvRollbackTransactionResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {
-        }
 
-        TEvRollbackTransactionResponse(const Ydb::Table::RollbackTransactionResponse& resp)
-            : TEvRollbackTransactionResponse(resp.operation().status(), IssuesFromOperation(resp.operation()))
-        {
-        }
-
-        Ydb::StatusIds::StatusCode Status;
-        NYql::TIssues Issues;
-    };
+class TQueryBase : public NKikimr::TQueryBase {
+public:
+    TQueryBase()
+        : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY)
+    {}
 };
 
 
@@ -502,248 +428,6 @@ private:
     THolder<NActors::IEventBase> ResultEvent;
     NActors::TActorId Owner;
     size_t TablesCreated = 0;
-};
-
-// TODO: add retry logic
-class TQueryBase : public NActors::TActorBootstrapped<TQueryBase> {
-protected:
-    struct TTxControl {
-        static TTxControl CommitTx() {
-            TTxControl control;
-            control.Commit = true;
-            return control;
-        }
-
-        static TTxControl BeginTx() {
-            TTxControl control;
-            control.Begin = true;
-            return control;
-        }
-
-        static TTxControl BeginAndCommitTx() {
-            TTxControl control;
-            control.Begin = true;
-            control.Commit = true;
-            return control;
-        }
-
-        static TTxControl ContinueTx() {
-            TTxControl control;
-            control.Continue = true;
-            return control;
-        }
-
-        static TTxControl ContinueAndCommitTx() {
-            TTxControl control;
-            control.Continue = true;
-            control.Commit = true;
-            return control;
-        }
-
-        bool Begin = false;
-        bool Commit = false;
-        bool Continue = false;
-    };
-
-public:
-    static constexpr char ActorName[] = "KQP_SCRIPT_EXECUTION_OPERATION_QUERY";
-
-    explicit TQueryBase(TString sessionId = {}, TString database = GetDefaultDatabase())
-        : Database(std::move(database))
-        , SessionId(std::move(sessionId))
-    {
-    }
-
-    void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override {
-        NActors::TActorBootstrapped<TQueryBase>::Registered(sys, owner);
-        Owner = owner;
-    }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvDataQueryResult, Handle);
-        hFunc(TEvPrivate::TEvCreateSessionResult, Handle);
-        hFunc(TEvPrivate::TEvDeleteSessionResult, Handle);
-        hFunc(TEvPrivate::TEvRollbackTransactionResponse, Handle);
-    );
-
-    void Bootstrap() {
-        Become(&TQueryBase::StateFunc);
-
-        if (SessionId) {
-            RunQuery();
-        } else {
-            RunCreateSession();
-        }
-    }
-
-    static TString GetDefaultDatabase() {
-        return CanonizePath(AppData()->TenantName);
-    }
-
-    template <class TProto, class TEvent>
-    void Subscribe(NThreading::TFuture<TProto>&& f) {
-        f.Subscribe(
-            [as = TActivationContext::ActorSystem(), selfId = SelfId()](const NThreading::TFuture<TProto>& res)
-            {
-                as->Send(selfId, new TEvent(res.GetValue()));
-            }
-        );
-    }
-
-    void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            SessionId = ev->Get()->SessionId;
-            DeleteSession = true;
-            RunQuery();
-            Y_VERIFY(Finished || RunningQuery);
-        } else {
-            KQP_PROXY_LOG_W("Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
-            Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
-        }
-    }
-
-    void Handle(TEvPrivate::TEvDeleteSessionResult::TPtr& ev) {
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            KQP_PROXY_LOG_W("Failed to delete session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
-        }
-        PassAway();
-    }
-
-    void Handle(TEvPrivate::TEvDataQueryResult::TPtr& ev) {
-        Y_VERIFY(RunningQuery);
-        RunningQuery = false;
-        KQP_PROXY_LOG_D("DataQueryResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
-        TxId = ev->Get()->Result.tx_meta().id();
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            ResultSets.clear();
-            ResultSets.reserve(ev->Get()->Result.result_sets_size());
-            for (auto& resultSet : *ev->Get()->Result.mutable_result_sets()) {
-                ResultSets.emplace_back(std::move(resultSet));
-            }
-            try {
-                OnQueryResult();
-            } catch (const std::exception& ex) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
-            }
-            Y_VERIFY(Finished || RunningQuery);
-        } else {
-            Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
-        }
-    }
-
-    void Handle(TEvPrivate::TEvRollbackTransactionResponse::TPtr& ev) {
-        KQP_PROXY_LOG_D("RollbackTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
-
-        // Continue finish
-        if (DeleteSession) {
-            RunDeleteSession();
-        } else {
-            PassAway();
-        }
-    }
-
-    void Finish(Ydb::StatusIds::StatusCode status, const TString& message, bool rollbackOnError = true) {
-        NYql::TIssues issues;
-        issues.AddIssue(message);
-        Finish(status, std::move(issues), rollbackOnError);
-    }
-
-    void Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError = true) {
-        Finished = true;
-        OnFinish(status, std::move(issues));
-        if (rollbackOnError && !CommitRequested && TxId && status != Ydb::StatusIds::SUCCESS) {
-            RollbackTransaction();
-        } else if (DeleteSession) {
-            RunDeleteSession();
-        } else {
-            PassAway();
-        }
-    }
-
-    void Finish() {
-        Finish(Ydb::StatusIds::SUCCESS, NYql::TIssues());
-    }
-
-    void RunQuery() {
-        try {
-            OnRunQuery();
-        } catch (const std::exception& ex) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
-        }
-    }
-
-    void RunCreateSession() {
-        using TEvCreateSessionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
-            Ydb::Table::CreateSessionResponse>;
-        Ydb::Table::CreateSessionRequest req;
-        Subscribe<Ydb::Table::CreateSessionResponse, TEvPrivate::TEvCreateSessionResult>(NRpcService::DoLocalRpc<TEvCreateSessionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
-    }
-
-    void RunDeleteSession() {
-        using TEvDeleteSessionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
-            Ydb::Table::DeleteSessionResponse>;
-        Ydb::Table::DeleteSessionRequest req;
-        req.set_session_id(SessionId);
-        Subscribe<Ydb::Table::DeleteSessionResponse, TEvPrivate::TEvDeleteSessionResult>(NRpcService::DoLocalRpc<TEvDeleteSessionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
-    }
-
-    void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, TTxControl txControl = TTxControl::BeginAndCommitTx()) {
-        Y_VERIFY(!RunningQuery);
-        RunningQuery = true;
-        KQP_PROXY_LOG_D("RunDataQuery: " << sql);
-        using TEvExecuteDataQueryRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
-            Ydb::Table::ExecuteDataQueryResponse>;
-        Ydb::Table::ExecuteDataQueryRequest req;
-        req.set_session_id(SessionId);
-        auto* txControlProto = req.mutable_tx_control();
-        if (txControl.Begin) {
-            txControlProto->mutable_begin_tx()->mutable_serializable_read_write();
-        } else if (txControl.Continue) {
-            Y_VERIFY(TxId);
-            txControlProto->set_tx_id(TxId);
-        }
-        if (txControl.Commit) {
-            CommitRequested = true;
-            txControlProto->set_commit_tx(true);
-        }
-        req.mutable_query()->set_yql_text(sql);
-        req.mutable_query_cache_policy()->set_keep_in_cache(true);
-        if (params) {
-            auto p = params->Build();
-            *req.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(p);
-        }
-        Subscribe<Ydb::Table::ExecuteDataQueryResponse, TEvPrivate::TEvDataQueryResult>(NRpcService::DoLocalRpc<TEvExecuteDataQueryRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
-    }
-
-    void RollbackTransaction() {
-        Y_VERIFY(SessionId);
-        Y_VERIFY(TxId);
-        KQP_PROXY_LOG_D("Rollback transaction: " << TxId);
-        using TEvRollbackTransactionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::RollbackTransactionRequest,
-            Ydb::Table::RollbackTransactionResponse>;
-        Ydb::Table::RollbackTransactionRequest req;
-        req.set_session_id(SessionId);
-        req.set_tx_id(TxId);
-        Subscribe<Ydb::Table::RollbackTransactionResponse, TEvPrivate::TEvRollbackTransactionResponse>(NRpcService::DoLocalRpc<TEvRollbackTransactionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
-    }
-
-private:
-    virtual void OnRunQuery() = 0;
-    virtual void OnQueryResult() = 0; // Must either run next query or finish
-    virtual void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) = 0;
-
-protected:
-    const TString Database;
-    TString SessionId;
-    TString TxId;
-    bool DeleteSession = false;
-    bool RunningQuery = false;
-    bool Finished = false;
-    bool CommitRequested = false;
-
-    NActors::TActorId Owner;
-
-    std::vector<NYdb::TResultSet> ResultSets;
 };
 
 class TCreateScriptOperationQuery : public TQueryBase {

@@ -35,10 +35,12 @@ runs:
       echo "$bad_suites"
       suites=""
       for suite in $(echo */ | sed -e 's/\///g'); do
+        echo "$suite"
         suite_find=$(echo $bad_suites | grep -E "$suite")
         if [[ $suite_find == '' ]]; then
             suites+=$suite;
-            suites+=$'\n'
+            suites+='
+            '
         fi
       done
       if [[ "${{inputs.test_label_regexp}}" != '' ]]; then

@@ -62,35 +62,32 @@ public:
 
         TChanges(const TMark& defaultMark,
                  std::vector<NOlap::TInsertedData>&& blobsToIndex, const TCompactionLimits& limits)
-            : TColumnEngineChanges(TColumnEngineChanges::INSERT)
+            : TColumnEngineChanges(TColumnEngineChanges::INSERT, limits)
             , DefaultMark(defaultMark)
         {
-            Limits = limits;
             DataToIndex = std::move(blobsToIndex);
         }
 
         TChanges(const TMark& defaultMark,
                  std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits, const TSnapshot& snapshot)
-            : TColumnEngineChanges(TColumnEngineChanges::COMPACTION)
+            : TColumnEngineChanges(TColumnEngineChanges::COMPACTION, limits)
             , DefaultMark(defaultMark)
         {
-            Limits = limits;
             CompactionInfo = std::move(info);
             InitSnapshot = snapshot;
         }
 
         TChanges(const TMark& defaultMark,
                  const TSnapshot& snapshot, const TCompactionLimits& limits)
-            : TColumnEngineChanges(TColumnEngineChanges::CLEANUP)
+            : TColumnEngineChanges(TColumnEngineChanges::CLEANUP, limits)
             , DefaultMark(defaultMark)
         {
-            Limits = limits;
             InitSnapshot = snapshot;
         }
 
         TChanges(const TMark& defaultMark,
                  TColumnEngineChanges::EType type, const TSnapshot& applySnapshot)
-            : TColumnEngineChanges(type)
+            : TColumnEngineChanges(type, TCompactionLimits())
             , DefaultMark(defaultMark)
         {
             ApplySnapshot = applySnapshot;
@@ -214,10 +211,10 @@ public:
 public:
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
 
-    std::shared_ptr<TColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) override;
+    std::shared_ptr<TColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                          const TSnapshot& outdatedSnapshot) override;
-    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                          const TSnapshot& outdatedSnapshot, const TCompactionLimits& limits) override;
+    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
                                                        ui32 maxRecords) override;
     std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
@@ -228,14 +225,13 @@ public:
     void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) override;
 
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void UpdateCompactionLimits(const TCompactionLimits& limits) override { Limits = limits; }
 
 
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
                                         const TPKRangesFilter& pkRangesFilter) const override;
-    std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) override;
+    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, ui64& lastCompactedGranule) override;
 
 private:
     using TMarksMap = std::map<TMark, ui64, TMark::TCompare>;
@@ -253,7 +249,7 @@ private:
     };
 
     TVersionedIndex VersionedIndex;
-    TCompactionLimits Limits;
+    const TCompactionLimits Limits;
     ui64 TabletId;
     std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
@@ -322,7 +318,7 @@ private:
                             EStatsUpdateType updateType) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
-    void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules);
+    void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const TCompactionLimits& limits);
 
     /// Return lists of adjacent empty granules for the path.
     std::vector<std::vector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;

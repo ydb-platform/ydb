@@ -273,7 +273,7 @@ TCompactionLimits TestLimits() {
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
             std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartInsert(std::move(dataToIndex));
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartInsert(TestLimits(), std::move(dataToIndex));
     if (!changes) {
         return false;
     }
@@ -308,11 +308,11 @@ struct TExpected {
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
              const TExpected& expected) {
     ui64 lastCompactedGranule = 0;
-    auto compactionInfo = engine.Compact(lastCompactedGranule);
+    auto compactionInfo = engine.Compact(TestLimits(), lastCompactedGranule);
     UNIT_ASSERT_VALUES_EQUAL(compactionInfo->Granules.size(), 1);
     UNIT_ASSERT(!compactionInfo->InGranule);
 
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TSnapshot::Zero());
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TSnapshot::Zero(), TestLimits());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 
@@ -338,7 +338,7 @@ bool Compact(const TIndexInfo& tableInfo, TTestDbWrapper& db, TSnapshot snap, TH
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, TestLimits(), pathsToDrop, 1000);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 

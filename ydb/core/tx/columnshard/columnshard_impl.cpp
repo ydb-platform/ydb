@@ -737,7 +737,7 @@ bool TColumnShard::SetupIndexation() {
     }
 
     Y_VERIFY(data.size());
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(std::move(data));
+    auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(CompactionLimits.Get(), std::move(data));
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare indexing at tablet " << TabletID());
         return false;
@@ -759,8 +759,8 @@ bool TColumnShard::SetupCompaction() {
     std::vector<std::unique_ptr<TEvPrivate::TEvCompaction>> events;
 
     while (ActiveCompaction < TSettings::MAX_ACTIVE_COMPACTIONS) {
-        TablesManager.MutablePrimaryIndex().UpdateCompactionLimits(CompactionLimits.Get());
-        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(LastCompactedGranule);
+        auto limits = CompactionLimits.Get();
+        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits, LastCompactedGranule);
         if (!compactionInfo || compactionInfo->Empty()) {
             if (events.empty()) {
                 LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
@@ -773,7 +773,7 @@ bool TColumnShard::SetupCompaction() {
         LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
 
         ui64 outdatedStep = GetOutdatedStep();
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(outdatedStep, 0));
+        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(outdatedStep, 0), limits);
         if (!indexChanges) {
             if (events.empty()) {
                 LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
@@ -859,7 +859,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, TLimits::MAX_TX_RECORDS);
+    auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, CompactionLimits.Get(), TLimits::MAX_TX_RECORDS);
     if (!changes) {
         LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
         return {};

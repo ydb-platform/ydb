@@ -393,7 +393,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
         }
     }
 
-    UpdateOverloaded(Granules);
+    UpdateOverloaded(Granules, Limits);
 
     Y_VERIFY(!(LastPortion >> 63), "near to int overflow");
     Y_VERIFY(!(LastGranule >> 63), "near to int overflow");
@@ -451,10 +451,10 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return CountersTable->Load(db, callback);
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) {
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
-    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(dataToIndex), Limits);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(dataToIndex), limits);
     ui32 reserveGranules = 0;
 
     changes->InitSnapshot = LastSnapshot;
@@ -491,11 +491,12 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vec
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std::unique_ptr<TCompactionInfo>&& info,
-                                                                            const TSnapshot& outdatedSnapshot) {
+                                                                            const TSnapshot& outdatedSnapshot,
+                                                                            const TCompactionLimits& limits) {
     Y_VERIFY(info);
     Y_VERIFY(info->Granules.size() == 1);
 
-    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(info), Limits, LastSnapshot);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(info), limits, LastSnapshot);
 
     const ui64 granule = *changes->CompactionInfo->Granules.begin();
     const auto gi = Granules.find(granule);
@@ -523,7 +524,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 
     if (changes->CompactionInfo->InGranule) {
         const TSnapshot completedSnap = std::max(LastSnapshot, outdatedSnapshot);
-        if (!InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, Limits, completedSnap, changes->MergeBorders)) {
+        if (!InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, limits, completedSnap, changes->MergeBorders)) {
             // Return granule to Compation list. This is equal to single compaction worker behaviour.
             CompactionGranules.insert(granule);
             return {};
@@ -537,9 +538,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
+                                                                         const TCompactionLimits& limits,
                                                                          THashSet<ui64>& pathsToDrop,
                                                                          ui32 maxRecords) {
-    auto changes = std::make_shared<TChanges>(DefaultMark(), snapshot, Limits);
+    auto changes = std::make_shared<TChanges>(DefaultMark(), snapshot, limits);
     ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
@@ -727,7 +729,7 @@ std::vector<std::vector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGran
     return emptyGranules;
 }
 
-void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) {
+void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules, const TCompactionLimits& limits) {
     for (const auto& [granule, spg] : granules) {
         const ui64 pathId = spg->Record.PathId;
 
@@ -740,7 +742,7 @@ void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr
         }
 
         // Size exceeds the configured limit. Mark granule as overloaded.
-        if (size >= Limits.GranuleOverloadSize) {
+        if (size >= limits.GranuleOverloadSize) {
             PathsGranulesOverloaded.emplace(pathId, granule);
         } else  if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
             // Size is under limit. Remove granule from the overloaded set.
@@ -853,7 +855,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
             }
         }
 
-        UpdateOverloaded(granules);
+        UpdateOverloaded(granules, indexChanges->Limits);
     }
     return true;
 }
@@ -1348,7 +1350,7 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
     return differentBorders && (sumMaxSize >= limits.GranuleBlobSplitSize || sumSize >= limits.GranuleOverloadSize);
 }
 
-std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {
+std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompactionLimits& limits, ui64& lastCompactedGranule) {
     if (CompactionGranules.empty()) {
         return {};
     }
@@ -1367,7 +1369,7 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
         Y_VERIFY(gi != Granules.end());
 
         bool inserted = false;
-        if (NeedSplit(gi->second->Portions, Limits, inserted)) {
+        if (NeedSplit(gi->second->Portions, limits, inserted)) {
             inGranule = false;
             granule = *it;
             CompactionGranules.erase(it);

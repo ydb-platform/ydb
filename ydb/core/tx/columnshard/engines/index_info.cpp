@@ -6,6 +6,8 @@
 #include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/formats/arrow/serializer/batch_only.h>
+#include <ydb/core/formats/arrow/transformer/dictionary.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr::NOlap {
 
@@ -332,7 +334,7 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
     return MinMaxIdxColumnsIds.contains(it->second);
 }
 
-TColumnSaver TIndexInfo::GetColumnSaver(const ui32 /*columnId*/, const TSaverContext& context) const {
+TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
     arrow::ipc::IpcWriteOptions options;
     if (context.GetExternalCompression()) {
         options.codec = context.GetExternalCompression()->BuildArrowCodec();
@@ -340,13 +342,37 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 /*columnId*/, const TSaverCon
         options.codec = DefaultCompression.BuildArrowCodec();
     }
     options.use_threads = false;
-    return TColumnSaver(nullptr, std::make_shared<NArrow::NSerialization::TBatchPayloadSerializer>(options));
+    auto it = ColumnFeatures.find(columnId);
+    NArrow::NTransformation::ITransformer::TPtr transformer;
+    if (it != ColumnFeatures.end()) {
+        transformer = it->second.GetSaveTransformer();
+        auto codec = it->second.GetCompressionCodec();
+        if (!!codec) {
+            options.codec = std::move(codec);
+        }
+    }
+    if (!transformer) {
+        return TColumnSaver(transformer, std::make_shared<NArrow::NSerialization::TBatchPayloadSerializer>(options));
+    } else {
+        return TColumnSaver(transformer, std::make_shared<NArrow::NSerialization::TFullDataSerializer>(options));
+    }
 }
 
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) const {
-    return std::make_shared<TColumnLoader>(nullptr,
-        std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(GetColumnSchema(columnId)),
-        GetColumnSchema(columnId), columnId);
+    auto it = ColumnFeatures.find(columnId);
+    NArrow::NTransformation::ITransformer::TPtr transformer;
+    if (it != ColumnFeatures.end()) {
+        transformer = it->second.GetLoadTransformer();
+    }
+    if (!transformer) {
+        return std::make_shared<TColumnLoader>(transformer,
+            std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(GetColumnSchema(columnId)),
+            GetColumnSchema(columnId), columnId);
+    } else {
+        return std::make_shared<TColumnLoader>(transformer,
+            std::make_shared<NArrow::NSerialization::TFullDataDeserializer>(),
+            GetColumnSchema(columnId), columnId);
+    }
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
@@ -358,6 +384,38 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     Y_VERIFY(field);
     std::vector<std::shared_ptr<arrow::Field>> fields = { field };
     return std::make_shared<arrow::Schema>(fields);
+}
+
+bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    if (schema.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "incorrect_engine_in_schema");
+        return false;
+    }
+
+    for (const auto& col : schema.GetColumns()) {
+        const ui32 id = col.GetId();
+        const TString& name = col.GetName();
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
+            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
+        ColumnNames[name] = id;
+        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col);
+        if (!cFeatures) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature");
+            return false;
+        }
+        ColumnFeatures.emplace(id, *cFeatures);
+    }
+
+    for (const auto& keyName : schema.GetKeyColumnNames()) {
+        Y_VERIFY(ColumnNames.contains(keyName));
+        KeyColumns.push_back(ColumnNames[keyName]);
+    }
+
+    if (schema.HasDefaultCompression()) {
+        Y_VERIFY(DefaultCompression.DeserializeFromProto(schema.GetDefaultCompression()));
+    }
+    return true;
 }
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials) {
@@ -393,6 +451,22 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
         out.emplace_back(ci->second.Name, ci->second.PType);
     }
     return out;
+}
+
+NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetSaveTransformer() const {
+    NArrow::NTransformation::ITransformer::TPtr transformer;
+    if (LowCardinality.value_or(false)) {
+        transformer = std::make_shared<NArrow::NTransformation::TDictionaryPackTransformer>();
+    }
+    return transformer;
+}
+
+NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetLoadTransformer() const {
+    NArrow::NTransformation::ITransformer::TPtr transformer;
+    if (LowCardinality.value_or(false)) {
+        transformer = std::make_shared<NArrow::NTransformation::TDictionaryUnpackTransformer>();
+    }
+    return transformer;
 }
 
 } // namespace NKikimr::NOlap

@@ -219,7 +219,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
-void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& version, const TTableSchema& schema, NIceDb::TNiceDb& db) {
+void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
     Y_VERIFY(SchemaPresets.contains(presetId));
     auto preset = SchemaPresets.at(presetId);
 
@@ -266,9 +266,9 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
     table.AddVersion(version, versionInfo);
 }
 
-void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const TTableSchema& schema) {
+void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema) {
     NOlap::TSnapshot snapshot{version.Step, version.TxId};
-    NOlap::TIndexInfo indexInfo = ConvertSchema(schema);
+    NOlap::TIndexInfo indexInfo = DeserializeIndexInfoFromProto(schema);
     indexInfo.SetAllKeys();
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
@@ -288,31 +288,9 @@ std::shared_ptr<NOlap::TColumnEngineChanges> TTablesManager::StartIndexCleanup(c
     return PrimaryIndex->StartCleanup(snapshot, PathsToDrop, maxRecords);
 }
 
-NOlap::TIndexInfo TTablesManager::ConvertSchema(const TTableSchema& schema) {
-    Y_VERIFY(schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-
-    ui32 indexId = 0;
-    NOlap::TIndexInfo indexInfo("", indexId, schema.GetCompositeMarks());
-
-    for (const auto& col : schema.GetColumns()) {
-        const ui32 id = col.GetId();
-        const TString& name = col.GetName();
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
-            col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-        indexInfo.Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
-        indexInfo.ColumnNames[name] = id;
-    }
-
-    for (const auto& keyName : schema.GetKeyColumnNames()) {
-        Y_VERIFY(indexInfo.ColumnNames.contains(keyName));
-        indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
-    }
-
-    if (schema.HasDefaultCompression()) {
-        NOlap::TCompression compression = NTiers::ConvertCompression(schema.GetDefaultCompression());
-        indexInfo.SetDefaultCompression(compression);
-    }
-
-    return indexInfo;
+NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    std::optional<NOlap::TIndexInfo> indexInfo = NOlap::TIndexInfo::BuildFromProto(schema);
+    Y_VERIFY(indexInfo);
+    return *indexInfo;
 }
 }

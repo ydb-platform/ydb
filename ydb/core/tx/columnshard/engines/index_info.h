@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace arrow {
     class Array;
@@ -108,9 +109,42 @@ public:
     }
 };
 
+class TColumnFeatures {
+private:
+    std::optional<NArrow::TCompression> Compression;
+    std::optional<bool> LowCardinality;
+public:
+    static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
+        TColumnFeatures result;
+        if (columnInfo.HasCompression()) {
+            NArrow::TCompression compression = NArrow::TCompression::Default();
+            Y_VERIFY(compression.DeserializeFromProto(columnInfo.GetCompression()));
+            result.Compression = compression;
+        }
+        if (columnInfo.HasLowCardinality()) {
+            result.LowCardinality = columnInfo.GetLowCardinality();
+        }
+        return result;
+    }
+
+    NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
+    NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
+
+    std::unique_ptr<arrow::util::Codec> GetCompressionCodec() const {
+        if (Compression) {
+            return Compression->BuildArrowCodec();
+        } else {
+            return nullptr;
+        }
+    }
+
+};
+
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
+private:
+    THashMap<ui32, TColumnFeatures> ColumnFeatures;
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
@@ -143,8 +177,17 @@ public:
         }
         return true;
     }
-public:
     TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
+public:
+
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+        TIndexInfo result("", 0, schema.GetCompositeMarks());
+        if (!result.DeserializeFromProto(schema)) {
+            return {};
+        }
+        return result;
+    }
 
     /// Returns id of the index.
     ui32 GetId() const noexcept {
@@ -226,8 +269,6 @@ public:
 
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
-
-    void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
 
     static const std::vector<std::string>& GetSpecialColumnNames() {
         static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID) };

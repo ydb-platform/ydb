@@ -112,8 +112,9 @@ namespace NKikimr::NSchemeShard {
             if (!Compression) {
                 Compression = NArrow::TCompression::Default();
             }
-            if (!Compression->ApplyDiff(diffColumn.GetCompression())) {
-                errors.AddError("Cannot merge compression info");
+            auto applyDiffResult = Compression->ApplyDiff(diffColumn.GetCompression());
+            if (!applyDiffResult) {
+                errors.AddError("Cannot merge compression info: " + applyDiffResult.GetErrorMessage());
                 return false;
             }
         }

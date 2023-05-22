@@ -5569,9 +5569,15 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
     } else if (name.StartsWith("pg_")) {
         auto func = name.SubStr(3);
         TVector<ui32> argTypes;
-        bool needRetype = false;
-        auto status = ExtractPgTypesFromMultiLambda(input->ChildRef(2), argTypes, needRetype, ctx);
-        YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+        if (input->Content().StartsWith("AggBlock")) {
+            for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+                argTypes.push_back(input->Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId());
+            }
+        } else {
+            bool needRetype = false;
+            auto status = ExtractPgTypesFromMultiLambda(input->ChildRef(2), argTypes, needRetype, ctx);
+            YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+        }
 
         const NPg::TAggregateDesc& aggDesc = NPg::LookupAggregation(TString(func), argTypes);
         const auto& procDesc = NPg::LookupProc(aggDesc.SerializeFuncId ? aggDesc.SerializeFuncId : aggDesc.TransFuncId);
@@ -6034,6 +6040,42 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
             .Seal()
             .Build();
     }
+}
+
+const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+    if (!EnsureStructType(pos, *originalExtractorType, ctx)) {
+        return nullptr;
+    }
+
+    auto structType = originalExtractorType->Cast<TStructExprType>();
+    if (structType->GetSize() != 1) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Expected struct with one member"));
+        return nullptr;
+    }
+
+    auto type = structType->GetItems()[0]->GetItemType();
+    if (isMany) {
+        if (type->GetKind() != ETypeAnnotationKind::Optional) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Expected optional state"));
+            return nullptr;
+        }
+
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    return type;
+}
+
+bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+    auto type = GetOriginalResultType(input->Pos(), isMany, originalExtractorType, ctx);
+    if (!type) {
+        return false;
+    }
+
+    input->SetTypeAnn(type);
+    return true;
 }
 
 

@@ -183,18 +183,13 @@ public:
     struct TSessionPoolStatCollector {
         TSessionPoolStatCollector(::NMonitoring::TIntGauge* activeSessions = nullptr
         , ::NMonitoring::TIntGauge* inPoolSessions = nullptr
-        , ::NMonitoring::TRate* fakeSessions = nullptr
-        , ::NMonitoring::TIntGauge* waiters = nullptr)
-        : ActiveSessions(activeSessions)
-        , InPoolSessions(inPoolSessions)
-        , FakeSessions(fakeSessions)
-        , Waiters(waiters)
+        , ::NMonitoring::TRate* fakeSessions = nullptr)
+        : ActiveSessions(activeSessions), InPoolSessions(inPoolSessions), FakeSessions(fakeSessions)
         { }
 
         ::NMonitoring::TIntGauge* ActiveSessions;
         ::NMonitoring::TIntGauge* InPoolSessions;
         ::NMonitoring::TRate* FakeSessions;
-        ::NMonitoring::TIntGauge* Waiters;
     };
 
     struct TClientRetryOperationStatCollector {
@@ -271,7 +266,6 @@ public:
         CacheMiss_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                      {"sensor", "Request/ClientQueryCacheMiss"} }));
         ActiveSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,             {"sensor", "Sessions/InUse"} }));
         InPoolSessions_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,             {"sensor", "Sessions/InPool"} }));
-        Waiters_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,                    {"sensor", "Sessions/WaitForReturn"} }));
         SessionCV_.Set(sensorsRegistry->IntGauge({ DatabaseLabel_,                  {"sensor", "SessionBalancer/Variation"} }));
         SessionRemovedDueBalancing_.Set(sensorsRegistry->Rate({ DatabaseLabel_,     {"sensor", "SessionBalancer/SessionsRemoved"} }));
         RequestMigrated_.Set(sensorsRegistry->Rate({ DatabaseLabel_,                {"sensor", "SessionBalancer/RequestsMigrated"} }));
@@ -354,7 +348,7 @@ public:
             return TSessionPoolStatCollector();
         }
 
-        return TSessionPoolStatCollector(ActiveSessions_.Get(), InPoolSessions_.Get(), FakeSessions_.Get(), Waiters_.Get());
+        return TSessionPoolStatCollector(ActiveSessions_.Get(), InPoolSessions_.Get(), FakeSessions_.Get());
     }
 
     TClientStatCollector GetClientStatCollector() {
@@ -392,7 +386,6 @@ private:
     TAtomicCounter<::NMonitoring::TRate> DiscoveryFailDueTransportError_;
     TAtomicPointer<::NMonitoring::TIntGauge> ActiveSessions_;
     TAtomicPointer<::NMonitoring::TIntGauge> InPoolSessions_;
-    TAtomicPointer<::NMonitoring::TIntGauge> Waiters_;
     TAtomicCounter<::NMonitoring::TIntGauge> SessionCV_;
     TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing_;
     TAtomicCounter<::NMonitoring::TRate> RequestMigrated_;

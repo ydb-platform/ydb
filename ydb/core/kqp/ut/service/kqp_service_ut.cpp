@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         auto kikimr = TKikimrRunner{settings};
         auto driver = kikimr.GetDriver();
 
-        size_t InFlight = 1; // use >1 to reproduce data race in Range* computation nodes
+        size_t InFlight = 10;
         NPar::LocalExecutor().RunAdditionalThreads(InFlight);
         NPar::LocalExecutor().ExecRange([&driver](int /*id*/) {
             TTimer t;
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                     SELECT Key, Value FROM `/Root/KeyValue`
                     WHERE Value = "One" AND Key IN $in
                 )");
-            for (ui32 i = 0; i < 200; ++i) {
+            for (ui32 i = 0; i < 20; ++i) {
                 auto params = TParamsBuilder();
                 auto& pl = params.AddParam("$in").BeginList();
                 for (auto v : {1, 2, 3, 42, 50, 100}) {

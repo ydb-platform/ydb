@@ -453,7 +453,6 @@ public:
 
         bool BadInTermsOfSelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 

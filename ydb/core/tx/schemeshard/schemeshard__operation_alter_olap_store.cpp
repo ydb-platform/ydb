@@ -58,7 +58,9 @@ TOlapStoreInfo::TPtr ParseParams(const TOlapStoreInfo::TPtr& storeInfo,
         if (!schemaUpdate.Parse(alterProto.GetAlterSchema(), errors)) {
             return nullptr;
         }
-        alterData->UpdatePreset(presetName, schemaUpdate, errors);
+        if (!alterData->UpdatePreset(presetName, schemaUpdate, errors)) {
+            return nullptr;
+        }
     }
     return alterData;
 }

@@ -12,7 +12,6 @@ bool TAssembleBatch::DoExecuteImpl() {
     Y_VERIFY(BatchConstructor.GetColumnsCount());
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-    options.RecordsCountLimit = Filter->Size();
     auto addBatch = BatchConstructor.Assemble(options);
     Y_VERIFY(addBatch);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)

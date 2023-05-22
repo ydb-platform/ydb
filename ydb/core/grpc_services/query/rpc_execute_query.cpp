@@ -1,5 +1,4 @@
 #include "service_query.h"
-#include "query_helpers.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -66,6 +65,105 @@ private:
     ui64 TotalResponsesSize_ = 0;
 };
 
+bool FillQueryContent(const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
+    NYql::TIssues& issues)
+{
+    switch (req.query_case()) {
+        case Ydb::Query::ExecuteQueryRequest::kQueryContent:
+            if (!CheckQuery(req.query_content().text(), issues)) {
+                return false;
+            }
+
+            kqpRequest.MutableRequest()->SetQuery(req.query_content().text());
+            return true;
+
+        default:
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query option"));
+            return false;
+    }
+}
+
+bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::TransactionSettings& to,
+    NYql::TIssues& issues)
+{
+    switch (from.tx_mode_case()) {
+        case Ydb::Query::TransactionSettings::kSerializableReadWrite:
+            to.mutable_serializable_read_write();
+            break;
+        case Ydb::Query::TransactionSettings::kOnlineReadOnly:
+            to.mutable_online_read_only()->set_allow_inconsistent_reads(
+                from.online_read_only().allow_inconsistent_reads());
+            break;
+        case Ydb::Query::TransactionSettings::kStaleReadOnly:
+            to.mutable_stale_read_only();
+            break;
+        case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
+            to.mutable_snapshot_read_only();
+            break;
+        default:
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                "Invalid tx_settings"));
+            return false;
+    }
+
+    return true;
+}
+
+bool FillTxControl(const Ydb::Query::TransactionControl& from, Ydb::Table::TransactionControl& to,
+    NYql::TIssues& issues)
+{
+    switch (from.tx_selector_case()) {
+        case Ydb::Query::TransactionControl::kTxId:
+            to.set_tx_id(from.tx_id());
+            break;
+        case Ydb::Query::TransactionControl::kBeginTx:
+            if (!FillTxSettings(from.begin_tx(), *to.mutable_begin_tx(), issues)) {
+                return false;
+            }
+            break;
+        default:
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                "Invalid tx_control settings"));
+            return false;
+    }
+
+    to.set_commit_tx(from.commit_tx());
+    return true;
+}
+
+std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
+    const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest)
+{
+    kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
+    switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_EXECUTE:
+            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            break;
+        default: {
+            NYql::TIssues issues;
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query mode"));
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
+        }
+    }
+
+    kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    kqpRequest.MutableRequest()->SetKeepSession(false);
+
+    if (req.has_tx_control()) {
+        NYql::TIssues issues;
+        if (!FillTxControl(req.tx_control(), *kqpRequest.MutableRequest()->MutableTxControl(), issues)) {
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
+        }
+    }
+
+    NYql::TIssues issues;
+    if (!FillQueryContent(req, kqpRequest, issues)) {
+        return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
+    }
+
+    return {Ydb::StatusIds::SUCCESS, {}};
+}
+
 class TExecuteQueryRPC : public TActorBootstrapped<TExecuteQueryRPC> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -126,13 +224,13 @@ private:
 
         auto [fillStatus, fillIssues] = FillKqpRequest(*req, ev->Record);
         if (fillStatus != Ydb::StatusIds::SUCCESS) {
-            return ReplyFinishStream(fillStatus, fillIssues);
+            return ReplyFinishStream(fillStatus, std::move(fillIssues));
         }
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
-            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issues);
+            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
         }
     }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import concurrent.futures
 import contextvars
 import datetime
 import functools
@@ -111,19 +112,20 @@ class AsyncQueueToSyncIteratorAsyncIO:
         return item
 
 
-class SyncIteratorToAsyncIterator:
-    def __init__(self, sync_iterator: Iterator):
+class SyncToAsyncIterator:
+    def __init__(self, sync_iterator: Iterator, executor: concurrent.futures.Executor):
         self._sync_iterator = sync_iterator
+        self._executor = executor
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
         try:
-            res = await to_thread(self._sync_iterator.__next__)
+            res = await to_thread(self._sync_iterator.__next__, executor=self._executor)
             return res
-        except StopAsyncIteration:
-            raise StopIteration()
+        except StopIteration:
+            raise StopAsyncIteration()
 
 
 class IGrpcWrapperAsyncIO(abc.ABC):
@@ -148,15 +150,18 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
     from_server_grpc: AsyncIterator
     convert_server_grpc_to_wrapper: Callable[[Any], Any]
     _connection_state: str
-    _stream_call: Optional[
-        Union[grpc.aio.StreamStreamCall, "grpc._channel._MultiThreadedRendezvous"]
-    ]
+    _stream_call: Optional[Union[grpc.aio.StreamStreamCall, "grpc._channel._MultiThreadedRendezvous"]]
+    _wait_executor: Optional[concurrent.futures.ThreadPoolExecutor]
 
     def __init__(self, convert_server_grpc_to_wrapper):
         self.from_client_grpc = asyncio.Queue()
         self.convert_server_grpc_to_wrapper = convert_server_grpc_to_wrapper
         self._connection_state = "new"
         self._stream_call = None
+        self._wait_executor = None
+
+    def __del__(self):
+        self._clean_executor(wait=False)
 
     async def start(self, driver: SupportedDriverType, stub, method):
         if asyncio.iscoroutinefunction(driver.__call__):
@@ -170,6 +175,12 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         if self._stream_call:
             self._stream_call.cancel()
 
+        self._clean_executor(wait=True)
+
+    def _clean_executor(self, wait: bool):
+        if self._wait_executor:
+            self._wait_executor.shutdown(wait)
+
     async def _start_asyncio_driver(self, driver: ydb.aio.Driver, stub, method):
         requests_iterator = QueueToIteratorAsyncIO(self.from_client_grpc)
         stream_call = await driver(
@@ -182,14 +193,11 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
 
     async def _start_sync_driver(self, driver: ydb.Driver, stub, method):
         requests_iterator = AsyncQueueToSyncIteratorAsyncIO(self.from_client_grpc)
-        stream_call = await to_thread(
-            driver,
-            requests_iterator,
-            stub,
-            method,
-        )
+        self._wait_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+        stream_call = await to_thread(driver, requests_iterator, stub, method, executor=self._wait_executor)
         self._stream_call = stream_call
-        self.from_server_grpc = SyncIteratorToAsyncIterator(stream_call.__iter__())
+        self.from_server_grpc = SyncToAsyncIterator(stream_call.__iter__(), self._wait_executor)
 
     async def receive(self) -> Any:
         # todo handle grpc exceptions and convert it to internal exceptions
@@ -248,9 +256,7 @@ class ServerStatus(IFromProto):
         return res
 
 
-def callback_from_asyncio(
-    callback: Union[Callable, Coroutine]
-) -> [asyncio.Future, asyncio.Task]:
+def callback_from_asyncio(callback: Union[Callable, Coroutine]) -> [asyncio.Future, asyncio.Task]:
     loop = asyncio.get_running_loop()
 
     if asyncio.iscoroutinefunction(callback):
@@ -259,7 +265,7 @@ def callback_from_asyncio(
         return loop.run_in_executor(None, callback)
 
 
-async def to_thread(func, /, *args, **kwargs):
+async def to_thread(func, *args, executor: Optional[concurrent.futures.Executor], **kwargs):
     """Asynchronously run function *func* in a separate thread.
 
     Any *args and **kwargs supplied for this function are directly passed
@@ -275,17 +281,18 @@ async def to_thread(func, /, *args, **kwargs):
     loop = asyncio.get_running_loop()
     ctx = contextvars.copy_context()
     func_call = functools.partial(ctx.run, func, *args, **kwargs)
-    return await loop.run_in_executor(None, func_call)
+    return await loop.run_in_executor(executor, func_call)
 
 
-def proto_duration_from_timedelta(t: Optional[datetime.timedelta]) -> ProtoDuration:
+def proto_duration_from_timedelta(t: Optional[datetime.timedelta]) -> Optional[ProtoDuration]:
     if t is None:
         return None
+
     res = ProtoDuration()
     res.FromTimedelta(t)
 
 
-def proto_timestamp_from_datetime(t: Optional[datetime.datetime]) -> ProtoTimeStamp:
+def proto_timestamp_from_datetime(t: Optional[datetime.datetime]) -> Optional[ProtoTimeStamp]:
     if t is None:
         return None
 

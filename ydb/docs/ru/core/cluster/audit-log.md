@@ -49,10 +49,10 @@ _Аудитный лог_ — это поток, который содержит
 
 ## Включение аудитного лога {#enabling-audit-log}
 
-Отправка событий в поток аудитного лога включается целиком для кластера {{ ydb-short-name }}. Для включения необходимо в [конфигурацию кластера](../deploy/configuration/config.md) добавить секцию `audit`, указать в ней одно из назначений для потока (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) или их комбинацию:
+Отправка событий в поток аудитного лога включается целиком для кластера {{ ydb-short-name }}. Для включения необходимо в [конфигурацию кластера](../deploy/configuration/config.md) добавить секцию `audit_config`, указать в ней одно из назначений для потока (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) или их комбинацию:
 
 ```yaml
-audit:
+audit_config:
   file_backend:
     format: audit_log_format
     file_path: "path_to_log_file"
@@ -75,7 +75,7 @@ audit:
 Пример конфигурации для сохранения аудитного лога в текстовом формате в файл `/var/log/ydb-audit.log`:
 
 ```yaml
-audit:
+audit_config:
   file_backend:
     format: TXT
     file_path: "/var/log/ydb-audit.log"
@@ -84,7 +84,7 @@ audit:
 Пример конфигурации для отправки аудитного лога в текстовом формате в Yandex Unified Agent с меткой `audit`, а также вывода его в `stderr` в формате JSON:
 
 ```yaml
-audit:
+audit_config:
   unified_agent_backend:
     format: TXT
     log_name: audit

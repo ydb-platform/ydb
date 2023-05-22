@@ -23,7 +23,7 @@ class TNodeRegistrationActor : public TActorBootstrapped<TNodeRegistrationActor>
 
     struct TNodeAuthorizationResult {
         bool IsAuthorized = false;
-        bool IsCertififateUsed = false;
+        bool IsCertificateUsed = false;
 
         operator bool() const {
             return IsAuthorized;
@@ -88,7 +88,7 @@ public:
         if (Request.HasPath()) {
             request->Record.SetPath(Request.GetPath());
         }
-        request->Record.SetAuthorizedByCertificate(nodeAuthorizationResult.IsCertififateUsed);
+        request->Record.SetAuthorizedByCertificate(nodeAuthorizationResult.IsCertificateUsed);
 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
 
@@ -185,7 +185,7 @@ public:
 
 private:
     TNodeAuthorizationResult IsNodeAuthorized() {
-        TNodeAuthorizationResult result {.IsAuthorized = false, .IsCertififateUsed = false};
+        TNodeAuthorizationResult result {.IsAuthorized = false, .IsCertificateUsed = false};
         auto* appdata = AppData();
         if (appdata && appdata->FeatureFlags.GetEnableDynamicNodeAuthorization() && DynamicNodeAuthorizationParams) {
             const auto& nodeAuthValues = FindClientCert();
@@ -212,7 +212,7 @@ private:
                 Response.MutableStatus()->SetReason("Cannot authorize node with host: " + host);
                 return result;
             }
-            result.IsCertififateUsed = true;
+            result.IsCertificateUsed = true;
         }
         result.IsAuthorized = true;
         return result;;

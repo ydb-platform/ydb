@@ -163,7 +163,7 @@ public:
     }
 
     ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
-        if (version >=Snapshot){
+        if (version >= Snapshot){
             return ResultIndexSchema;
         }
         return IndexVersions.GetSchema(version);

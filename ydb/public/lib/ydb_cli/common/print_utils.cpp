@@ -7,6 +7,9 @@ namespace NConsoleClient {
 
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors) {
     switch (entry.Type) {
+    case NScheme::ESchemeEntryType::ColumnStore:
+        o << colors.LightGrayColor();
+        break;
     case NScheme::ESchemeEntryType::Directory:
         o << colors.LightBlueColor();
         break;
@@ -79,6 +82,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "table";
     case NScheme::ESchemeEntryType::ColumnTable:
         return "column-table";
+    case NScheme::ESchemeEntryType::ColumnStore:
+        return "column-store";
     case NScheme::ESchemeEntryType::PqGroup:
     case NScheme::ESchemeEntryType::Topic:
         return "topic";

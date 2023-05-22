@@ -271,5 +271,11 @@ void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TActorId sender, const TString &path);
+
+TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
+
+TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+
 } // namespace NKqp
 } // namespace NKikimr

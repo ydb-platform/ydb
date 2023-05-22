@@ -1,25 +1,25 @@
 #include "portion_info.h"
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 
 namespace NKikimr::NOlap {
 
 TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array,
-                                      const std::shared_ptr<arrow::Field>& field,
-                                      const arrow::ipc::IpcWriteOptions& writeOptions)
-{
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
-    auto batch = arrow::RecordBatch::Make(schema, array->length(), {array});
+    const std::shared_ptr<arrow::Field>& field,
+    const TColumnSaver saver) {
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
+    auto batch = arrow::RecordBatch::Make(schema, array->length(), { array });
     Y_VERIFY(batch);
 
-    return NArrow::SerializeBatch(batch, writeOptions);
+    return saver.Apply(batch);
 }
 
 TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
                                         const std::shared_ptr<arrow::Field>& field,
                                         TColumnRecord&& record,
-                                        const arrow::ipc::IpcWriteOptions& writeOptions,
+                                        const TColumnSaver saver,
                                         const ui32 limitBytes) {
-    auto blob = SerializeColumn(array, field, writeOptions);
+    auto blob = SerializeColumn(array, field, saver);
     if (blob.size() >= limitBytes) {
         return {};
     }
@@ -46,34 +46,52 @@ void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>&
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                                const TString& tierName) {
+    const auto& indexInfo = snapshotSchema.GetIndexInfo();
+    const auto& minMaxColumns = indexInfo.GetMinMaxIdxColumns();
+
     TierName = tierName;
     Meta = {};
+    Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
 
-    auto& indexInfo = snapshotSchema.GetIndexInfo();
+    // Copy first and last key rows into new batch to free source batch's memory
+    std::shared_ptr<arrow::RecordBatch> edgesBatch;
+    {
+        auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetIndexKey());
+        std::vector<bool> bits(batch->num_rows(), false);
+        bits[0] = true;
+        bits[batch->num_rows() - 1] = true;
+
+        auto filter = NArrow::TColumnFilter(std::move(bits)).BuildArrowFilter(batch->num_rows());
+        auto res = arrow::compute::Filter(keyBatch, filter);
+        Y_VERIFY(res.ok());
+
+        edgesBatch = res->record_batch();
+        Y_VERIFY(edgesBatch->num_rows() == 1 || edgesBatch->num_rows() == 2);
+    }
+
+    Meta.IndexKeyStart = NArrow::TReplaceKey::FromBatch(edgesBatch, 0);
+    Meta.IndexKeyEnd = NArrow::TReplaceKey::FromBatch(edgesBatch, edgesBatch->num_rows() - 1);
+
     /// @note It does not add RawBytes info for snapshot columns, only for user ones.
     for (auto& [columnId, col] : indexInfo.Columns) {
+        const auto& columnName = col.Name;
         auto column = batch->GetColumnByName(col.Name);
         Y_VERIFY(column);
         Meta.ColumnMeta[columnId].NumRows = column->length();
         Meta.ColumnMeta[columnId].RawBytes = NArrow::GetArrayDataSize(column);
-    }
 
-    for (auto& mmxColumnId : indexInfo.GetMinMaxIdxColumns()) {
-        auto columnName = indexInfo.GetColumnName(mmxColumnId, true);
-        auto column = batch->GetColumnByName(columnName);
-        Y_VERIFY(column);
+        if (minMaxColumns.contains(columnId)) {
+            auto column = batch->GetColumnByName(columnName);
+            Y_VERIFY(column);
 
-        bool isSorted = false;
-        if (mmxColumnId == indexInfo.GetPKFirstColumnId()) {
-            FirstPkColumn = mmxColumnId;
-            isSorted = true;
+            bool isSorted = (columnId == Meta.FirstPkColumn);
+            AddMinMax(columnId, column, isSorted);
+            Y_VERIFY(Meta.HasMinMax(columnId));
         }
-        AddMinMax(mmxColumnId, column, isSorted);
-        Y_VERIFY(HasMinMax(mmxColumnId));
     }
 }
 
-TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
+TString TPortionInfo::GetMetadata(const TIndexInfo& indexInfo, const TColumnRecord& rec) const {
     NKikimrTxColumnShard::TIndexColumnMeta meta; // TODO: move proto serialization out of engines folder
     if (Meta.ColumnMeta.contains(rec.ColumnId)) {
         const auto& columnMeta = Meta.ColumnMeta.find(rec.ColumnId)->second;
@@ -89,7 +107,7 @@ TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
         }
     }
 
-    if (rec.ColumnId == FirstPkColumn) {
+    if (rec.ColumnId == Meta.FirstPkColumn) {
         auto* portionMeta = meta.MutablePortionMeta();
 
         switch (Meta.Produced) {
@@ -116,6 +134,16 @@ TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
         if (!TierName.empty()) {
             portionMeta->SetTierName(TierName);
         }
+
+        Y_VERIFY(Meta.IndexKeyStart && Meta.IndexKeyEnd);
+        const bool compositeIndexKey = indexInfo.GetIndexKey()->num_fields() > 1;
+        if (compositeIndexKey) {
+            // We know that IndexKeyStart and IndexKeyEnd are made from edgesBatch. Restore it.
+            auto edgesBatch = Meta.IndexKeyStart->RestoreBatch(indexInfo.GetIndexKey());
+            Y_VERIFY(edgesBatch && edgesBatch->ValidateFull().ok());
+            Y_VERIFY(edgesBatch->num_rows() == 1 || edgesBatch->num_rows() == 2);
+            portionMeta->SetIndexKeyBorders(NArrow::SerializeBatchNoCompression(edgesBatch));
+        }
     }
 
     TString out;
@@ -132,10 +160,13 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
     bool ok = meta.ParseFromString(rec.Metadata);
     Y_VERIFY(ok);
 
-    FirstPkColumn = indexInfo.GetPKFirstColumnId();
+    Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
     auto field = indexInfo.ArrowColumnField(rec.ColumnId);
+    const bool compositeIndexKey = indexInfo.GetIndexKey()->num_fields() > 1;
 
     if (meta.HasPortionMeta()) {
+        Y_VERIFY_DEBUG(rec.ColumnId == Meta.FirstPkColumn);
+
         auto& portionMeta = meta.GetPortionMeta();
         TierName = portionMeta.GetTierName();
 
@@ -148,6 +179,16 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
         } else if (portionMeta.GetIsEvicted()) {
             Meta.Produced = TPortionMeta::EVICTED;
         }
+
+        if (compositeIndexKey) {
+            Y_VERIFY(portionMeta.HasIndexKeyBorders());
+            auto edgesBatch = NArrow::DeserializeBatch(portionMeta.GetIndexKeyBorders(), indexInfo.GetIndexKey());
+            Y_VERIFY(edgesBatch && edgesBatch->ValidateFull().ok());
+            Y_VERIFY(edgesBatch->num_rows() == 1 || edgesBatch->num_rows() == 2);
+
+            Meta.IndexKeyStart = NArrow::TReplaceKey::FromBatch(edgesBatch, 0);
+            Meta.IndexKeyEnd = NArrow::TReplaceKey::FromBatch(edgesBatch, edgesBatch->num_rows() - 1);
+        }
     }
     if (meta.HasNumRows()) {
         Meta.ColumnMeta[rec.ColumnId].NumRows = meta.GetNumRows();
@@ -156,10 +197,22 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
         Meta.ColumnMeta[rec.ColumnId].RawBytes = meta.GetRawBytes();
     }
     if (meta.HasMinValue()) {
-        Meta.ColumnMeta[rec.ColumnId].Min = ConstantToScalar(meta.GetMinValue(), field->type());
+        auto scalar = ConstantToScalar(meta.GetMinValue(), field->type());
+        Meta.ColumnMeta[rec.ColumnId].Min = scalar;
+
+        // Restore Meta.IndexKeyStart for one column IndexKey
+        if (!compositeIndexKey && rec.ColumnId == Meta.FirstPkColumn) {
+            Meta.IndexKeyStart = NArrow::TReplaceKey::FromScalar(scalar);
+        }
     }
     if (meta.HasMaxValue()) {
-        Meta.ColumnMeta[rec.ColumnId].Max = ConstantToScalar(meta.GetMaxValue(), field->type());
+        auto scalar = ConstantToScalar(meta.GetMaxValue(), field->type());
+        Meta.ColumnMeta[rec.ColumnId].Max = scalar;
+
+        // Restore Meta.IndexKeyEnd for one column IndexKey
+        if (!compositeIndexKey && rec.ColumnId == Meta.FirstPkColumn) {
+            Meta.IndexKeyEnd = NArrow::TReplaceKey::FromScalar(scalar);
+        }
     }
 }
 
@@ -186,42 +239,14 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return Meta.ColumnMeta.find(columnId)->second.Max;
 }
 
-std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(const ui32 needCount, const bool reverse) const {
+std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_VERIFY(!Blobs.empty());
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ Field });
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(Blobs.size());
-    ui32 count = 0;
-    if (!reverse) {
-        for (auto& blob : Blobs) {
-            batches.push_back(blob.BuildRecordBatch(schema));
-            Y_VERIFY(batches.back());
-            if (count + batches.back()->num_rows() >= needCount) {
-                Y_VERIFY(count <= needCount);
-                batches.back() = batches.back()->Slice(0, needCount - count);
-            }
-            count += batches.back()->num_rows();
-            Y_VERIFY(count <= needCount);
-            if (count == needCount) {
-                break;
-            }
-        }
-    } else {
-        for (auto it = Blobs.rbegin(); it != Blobs.rend(); ++it) {
-            batches.push_back(it->BuildRecordBatch(schema));
-            Y_VERIFY(batches.back());
-            if (count + batches.back()->num_rows() >= needCount) {
-                Y_VERIFY(count <= needCount);
-                batches.back() = batches.back()->Slice(batches.back()->num_rows() - (needCount - count), needCount - count);
-            }
-            count += batches.back()->num_rows();
-            Y_VERIFY(count <= needCount);
-            if (count == needCount) {
-                break;
-            }
-        }
-        std::reverse(batches.begin(), batches.end());
+    for (auto& blob : Blobs) {
+        batches.push_back(blob.BuildRecordBatch(*Loader));
+        Y_VERIFY(batches.back());
     }
 
     auto res = arrow::Table::FromRecordBatches(batches);
@@ -232,12 +257,11 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble(con
 std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector< std::shared_ptr<arrow::Field>> fields;
-    ui64 limit = options.RecordsCountLimit ? *options.RecordsCountLimit : Max<ui64>();
     for (auto&& i : Columns) {
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
         }
-        columns.emplace_back(i.Assemble(limit, !options.ForwardAssemble));
+        columns.emplace_back(i.Assemble());
         fields.emplace_back(i.GetField());
     }
 

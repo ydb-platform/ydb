@@ -242,7 +242,7 @@ public:
         }
 
         if (TxCtx->HasUncommittedChangesRead) {
-            YQL_ENSURE(AppData()->FeatureFlags.GetEnableKqpImmediateEffects());
+            YQL_ENSURE(TxCtx->EnableImmediateEffects);
 
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
@@ -374,8 +374,8 @@ public:
         return (
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
-            type == NKikimrKqp::QUERY_TYPE_SQL_QUERY ||
-            type == NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY
+            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
         );
     }
 

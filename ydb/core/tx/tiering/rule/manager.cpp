@@ -16,15 +16,15 @@ NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuild
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTieringRule::TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     {
-        auto it = settings.GetFeatures().find(TTieringRule::TDecoder::DefaultColumn);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TTieringRule::TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Utf8(it->second));
+        auto fValue = settings.GetFeaturesExtractor().Extract(TTieringRule::TDecoder::DefaultColumn);
+        if (fValue) {
+            result.SetColumn(TTieringRule::TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Utf8(*fValue));
         }
     }
     {
-        auto it = settings.GetFeatures().find(TTieringRule::TDecoder::Description);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TTieringRule::TDecoder::Description, NMetadata::NInternal::TYDBValue::Utf8(it->second));
+        auto fValue = settings.GetFeaturesExtractor().Extract(TTieringRule::TDecoder::Description);
+        if (fValue) {
+            result.SetColumn(TTieringRule::TDecoder::Description, NMetadata::NInternal::TYDBValue::Utf8(*fValue));
         }
     }
     return result;

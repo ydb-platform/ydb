@@ -112,6 +112,17 @@ TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& 
         return node;
     }
 
+    if (auto index = node.Maybe<TKqlReadTableIndexRanges>()) {
+        return Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
+            .Table(read.Table())
+            .Ranges(read.Ranges())
+            .Columns(usedColumns.Cast())
+            .Settings(read.Settings())
+            .ExplainPrompt(read.ExplainPrompt())
+            .Index(index.Index().Cast())
+            .Done();
+    }
+
     return Build<TKqlReadTableRangesBase>(ctx, read.Pos())
         .CallableName(read.CallableName())
         .Table(read.Table())

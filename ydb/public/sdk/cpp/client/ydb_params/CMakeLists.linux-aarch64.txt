@@ -13,6 +13,7 @@ target_link_libraries(cpp-client-ydb_params PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  api-protos
   client-ydb_types-fatal_error_handlers
   cpp-client-ydb_value
 )

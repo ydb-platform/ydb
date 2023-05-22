@@ -17,7 +17,7 @@
 #include <ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/public/api/protos/federation_discovery.pb.h>
+#include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
 #include <ydb/public/api/grpc/draft/dummy.pb.h>
 

@@ -1,6 +1,8 @@
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_completion_impl.h"
+#include "blobstorage_pdisk_impl.h"
+#include "blobstorage_pdisk_log_cache.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
@@ -11,7 +13,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/protos/services.pb.h>
-#include <ydb/core/util/cache.h>
 #include <ydb/core/util/yverify_stream.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
@@ -1198,48 +1199,29 @@ class TCachedBlockDevice : public TRealBlockDevice {
         }
     };
 
-    struct TCacheRecord : public TThrRefBase {
-        char *Data;
-        ui64 Size;
-        TVector<ui64> BadOffsets;
-
-        TCacheRecord(TCachedReadCompletion *source)
-            : Data(static_cast<char*>(malloc(source->GetSize())))
-            , Size(source->GetSize())
-            , BadOffsets(std::move(source->GetBadOffsets()))
-        {
-            memcpy(Data, source->GetData(), source->GetSize());
-        }
-
-        ~TCacheRecord() {
-            free(Data);
-        }
-    };
-
     static constexpr ui64 MaxCount = 500ull;
     static constexpr ui64 MaxReadsInFly = 2;
 
     TMutex CacheMutex;
-    NCache::TLruCache<ui64, TIntrusivePtr<TCacheRecord>> Cache;
+    TLogCache Cache; // cache records MUST NOT cross chunk boundaries
     TMultiMap<ui64, TRead> ReadsForOffset;
     TMap<ui64, TCachedReadCompletion*> CurrentReads;
     ui64 ReadsInFly;
+    TPDisk * const PDisk;
 
     void UpdateReads() {
         auto nextIt = ReadsForOffset.begin();
         for (auto it = ReadsForOffset.begin(); it != ReadsForOffset.end(); it = nextIt) {
             nextIt++;
             TRead &read = it->second;
-            TIntrusivePtr<TCacheRecord> *found;
-            bool isFound = Cache.Find(read.Offset, found);
-            if (isFound) {
-                TCacheRecord &cached = *found->Get();
-                if (read.Size <= cached.Size) {
-                    memcpy(read.Data, cached.Data, read.Size);
+            const TLogCache::TCacheRecord* cached = Cache.Find(read.Offset);
+            if (cached) {
+                if (read.Size <= cached->Data.Size()) {
+                    memcpy(read.Data, cached->Data.GetData(), read.Size);
                     Mon.DeviceReadCacheHits->Inc();
                     Y_VERIFY(read.CompletionAction);
-                    for (size_t i = 0; i < cached.BadOffsets.size(); ++i) {
-                        read.CompletionAction->RegisterBadOffset(cached.BadOffsets[i]);
+                    for (size_t i = 0; i < cached->BadOffsets.size(); ++i) {
+                        read.CompletionAction->RegisterBadOffset(cached->BadOffsets[i]);
                     }
                     NoopAsyncHackForLogReader(read.CompletionAction, read.ReqId);
                     ReadsForOffset.erase(it);
@@ -1270,13 +1252,14 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            TIntrusivePtr<TSectorMap> sectorMap)
+            TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk)
         : TRealBlockDevice(path, pDiskId, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
                 maxQueuedCompletionActions, sectorMap)
-        , ReadsInFly(0)
+        , ReadsInFly(0), PDisk(pdisk)
     {}
 
     void ExecRead(TCachedReadCompletion *completion, TActorSystem *actorSystem) {
+        Y_ASSERT(PDisk);
         TStackVec<TCompletionAction*, 32> pendingActions;
         {
             TGuard<TMutex> guard(CacheMutex);
@@ -1284,28 +1267,42 @@ public:
             auto currentReadIt = CurrentReads.find(offset);
             Y_VERIFY(currentReadIt != CurrentReads.end());
             auto range = ReadsForOffset.equal_range(offset);
-            if (Cache.GetCount() >= MaxCount) {
-                Cache.Pop();
+
+            ui64 chunkIdx = offset / PDisk->Format.ChunkSize;
+            Y_VERIFY(chunkIdx < PDisk->ChunkState.size());
+            if (TChunkState::DATA_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
+                if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
+                    // TODO: split buffer if crossing chunk boundary instead of completely discarding it
+                    LOG_INFO_S(
+                        *ActorSystem, NKikimrServices::BS_DEVICE,
+                        "Skip caching log read due to chunk boundary crossing");
+                } else {
+                    if (Cache.Size() >= MaxCount) {
+                        Cache.Pop();
+                    }
+                    const char* dataPtr = static_cast<const char*>(completion->GetData());
+                    Cache.Insert(
+                        TLogCache::TCacheRecord(
+                            completion->GetOffset(),
+                            TRcBuf(TString(dataPtr, dataPtr + completion->GetSize())),
+                            completion->GetBadOffsets()));
+                }
             }
-            TIntrusivePtr<TCacheRecord> cacheRecord(new TCacheRecord(completion));
-            TIntrusivePtr<TCacheRecord> *junk;
-            Cache.Erase(offset);
-            bool isOk = Cache.Insert(offset, cacheRecord, junk);
-            Y_VERIFY(isOk);
+
             auto nextIt = range.first;
             for (auto it = range.first; it != range.second; it = nextIt) {
                 nextIt++;
                 TRead &read = it->second;
                 if (read.Size <= completion->GetSize()) {
                     if (read.Data != completion->GetData()) {
-                        memcpy(read.Data, cacheRecord->Data, read.Size);
+                        memcpy(read.Data, completion->GetData(), read.Size);
                         Mon.DeviceReadCacheHits->Inc();
                     } else {
                         Mon.DeviceReadCacheMisses->Inc();
                     }
                     Y_VERIFY(read.CompletionAction);
-                    for (size_t i = 0; i < cacheRecord->BadOffsets.size(); ++i) {
-                        read.CompletionAction->RegisterBadOffset(cacheRecord->BadOffsets[i]);
+                    for (ui64 badOffset : completion->GetBadOffsets()) {
+                        read.CompletionAction->RegisterBadOffset(badOffset);
                     }
                     pendingActions.push_back(read.CompletionAction);
                     ReadsForOffset.erase(it);
@@ -1360,6 +1357,11 @@ public:
         Cache.Clear();
     }
 
+    virtual void EraseCacheRange(ui64 begin, ui64 end) override {
+        TGuard<TMutex> guard(CacheMutex);
+        Cache.EraseRange(begin, end);
+    }
+
     void Stop() override {
         TRealBlockDevice::Stop();
         for (auto it = CurrentReads.begin(); it != CurrentReads.end(); ++it) {
@@ -1377,14 +1379,14 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        TIntrusivePtr<TSectorMap> sectorMap) {
+        TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk) {
     return new TCachedBlockDevice(path, pDiskId, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, sectorMap);
+            maxQueuedCompletionActions, sectorMap, pdisk);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem) {
-    IBlockDevice *device = CreateRealBlockDevice(path, 0, mon, 0, 0, 4, flags, 8, sectorMap);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk) {
+    IBlockDevice *device = CreateRealBlockDevice(path, 0, mon, 0, 0, 4, flags, 8, sectorMap, pdisk);
     device->Initialize(actorSystem, {});
     return device;
 }

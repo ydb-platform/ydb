@@ -820,16 +820,12 @@ message TDataTransaction {
 }
 
 message TConfigTransaction {
-    optional uint64 SchemeShardId = 1;
     optional TPQTabletConfig TabletConfig = 2;
     optional TBootstrapConfig BootstrapConfig = 3;
 }
 
 message TEvProposeTransaction {
-    oneof Source {
-        NActorsProto.TActorId Actor = 1;
-        uint64 Tablet = 5;
-    }
+    optional NActorsProto.TActorId SourceActor = 1;
     optional uint64 TxId = 2;
     oneof TxBody {
         TDataTransaction Data = 3;
@@ -920,15 +916,11 @@ message TTransaction {
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
-    optional uint64 SchemeShardId = 16;
 
     //
     // получатель результата
     //
-    oneof Source {
-        NActorsProto.TActorId Actor = 14;
-        uint64 Tablet = 15;
-    }
+    optional NActorsProto.TActorId SourceActor = 14;
 };
 
 message TTabletTxInfo {

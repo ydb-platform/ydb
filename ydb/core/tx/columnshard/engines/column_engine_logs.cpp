@@ -34,8 +34,8 @@ bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& por
                 goodCompacted.insert(portionInfo.Portion());
             }
 
-            NArrow::TReplaceKey start = portionInfo.EffKeyStart();
-            NArrow::TReplaceKey end = portionInfo.EffKeyEnd();
+            const NArrow::TReplaceKey& start = portionInfo.IndexKeyStart();
+            const NArrow::TReplaceKey& end = portionInfo.IndexKeyEnd();
 
             points[start].push_back(&portionInfo);
             points[end].push_back(nullptr);
@@ -103,13 +103,13 @@ bool InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& por
 
         // Prevent merge of compacted portions with no intersections
         if (filtered.contains(curPortion)) {
-            auto start = portionInfo.EffKeyStart();
+            const auto& start = portionInfo.IndexKeyStart();
             borders.emplace_back(TMark(start));
         } else {
             // nextToGood borders potentially split good compacted portions into 2 parts:
             // the first one without intersections and the second with them
             if (goodCompacted.contains(curPortion) || nextToGood.contains(curPortion)) {
-                auto start = portionInfo.EffKeyStart();
+                const auto& start = portionInfo.IndexKeyStart();
                 borders.emplace_back(TMark(start));
             }
 
@@ -524,6 +524,8 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     if (changes->CompactionInfo->InGranule) {
         const TSnapshot completedSnap = std::max(LastSnapshot, outdatedSnapshot);
         if (!InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, Limits, completedSnap, changes->MergeBorders)) {
+            // Return granule to Compation list. This is equal to single compaction worker behaviour.
+            CompactionGranules.insert(granule);
             return {};
         }
     } else {
@@ -758,6 +760,8 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         Y_VERIFY(changes->ApplySnapshot == snapshot);
     }
 
+    const auto& indexInfo = GetIndexInfo();
+
     // Update tmp granules with real ids
     auto granuleRemap = changes->TmpToNewGranules(LastGranule);
     ui64 portion = LastPortion;
@@ -772,11 +776,11 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
                 TPortionMeta::COMPACTED : TPortionMeta::SPLIT_COMPACTED;
         }
 
-        portionInfo.UpdateRecordsMeta(produced);
+        portionInfo.UpdateRecordsMeta(indexInfo, produced);
     }
 
     for (auto& [portionInfo, _] : changes->PortionsToEvict) {
-        portionInfo.UpdateRecordsMeta(TPortionMeta::EVICTED);
+        portionInfo.UpdateRecordsMeta(indexInfo, TPortionMeta::EVICTED);
     }
 
     for (auto& [_, id] : changes->PortionsToMove) {
@@ -794,6 +798,12 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     }
 
     if (!ApplyChanges(db, *changes, snapshot, false)) { // validate only
+        if (changes->IsCompaction()) {
+            // Return granule to Compation list. This is equal to single compaction worker behaviour.
+            for (const auto& portionInfo : changes->SwitchedPortions) {
+                CompactionGranules.insert(portionInfo.Granule());
+            }
+        }
         return false;
     }
     bool ok = ApplyChanges(db, *changes, snapshot, true);
@@ -905,7 +915,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             auto& granuleStart = Granules[granule]->Record.Mark;
 
             if (!apply) { // granule vs portion minPK
-                auto portionStart = portionInfo.EffKeyStart();
+                const auto& portionStart = portionInfo.IndexKeyStart();
                 if (portionStart < granuleStart) {
                     LOG_S_ERROR("Cannot update invalid portion " << portionInfo
                         << " start: " << TMark(portionStart).ToString()
@@ -1022,7 +1032,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
                 ? Granules[granule]->Record.Mark
                 : changes.NewGranules.find(granule)->second.second.GetBorder();
 
-            auto portionStart = portionInfo.EffKeyStart();
+            const auto& portionStart = portionInfo.IndexKeyStart();
             if (portionStart < granuleStart) {
                 LOG_S_ERROR("Cannot insert invalid portion " << portionInfo
                     << " start: " << TMark(portionStart).ToString()
@@ -1218,23 +1228,40 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     }
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
-    std::optional<TMap<TMark, ui64>::const_iterator> previousIterator;
-    for (auto&& i : pkRangesFilter) {
-        std::optional<NArrow::TReplaceKey> keyFrom = i.GetPredicateFrom().ExtractKey(GetIndexKey());
-        std::optional<NArrow::TReplaceKey> keyTo = i.GetPredicateTo().ExtractKey(GetIndexKey());
+    std::optional<TMarksMap::const_iterator> previousIterator;
+    const bool compositeMark = GetIndexKey()->num_fields() > 1;
+
+    for (auto&& filter : pkRangesFilter) {
+        std::optional<NArrow::TReplaceKey> indexKeyFrom = filter.KeyFrom(GetIndexKey());
+        std::optional<NArrow::TReplaceKey> indexKeyTo = filter.KeyTo(GetIndexKey());
+
+        std::shared_ptr<arrow::Scalar> keyFrom;
+        std::shared_ptr<arrow::Scalar> keyTo;
+        if (indexKeyFrom) {
+            keyFrom = NArrow::TReplaceKey::ToScalar(*indexKeyFrom, 0);
+        }
+        if (indexKeyTo) {
+            keyTo = NArrow::TReplaceKey::ToScalar(*indexKeyTo, 0);
+        }
+
         auto it = pathGranules.begin();
         if (keyFrom) {
-            it = pathGranules.upper_bound(TMark(*keyFrom));
-            --it;
+            it = pathGranules.lower_bound(*keyFrom);
+            if (it != pathGranules.begin()) {
+                if (it == pathGranules.end() || compositeMark || *keyFrom != it->first) {
+                    // TODO: better check if we really need an additional granule before the range
+                    --it;
+                }
+            }
         }
+
         if (previousIterator && (previousIterator == pathGranules.end() || it->first < (*previousIterator)->first)) {
             it = *previousIterator;
         }
         for (; it != pathGranules.end(); ++it) {
             auto& mark = it->first;
             ui64 granule = it->second;
-
-            if (keyTo && *keyTo < mark.GetBorder()) {
+            if (keyTo && mark > *keyTo) {
                 break;
             }
 
@@ -1259,11 +1286,13 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         }
                     }
                     Y_VERIFY(outPortion.Produced());
-                    if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")("granule", granule)("portion", portionInfo->Portion());
+                    if (!compositeMark && !pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
+                            ("granule", granule)("portion", portionInfo->Portion());
                         continue;
                     } else {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")("granule", granule)("portion", portionInfo->Portion());
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
+                            ("granule", granule)("portion", portionInfo->Portion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));
                     granuleHasDataForSnaphsot = true;
@@ -1284,9 +1313,8 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
     ui64 sumSize = 0;
     ui64 sumMaxSize = 0;
     size_t activeCount = 0;
-    std::shared_ptr<arrow::Scalar> minPk0;
-    std::shared_ptr<arrow::Scalar> maxPk0;
-    bool pkEqual = true;
+    THashSet<NArrow::TReplaceKey> borders;
+    bool differentBorders = false;
 
     for (const auto& [_, info] : portions) {
         // We need only actual portions here (with empty XPlanStep:XTxId)
@@ -1296,19 +1324,11 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
             continue;
         }
 
-        if (pkEqual) {
-            const auto [minPkCurrent, maxPkCurrent] = info.MinMaxValue(info.FirstPkColumn);
-            // Check that all pks equal to each other.
-            if ((pkEqual = bool(minPkCurrent) && bool(maxPkCurrent))) {
-                if (minPk0 && maxPk0) {
-                    pkEqual = arrow::ScalarEquals(*minPk0, *minPkCurrent) && arrow::ScalarEquals(*maxPk0, *maxPkCurrent);
-                } else {
-                    pkEqual = arrow::ScalarEquals(*minPkCurrent, *maxPkCurrent);
-
-                    minPk0 = minPkCurrent;
-                    maxPk0 = maxPkCurrent;
-                }
-            }
+        // Find at least 2 unique borders
+        if (!differentBorders) {
+            borders.insert(info.IndexKeyStart());
+            borders.insert(info.IndexKeyEnd());
+            differentBorders = (borders.size() > 1);
         }
 
         auto sizes = info.BlobsSizes();
@@ -1325,7 +1345,7 @@ static bool NeedSplit(const THashMap<ui64, TPortionInfo>& portions, const TCompa
         return false;
     }
 
-    return !pkEqual && (sumMaxSize >= limits.GranuleBlobSplitSize || sumSize >= limits.GranuleOverloadSize);
+    return differentBorders && (sumMaxSize >= limits.GranuleBlobSplitSize || sumSize >= limits.GranuleOverloadSize);
 }
 
 std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {
@@ -1335,9 +1355,8 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
 
     ui64 granule = 0;
     bool inGranule = true;
-    auto it = CompactionGranules.upper_bound(lastCompactedGranule);
 
-    while (!CompactionGranules.empty()) {
+    for (auto it = CompactionGranules.upper_bound(lastCompactedGranule); !CompactionGranules.empty();) {
         // Start from the beggining if the end is reached.
         if (it == CompactionGranules.end()) {
             it = CompactionGranules.begin();
@@ -1351,9 +1370,11 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompact
         if (NeedSplit(gi->second->Portions, Limits, inserted)) {
             inGranule = false;
             granule = *it;
+            CompactionGranules.erase(it);
             break;
         } else if (inserted) {
             granule = *it;
+            CompactionGranules.erase(it);
             break;
         }
 

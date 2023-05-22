@@ -91,7 +91,8 @@ struct TSetup {
         Reset();
         Explorer.Walk(pgm.GetNode(), *Env);
         TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(NodeFactory),
-            FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, UseLLVM ? "" : "OFF", EGraphPerProcess::Multi);
+            FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
+             UseLLVM ? "" : "OFF", EGraphPerProcess::Multi, nullptr, nullptr, nullptr);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));

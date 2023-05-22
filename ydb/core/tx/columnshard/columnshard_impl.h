@@ -25,7 +25,7 @@ namespace NKikimr::NColumnShard {
 extern bool gAllowLogBatchingDefaultValue;
 
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent);
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent);
+IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
 IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent);
 IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
@@ -44,6 +44,8 @@ IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui6
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 
 struct TSettings {
+    static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 2;
+
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
 
     TControlWrapper BlobWriteGrouppingEnabled;
@@ -97,7 +99,6 @@ public:
     bool HasCleanup() const { return Activity & CLEAN; }
     bool HasTtl() const { return Activity & TTL; }
     bool HasAll() const { return Activity == ALL; }
-    bool IndexationOnly() const { return Activity == INDEX; }
 
 private:
     EBackActivity Activity = NONE;
@@ -396,7 +397,8 @@ private:
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
-    bool ActiveIndexingOrCompaction = false;
+    bool ActiveIndexing = false;
+    ui32 ActiveCompaction = 0;
     bool ActiveCleanup = false;
     bool ActiveTtl = false;
     ui32 ActiveEvictions = 0;
@@ -465,8 +467,8 @@ private:
 
     void ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly = false);
 
-    std::unique_ptr<TEvPrivate::TEvIndexing> SetupIndexation();
-    std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();
+    bool SetupIndexation();
+    bool SetupCompaction();
     std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {},
                                                       bool force = false);
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();

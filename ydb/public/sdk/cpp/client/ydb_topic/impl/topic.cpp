@@ -284,12 +284,26 @@ ui64 TPartitionStats::GetBytesWrittenPerDay() const {
 
 TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats)
     : CommittedOffset_(partitionStats.committed_offset())
+    , LastReadOffset_(partitionStats.last_read_offset())
+    , ReaderName_(partitionStats.reader_name())
+    , ReadSessionId_(partitionStats.read_session_id())
 {}
 
 ui64 TPartitionConsumerStats::GetCommittedOffset() const {
     return CommittedOffset_;
 }
 
+ui64 TPartitionConsumerStats::GetLastReadOffset() const {
+    return LastReadOffset_;
+}
+
+TString TPartitionConsumerStats::GetReaderName() const {
+    return ReaderName_;
+}
+
+TString TPartitionConsumerStats::GetReadSessionId() const {
+    return ReadSessionId_;
+}
 
 
 TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)

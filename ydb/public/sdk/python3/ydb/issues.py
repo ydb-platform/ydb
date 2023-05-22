@@ -160,10 +160,7 @@ def _format_issues(issues):
     if not issues:
         return ""
 
-    return " ,".join(
-        text_format.MessageToString(issue, as_utf8=False, as_one_line=True)
-        for issue in issues
-    )
+    return " ,".join(text_format.MessageToString(issue, as_utf8=False, as_one_line=True) for issue in issues)
 
 
 def _format_response(response):

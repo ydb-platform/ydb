@@ -23,7 +23,6 @@ target_link_libraries(cpp-client-ydb_value PUBLIC
   cpp-containers-stack_vector
   api-protos
   impl-ydb_internal-value_helpers
-  cpp-client-ydb_proto
   client-ydb_types-fatal_error_handlers
   yql-public-decimal
   ydb-library-uuid

@@ -32,13 +32,10 @@ class DiscoveryEndpointsResolver(_DiscoveryEndpointsResolver):
             await connection.connection_ready()
         except Exception:
             self._add_debug_details(
-                'Failed to establish connection to YDB discovery endpoint: "%s". Check endpoint correctness.'
-                % endpoint
+                'Failed to establish connection to YDB discovery endpoint: "%s". Check endpoint correctness.' % endpoint
             )
             return None
-        self.logger.debug(
-            "Resolving endpoints for database %s", self._driver_config.database
-        )
+        self.logger.debug("Resolving endpoints for database %s", self._driver_config.database)
 
         try:
             resolved = await connection(
@@ -46,9 +43,7 @@ class DiscoveryEndpointsResolver(_DiscoveryEndpointsResolver):
                 _apis.DiscoveryService.Stub,
                 _apis.DiscoveryService.ListEndpoints,
                 DiscoveryResult.from_response,
-                settings=settings_impl.BaseRequestSettings().with_timeout(
-                    self._ready_timeout
-                ),
+                settings=settings_impl.BaseRequestSettings().with_timeout(self._ready_timeout),
             )
 
             self._add_debug_details(

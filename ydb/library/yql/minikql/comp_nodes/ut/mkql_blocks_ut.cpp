@@ -2,8 +2,39 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
+#include <arrow/compute/exec_internal.h>
+#include <arrow/array/builder_primitive.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
+
+namespace {
+    arrow::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
+        const std::vector<arrow::Datum>& argDatums, arrow::compute::ExecContext& execContext) {
+        const auto& kernel = kernelNode->GetArrowKernel();        
+        arrow::compute::KernelContext kernelContext(&execContext);
+        std::unique_ptr<arrow::compute::KernelState> state;
+        auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+        ARROW_OK(executor->Init(&kernelContext, { &kernel, kernelNode->GetArgsDesc(), nullptr }));
+        auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
+        ARROW_OK(executor->Execute(argDatums, listener.get()));
+        return executor->WrapResults(argDatums, listener->values());
+    }
+
+    void ExecuteAllKernels(std::vector<arrow::Datum>& datums, const TArrowKernelsTopology* topology, arrow::compute::ExecContext& execContext) {
+        for (ui32 i = 0; i < topology->Items.size(); ++i) {
+            std::vector<arrow::Datum> argDatums;
+            argDatums.reserve(topology->Items[i].Inputs.size());
+            for (auto j : topology->Items[i].Inputs) {
+                argDatums.emplace_back(datums[j]);
+            }
+
+            arrow::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
+            datums[i + topology->InputArgsCount] = output;
+        }        
+    }
+}
+
 Y_UNIT_TEST_SUITE(TMiniKQLBlocksTest) {
 Y_UNIT_TEST(TestEmpty) {
     TSetup<false> setup;
@@ -457,7 +488,121 @@ Y_UNIT_TEST(TestWideFromBlocks) {
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
 }
+}
 
+Y_UNIT_TEST_SUITE(TMiniKQLDirectKernelTest) {
+Y_UNIT_TEST(Simple) {
+    TSetup<false> setup;
+    auto& pb = *setup.PgmBuilder;
+
+    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto boolBlocksType = pb.NewBlockType(boolType, TBlockType::EShape::Many);
+    const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
+    const auto arg1 = pb.Arg(boolBlocksType);
+    const auto arg2 = pb.Arg(ui64BlocksType);
+    const auto arg3 = pb.Arg(ui64BlocksType);
+    const auto ifNode = pb.BlockIf(arg1, arg2, arg3);
+    const auto eqNode = pb.BlockFunc("Equals", boolBlocksType, { ifNode, arg2 });
+
+    const auto graph = setup.BuildGraph(eqNode, {arg1.GetNode(), arg2.GetNode(), arg3.GetNode()});
+    const auto topology = graph->GetKernelsTopology();
+    UNIT_ASSERT(topology);
+    UNIT_ASSERT_VALUES_EQUAL(topology->InputArgsCount, 3);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Node->GetKernelName(), "If");
+    const std::vector<ui32> expectedInputs1{{0, 1, 2}};
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[1].Node->GetKernelName(), "Equals");
+    const std::vector<ui32> expectedInputs2{{3, 1}};
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[1].Inputs, expectedInputs2);
+
+    arrow::compute::ExecContext execContext;
+    const size_t blockSize = 100000;
+    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    {
+        arrow::UInt8Builder builder1(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool()), builder3(execContext.memory_pool());
+        ARROW_OK(builder1.Reserve(blockSize));
+        ARROW_OK(builder2.Reserve(blockSize));
+        ARROW_OK(builder3.Reserve(blockSize));
+        for (size_t i = 0; i < blockSize; ++i) {
+            builder1.UnsafeAppend(i & 1);
+            builder2.UnsafeAppend(i);
+            builder3.UnsafeAppend(3 * i);
+        }
+
+        std::shared_ptr<arrow::ArrayData> data1;
+        ARROW_OK(builder1.FinishInternal(&data1));
+        std::shared_ptr<arrow::ArrayData> data2;
+        ARROW_OK(builder2.FinishInternal(&data2));
+        std::shared_ptr<arrow::ArrayData> data3;
+        ARROW_OK(builder3.FinishInternal(&data3));
+        datums[0] = data1;
+        datums[1] = data2;
+        datums[2] = data3;
+    }
+
+    ExecuteAllKernels(datums, topology, execContext);
+
+    auto res = datums.back().array()->GetValues<ui8>(1);
+    for (size_t i = 0; i < blockSize; ++i) {
+        auto expected = (((i & 1) ? i : i * 3) == i) ? 1 : 0;
+        UNIT_ASSERT_VALUES_EQUAL(res[i], expected);
+    }
+}
+
+Y_UNIT_TEST(WithScalars) {
+    TSetup<false> setup;
+    auto& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
+    const auto scalar = pb.AsScalar(pb.NewDataLiteral(false));
+    const auto arg1 = pb.Arg(ui64BlocksType);
+    const auto arg2 = pb.Arg(ui64BlocksType);
+    const auto ifNode = pb.BlockIf(scalar, arg1, arg2);
+
+    const auto graph = setup.BuildGraph(ifNode, {arg1.GetNode(), arg2.GetNode()});
+    const auto topology = graph->GetKernelsTopology();
+    UNIT_ASSERT(topology);
+    UNIT_ASSERT_VALUES_EQUAL(topology->InputArgsCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Node->GetKernelName(), "AsScalar");
+    const std::vector<ui32> expectedInputs1;
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[1].Node->GetKernelName(), "If");
+    const std::vector<ui32> expectedInputs2{{2, 0, 1}};
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[1].Inputs, expectedInputs2);
+
+    arrow::compute::ExecContext execContext;
+    const size_t blockSize = 100000;
+    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    {
+        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        ARROW_OK(builder1.Reserve(blockSize));
+        ARROW_OK(builder2.Reserve(blockSize));
+        for (size_t i = 0; i < blockSize; ++i) {
+            builder1.UnsafeAppend(i);
+            builder2.UnsafeAppend(3 * i);
+        }
+
+        std::shared_ptr<arrow::ArrayData> data1;
+        ARROW_OK(builder1.FinishInternal(&data1));
+        std::shared_ptr<arrow::ArrayData> data2;
+        ARROW_OK(builder2.FinishInternal(&data2));
+        datums[0] = data1;
+        datums[1] = data2;
+    }
+
+    ExecuteAllKernels(datums, topology, execContext);
+
+    auto res = datums.back().array()->GetValues<ui64>(1);
+    for (size_t i = 0; i < blockSize; ++i) {
+        auto expected = 3 * i;
+        UNIT_ASSERT_VALUES_EQUAL(res[i], expected);
+    }
+}
 
 }
 

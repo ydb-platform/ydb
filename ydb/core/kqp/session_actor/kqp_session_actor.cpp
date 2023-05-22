@@ -271,8 +271,8 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
-            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
                 return true;
 
             // should not be compiled. TODO: forward to request executer
@@ -504,7 +504,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables());
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
@@ -523,7 +523,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>();
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
     }
 
@@ -545,6 +545,10 @@ public:
         TTimerGuard timer(this);
         auto *response = ev->Get();
 
+        if (QueryState) {
+            QueryState->Orbit = std::move(response->Orbit);
+        }
+
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
             auto& issues = response->Issues;
             ReplyQueryError(StatusForSnapshotError(response->Status), "", MessageFromIssues(issues));
@@ -558,7 +562,8 @@ public:
 
     void BeginTx(const Ydb::Table::TransactionSettings& settings) {
         QueryState->TxId = UlidGen.Next();
-        QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+        QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
+            AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
@@ -605,7 +610,7 @@ public:
             }
         } else {
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
-                AppData()->TimeProvider, AppData()->RandomProvider);
+                AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         }
@@ -620,9 +625,8 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        bool enableImmediateEffects = Config->FeatureFlags.GetEnableKqpImmediateEffects();
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
-            enableImmediateEffects, EKikimrQueryType::Dml);
+            EKikimrQueryType::Dml);
         if (!success) {
             YQL_ENSURE(!issues.Empty());
             ReplyQueryError(GetYdbStatus(issues), "", MessageFromIssues(issues));
@@ -644,8 +648,8 @@ public:
                 YQL_ENSURE(
                     type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
                     type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
-                    type == NKikimrKqp::QUERY_TYPE_SQL_QUERY ||
-                    type == NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY
+                    type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+                    type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
                 );
                 break;
 
@@ -946,7 +950,7 @@ public:
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
             if (txCtx.HasUncommittedChangesRead) {
-                YQL_ENSURE(Config->FeatureFlags.GetEnableKqpImmediateEffects());
+                YQL_ENSURE(txCtx.EnableImmediateEffects);
                 request.UseImmediateEffects = true;
             }
         }
@@ -1136,8 +1140,8 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
-            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY: {
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();

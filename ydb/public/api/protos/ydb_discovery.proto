@@ -49,7 +49,7 @@ message WhoAmIRequest {
     // Include user groups in response
     bool include_groups = 1;
 }
-	
+
 message WhoAmIResult {
     // User SID (Security ID)
     string user = 1;
@@ -58,5 +58,53 @@ message WhoAmIResult {
 }
 
 message WhoAmIResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message NodeLocation {
+    // compatibility section -- will be removed in future versions
+    optional uint32 data_center_num = 1 [deprecated=true];
+    optional uint32 room_num = 2 [deprecated=true];
+    optional uint32 rack_num = 3 [deprecated=true];
+    optional uint32 body_num = 4 [deprecated=true];
+    optional uint32 body = 100500 [deprecated=true]; // for compatibility with WalleLocation
+
+    optional string data_center = 10;
+    optional string module = 20;
+    optional string rack = 30;
+    optional string unit = 40;
+}
+
+message NodeInfo {
+    optional uint32 node_id = 1;
+    optional string host = 2;
+    optional uint32 port = 3;
+    optional string resolve_host = 4;
+    optional string address = 5;
+    optional NodeLocation location = 6;
+    optional uint64 expire = 7;
+}
+
+message NodeRegistrationRequest {
+    optional string host = 1;
+    optional uint32 port = 2;
+    optional string resolve_host = 3;
+    optional string address = 4;
+    optional NodeLocation location = 5;
+    optional string domain_path = 6;
+    optional bool fixed_node_id = 7;
+    optional string path = 8;
+}
+
+message NodeRegistrationResult {
+    optional uint32 node_id = 1;
+    optional string domain_path = 2;
+    optional uint64 expire = 3;
+    repeated NodeInfo nodes = 4;
+    optional uint64 scope_tablet_id = 5;
+    optional uint64 scope_path_id = 6;
+}
+
+message NodeRegistrationResponse {
     Ydb.Operations.Operation operation = 1;
 }

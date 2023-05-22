@@ -41,6 +41,8 @@ const TTypeAnnotationNode* TConstraintNode::GetSubTypeByPath(const TPathType& pa
     switch (type.GetKind()) {
         case ETypeAnnotationKind::Optional:
             return GetSubTypeByPath(path, *type.Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::List: // TODO: Remove later: temporary stub for single AsList in FlatMap and same cases.
+            return GetSubTypeByPath(path, *type.Cast<TListExprType>()->GetItemType());
         case ETypeAnnotationKind::Struct:
             if (const auto itemType = type.Cast<TStructExprType>()->FindItemType(path.front()))
                 return GetSubTypeByPath(tail(path), *itemType);
@@ -339,6 +341,9 @@ const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLe
 }
 
 const TSortedConstraintNode* TSortedConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& filter) const {
+    if (!filter)
+        return this;
+
     TContainerType sorted;
     sorted.reserve(Content_.size());
     for (const auto& item : Content_) {
@@ -358,6 +363,9 @@ const TSortedConstraintNode* TSortedConstraintNode::FilterFields(TExprContext& c
 }
 
 const TSortedConstraintNode* TSortedConstraintNode::RenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    if (!reduce)
+        return this;
+
     TContainerType sorted;
     sorted.reserve(Content_.size());
     for (const auto& item : Content_) {
@@ -589,6 +597,9 @@ const TChoppedConstraintNode* TChoppedConstraintNode::MakeCommon(const std::vect
 
 const TChoppedConstraintNode*
 TChoppedConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!predicate)
+        return this;
+
     TFullSetType chopped;
     chopped.reserve(Sets_.size());
     for (const auto& set : Sets_) {
@@ -610,6 +621,9 @@ TChoppedConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& predi
 
 const TChoppedConstraintNode*
 TChoppedConstraintNode::RenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    if (!reduce)
+        return this;
+
     TFullSetType chopped;
     chopped.reserve(Sets_.size());
     for (const auto& set : Sets_) {
@@ -851,6 +865,9 @@ void TUniqueConstraintNodeBase<Distinct>::FilterUncompleteReferences(TSetType& r
 template<bool Distinct>
 const TUniqueConstraintNodeBase<Distinct>*
 TUniqueConstraintNodeBase<Distinct>::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!predicate)
+        return this;
+
     auto sets = Sets_;
     for (auto it = sets.cbegin(); sets.cend() != it;) {
         if (std::all_of(it->cbegin(), it->cend(), predicate))
@@ -864,6 +881,9 @@ TUniqueConstraintNodeBase<Distinct>::FilterFields(TExprContext& ctx, const TPath
 template<bool Distinct>
 const TUniqueConstraintNodeBase<Distinct>*
 TUniqueConstraintNodeBase<Distinct>::RenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    if (!reduce)
+        return this;
+
     TFullSetType sets;
     sets.reserve(Sets_.size());
     for (const auto& set : Sets_) {
@@ -880,6 +900,10 @@ TUniqueConstraintNodeBase<Distinct>::RenameFields(TExprContext& ctx, const TPath
                     newSets.back().insert_unique(newPath);
                 }
             }
+
+            // TODO: Fix it by use sets of duplicated columns.
+            if (newSets.size() > 42U)
+                return nullptr;
         }
         if (set.size() == newSets.front().size())
             sets.insert_unique(newSets.cbegin(), newSets.cend());
@@ -1111,6 +1135,9 @@ TPartOfConstraintNode<TOriginalConstraintNode>::ExtractField(TExprContext& ctx, 
 template<class TOriginalConstraintNode>
 const TPartOfConstraintNode<TOriginalConstraintNode>*
 TPartOfConstraintNode<TOriginalConstraintNode>::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!predicate)
+        return this;
+
     auto mapping = Mapping_;
     for (auto part = mapping.begin(); mapping.end() != part;) {
         for (auto it = part->second.cbegin(); part->second.cend() != it;) {
@@ -1131,6 +1158,9 @@ TPartOfConstraintNode<TOriginalConstraintNode>::FilterFields(TExprContext& ctx, 
 template<class TOriginalConstraintNode>
 const TPartOfConstraintNode<TOriginalConstraintNode>*
 TPartOfConstraintNode<TOriginalConstraintNode>::RenameFields(TExprContext& ctx, const TPathReduce& rename) const {
+    if (!rename)
+        return this;
+
     TMapType mapping(Mapping_.size());
     for (const auto& part : Mapping_) {
         TPartType map;
@@ -1531,6 +1561,9 @@ const TPassthroughConstraintNode* TPassthroughConstraintNode::ExtractField(TExpr
 
 const TPassthroughConstraintNode*
 TPassthroughConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!predicate)
+        return this;
+
     TMapType passtrought(Mapping_.size());
     for (const auto& part : Mapping_) {
         TPartType mapping;
@@ -1550,6 +1583,9 @@ TPassthroughConstraintNode::FilterFields(TExprContext& ctx, const TPathFilter& p
 
 const TPassthroughConstraintNode*
 TPassthroughConstraintNode::RenameFields(TExprContext& ctx, const TPathReduce& rename) const {
+    if (!rename)
+        return this;
+
     TMapType passtrought(Mapping_.size());
     for (const auto& part : Mapping_) {
         TPartType mapping;
@@ -2113,6 +2149,20 @@ void Out<NYql::TConstraintNode::TPathType>(IOutputStream& out, const NYql::TCons
             out.Write(c);
         }
     }
+}
+
+template<>
+void Out<NYql::TConstraintNode::TSetType>(IOutputStream& out, const NYql::TConstraintNode::TSetType& c) {
+    out.Write('{');
+    bool first = true;
+    for (const auto& path : c) {
+        if (first)
+            first = false;
+        else
+            out.Write(',');
+        out << path;
+    }
+    out.Write('}');
 }
 
 template<>

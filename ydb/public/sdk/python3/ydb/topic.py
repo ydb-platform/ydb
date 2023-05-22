@@ -11,10 +11,13 @@ __all__ = [
     "TopicMeteringMode",
     "TopicReader",
     "TopicReaderAsyncIO",
+    "TopicReaderSelector",
     "TopicReaderSettings",
     "TopicStatWindow",
+    "TopicWriteResult",
     "TopicWriter",
     "TopicWriterAsyncIO",
+    "TopicWriterInitInfo",
     "TopicWriterMessage",
     "TopicWriterSettings",
 ]
@@ -30,6 +33,7 @@ from . import driver
 
 from ._topic_reader.topic_reader import (
     PublicReaderSettings as TopicReaderSettings,
+    PublicTopicSelector as TopicReaderSelector,
 )
 
 from ._topic_reader.topic_reader_sync import TopicReaderSync as TopicReader
@@ -42,6 +46,8 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     PublicWriterSettings as TopicWriterSettings,
     PublicMessage as TopicWriterMessage,
     RetryPolicy as TopicWriterRetryPolicy,
+    PublicWriterInitInfo as TopicWriterInitInfo,
+    PublicWriteResult as TopicWriteResult,
 )
 
 from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
@@ -71,9 +77,7 @@ class TopicClientAsyncIO:
     _settings: TopicClientSettings
     _executor: concurrent.futures.Executor
 
-    def __init__(
-        self, driver: aio.Driver, settings: Optional[TopicClientSettings] = None
-    ):
+    def __init__(self, driver: aio.Driver, settings: Optional[TopicClientSettings] = None):
         if not settings:
             settings = TopicClientSettings()
         self._closed = False
@@ -130,9 +134,7 @@ class TopicClientAsyncIO:
             _wrap_operation,
         )
 
-    async def describe_topic(
-        self, path: str, include_stats: bool = False
-    ) -> TopicDescription:
+    async def describe_topic(self, path: str, include_stats: bool = False) -> TopicDescription:
         args = locals().copy()
         del args["self"]
         req = _ydb_topic_public_types.DescribeTopicRequestParams(**args)
@@ -155,14 +157,12 @@ class TopicClientAsyncIO:
 
     def reader(
         self,
-        topic: str,
+        topic: Union[str, TopicReaderSelector, List[Union[str, TopicReaderSelector]]],
         consumer: str,
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None,
-        decoder_executor: Optional[
-            concurrent.futures.Executor
-        ] = None,  # default shared client executor pool
+        decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicReaderAsyncIO:
 
         if not decoder_executor:
@@ -185,12 +185,8 @@ class TopicClientAsyncIO:
         auto_seqno: bool = True,
         auto_created_at: bool = True,
         codec: Optional[TopicCodec] = None,  # default mean auto-select
-        encoders: Optional[
-            Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]
-        ] = None,
-        encoder_executor: Optional[
-            concurrent.futures.Executor
-        ] = None,  # default shared client executor pool
+        encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicWriterAsyncIO:
         args = locals()
         del args["self"]
@@ -283,9 +279,7 @@ class TopicClient:
             _wrap_operation,
         )
 
-    def describe_topic(
-        self, path: str, include_stats: bool = False
-    ) -> TopicDescription:
+    def describe_topic(self, path: str, include_stats: bool = False) -> TopicDescription:
         args = locals().copy()
         del args["self"]
         self._check_closed()
@@ -312,14 +306,12 @@ class TopicClient:
 
     def reader(
         self,
-        topic: str,
+        topic: Union[str, TopicReaderSelector, List[Union[str, TopicReaderSelector]]],
         consumer: str,
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None,
-        decoder_executor: Optional[
-            concurrent.futures.Executor
-        ] = None,  # default shared client executor pool
+        decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicReader:
         if not decoder_executor:
             decoder_executor = self._executor
@@ -342,12 +334,8 @@ class TopicClient:
         auto_seqno: bool = True,
         auto_created_at: bool = True,
         codec: Optional[TopicCodec] = None,  # default mean auto-select
-        encoders: Optional[
-            Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]
-        ] = None,
-        encoder_executor: Optional[
-            concurrent.futures.Executor
-        ] = None,  # default shared client executor pool
+        encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicWriter:
         args = locals()
         del args["self"]

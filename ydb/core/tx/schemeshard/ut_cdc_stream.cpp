@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeNewAndOldImages
-              Format: ECdcStreamFormatDocApiJson
+              Format: ECdcStreamFormatDynamoDBStreamsJson
             }
         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeUpdate
-              Format: ECdcStreamFormatDocApiJson
+              Format: ECdcStreamFormatDynamoDBStreamsJson
             }
         )", {NKikimrScheme::StatusInvalidParameter});
 
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeNewAndOldImages
-              Format: ECdcStreamFormatDocApiJson
+              Format: ECdcStreamFormatDynamoDBStreamsJson
               AwsRegion: "ru-central1"
             }
         )");
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DocumentTable/Stream"), {
             NLs::PathExist,
             NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDocApiJson),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson),
             NLs::StreamAwsRegion("ru-central1"),
         });
     }

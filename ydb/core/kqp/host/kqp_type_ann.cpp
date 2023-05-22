@@ -297,8 +297,11 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
     bool olapTable = TKqpReadOlapTableRangesBase::Match(node.Get());
+    bool index = TKqlReadTableIndexRanges::Match(node.Get());
 
-    if ((olapTable && !EnsureArgsCount(*node, 6, ctx)) || (!olapTable && !EnsureArgsCount(*node, 5, ctx))) {
+    size_t argCount = (olapTable || index) ? 6 : 5;
+
+    if (!EnsureArgsCount(*node, argCount, ctx)) {
         return TStatus::Error;
     }
 
@@ -333,6 +336,8 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     if (TKqlReadTableRanges::Match(node.Get())) {
+        node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+    } else if (TKqlReadTableIndexRanges::Match(node.Get())) {
         node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
     } else if (TKqpReadTableRanges::Match(node.Get())) {
         node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));

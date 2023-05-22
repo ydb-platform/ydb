@@ -1,5 +1,6 @@
 #include "datashard_impl.h"
 #include "datashard_txs.h"
+#include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -11,6 +12,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
 
@@ -162,6 +165,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.Get();
+
+    RegisterDataShardProbes();
 }
 
 NTabletPipe::TClientConfig TDataShard::GetPipeClientConfig() {
@@ -563,6 +568,7 @@ public:
 
         ui64 resultSize = Result->GetTxResult().size();
         ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
+        LWTRACK(ProposeTransactionSendResult, Result->Orbit);
         Self->Send(Target, Result.Release(), flags);
     }
 
@@ -605,6 +611,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
 
     ui64 resultSize = res->GetTxResult().size();
     ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
+    LWTRACK(ProposeTransactionSendResult, res->Orbit);
     ctx.Send(target, res.Release(), flags);
 }
 
@@ -2483,6 +2490,7 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
     bool reject = CheckDataTxReject(txDescr, ctx, rejectStatus, rejectReason);
 
     if (reject) {
+        LWTRACK(ProposeTransactionReject, msg->Orbit);
         THolder<TEvDataShard::TEvProposeTransactionResult> result =
             THolder(new TEvDataShard::TEvProposeTransactionResult(msg->GetTxKind(),
                                                             TabletID(),
@@ -2507,12 +2515,16 @@ void TDataShard::UpdateProposeQueueSize() const {
 }
 
 void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
+    LWTRACK(ProposeTransactionRequest, msg->Orbit);
+
     // Check if we need to delay an immediate transaction
     if (MediatorStateWaiting &&
         (ev->Get()->GetFlags() & TTxFlags::Immediate) &&
         !(ev->Get()->GetFlags() & TTxFlags::ForceOnline))
     {
         // We cannot calculate correct version until we restore mediator state
+        LWTRACK(ProposeTransactionWaitMediatorState, msg->Orbit);
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
         return;
@@ -2521,6 +2533,7 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     if (Pipeline.HasProposeDelayers()) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Handle TEvProposeTransaction delayed at " << TabletID() << " until dependency graph is restored");
+        LWTRACK(ProposeTransactionWaitDelayers, msg->Orbit);
         DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
         return;
@@ -2589,6 +2602,9 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, con
 }
 
 void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
+    LWTRACK(ProposeTransactionRequest, msg->Orbit);
+
     IncCounter(COUNTER_PREPARE_REQUEST);
 
     if (TxInFly() > GetMaxTxInFly()) {
@@ -2629,11 +2645,12 @@ void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
 }
 
 void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
     bool mayRunImmediate = false;
 
-    if ((ev->Get()->GetFlags() & TTxFlags::Immediate) &&
-        !(ev->Get()->GetFlags() & TTxFlags::ForceOnline) &&
-        ev->Get()->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA)
+    if ((msg->GetFlags() & TTxFlags::Immediate) &&
+        !(msg->GetFlags() & TTxFlags::ForceOnline) &&
+        msg->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA)
     {
         // This transaction may run in immediate mode
         mayRunImmediate = true;
@@ -2641,6 +2658,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
 
     if (mayRunImmediate) {
         // Enqueue immediate transactions so they don't starve existing operations
+        LWTRACK(ProposeTransactionEnqueue, msg->Orbit);
         ProposeQueue.Enqueue(std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, ctx);
         UpdateProposeQueueSize();
     } else {
@@ -3051,6 +3069,8 @@ bool TDataShard::WaitPlanStep(ui64 step) {
 }
 
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
+    auto* msg = ev->Get();
+
     if (MvccSwitchState == TSwitchState::SWITCHING) {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction needs to wait because of mvcc state switching");
         return true;
@@ -3062,6 +3082,7 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
         TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge(GetEnablePrioritizedMvccSnapshotReads());
         if (rowVersion >= unreadableEdge) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction reads from " << rowVersion << " which is not before unreadable edge " << unreadableEdge);
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, rowVersion.Step, rowVersion.TxId);
             return true;
         }
     }

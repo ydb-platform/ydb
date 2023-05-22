@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
                 auto& req = *ev->Record.MutableRequest();
                 req.SetQuery("SELECT 42");
-                req.SetType(NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY);
+                req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
                 req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
                 req.SetDatabase(settings.DomainName);
 

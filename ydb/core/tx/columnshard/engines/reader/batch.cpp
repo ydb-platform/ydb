@@ -30,11 +30,12 @@ NColumnShard::IDataTasksProcessor::ITask::TPtr TBatch::AssembleTask(NColumnShard
     Y_VERIFY(!FetchedInfo.GetFilteredBatch());
 
     auto blobSchema = readMetadata->GetLoadSchema(PortionInfo->GetSnapshot());
+    auto readSchema = readMetadata->GetLoadSchema(readMetadata->GetSnapshot());
     ISnapshotSchema::TPtr resultSchema;
     if (CurrentColumnIds) {
-        resultSchema= std::make_shared<TFilteredSnapshotSchema>(readMetadata->GetLoadSchema(readMetadata->GetSnapshot()), *CurrentColumnIds);
+        resultSchema = std::make_shared<TFilteredSnapshotSchema>(readSchema, *CurrentColumnIds);
     } else {
-        resultSchema = readMetadata->GetLoadSchema(readMetadata->GetSnapshot());
+        resultSchema = readSchema;
     }
     auto batchConstructor = PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, Data);
     Data.clear();
@@ -184,39 +185,22 @@ std::shared_ptr<TSortableBatchPosition> TBatch::GetFirstPK(const bool reverse, c
 }
 
 void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::shared_ptr<TSortableBatchPosition>& from, std::shared_ptr<TSortableBatchPosition>& to) const {
-    from = nullptr;
-    to = nullptr;
-    if (!FirstPK || !LastPK) {
-        std::vector<std::shared_ptr<arrow::Scalar>> minRecord;
-        std::vector<std::shared_ptr<arrow::Scalar>> maxRecord;
-        for (auto&& i : indexInfo.GetReplaceKey()->fields()) {
-            const ui32 columnId = indexInfo.GetColumnId(i->name());
-            const auto& [minScalar, maxScalar] = PortionInfo->MinMaxValue(columnId);
-            if (!FirstPK && !minScalar) {
-                FirstPK = nullptr;
-                ReverseLastPK = nullptr;
-            } else {
-                minRecord.emplace_back(minScalar);
-            }
-            if (!LastPK && !maxScalar) {
-                LastPK = nullptr;
-                ReverseFirstPK = nullptr;
-            } else {
-                maxRecord.emplace_back(maxScalar);
-            }
-        }
-        if (!FirstPK) {
-            auto batch = NArrow::BuildSingleRecordBatch(indexInfo.GetReplaceKey(), minRecord);
-            Y_VERIFY(batch);
-            FirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), false);
-            ReverseLastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), true);
-        }
-        if (!LastPK) {
-            auto batch = NArrow::BuildSingleRecordBatch(indexInfo.GetReplaceKey(), maxRecord);
-            Y_VERIFY(batch);
-            LastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), false);
-            ReverseFirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexInfo.GetReplaceKey()->field_names(), true);
-        }
+    auto indexKey = indexInfo.GetIndexKey();
+    if (!FirstPK) {
+        Y_VERIFY(PortionInfo->Valid());
+        const NArrow::TReplaceKey& minRecord = PortionInfo->IndexKeyStart();
+        auto batch = minRecord.ToBatch(indexKey);
+        Y_VERIFY(batch);
+        FirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), false);
+        ReverseLastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), true);
+    }
+    if (!LastPK) {
+        Y_VERIFY(PortionInfo->Valid());
+        const NArrow::TReplaceKey& maxRecord = PortionInfo->IndexKeyEnd();
+        auto batch = maxRecord.ToBatch(indexKey);
+        Y_VERIFY(batch);
+        LastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), false);
+        ReverseFirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), true);
     }
     if (reverse) {
         from = *ReverseFirstPK;

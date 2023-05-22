@@ -338,7 +338,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        for (auto shardIdx : storeInfo->ColumnShards) {
+        for (auto shardIdx : storeInfo->GetColumnShards()) {
             Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
             txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
 

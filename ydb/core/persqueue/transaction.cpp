@@ -34,12 +34,8 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
             tx.GetAggrPredicate() ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT;
     }
 
-    if (tx.HasTablet()) {
-        SourceTablet = tx.GetTablet();
-    } else {
-        Y_VERIFY(tx.HasActor());
-        SourceActor = ActorIdFromProto(tx.GetActor());
-    }
+    Y_VERIFY(tx.HasSourceActor());
+    SourceActor = ActorIdFromProto(tx.GetSourceActor());
 }
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
@@ -66,10 +62,6 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
 
 void TDistributedTransaction::InitConfigTransaction(const NKikimrPQ::TTransaction& tx)
 {
-    Y_VERIFY(tx.HasSchemeShardId());
-
-    Receivers.insert(tx.GetSchemeShardId());
-
     TabletConfig = tx.GetTabletConfig();
     BootstrapConfig = tx.GetBootstrapConfig();
 
@@ -96,7 +88,6 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
                                                    ui64 extractTabletId)
 {
     Y_VERIFY(event.GetTxBodyCase() != NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET);
-    Y_VERIFY(event.GetSourceCase() != NKikimrPQ::TEvProposeTransaction::SOURCE_NOT_SET);
     Y_VERIFY(TxId == Max<ui64>());
 
     TxId = event.GetTxId();
@@ -118,18 +109,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
         Y_FAIL_S("unknown TxBody case");
     }
 
-    switch (event.GetSourceCase()) {
-    case NKikimrPQ::TEvProposeTransaction::kActor:
-        Y_VERIFY(event.HasActor());
-        SourceActor = ActorIdFromProto(event.GetActor());
-        break;
-    case NKikimrPQ::TEvProposeTransaction::kTablet:
-        Y_VERIFY(event.HasTablet());
-        SourceTablet = event.GetTablet();
-        break;
-    default:
-        Y_FAIL_S("unknown Source case");
-    }
+    Y_VERIFY(event.HasSourceActor());
+    SourceActor = ActorIdFromProto(event.GetSourceActor());
 }
 
 void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody,
@@ -159,11 +140,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
 
 void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody)
 {
-    Y_VERIFY(txBody.HasSchemeShardId());
-
     Kind = NKikimrPQ::TTransaction::KIND_CONFIG;
-
-    Receivers.insert(txBody.GetSchemeShardId());
 
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
@@ -313,12 +290,8 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
         Y_FAIL_S("unknown transaction type");
     }
 
-    if (SourceTablet != Max<ui64>()) {
-        tx.SetTablet(SourceTablet);
-    } else {
-        Y_VERIFY(SourceActor != TActorId());
-        ActorIdToProto(SourceActor, tx.MutableActor());
-    }
+    Y_VERIFY(SourceActor != TActorId());
+    ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
     TString value;
     Y_VERIFY(tx.SerializeToString(&value));
@@ -347,10 +320,6 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
 
 void TDistributedTransaction::AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx)
 {
-    Y_VERIFY(Receivers.size() == 1);
-
-    tx.SetSchemeShardId(*Receivers.begin());
-
     *tx.MutableTabletConfig() = TabletConfig;
     *tx.MutableBootstrapConfig() = BootstrapConfig;
 }

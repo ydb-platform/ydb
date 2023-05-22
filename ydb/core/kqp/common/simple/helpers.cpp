@@ -9,8 +9,8 @@ bool IsSqlQuery(const NKikimrKqp::EQueryType& queryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
         case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-        case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
-        case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
+        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
             return true;
 
         default:

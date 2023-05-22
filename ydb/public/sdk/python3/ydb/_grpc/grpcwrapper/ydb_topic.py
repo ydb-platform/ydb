@@ -80,10 +80,7 @@ class OffsetsRange(IFromProto, IToProto):
 
     def __post_init__(self):
         if self.end < self.start:
-            raise ValueError(
-                "offset end must be not less then start. Got start=%s end=%s"
-                % (self.start, self.end)
-            )
+            raise ValueError("offset end must be not less then start. Got start=%s end=%s" % (self.start, self.end))
 
     @staticmethod
     def from_proto(msg: ydb_topic_pb2.OffsetsRange) -> "OffsetsRange":
@@ -145,18 +142,12 @@ class StreamWriteMessage:
 
             if self.partitioning is None:
                 pass
-            elif isinstance(
-                self.partitioning, StreamWriteMessage.PartitioningMessageGroupID
-            ):
+            elif isinstance(self.partitioning, StreamWriteMessage.PartitioningMessageGroupID):
                 proto.message_group_id = self.partitioning.message_group_id
-            elif isinstance(
-                self.partitioning, StreamWriteMessage.PartitioningPartitionID
-            ):
+            elif isinstance(self.partitioning, StreamWriteMessage.PartitioningPartitionID):
                 proto.partition_id = self.partitioning.partition_id
             else:
-                raise Exception(
-                    "Bad partitioning type at StreamWriteMessage.InitRequest"
-                )
+                raise Exception("Bad partitioning type at StreamWriteMessage.InitRequest")
 
             if self.write_session_meta:
                 for key in self.write_session_meta:
@@ -213,18 +204,12 @@ class StreamWriteMessage:
 
                 if self.partitioning is None:
                     pass
-                elif isinstance(
-                    self.partitioning, StreamWriteMessage.PartitioningPartitionID
-                ):
+                elif isinstance(self.partitioning, StreamWriteMessage.PartitioningPartitionID):
                     proto.partition_id = self.partitioning.partition_id
-                elif isinstance(
-                    self.partitioning, StreamWriteMessage.PartitioningMessageGroupID
-                ):
+                elif isinstance(self.partitioning, StreamWriteMessage.PartitioningMessageGroupID):
                     proto.message_group_id = self.partitioning.message_group_id
                 else:
-                    raise Exception(
-                        "Bad partition at StreamWriteMessage.WriteRequest.MessageData"
-                    )
+                    raise Exception("Bad partition at StreamWriteMessage.WriteRequest.MessageData")
 
                 return proto
 
@@ -277,14 +262,10 @@ class StreamWriteMessage:
             ]
 
             @classmethod
-            def from_proto(
-                cls, proto_ack: ydb_topic_pb2.StreamWriteMessage.WriteResponse.WriteAck
-            ):
+            def from_proto(cls, proto_ack: ydb_topic_pb2.StreamWriteMessage.WriteResponse.WriteAck):
                 if proto_ack.HasField("written"):
-                    message_write_status = (
-                        StreamWriteMessage.WriteResponse.WriteAck.StatusWritten(
-                            proto_ack.written.offset
-                        )
+                    message_write_status = StreamWriteMessage.WriteResponse.WriteAck.StatusWritten(
+                        proto_ack.written.offset
                     )
                 elif proto_ack.HasField("skipped"):
                     reason = proto_ack.skipped.reason
@@ -319,14 +300,9 @@ class StreamWriteMessage:
                     @classmethod
                     def from_protobuf_code(
                         cls, code: int
-                    ) -> Union[
-                        "StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped.Reason",
-                        int,
-                    ]:
+                    ) -> Union["StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped.Reason", int]:
                         try:
-                            return StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped.Reason(
-                                code
-                            )
+                            return StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped.Reason(code)
                         except ValueError:
                             return code
 
@@ -434,8 +410,8 @@ class StreamReadMessage:
         class TopicReadSettings(IToProto):
             path: str
             partition_ids: List[int] = field(default_factory=list)
-            max_lag_seconds: Union[datetime.timedelta, None] = None
-            read_from: Union[int, float, datetime.datetime, None] = None
+            max_lag: Optional[datetime.timedelta] = None
+            read_from: Optional[datetime.datetime] = None
 
             def to_proto(
                 self,
@@ -443,8 +419,14 @@ class StreamReadMessage:
                 res = ydb_topic_pb2.StreamReadMessage.InitRequest.TopicReadSettings()
                 res.path = self.path
                 res.partition_ids.extend(self.partition_ids)
-                if self.max_lag_seconds is not None:
-                    res.max_lag = proto_duration_from_timedelta(self.max_lag_seconds)
+                max_lag = proto_duration_from_timedelta(self.max_lag)
+                if max_lag is not None:
+                    res.max_lag = max_lag
+
+                read_from = proto_timestamp_from_datetime(self.read_from)
+                if read_from is not None:
+                    res.read_from = read_from
+
                 return res
 
     @dataclass
@@ -477,11 +459,7 @@ class StreamReadMessage:
         ) -> "StreamReadMessage.ReadResponse":
             partition_data = []
             for proto_partition_data in msg.partition_data:
-                partition_data.append(
-                    StreamReadMessage.ReadResponse.PartitionData.from_proto(
-                        proto_partition_data
-                    )
-                )
+                partition_data.append(StreamReadMessage.ReadResponse.PartitionData.from_proto(proto_partition_data))
             return StreamReadMessage.ReadResponse(
                 partition_data=partition_data,
                 bytes_size=msg.bytes_size,
@@ -523,9 +501,7 @@ class StreamReadMessage:
             ) -> "StreamReadMessage.ReadResponse.Batch":
                 message_data = []
                 for message in msg.message_data:
-                    message_data.append(
-                        StreamReadMessage.ReadResponse.MessageData.from_proto(message)
-                    )
+                    message_data.append(StreamReadMessage.ReadResponse.MessageData.from_proto(message))
                 return StreamReadMessage.ReadResponse.Batch(
                     message_data=message_data,
                     producer_id=msg.producer_id,
@@ -545,9 +521,7 @@ class StreamReadMessage:
             ) -> "StreamReadMessage.ReadResponse.PartitionData":
                 batches = []
                 for proto_batch in msg.batches:
-                    batches.append(
-                        StreamReadMessage.ReadResponse.Batch.from_proto(proto_batch)
-                    )
+                    batches.append(StreamReadMessage.ReadResponse.Batch.from_proto(proto_batch))
                 return StreamReadMessage.ReadResponse.PartitionData(
                     partition_session_id=msg.partition_session_id,
                     batches=batches,
@@ -584,9 +558,7 @@ class StreamReadMessage:
 
     @dataclass
     class CommitOffsetResponse(IFromProto):
-        partitions_committed_offsets: List[
-            "StreamReadMessage.CommitOffsetResponse.PartitionCommittedOffset"
-        ]
+        partitions_committed_offsets: List["StreamReadMessage.CommitOffsetResponse.PartitionCommittedOffset"]
 
         @staticmethod
         def from_proto(
@@ -637,9 +609,7 @@ class StreamReadMessage:
             msg: ydb_topic_pb2.StreamReadMessage.StartPartitionSessionRequest,
         ) -> "StreamReadMessage.StartPartitionSessionRequest":
             return StreamReadMessage.StartPartitionSessionRequest(
-                partition_session=StreamReadMessage.PartitionSession.from_proto(
-                    msg.partition_session
-                ),
+                partition_session=StreamReadMessage.PartitionSession.from_proto(msg.partition_session),
                 committed_offset=msg.committed_offset,
                 partition_offsets=OffsetsRange.from_proto(msg.partition_offsets),
             )
@@ -688,16 +658,10 @@ class StreamReadMessage:
                 res.init_request.CopyFrom(self.client_message.to_proto())
             elif isinstance(self.client_message, UpdateTokenRequest):
                 res.update_token_request.CopyFrom(self.client_message.to_proto())
-            elif isinstance(
-                self.client_message, StreamReadMessage.StartPartitionSessionResponse
-            ):
-                res.start_partition_session_response.CopyFrom(
-                    self.client_message.to_proto()
-                )
+            elif isinstance(self.client_message, StreamReadMessage.StartPartitionSessionResponse):
+                res.start_partition_session_response.CopyFrom(self.client_message.to_proto())
             else:
-                raise NotImplementedError(
-                    "Unknown message type: %s" % type(self.client_message)
-                )
+                raise NotImplementedError("Unknown message type: %s" % type(self.client_message))
             return res
 
     @dataclass
@@ -714,23 +678,17 @@ class StreamReadMessage:
             if mess_type == "read_response":
                 return StreamReadMessage.FromServer(
                     server_status=server_status,
-                    server_message=StreamReadMessage.ReadResponse.from_proto(
-                        msg.read_response
-                    ),
+                    server_message=StreamReadMessage.ReadResponse.from_proto(msg.read_response),
                 )
             elif mess_type == "commit_offset_response":
                 return StreamReadMessage.FromServer(
                     server_status=server_status,
-                    server_message=StreamReadMessage.CommitOffsetResponse.from_proto(
-                        msg.commit_offset_response
-                    ),
+                    server_message=StreamReadMessage.CommitOffsetResponse.from_proto(msg.commit_offset_response),
                 )
             elif mess_type == "init_response":
                 return StreamReadMessage.FromServer(
                     server_status=server_status,
-                    server_message=StreamReadMessage.InitResponse.from_proto(
-                        msg.init_response
-                    ),
+                    server_message=StreamReadMessage.InitResponse.from_proto(msg.init_response),
                 )
             elif mess_type == "start_partition_session_request":
                 return StreamReadMessage.FromServer(
@@ -742,9 +700,7 @@ class StreamReadMessage:
             elif mess_type == "update_token_response":
                 return StreamReadMessage.FromServer(
                     server_status=server_status,
-                    server_message=UpdateTokenResponse.from_proto(
-                        msg.update_token_response
-                    ),
+                    server_message=UpdateTokenResponse.from_proto(msg.update_token_response),
                 )
 
             # todo replace exception to log
@@ -867,13 +823,9 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
             msg: ydb_topic_pb2.Consumer.ConsumerStats,
         ) -> "Consumer.ConsumerStats":
             return Consumer.ConsumerStats(
-                min_partitions_last_read_time=datetime_from_proto_timestamp(
-                    msg.min_partitions_last_read_time
-                ),
+                min_partitions_last_read_time=datetime_from_proto_timestamp(msg.min_partitions_last_read_time),
                 max_read_time_lag=timedelta_from_proto_duration(msg.max_read_time_lag),
-                max_write_time_lag=timedelta_from_proto_duration(
-                    msg.max_write_time_lag
-                ),
+                max_write_time_lag=timedelta_from_proto_duration(msg.max_write_time_lag),
                 bytes_read=MultipleWindowsStat.from_proto(msg.bytes_read),
             )
 
@@ -1015,12 +967,8 @@ class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
     def from_proto(msg: ydb_topic_pb2.DescribeTopicResult) -> "DescribeTopicResult":
         return DescribeTopicResult(
             self_proto=msg.self,
-            partitioning_settings=PartitioningSettings.from_proto(
-                msg.partitioning_settings
-            ),
-            partitions=list(
-                map(DescribeTopicResult.PartitionInfo.from_proto, msg.partitions)
-            ),
+            partitioning_settings=PartitioningSettings.from_proto(msg.partitioning_settings),
+            partitions=list(map(DescribeTopicResult.PartitionInfo.from_proto, msg.partitions)),
             retention_period=msg.retention_period,
             retention_storage_mb=msg.retention_storage_mb,
             supported_codecs=SupportedCodecs.from_proto(msg.supported_codecs),
@@ -1041,9 +989,7 @@ class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
             self=scheme._wrap_scheme_entry(self.self_proto),
             min_active_partitions=self.partitioning_settings.min_active_partitions,
             partition_count_limit=self.partitioning_settings.partition_count_limit,
-            partitions=list(
-                map(DescribeTopicResult.PartitionInfo.to_public, self.partitions)
-            ),
+            partitions=list(map(DescribeTopicResult.PartitionInfo.to_public, self.partitions)),
             retention_period=self.retention_period,
             retention_storage_mb=self.retention_storage_mb,
             supported_codecs=self.supported_codecs.to_public(),
@@ -1108,12 +1054,8 @@ class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
 
             return DescribeTopicResult.TopicStats(
                 store_size_bytes=msg.store_size_bytes,
-                min_last_write_time=datetime_from_proto_timestamp(
-                    msg.min_last_write_time
-                ),
-                max_write_time_lag=timedelta_from_proto_duration(
-                    msg.max_write_time_lag
-                ),
+                min_last_write_time=datetime_from_proto_timestamp(msg.min_last_write_time),
+                max_write_time_lag=timedelta_from_proto_duration(msg.max_write_time_lag),
                 bytes_written=MultipleWindowsStat.from_proto(msg.bytes_written),
             )
 

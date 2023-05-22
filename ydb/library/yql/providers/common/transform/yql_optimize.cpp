@@ -14,18 +14,18 @@ using namespace NNodes;
 class TOptimizeTransformerBase::TIgnoreOptimizationContext: public IOptimizationContext {
 public:
     TIgnoreOptimizationContext(TOptimizeTransformerBase::TGetParents getParents)
-        : GetParents(std::move(getParents))
+        : GetParents_(std::move(getParents))
     {
     }
     virtual ~TIgnoreOptimizationContext() = default;
     void RemapNode(const TExprNode& src, const TExprNode::TPtr&) final {
-        const TParentsMap* parentsMap = GetParents();
+        const TParentsMap* parentsMap = GetParents_();
         auto parentsIt = parentsMap->find(&src);
         YQL_ENSURE(parentsIt != parentsMap->cend());
         YQL_ENSURE(parentsIt->second.size() == 1, "Bad usage of local optimizer. Try to switch to global mode");
     }
 private:
-    TOptimizeTransformerBase::TGetParents GetParents;
+    TOptimizeTransformerBase::TGetParents GetParents_;
 };
 
 class TOptimizeTransformerBase::TRemapOptimizationContext: public IOptimizationContext {

@@ -28,104 +28,71 @@ class TestInsertOperations(object):
         if hasattr(cls, 'cluster'):
             cls.cluster.stop()
 
-    def test_several_inserts_per_transaction_are_forbidden(self):
+    def test_several_inserts_per_transaction_are_success(self):
         # Arrange
-        name = 'test_several_inserts_per_transaction_are_forbidden'
+        name = 'test_several_inserts_per_transaction_are_success'
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.execute_scheme('CREATE TABLE %s (id Int32, PRIMARY KEY(id));' % name)
         tx = session.transaction()
 
         tx.execute('INSERT INTO %s (id) VALUES (1);' % name)
-
-        # Act + Assert
-        def callee():
-            tx.execute('insert into %s (id) values (2);' % name, commit_tx=True)
-
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
-            )
-        )
+        tx.execute('insert into %s (id) values (2);' % name, commit_tx=True)
 
         with session.transaction() as tx:
             result_sets = tx.execute('SELECT COUNT(*) as cnt FROM %s;' % name, commit_tx=True)
             assert_that(
                 result_sets[0].rows[0].cnt,
                 equal_to(
-                    0
+                    2
                 )
             )
 
-    def test_insert_plus_update_per_transaction_are_forbidden(self):
+    def test_insert_plus_update_per_transaction_are_success(self):
         # Arrange
-        name = "test_insert_plus_update_per_transaction_are_forbidden"
+        name = "test_insert_plus_update_per_transaction_are_success"
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.execute_scheme('CREATE TABLE %s (id Int32, value Int32, PRIMARY KEY(id));' % name)
         session.transaction().execute(
             'insert into %s (id, value) values (1, 1), (2, 2), (3, 3);' % name, commit_tx=True)
 
         tx = session.transaction()
-        # Act + Assert
         tx.execute('update %s set value = 4 where id = 3;' % name)
-
-        def callee():
-            tx.execute('insert into %s (id, value) values (4, 4);' % name)
-
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
-            )
-        )
+        tx.execute('insert into %s (id, value) values (4, 4);' % name, commit_tx=True)
 
         with session.transaction() as tx:
             result_sets = tx.execute('SELECT COUNT(*) as cnt FROM %s;' % name, commit_tx=True)
             assert_that(
                 result_sets[0].rows[0].cnt,
                 equal_to(
-                    3
+                    4
                 )
             )
 
-    def test_update_plus_insert_per_transaction_are_forbidden_prepared_case(self):
+    def test_update_plus_insert_per_transaction_are_success_prepared_case(self):
         # Arrange
-        name = "test_update_plus_insert_per_transaction_are_forbidden_prepared_case"
+        name = "test_update_plus_insert_per_transaction_are_success_prepared_case"
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.execute_scheme('CREATE TABLE %s (id Int32, value Int32, PRIMARY KEY(id));' % name)
         session.transaction().execute(
             'insert into %s (id, value) values (1, 1), (2, 2), (3, 3);' % name, commit_tx=True)
 
-        # Act + Assert
         tx = session.transaction()
         tx.execute('update %s set value = 4 where id = 3;' % name)
         sql = 'insert into %s (id, value) values (4, 4);' % name
         prepared_sql = session.prepare(sql)
-
-        def callee():
-            tx.execute(prepared_sql)
-
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
-            )
-        )
+        tx.execute(prepared_sql, commit_tx=True)
 
         with session.transaction() as tx:
             result_sets = tx.execute('SELECT COUNT(*) as cnt FROM %s;' % name, commit_tx=True)
             assert_that(
                 result_sets[0].rows[0].cnt,
                 equal_to(
-                    3
+                    4
                 )
             )
 
-    def test_upsert_plus_insert_per_transaction_are_forbidden_prepared_case(self):
-        name = "test_upsert_plus_insert_per_transaction_are_forbidden_prepared_case"
+    def test_upsert_plus_insert_per_transaction_are_success_prepared_case(self):
+        name = "test_upsert_plus_insert_per_transaction_are_success_prepared_case"
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         session.execute_scheme('CREATE TABLE %s (id Int32, value Int32, PRIMARY KEY(id));' % name)
         session.transaction().execute(
@@ -133,24 +100,14 @@ class TestInsertOperations(object):
 
         tx = session.transaction()
         tx.execute('upsert into %s (id, value) values (5, 5);' % name)
-
-        def callee():
-            tx.execute('insert into %s (id, value) values (4, 4);' % name, commit_tx=True)
-
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
-            )
-        )
+        tx.execute('insert into %s (id, value) values (4, 4);' % name, commit_tx=True)
 
         with session.transaction() as tx:
             result_sets = tx.execute('SELECT COUNT(*) as cnt FROM %s;' % name, commit_tx=True)
             assert_that(
                 result_sets[0].rows[0].cnt,
                 equal_to(
-                    3
+                    5
                 )
             )
 
@@ -161,7 +118,6 @@ class TestInsertOperations(object):
         session.transaction().execute(
             'insert into %s (id, value) values (1, 1), (2, 2), (3, 3);' % name, commit_tx=True)
 
-        # Actually that should be ok since upsert is about blind writes
         with session.transaction() as tx:
             tx.execute('insert into %s (id, value) values (4, 4);' % name)
             tx.execute('upsert into %s (id, value) values (4, 5);' % name)
@@ -193,25 +149,15 @@ class TestInsertOperations(object):
             'insert into %s (id, value) values (1, 1), (2, 2), (3, 3);' % name, commit_tx=True)
 
         tx = session.transaction()
-        tx.execute('insert or revert into %s (id, value) values (4, 4);' % name)
-
-        def callee():
-            tx.execute('insert or revert into %s (id, value) values (5, 5);' % name, commit_tx=True)
-
-        assert_that(
-            callee,
-            raises(
-                ydb.GenericError,
-                "Data modifications previously made to table .*%s.* in current transaction won.*t be seen" % name,
-            )
-        )
+        tx.execute('insert or revert into %s (id, value) values (3, 3);' % name)
+        tx.execute('insert or revert into %s (id, value) values (4, 4);' % name, commit_tx=True)
 
         with session.transaction() as tx:
             result_sets = tx.execute('SELECT COUNT(*) as cnt FROM %s;' % name, commit_tx=True)
             assert_that(
                 result_sets[0].rows[0].cnt,
                 equal_to(
-                    3
+                    4
                 )
             )
 
@@ -221,14 +167,16 @@ class TestInsertOperations(object):
         session.execute_scheme('CREATE TABLE %s (id Int32, value Int32, PRIMARY KEY(id));' % name)
 
         queries = (
-            ('select count(*) as cnt from %s;', 'read'),
-            ('insert into %s (id, value) values (4, 4)', 'read-write'),
-            ('upsert  into %s (id, value) values (4, 4)', 'write'),
-            ('replace into %s (id, value) values (4, 4)', 'write'),
-            ('delete from %s;', 'read-write'),
-            ('update %s set value = 4 where id = 2; ', 'read-write'),
-            ('insert or revert into %s (id, value) values (4, 4);', 'read-write'),
+            ('select count(*) as cnt from %s;', 'select'),
+            ('insert into %s (id, value) values (4, 4)', 'insert'),
+            ('upsert  into %s (id, value) values (4, 4)', 'upsert'),
+            ('replace into %s (id, value) values (4, 4)', 'replace'),
+            ('delete from %s;', 'delete'),
+            ('update %s set value = 4 where id = 2; ', 'update'),
+            ('insert or revert into %s (id, value) values (4, 4);', 'insert_or_revert'),
         )
+
+        row_adding_operations = ['insert', 'upsert', 'replace', 'insert_or_revert']
 
         for first_query, first_query_kind in queries:
             for second_query, second_query_kind in queries:
@@ -238,11 +186,12 @@ class TestInsertOperations(object):
                 def callee():
                     tx.execute(second_query % name, commit_tx=True)
 
-                if 'write' in first_query_kind and 'read' in second_query_kind:
+                if first_query_kind in row_adding_operations and second_query_kind == 'insert':
                     assert_that(
                         callee,
                         raises(
-                            ydb.GenericError,
+                            ydb.PreconditionFailed,
+                            "Conflict with existing key."
                         )
                     )
 

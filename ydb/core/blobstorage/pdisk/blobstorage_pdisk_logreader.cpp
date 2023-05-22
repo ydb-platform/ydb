@@ -793,11 +793,11 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
                     << " Marker# LR018");
         } else {
-//           Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
-//                   << " File# " << __FILE__
-//                   << " Line# " << __LINE__
-//                   << " LogEndChunkIdx# " << LogEndChunkIdx
-//                   << " LogEndSectorIdx# " << LogEndSectorIdx);
+           Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
+                   << " File# " << __FILE__
+                   << " Line# " << __LINE__
+                   << " LogEndChunkIdx# " << LogEndChunkIdx
+                   << " LogEndSectorIdx# " << LogEndSectorIdx);
             if (!(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx)) {
                 LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
                         << " In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector."
@@ -1147,6 +1147,11 @@ void TLogReader::Reply() {
     if (IsInitial) {
         PDisk->ProcessChunkOwnerMap(*ChunkOwnerMap.Get());
         ChunkOwnerMap.Destroy();
+
+        PDisk->BlockDevice->EraseCacheRange(
+            PDisk->Format.Offset(ChunkIdx, 0),
+            PDisk->Format.Offset(ChunkIdx + 1, 0)
+        );
     }
     LOG_DEBUG(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " To ownerId# %" PRIu32 " %s",
         (ui32)PDisk->PDiskId, (ui32)Owner, Result->ToString().c_str());
@@ -1387,4 +1392,3 @@ void TLogReader::ReleaseUsedBadOffsets() {
 
 } // NPDisk
 } // NKikimr
-

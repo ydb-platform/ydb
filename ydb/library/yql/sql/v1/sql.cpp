@@ -1886,6 +1886,12 @@ static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node,
             return false;
         }
         settings.RetentionPeriod = exprNode;
+    } else if (to_lower(id.Name) == "aws_region") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
+            ctx.Context().Error() << "Literal of String type is expected for " << id.Name;
+            return false;
+        }
+        settings.AwsRegion = exprNode;
     } else {
         ctx.Context().Error(id.Pos) << "Unknown changefeed setting: " << id.Name;
         return false;

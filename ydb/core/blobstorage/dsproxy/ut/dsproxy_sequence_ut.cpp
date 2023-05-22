@@ -525,6 +525,7 @@ void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorage
 
     TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched;
     testState.CreatePutRequests(blobs, std::back_inserter(batched), tactic, handleClass);
+    SetPredictedDelaysForAllQueues({});
     runtime.Register(DSProxyEnv.CreatePutRequestActor(batched, tactic, handleClass).release());
 
     TMap<TPartLocation, NKikimrProto::EReplyStatus> specialStatuses;
@@ -550,8 +551,6 @@ void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorage
 
 Y_UNIT_TEST(TestGivenBlock42MultiPut2ItemsStatuses) {
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
-    TTestBasicRuntime runtime(1, false);
-    Setup(runtime, type);
     constexpr ui64 statusCount = 3;
     NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
         NKikimrProto::OK,
@@ -561,6 +560,8 @@ Y_UNIT_TEST(TestGivenBlock42MultiPut2ItemsStatuses) {
     Y_VERIFY(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
     for (ui64 fstIdx = 0; fstIdx < statusCount; ++fstIdx) {
         for (ui64 sndIdx = 0; sndIdx < statusCount; ++sndIdx) {
+            TTestBasicRuntime runtime(1, false);
+            Setup(runtime, type);
             MakeTestMultiPutItemStatuses(runtime, type, {maybeStatuses[fstIdx], maybeStatuses[sndIdx]});
         }
     }
@@ -1177,6 +1178,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                     q.Shift = shift;
                     q.Size = size;
                 }
+                SetPredictedDelaysForAllQueues({});
                 runtime.Send(
                     new IEventHandle(
                         proxy, sender, new TEvBlobStorage::TEvGet(

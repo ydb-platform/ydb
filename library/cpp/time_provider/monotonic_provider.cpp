@@ -29,15 +29,4 @@ namespace NMonotonic {
         return TIntrusivePtr<IMonotonicTimeProvider>(new TDefaultMonotonicTimeProvider);
     }
 
-    class TDefaultBootTimeProvider: public IBootTimeProvider {
-    public:
-        TBootTime Now() override {
-            return TBootTime::Now();
-        }
-    };
-
-    TIntrusivePtr<IBootTimeProvider> CreateDefaultBootTimeProvider() {
-        return TIntrusivePtr<IBootTimeProvider>(new TDefaultBootTimeProvider);
-    }
-
 }

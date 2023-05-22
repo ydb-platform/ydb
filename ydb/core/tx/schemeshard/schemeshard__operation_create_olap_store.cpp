@@ -14,114 +14,25 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 
-// TODO: make it a part of TOlapStoreInfo
-bool PrepareSchemaPreset(NKikimrSchemeOp::TColumnTableSchemaPreset& proto, TOlapStoreInfo& store,
-                         size_t protoIndex, IErrorCollector& errors)
-{
-    TOlapStoreSchemaPreset preset;
-    if (!preset.ParseFromRequest(proto, errors)) {
-        return false;
-    }
-    const auto presetId = store.Description.GetNextSchemaPresetId();
-    if (store.SchemaPresets.contains(presetId) || store.SchemaPresetByName.contains(preset.GetName())) {
-        errors.AddError(Sprintf("Duplicate schema preset %" PRIu32 " with name '%s'", presetId, proto.GetName().c_str()));
-        return false;
-    }
-    preset.SetId(presetId);
-    preset.SetProtoIndex(protoIndex);
-
-    TOlapSchemaUpdate schemaDiff;
-    if (!schemaDiff.Parse(proto.GetSchema(), errors, true)) {
-        return false;
-    }
-
-    if (!preset.Update(schemaDiff, errors)) {
-        return false;
-    }
-    proto.Clear();
-    preset.Serialize(proto);
-
-    store.Description.SetNextSchemaPresetId(presetId + 1);
-    store.SchemaPresetByName[preset.GetName()] = preset.GetId();
-    store.SchemaPresets[preset.GetId()] = std::move(preset);
-    return true;
-}
-
-TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescription& opSrc, IErrorCollector& errors)
-{
-    TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo;
-    storeInfo->AlterVersion = 1;
-    storeInfo->Description = opSrc;
-    auto& op = storeInfo->Description;
-
-    if (op.GetRESERVED_MetaShardCount() != 0) {
-        errors.AddError("trying to create OLAP store with meta shards (not supported yet)");
-        return nullptr;
-    }
-
-    if (!op.HasColumnShardCount()) {
-        errors.AddError("trying to create OLAP store without shards number specified");
-        return nullptr;
-    }
-
-    if (op.GetColumnShardCount() == 0) {
-        errors.AddError("trying to create OLAP store without zero shards");
-        return nullptr;
-    }
-
-    for (auto& presetProto : *op.MutableRESERVED_TtlSettingsPresets()) {
-        Y_UNUSED(presetProto);
-        errors.AddError("TTL presets are not supported");
-        return nullptr;
-    }
-
-    op.SetNextSchemaPresetId(1);
-    op.SetNextTtlSettingsPresetId(1);
-
-    size_t protoIndex = 0;
-    for (auto& presetProto : *op.MutableSchemaPresets()) {
-        if (presetProto.HasId()) {
-            errors.AddError("Schema preset id cannot be specified explicitly");
-            return nullptr;
-        }
-        if (!PrepareSchemaPreset(presetProto, *storeInfo, protoIndex++, errors)) {
-            return nullptr;
-        }
-    }
-
-    if (!storeInfo->SchemaPresetByName.contains("default") || storeInfo->SchemaPresets.size() > 1) {
-        errors.AddError("A single schema preset named 'default' is required");
-        return nullptr;
-    }
-
-    storeInfo->ColumnShards.resize(op.GetColumnShardCount());
-    return storeInfo;
-}
-
 void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
                    const TChannelsBindings& channelsBindings,
                    TTxState& txState, TSchemeShard* ss)
 {
-    ui32 numColumnShards = storeInfo->ColumnShards.size();
-    ui32 numShards = numColumnShards;
-
+    ui32 numShards = storeInfo->GetColumnShards().size();
     txState.Shards.reserve(numShards);
 
     TShardInfo columnShardInfo = TShardInfo::ColumnShardInfo(txId, pathId);
     columnShardInfo.BindedChannels = channelsBindings;
 
-    storeInfo->Sharding.ClearColumnShards();
-    for (ui64 i = 0; i < numColumnShards; ++i) {
+    TVector<TShardIdx> shardsIndexes;
+    shardsIndexes.reserve(numShards);
+    for (ui64 i = 0; i < numShards; ++i) {
         TShardIdx idx = ss->RegisterShardInfo(columnShardInfo);
         ss->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
         txState.Shards.emplace_back(idx, ETabletType::ColumnShard, TTxState::CreateParts);
-
-        storeInfo->ColumnShards[i] = idx;
-        auto* shardInfoProto = storeInfo->Sharding.AddColumnShards();
-        shardInfoProto->SetOwnerId(idx.GetOwnerId());
-        shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
+        shardsIndexes.push_back(idx);
     }
-
+    storeInfo->ApplySharding(shardsIndexes);
     ss->SetPartitioning(pathId, storeInfo);
 }
 
@@ -171,7 +82,7 @@ public:
 
             // TODO: we may need to specify a more complex data channel mapping
             auto* init = tx.MutableInitShard();
-            init->SetDataChannelCount(storeInfo->Description.GetStorageConfig().GetDataChannelCount());
+            init->SetDataChannelCount(storeInfo->GetStorageConfig().GetDataChannelCount());
             init->SetOwnerPathId(txState->TargetPathId.LocalPathId);
             init->SetOwnerPath(path.PathString());
 
@@ -492,24 +403,19 @@ public:
         }
 
         TProposeErrorCollector errors(*result);
-        TOlapStoreInfo::TPtr storeInfo = CreateOlapStore(createDescription, errors);
-        if (!storeInfo.Get()) {
+        TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo;
+        if (!storeInfo->ParseFromRequest(createDescription, errors)) {
             return result;
-        }
-
-        // Make it easier by having data channel count always specified internally
-        if (!storeInfo->Description.GetStorageConfig().HasDataChannelCount()) {
-            storeInfo->Description.MutableStorageConfig()->SetDataChannelCount(1);
         }
 
         // Construct channels bindings for columnshards
         TChannelsBindings channelsBindings;
-        if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storeInfo->Description.GetStorageConfig(), channelsBindings, errStr)) {
+        if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storeInfo->GetStorageConfig(), channelsBindings, errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
-        const ui64 shardsToCreate = storeInfo->ColumnShards.size();
+        const ui64 shardsToCreate = storeInfo->GetColumnShards().size();
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks

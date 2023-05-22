@@ -37,6 +37,8 @@ target_link_libraries(cli_utils PUBLIC
   api-grpc-draft
   lib-deprecated-client
   common
+  cpp-client-ydb_discovery
+  cpp-client-ydb_driver
 )
 target_sources(cli_utils PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli.cpp

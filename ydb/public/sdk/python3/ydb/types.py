@@ -14,10 +14,7 @@ _EPOCH = datetime(1970, 1, 1)
 
 
 def _from_date(x, table_client_settings):
-    if (
-        table_client_settings is not None
-        and table_client_settings._native_date_in_result_sets
-    ):
+    if table_client_settings is not None and table_client_settings._native_date_in_result_sets:
         return _EPOCH.date() + timedelta(days=x.uint32_value)
     return x.uint32_value
 
@@ -30,19 +27,13 @@ def _to_date(pb, value):
 
 
 def _from_datetime_number(x, table_client_settings):
-    if (
-        table_client_settings is not None
-        and table_client_settings._native_datetime_in_result_sets
-    ):
+    if table_client_settings is not None and table_client_settings._native_datetime_in_result_sets:
         return datetime.utcfromtimestamp(x)
     return x
 
 
 def _from_json(x, table_client_settings):
-    if (
-        table_client_settings is not None
-        and table_client_settings._native_json_in_result_sets
-    ):
+    if table_client_settings is not None and table_client_settings._native_json_in_result_sets:
         return json.loads(x)
     return x
 
@@ -57,10 +48,7 @@ def _from_uuid(pb, value):
 
 
 def _from_interval(value_pb, table_client_settings):
-    if (
-        table_client_settings is not None
-        and table_client_settings._native_interval_in_result_sets
-    ):
+    if table_client_settings is not None and table_client_settings._native_interval_in_result_sets:
         return timedelta(microseconds=value_pb.int64_value)
     return value_pb.int64_value
 
@@ -77,10 +65,7 @@ def _to_interval(pb, value):
 
 
 def _from_timestamp(value_pb, table_client_settings):
-    if (
-        table_client_settings is not None
-        and table_client_settings._native_timestamp_in_result_sets
-    ):
+    if table_client_settings is not None and table_client_settings._native_timestamp_in_result_sets:
         return _EPOCH + timedelta(microseconds=value_pb.uint64_value)
     return value_pb.uint64_value
 
@@ -157,9 +142,7 @@ class PrimitiveType(enum.Enum):
         :return: A valid value of primitive type
         """
         if self._to_obj is not None and self._proto_field:
-            return self._to_obj(
-                getattr(value_pb, self._proto_field), table_client_settings
-            )
+            return self._to_obj(getattr(value_pb, self._proto_field), table_client_settings)
 
         if self._to_obj is not None:
             return self._to_obj(value_pb, table_client_settings)
@@ -230,9 +213,7 @@ class DecimalType(AbstractTypeBuilder):
         self._precision = precision
         self._scale = scale
         self._proto = _apis.ydb_value.Type()
-        self._proto.decimal_type.MergeFrom(
-            _apis.ydb_value.DecimalType(precision=self._precision, scale=self._scale)
-        )
+        self._proto.decimal_type.MergeFrom(_apis.ydb_value.DecimalType(precision=self._precision, scale=self._scale))
 
     @property
     def precision(self):
@@ -286,9 +267,7 @@ class OptionalType(AbstractTypeBuilder):
         self._repr = "%s?" % str(optional_type)
         self._proto = _apis.ydb_value.Type()
         self._item = optional_type
-        self._proto.optional_type.MergeFrom(
-            _apis.ydb_value.OptionalType(item=optional_type.proto)
-        )
+        self._proto.optional_type.MergeFrom(_apis.ydb_value.OptionalType(item=optional_type.proto))
 
     @property
     def item(self):
@@ -317,9 +296,7 @@ class ListType(AbstractTypeBuilder):
         :param list_type: List item type builder
         """
         self._repr = "List<%s>" % str(list_type)
-        self._proto = _apis.ydb_value.Type(
-            list_type=_apis.ydb_value.ListType(item=list_type.proto)
-        )
+        self._proto = _apis.ydb_value.Type(list_type=_apis.ydb_value.ListType(item=list_type.proto))
 
     @property
     def proto(self):

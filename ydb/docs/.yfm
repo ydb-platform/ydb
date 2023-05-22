@@ -16,8 +16,8 @@ docs-viewer:
     url:
       en: https://ydb.tech/
       default: https://ydb.tech/{lang}
-    src: https://storage.yandexcloud.net/docs-external/ydb/assets/Logo-YDB.svg
-    src-mobile: https://storage.yandexcloud.net/docs-external/ydb/assets/Logo-YDB.svg
+    src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/logo-full-site-header.svg
+    src-mobile: https://storage.yandexcloud.net/ydb-www-prod-site-assets/logo-full-site-header.svg
     img-has:
       width: 80px
       offset: true

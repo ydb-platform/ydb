@@ -4,14 +4,14 @@
 #include "scalars.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/compression/object.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 
 namespace NKikimr::NOlap {
 
-struct TCompression {
-    arrow::Compression::type Codec{arrow::Compression::LZ4_FRAME};
-    std::optional<int> Level;
-};
+using TCompression = NArrow::TCompression;
 
 class TTierInfo {
 private:
@@ -107,10 +107,12 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << EvictColumnName << "' "
-            << arrow::util::Codec::GetCodecAsString(Compression ? Compression->Codec : TCompression().Codec)
-            << ":" << ((Compression && Compression->Level) ?
-                *Compression->Level : arrow::util::kUseDefaultCompressionLevel);
+        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << EvictColumnName << "' ";
+        if (Compression) {
+            sb << Compression->DebugString();
+        } else {
+            sb << TCompression::Default().DebugString();
+        }
         return sb;
     }
 };

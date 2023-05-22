@@ -214,8 +214,8 @@ namespace NInterconnect {
         token.Request(read, write);
     }
 
-    bool TStreamSocket::ExpectingCertainWrite() const {
-        return false;
+    size_t TStreamSocket::ExpectedWriteLength() const {
+        return 0;
     }
 
     //////////////////////////////////////////////////////
@@ -500,8 +500,8 @@ namespace NInterconnect {
             return res;
         }
 
-        bool ExpectingCertainWrite() const {
-            return BlockedSend.has_value();
+        size_t ExpectedWriteLength() const {
+            return BlockedSend ? BlockedSend->second : 0;
         }
 
         std::optional<std::pair<void*, size_t>> BlockedReceive;
@@ -651,7 +651,7 @@ namespace NInterconnect {
         token.Request(WantRead(), WantWrite());
     }
 
-    bool TSecureSocket::ExpectingCertainWrite() const {
-        return Impl->ExpectingCertainWrite();
+    size_t TSecureSocket::ExpectedWriteLength() const {
+        return Impl->ExpectedWriteLength();
     }
 }

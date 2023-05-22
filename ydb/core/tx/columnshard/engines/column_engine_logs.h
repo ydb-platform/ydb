@@ -238,6 +238,8 @@ public:
     std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) override;
 
 private:
+    using TMarksMap = std::map<TMark, ui64, TMark::TCompare>;
+
     struct TGranuleMeta {
         const TGranuleRecord Record;
         THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
@@ -257,7 +259,7 @@ private:
     std::shared_ptr<TColumnsTable> ColumnsTable;
     std::shared_ptr<TCountersTable> CountersTable;
     THashMap<ui64, std::shared_ptr<TGranuleMeta>> Granules; // granule -> meta
-    THashMap<ui64, TMap<TMark, ui64>> PathGranules; // path_id -> {mark, granule}
+    THashMap<ui64, TMarksMap> PathGranules; // path_id -> {mark, granule}
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
     THashSet<ui64> GranulesInSplit;
     /// Set of empty granules.

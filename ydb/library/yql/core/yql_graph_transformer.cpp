@@ -10,24 +10,24 @@ namespace {
 class TCompositeGraphTransformer : public TGraphTransformerBase {
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
-        : Stages(stages)
-        , UseIssueScopes(useIssueScopes)
-        , DoCheckArguments(doCheckArguments)
+        : Stages_(stages)
+        , UseIssueScopes_(useIssueScopes)
+        , DoCheckArguments_(doCheckArguments)
     {
-        if (UseIssueScopes) {
-            for (const auto& stage : Stages) {
+        if (UseIssueScopes_) {
+            for (const auto& stage : Stages_) {
                 YQL_ENSURE(!stage.Name.empty());
             }
         }
     }
 
     void Rewind() override {
-        for (auto& stage : Stages) {
+        for (auto& stage : Stages_) {
             stage.GetTransformer().Rewind();
         }
 
-        Index = 0;
-        CheckArgumentsCount = 0;
+        Index_ = 0;
+        CheckArgumentsCount_ = 0;
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -40,41 +40,41 @@ public:
         }
 #endif
 
-        if (Index >= Stages.size()) {
+        if (Index_ >= Stages_.size()) {
             return TStatus::Ok;
         }
 
         auto status = WithScope(ctx, [&]() {
-            return Stages[Index].GetTransformer().Transform(input, output, ctx);
+            return Stages_[Index_].GetTransformer().Transform(input, output, ctx);
         });
 #ifndef NDEBUG
-        if (DoCheckArguments && output && output != input) {
+        if (DoCheckArguments_ && output && output != input) {
             try {
                 CheckArguments(*output);
-                ++CheckArgumentsCount;
+                ++CheckArgumentsCount_;
             } catch (yexception& e) {
-                e << "at CheckArguments() pass #" << CheckArgumentsCount
-                  << ", stage '" << Stages[Index].Name << "'";
+                e << "at CheckArguments() pass #" << CheckArgumentsCount_
+                  << ", stage '" << Stages_[Index_].Name << "'";
                 throw;
             }
         }
 #else
-        Y_UNUSED(DoCheckArguments);
-        Y_UNUSED(CheckArgumentsCount);
+        Y_UNUSED(DoCheckArguments_);
+        Y_UNUSED(CheckArgumentsCount_);
 #endif
         status = HandleStatus(status);
         return status;
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
-        YQL_ENSURE(Index < Stages.size());
-        return Stages[Index].GetTransformer().GetAsyncFuture(input);
+        YQL_ENSURE(Index_ < Stages_.size());
+        return Stages_[Index_].GetTransformer().GetAsyncFuture(input);
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        YQL_ENSURE(Index < Stages.size());
+        YQL_ENSURE(Index_ < Stages_.size());
         auto status = WithScope(ctx, [&]() {
-            return Stages[Index].GetTransformer().ApplyAsyncChanges(input, output, ctx);
+            return Stages_[Index_].GetTransformer().ApplyAsyncChanges(input, output, ctx);
         });
 
         status = HandleStatus(status);
@@ -82,18 +82,18 @@ public:
     }
 
     TStatistics GetStatistics() const final {
-        if (Statistics.Stages.empty()) {
-            Statistics.Stages.resize(Stages.size());
+        if (Statistics_.Stages.empty()) {
+            Statistics_.Stages.resize(Stages_.size());
         }
 
-        YQL_ENSURE(Stages.size() == Statistics.Stages.size());
-        for (size_t i = 0; i < Stages.size(); ++i) {
-            auto& stagePair = Statistics.Stages[i];
-            stagePair.first = Stages[i].Name;
-            stagePair.second =  Stages[i].GetTransformer().GetStatistics();
+        YQL_ENSURE(Stages_.size() == Statistics_.Stages.size());
+        for (size_t i = 0; i < Stages_.size(); ++i) {
+            auto& stagePair = Statistics_.Stages[i];
+            stagePair.first = Stages_[i].Name;
+            stagePair.second =  Stages_[i].GetTransformer().GetStatistics();
         }
 
-        return Statistics;
+        return Statistics_;
     }
 
 private:
@@ -104,11 +104,11 @@ private:
 
         if (status.HasRestart) {
             // ignore Async status in this case
-            Index = 0;
+            Index_ = 0;
             status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
         } else if (status.Level == IGraphTransformer::TStatus::Ok) {
             status = IGraphTransformer::TStatus::Repeat;
-            ++Index;
+            ++Index_;
         }
 
         return status;
@@ -116,10 +116,10 @@ private:
 
     template <typename TFunc>
     TStatus WithScope(TExprContext& ctx, TFunc func) {
-        if (UseIssueScopes) {
+        if (UseIssueScopes_) {
             TIssueScopeGuard guard(ctx.IssueManager, [&]() {
-                const auto scopeIssueCode = Stages[Index].IssueCode;
-                const auto scopeIssueMessage = Stages[Index].IssueMessage;
+                const auto scopeIssueCode = Stages_[Index_].IssueCode;
+                const auto scopeIssueMessage = Stages_[Index_].IssueMessage;
 
                 auto issue = MakeIntrusive<TIssue>(TPosition(), scopeIssueMessage ? scopeIssueMessage : IssueCodeToString(scopeIssueCode));
                 issue->SetCode(scopeIssueCode, GetSeverity(scopeIssueCode));
@@ -133,11 +133,11 @@ private:
     }
 
 protected:
-    TVector<TTransformStage> Stages;
-    const bool UseIssueScopes;
-    const bool DoCheckArguments;
-    size_t Index = 0;
-    ui64 CheckArgumentsCount = 0;
+    TVector<TTransformStage> Stages_;
+    const bool UseIssueScopes_;
+    const bool DoCheckArguments_;
+    size_t Index_ = 0;
+    ui64 CheckArgumentsCount_ = 0;
 };
 
 void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where, TExprContext& ctx) {
@@ -173,7 +173,7 @@ public:
 
 private:
     void Rewind() override {
-        Condition.Clear();
+        Condition_.Clear();
         TCompositeGraphTransformer::Rewind();
     }
 
@@ -184,17 +184,17 @@ private:
 
         if (status.HasRestart) {
             // ignore Async status in this case
-            Index = 0;
+            Index_ = 0;
             status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
         } else if (status.Level == IGraphTransformer::TStatus::Ok) {
             status = IGraphTransformer::TStatus::Repeat;
-            YQL_ENSURE(!Condition.Empty(), "Condition must be set");
-            if (Index == 0 && *Condition) {
-                Index = 1; // left
-            } else if (Index == 0) {
-                Index = 2; // right
+            YQL_ENSURE(!Condition_.Empty(), "Condition must be set");
+            if (Index_ == 0 && *Condition_) {
+                Index_ = 1; // left
+            } else if (Index_ == 0) {
+                Index_ = 2; // right
             } else {
-                Index = 3; // end
+                Index_ = 3; // end
             }
         }
 
@@ -205,8 +205,8 @@ private:
     {
         auto transformer = CreateFunctorTransformer([this, condition](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             output = input;
-            if (Condition.Empty()) {
-                Condition = condition(input, ctx);
+            if (Condition_.Empty()) {
+                Condition_ = condition(input, ctx);
             }
             return TStatus::Ok;
         });
@@ -214,7 +214,7 @@ private:
         return TTransformStage(transformer, "Condition", TIssuesIds::DEFAULT_ERROR);
     }
 
-    TMaybe<bool> Condition;
+    TMaybe<bool> Condition_;
 };
 
 } // namespace

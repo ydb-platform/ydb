@@ -105,9 +105,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 }
 
                 case NKikimrSchemeOp::ECdcStreamFormatJson:
-                case NKikimrSchemeOp::ECdcStreamFormatDocApiJson: {
+                case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
                     NJson::TJsonValue json;
-                    if (Stream.Format == NKikimrSchemeOp::ECdcStreamFormatDocApiJson) {
+                    if (Stream.Format == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
                         record.SerializeToDocApiJson(json, TChangeRecord::TDocApiJsonOptions{
                             .AwsRegion = Stream.AwsRegion,
                             .StreamMode = Stream.Mode,
@@ -697,7 +697,7 @@ class TCdcChangeSenderMain
             }
 
             case NKikimrSchemeOp::ECdcStreamFormatJson:
-            case NKikimrSchemeOp::ECdcStreamFormatDocApiJson: {
+            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
                 using namespace NKikimr::NDataStreams::V1;
                 const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
                 return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());

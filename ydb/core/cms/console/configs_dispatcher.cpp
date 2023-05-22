@@ -265,7 +265,8 @@ void TConfigsDispatcher::Bootstrap()
         TVector<ui32>(DYNAMIC_KINDS.begin(), DYNAMIC_KINDS.end()),
         CurrentConfig,
         0,
-        true);
+        true,
+        1);
     CommonSubscriptionClient = RegisterWithSameMailbox(commonClient);
 
     Become(&TThis::StateInit);
@@ -330,13 +331,17 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 {
     NKikimrConfig::TAppConfig newYamlProtoConfig = {};
 
-    NYamlConfig::ResolveAndParseYamlConfig(
-        YamlConfig,
-        VolatileYamlConfigs,
-        Labels,
-        newYamlProtoConfig,
-        &ResolvedYamlConfig,
-        &ResolvedJsonConfig);
+    try {
+        NYamlConfig::ResolveAndParseYamlConfig(
+            YamlConfig,
+            VolatileYamlConfigs,
+            Labels,
+            newYamlProtoConfig,
+            &ResolvedYamlConfig,
+            &ResolvedJsonConfig);
+    } catch (const yexception& ex) {
+        BLOG_ERROR("Got invalid config from console error# " << ex.what());
+    }
 
     return newYamlProtoConfig;
 }

@@ -81,7 +81,7 @@ TString TPGParse::Dump() const {
     TPGStreamInput stream(*this);
     TStringBuf name;
     stream >> name;
-    return TStringBuilder() << "Name:" << name;
+    return TStringBuilder() << "Name: " << name;
 }
 
 TPGParse::TQueryData TPGParse::GetQueryData() const {
@@ -171,10 +171,10 @@ TString TPGDescribe::Dump() const {
     TStringBuilder text;
     char describeType = 0;
     stream >> describeType;
-    text << "Type:" << describeType;
+    text << "Type: " << describeType;
     TStringBuf name;
     stream >> name;
-    text << " Name:" << name;
+    text << " Name: " << name;
     return text;
 }
 
@@ -202,6 +202,35 @@ TString TPGExecute::Dump() const {
     }
     return text;
 }
+
+TPGClose::TCloseData TPGClose::GetCloseData() const {
+    TCloseData closeData;
+    TPGStreamInput stream(*this);
+    char type;
+    TString name;
+    stream >> type;
+    stream >> name;
+    switch (type) {
+        case 'S':
+            closeData.StatementName = name;
+            break;
+        case 'P':
+            closeData.PortalName = name;
+            break;
+    }
+    return closeData;
+}
+
+TString TPGClose::Dump() const {
+    TStringBuilder text;
+    TPGStreamInput stream(*this);
+    char type;
+    TStringBuf name;
+    stream >> type >> name;
+    text << "Type: " << type << " Name: " << name;
+    return text;
+}
+
 
 
 }

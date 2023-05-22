@@ -70,35 +70,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
     }
 
-    NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server,
-                                                        TActorId sender,
-                                                        const TString &path)
-    {
-        auto &runtime = *server->GetRuntime();
-        TAutoPtr<IEventHandle> handle;
-        TVector<ui64> shards;
-
-        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-        request->Record.MutableDescribePath()->SetPath(path);
-        request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-        auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-
-        return *reply->MutableRecord();
-    }
-
-    TVector<ui64> GetTableShards(Tests::TServer* server,
-                                TActorId sender,
-                                const TString &path)
-    {
-        TVector<ui64> shards;
-        auto lsResult = DescribeTable(server, sender, path);
-        for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
-            shards.push_back(part.GetDatashardId());
-
-        return shards;
-    }
-
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
         TAtomic prev;
         runtime->GetAppData().Icb->SetValue("SchemeShard_SplitMergePartCountLimit", val, prev);

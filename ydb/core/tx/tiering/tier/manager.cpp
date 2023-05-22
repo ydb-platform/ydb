@@ -11,11 +11,11 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
     NMetadata::NInternal::TTableRecord result;
     result.SetColumn(TTierConfig::TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     {
-        auto it = settings.GetFeatures().find(TTierConfig::TDecoder::TierConfig);
-        if (it != settings.GetFeatures().end()) {
+        auto fConfig = settings.GetFeaturesExtractor().Extract(TTierConfig::TDecoder::TierConfig);
+        if (fConfig) {
             NKikimrSchemeOp::TStorageTierConfig proto;
-            if (!::google::protobuf::TextFormat::ParseFromString(it->second, &proto)) {
-                return "incorrect proto format";
+            if (!::google::protobuf::TextFormat::ParseFromString(*fConfig, &proto)) {
+                return TConclusionStatus::Fail("incorrect proto format");
             } else if (proto.HasObjectStorage()) {
                 TString defaultUserId;
                 if (context.GetExternalData().GetUserToken()) {
@@ -25,33 +25,33 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                 if (proto.GetObjectStorage().HasSecretableAccessKey()) {
                     auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(proto.GetObjectStorage().GetSecretableAccessKey(), defaultUserId);
                     if (!accessKey) {
-                        return "AccessKey description is incorrect";
+                        return TConclusionStatus::Fail("AccessKey description is incorrect");
                     }
                     *proto.MutableObjectStorage()->MutableSecretableAccessKey() = accessKey->SerializeToProto();
                 } else if (proto.GetObjectStorage().HasAccessKey()) {
                     auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetAccessKey(), defaultUserId);
                     if (!accessKey) {
-                        return "AccessKey is incorrect";
+                        return TConclusionStatus::Fail("AccessKey is incorrect");
                     }
                     *proto.MutableObjectStorage()->MutableAccessKey() = accessKey->SerializeToString();
                 } else {
-                    return "AccessKey not configured";
+                    return TConclusionStatus::Fail("AccessKey not configured");
                 }
 
                 if (proto.GetObjectStorage().HasSecretableSecretKey()) {
                     auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromProto(proto.GetObjectStorage().GetSecretableSecretKey(), defaultUserId);
                     if (!secretKey) {
-                        return "SecretKey description is incorrect";
+                        return TConclusionStatus::Fail("SecretKey description is incorrect");
                     }
                     *proto.MutableObjectStorage()->MutableSecretableSecretKey() = secretKey->SerializeToProto();
                 } else if (proto.GetObjectStorage().HasSecretKey()) {
                     auto secretKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetSecretKey(), defaultUserId);
                     if (!secretKey) {
-                        return "SecretKey is incorrect";
+                        return TConclusionStatus::Fail("SecretKey is incorrect");
                     }
                     *proto.MutableObjectStorage()->MutableSecretKey() = secretKey->SerializeToString();
                 } else {
-                    return "SecretKey not configured";
+                    return TConclusionStatus::Fail("SecretKey not configured");
                 }
             }
             result.SetColumn(TTierConfig::TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(proto.DebugString()));

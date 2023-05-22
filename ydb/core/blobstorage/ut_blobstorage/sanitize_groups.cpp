@@ -35,6 +35,20 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             .LocationGenerator = [&](ui32 nodeId) { return locations[nodeId - 1]; },
         }};
 
+
+        auto catchSanitizeRequests = [](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    UNIT_ASSERT(command.GetCommandCase() != NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup);
+                }
+            }
+            return true;
+        };
+
+        env.Runtime->FilterFunction = catchSanitizeRequests;
+
+        // Initialize runtime
         TGroupGeometryInfo geom = CreateGroupGeometry(groupType);
 
         const ui32 disksPerNode = 1;
@@ -47,6 +61,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, error), error);
         env.Cleanup();
 
+        // Shuffle node locayion, assure that layout error occured
         std::random_shuffle(locations.begin(), locations.end());
         env.Initialize();
         env.Sim(TDuration::Seconds(100));
@@ -54,8 +69,16 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         CheckBaseConfigLayout(geom, cfg, error);
         Cerr << error << Endl;
 
+        // Sanitize groups
+        env.Runtime->FilterFunction = {};
         env.UpdateSettings(true, false, true);
         env.Sim(TDuration::Minutes(15));
+        cfg = env.FetchBaseConfig();
+        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, error), error);
+
+        // Assure that sanitizer doesn't send request to fully sane groups
+        env.Runtime->FilterFunction = catchSanitizeRequests;
+        env.Sim(TDuration::Minutes(3));
         cfg = env.FetchBaseConfig();
         UNIT_ASSERT_C(CheckBaseConfigLayout(geom, cfg, error), error);
     }

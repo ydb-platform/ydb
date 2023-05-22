@@ -42,9 +42,9 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     } else {
         Workers.emplace_back(ev->Sender);
     }
-    if (ev->Get()->GetErrorMessage()) {
+    if (ev->Get()->IsFail()) {
         ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=on_error;owner=" << ev->Get()->GetOwnerId() << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
-        Send(ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetErrorMessage()));
+        Send(ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetError()));
     } else {
         Send(ev->Get()->GetOwnerId(), new TEvExecution::TEvTaskProcessedResult(ev->Get()->GetResult()));
     }
@@ -64,8 +64,9 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     } else {
         ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=overlimit;sender=" << ev->Sender << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
         OverlimitRate->Inc();
-        Send(ev->Sender, new TEvExecution::TEvTaskProcessedResult("scan conveyor overloaded (" +
-            ::ToString(Waiting.size()) + " >= " + ::ToString(Config.GetQueueSizeLimit()) + ")"));
+        Send(ev->Sender, new TEvExecution::TEvTaskProcessedResult(
+            TConclusionStatus::Fail("scan conveyor overloaded (" + ::ToString(Waiting.size()) + " >= " + ::ToString(Config.GetQueueSizeLimit()) + ")")
+        ));
     }
     WaitingQueueSize->Set(Waiting.size());
     WorkersCount->Set(Workers.size());

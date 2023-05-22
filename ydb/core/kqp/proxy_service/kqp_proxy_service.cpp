@@ -8,6 +8,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -144,8 +145,8 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
                 : Snapshot(std::move(snapshot)) {}
         };
 
-        struct TEvScriptExecutionsTableCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTableCreationFinished, EvScriptExecutionsTableCreationFinished> {
-            TEvScriptExecutionsTableCreationFinished() = default;
+        struct TEvScriptExecutionsTablesCreationFinished : public NActors::TEventLocal<TEvScriptExecutionsTablesCreationFinished, EvScriptExecutionsTableCreationFinished> {
+            TEvScriptExecutionsTablesCreationFinished() = default;
         };
     };
 
@@ -233,7 +234,7 @@ public:
         SendWhiteboardRequest();
         ScheduleIdleSessionCheck(TDuration::Seconds(2));
 
-        CheckScriptExecutionsTableExistence();
+        CheckScriptExecutionsTablesExistence();
     }
 
     TDuration GetSessionIdleDuration() const {
@@ -1127,7 +1128,9 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
-            hFunc(TEvPrivate::TEvScriptExecutionsTableCreationFinished, Handle);
+            hFunc(TEvPrivate::TEvScriptExecutionsTablesCreationFinished, Handle);
+            hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
+            hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1313,16 +1316,24 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    void CheckScriptExecutionsTableExistence() {
+    void CheckScriptExecutionsTablesExistence() {
         if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
-            Register(CreateScriptExecutionsTableCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTableCreationFinished>()));
+            Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()));
         } else {
             ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
         }
     }
 
-    void Handle(TEvPrivate::TEvScriptExecutionsTableCreationFinished::TPtr&) {
+    void Handle(TEvPrivate::TEvScriptExecutionsTablesCreationFinished::TPtr&) {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+    }
+
+    void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
+        Register(CreateGetScriptExecutionOperationActor(std::move(ev)));
+    }
+
+    void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
+        Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
     }
 
 private:

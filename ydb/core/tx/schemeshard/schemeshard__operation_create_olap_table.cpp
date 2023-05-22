@@ -134,9 +134,9 @@ public:
     {}
 
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
-        if (description.GetColumnShardCount() > StoreInfo.ColumnShards.size()) {
+        if (description.GetColumnShardCount() > StoreInfo.GetColumnShards().size()) {
             errors.AddError(Sprintf("Cannot create table with %" PRIu32 " column shards, only %" PRIu32 " are available",
-                description.GetColumnShardCount(), ui32(StoreInfo.ColumnShards.size())));
+                description.GetColumnShardCount(), ui32(StoreInfo.GetColumnShards().size())));
             return false;
         }
 
@@ -298,8 +298,7 @@ public:
                 Y_VERIFY(storeInfo->SchemaPresets.contains(presetId),
                     "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
                 auto& preset = storeInfo->SchemaPresets.at(presetId);
-                size_t presetIndex = preset.GetProtoIndex();
-                create->MutableSchemaPreset()->CopyFrom(storeInfo->Description.GetSchemaPresets(presetIndex));
+                preset.Serialize(*create->MutableSchemaPreset());
             }
 
             Y_VERIFY(create);
@@ -674,7 +673,7 @@ public:
             if (tableInfo) {
                 auto layoutPolicy = storeInfo->GetTablesLayoutPolicy();
                 auto currentLayout = context.SS->ColumnTables.GetTablesLayout(
-                    TColumnTablesLayout::ShardIdxToTabletId(storeInfo->ColumnShards, *context.SS));
+                    TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
                 TTablesStorage::TTableCreateOperator createOperator(tableInfo);
                 if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy)) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,

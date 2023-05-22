@@ -344,6 +344,7 @@ private:
 
     void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
         TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
+        ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState, "Unexpected propose result from unknown tabletId " << shardId);
@@ -971,6 +972,7 @@ private:
 
     void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
         TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
+        ResponseEv->Orbit.Join(res->Orbit);
         const ui64 shardId = res->GetOrigin();
         LastShard = shardId;
 
@@ -1549,8 +1551,9 @@ private:
             const ui32 flags =
                 (ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0) |
                 (VolatileTx ? NTxDataShard::TTxFlags::VolatilePrepare : 0);
+            std::unique_ptr<TEvDataShard::TEvProposeTransaction> evData;
             if (GetSnapshot().IsValid() && (ReadOnlyTx || Request.UseImmediateEffects)) {
-                ev.reset(new TEvDataShard::TEvProposeTransaction(
+                evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
                     TxId,
@@ -1559,13 +1562,15 @@ private:
                     GetSnapshot().TxId,
                     flags));
             } else {
-                ev.reset(new TEvDataShard::TEvProposeTransaction(
+                evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
                     SelfId(),
                     TxId,
                     dataTransaction.SerializeAsString(),
                     flags));
             }
+            ResponseEv->Orbit.Fork(evData->Orbit);
+            ev = std::move(evData);
         }
         auto traceId = ExecuterSpan.GetTraceId();
 
@@ -2232,7 +2237,7 @@ private:
             }
             transaction.SetImmediate(ImmediateTx);
 
-            ActorIdToProto(SelfId(), ev->Record.MutableActor());
+            ActorIdToProto(SelfId(), ev->Record.MutableSourceActor());
             ev->Record.MutableData()->Swap(&transaction);
             ev->Record.SetTxId(TxId);
 

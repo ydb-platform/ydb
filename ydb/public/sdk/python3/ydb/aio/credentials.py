@@ -102,8 +102,7 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
                     )
                 )
             raise issues.ConnectionError(
-                "%s: %s.\n%s"
-                % (self.__class__.__name__, self.last_error, self.extra_error_message)
+                "%s: %s.\n%s" % (self.__class__.__name__, self.last_error, self.extra_error_message)
             )
         return cached_token
 

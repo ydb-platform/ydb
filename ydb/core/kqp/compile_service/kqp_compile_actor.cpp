@@ -126,11 +126,11 @@ public:
                 AsyncCompileResult = KqpHost->PrepareScanQuery(QueryRef, QueryId.IsSql(), prepareSettings);
                 break;
 
-            case NKikimrKqp::QUERY_TYPE_SQL_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
                 AsyncCompileResult = KqpHost->PrepareQuery(QueryRef, prepareSettings);
                 break;
 
-            case NKikimrKqp::QUERY_TYPE_FEDERATED_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
                 AsyncCompileResult = KqpHost->PrepareFederatedQuery(QueryRef, prepareSettings);
                 break;
 
@@ -368,6 +368,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePredicateExtractForDataQuery = serviceConfig.GetEnablePredicateExtractForDataQueries();
     kqpConfig.EnablePredicateExtractForScanQuery = serviceConfig.GetEnablePredicateExtractForScanQueries();
     kqpConfig.EnableSequentialHints = serviceConfig.GetEnableSequentialHints();
+    kqpConfig.EnableKqpImmediateEffects = serviceConfig.GetEnableKqpImmediateEffects();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

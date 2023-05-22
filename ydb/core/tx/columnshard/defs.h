@@ -22,6 +22,27 @@ struct TLimits {
     static ui64 GetMaxBlobSize();
     static void SetMaxBlobSize(const ui64 value);
 
+    class TMaxBlobSizeGuard: TNonCopyable {
+    private:
+        const ui64 Size;
+        const ui64 Original;
+    public:
+        TMaxBlobSizeGuard(const ui64 value)
+            : Size(value)
+            , Original(GetBlobSizeLimit())
+        {
+            SetMaxBlobSize(Size);
+        }
+
+        ~TMaxBlobSizeGuard() {
+            SetMaxBlobSize(Original);
+        }
+    };
+
+    static TMaxBlobSizeGuard MaxBlobSizeGuard(const ui64 value) {
+        return TMaxBlobSizeGuard(value);
+    }
+
     TControlWrapper MinInsertBytes;
     TControlWrapper MaxInsertBytes;
     TControlWrapper InsertTableSize;

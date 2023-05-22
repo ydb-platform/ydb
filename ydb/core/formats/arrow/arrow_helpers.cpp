@@ -1,10 +1,15 @@
 #include "arrow_helpers.h"
 #include "switch_type.h"
 #include "one_batch_input_stream.h"
+#include "common/validation.h"
 #include "merging_sorted_input_stream.h"
+#include "serializer/batch_only.h"
+#include "serializer/abstract.h"
+#include "serializer/stream.h"
 
 #include <ydb/core/util/yverify_stream.h>
 #include <util/system/yassert.h>
+#include <util/string/join.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
@@ -124,15 +129,12 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TStri
 }
 
 TString SerializeSchema(const arrow::Schema& schema) {
-    auto buffer = arrow::ipc::SerializeSchema(schema);
-    if (!buffer.ok()) {
-        return {};
-    }
-    return TString((const char*)(*buffer)->data(), (*buffer)->size());
+    auto buffer = TStatusValidator::GetValid(arrow::ipc::SerializeSchema(schema));
+    return buffer->ToString();
 }
 
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(str));
+    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<NSerialization::TBufferOverString>(str));
     arrow::io::BufferReader reader(buffer);
     arrow::ipc::DictionaryMemo dictMemo;
     auto schema = ReadSchema(&reader, &dictMemo);
@@ -142,67 +144,8 @@ std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
     return *schema;
 }
 
-namespace {
-    class TFixedStringOutputStream final : public arrow::io::OutputStream {
-    public:
-        TFixedStringOutputStream(TString* out)
-            : Out(out)
-            , Position(0)
-        { }
-
-        arrow::Status Close() override {
-            Out = nullptr;
-            return arrow::Status::OK();
-        }
-
-        bool closed() const override {
-            return Out == nullptr;
-        }
-
-        arrow::Result<int64_t> Tell() const override {
-            return Position;
-        }
-
-        arrow::Status Write(const void* data, int64_t nbytes) override {
-            if (Y_LIKELY(nbytes > 0)) {
-                Y_VERIFY(Out && Out->size() - Position >= ui64(nbytes));
-                char* dst = &(*Out)[Position];
-                ::memcpy(dst, data, nbytes);
-                Position += nbytes;
-            }
-
-            return arrow::Status::OK();
-        }
-
-        size_t GetPosition() const {
-            return Position;
-        }
-
-    private:
-        TString* Out;
-        size_t Position;
-    };
-}
-
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) {
-    arrow::ipc::IpcPayload payload;
-    auto status = arrow::ipc::GetRecordBatchPayload(*batch, options, &payload);
-    Y_VERIFY_OK(status);
-
-    int32_t metadata_length = 0;
-    arrow::io::MockOutputStream mock;
-    status = arrow::ipc::WriteIpcPayload(payload, options, &mock, &metadata_length);
-    Y_VERIFY_OK(status);
-
-    TString str;
-    str.resize(mock.GetExtentBytesWritten());
-
-    TFixedStringOutputStream out(&str);
-    status = arrow::ipc::WriteIpcPayload(payload, options, &out, &metadata_length);
-    Y_VERIFY_OK(status);
-    Y_VERIFY(out.GetPosition() == str.size());
-
-    return str;
+    return NSerialization::TBatchPayloadSerializer(options).Serialize(batch);
 }
 
 TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -211,18 +154,16 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
     return SerializeBatch(batch, writeOptions);
 }
 
-std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) {
-    arrow::ipc::DictionaryMemo dictMemo;
-    auto options = arrow::ipc::IpcReadOptions::Defaults();
-    options.use_threads = false;
-
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(blob));
-    arrow::io::BufferReader reader(buffer);
-    auto batch = ReadRecordBatch(schema, &dictMemo, options, &reader);
-    if (!batch.ok() || !(*batch)->Validate().ok()) {
-        return {};
+std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema)
+{
+    auto result = NSerialization::TBatchPayloadDeserializer(schema).Deserialize(blob);
+    if (result.ok()) {
+        return *result;
+    } else {
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())
+            ("schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
+        return nullptr;
     }
-    return *batch;
 }
 
 std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount) {

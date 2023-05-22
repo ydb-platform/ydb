@@ -74,6 +74,7 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
 
     auto readMatch = MatchRead<TKqlReadTableBase>(flatMap.Input());
 
+    TString lookupTable;
     //TODO: remove this branch KIKIMR-15255
     if (!readMatch) {
         if (auto readRangesMatch = MatchRead<TKqlReadTableRangesBase>(flatMap.Input())) {
@@ -91,6 +92,11 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
                             .To(key)
                             .Build()
                         .Done();
+                if (auto indexRead = read.Maybe<TKqlReadTableIndexRanges>()) {
+                    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+                    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(indexRead.Index().Cast().StringValue());
+                    lookupTable = indexMeta->Name;
+                }
             } else {
                 return node;
             }
@@ -121,10 +127,9 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
         return node;
     }
 
-    TString lookupTable;
     if (auto indexRead = readTable.Maybe<TKqlReadTableIndex>()) {
         lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
-    } else {
+    } else if (!lookupTable) {
         lookupTable = readTable.Table().Path().StringValue();
     }
 

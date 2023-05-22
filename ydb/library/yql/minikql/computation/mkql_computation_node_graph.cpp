@@ -186,9 +186,9 @@ public:
     }
 
     IComputationExternalNode* GetEntryPoint(size_t index, bool require) {
-        MKQL_ENSURE(index < Runtime2Computation.size() && (!require || Runtime2Computation[index]),
+        MKQL_ENSURE(index < Runtime2ComputationEntryPoints.size() && (!require || Runtime2ComputationEntryPoints[index]),
             "Pattern nodes can not get computation node by index: " << index << ", require: " << require);
-        return Runtime2Computation[index];
+        return Runtime2ComputationEntryPoints[index];
     }
 
     IComputationNode* GetRoot() {
@@ -197,6 +197,10 @@ public:
 
     bool GetSuitableForCache() const {
         return SuitableForCache;
+    }
+
+    size_t GetEntryPointsCount() const {
+        return Runtime2ComputationEntryPoints.size();
     }
 
 private:
@@ -210,7 +214,7 @@ private:
     TComputationMutables Mutables;
     TComputationNodePtrDeque ComputationNodesList;
     IComputationNode* RootNode = nullptr;
-    TComputationExternalNodePtrVector Runtime2Computation;
+    TComputationExternalNodePtrVector Runtime2ComputationEntryPoints;
     TComputationNodeOnNodeMap ElementsCache;
     bool SuitableForCache = true;
 };
@@ -527,8 +531,8 @@ public:
         PatternNodes->RootNode = rootNode;
     }
 
-    void PreserveEntryPoints(TComputationExternalNodePtrVector&& runtime2Computation) {
-        PatternNodes->Runtime2Computation = std::move(runtime2Computation);
+    void PreserveEntryPoints(TComputationExternalNodePtrVector&& runtime2ComputationEntryPoints) {
+        PatternNodes->Runtime2ComputationEntryPoints = std::move(runtime2ComputationEntryPoints);
     }
 
 private:
@@ -617,6 +621,72 @@ public:
         return PatternNodes->GetEntryPoint(index, require);
     }
 
+    const TArrowKernelsTopology* GetKernelsTopology() override {
+        Prepare();
+        if (!KernelsTopology.has_value()) {
+            CalculateKernelTopology(*Ctx);
+        }
+        
+        return &KernelsTopology.value();
+    }
+
+    void CalculateKernelTopology(TComputationContext& ctx) {
+        KernelsTopology.emplace();
+        KernelsTopology->InputArgsCount = PatternNodes->GetEntryPointsCount();
+
+        std::stack<const IComputationNode*> stack;
+        struct TNodeState {
+            bool Visited;
+            ui32 Index;
+        };
+
+        std::unordered_map<const IComputationNode*, TNodeState> deps;
+        for (ui32 i = 0; i < KernelsTopology->InputArgsCount; ++i) {
+            auto entryPoint = PatternNodes->GetEntryPoint(i, false);
+            if (!entryPoint) {
+                continue;
+            }
+
+            deps.emplace(entryPoint, TNodeState{ true, i});
+        }
+
+        stack.push(PatternNodes->GetRoot());
+        while (!stack.empty()) {
+            auto node = stack.top();
+            auto [iter, inserted]  = deps.emplace(node, TNodeState{ false, 0 });
+            auto extNode = dynamic_cast<const IComputationExternalNode*>(node);
+            if (extNode) {
+                MKQL_ENSURE(!inserted, "Unexpected external node");
+                stack.pop();
+                continue;
+            }
+
+            auto kernelNode = node->PrepareArrowKernelComputationNode(ctx);
+            MKQL_ENSURE(kernelNode, "No kernel for node: " << node->DebugString());
+            auto argsCount = kernelNode->GetArgsDesc().size();
+
+            if (!iter->second.Visited) {
+                for (ui32 j = 0; j < argsCount; ++j) {
+                    stack.push(kernelNode->GetArgument(j));
+                }
+                iter->second.Visited = true;
+            } else {
+                iter->second.Index = KernelsTopology->InputArgsCount + KernelsTopology->Items.size();
+                KernelsTopology->Items.emplace_back();
+                auto& i = KernelsTopology->Items.back();
+                i.Inputs.reserve(argsCount);
+                for (ui32 j = 0; j < argsCount; ++j) {
+                    auto it = deps.find(kernelNode->GetArgument(j));
+                    MKQL_ENSURE(it != deps.end(), "Missing argument");
+                    i.Inputs.emplace_back(it->second.Index);
+                }
+
+                i.Node = std::move(kernelNode);
+                stack.pop();
+            }
+        }
+    }
+
     void Invalidate() override {
         std::fill_n(Ctx->MutableValues.get(), PatternNodes->GetMutables().CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
     }
@@ -690,6 +760,7 @@ private:
     THolder<TComputationContext> Ctx;
     TComputationOptsFull CompOpts;
     bool IsPrepared = false;
+    std::optional<TArrowKernelsTopology> KernelsTopology;
 };
 
 } // namespace
@@ -861,16 +932,31 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
 
     const auto rootNode = builder->GetComputationNode(root.GetNode());
 
-    TComputationExternalNodePtrVector runtime2Computation;
-    runtime2Computation.resize(entryPoints.size(), nullptr);
+    TComputationExternalNodePtrVector runtime2ComputationEntryPoints;
+    runtime2ComputationEntryPoints.resize(entryPoints.size(), nullptr);
+    std::unordered_map<TNode*, std::vector<ui32>> entryPointIndex;
+    for (ui32 i = 0; i < entryPoints.size(); ++i) {
+        entryPointIndex[entryPoints[i]].emplace_back(i);
+    }
+
     for (const auto& node : explorer.GetNodes()) {
-        for (auto iter = std::find(entryPoints.cbegin(), entryPoints.cend(), node); entryPoints.cend() != iter; iter = std::find(iter + 1, entryPoints.cend(), node)) {
-            runtime2Computation[iter - entryPoints.begin()] = dynamic_cast<IComputationExternalNode*>(builder->GetComputationNode(node));
+        auto it = entryPointIndex.find(node);
+        if (it == entryPointIndex.cend()) {
+            continue;
         }
+
+        auto compNode = dynamic_cast<IComputationExternalNode*>(builder->GetComputationNode(node));
+        for (auto index : it->second) {
+            runtime2ComputationEntryPoints[index] = compNode;
+        }
+    }
+
+    for (const auto& node : explorer.GetNodes()) {
         node->SetCookie(0);
     }
+
     builder->PreserveRoot(rootNode);
-    builder->PreserveEntryPoints(std::move(runtime2Computation));
+    builder->PreserveEntryPoints(std::move(runtime2ComputationEntryPoints));
 
     return MakeIntrusive<TComputationPatternImpl>(std::move(builder), opts);
 }

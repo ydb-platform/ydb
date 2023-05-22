@@ -33,6 +33,22 @@ struct TCompactionLimits {
 
 class TMark {
 public:
+    struct TCompare {
+        using is_transparent = void;
+
+        bool operator() (const TMark& a, const TMark& b) const {
+            return a < b;
+        }
+
+        bool operator() (const arrow::Scalar& a, const TMark& b) const {
+            return a < b;
+        }
+
+        bool operator() (const TMark& a, const arrow::Scalar& b) const {
+            return a < b;
+        }
+    };
+
     explicit TMark(const NArrow::TReplaceKey& key)
         : Border(key)
     {}
@@ -46,6 +62,23 @@ public:
 
     std::partial_ordering operator <=> (const TMark& m) const {
         return Border <=> m.Border;
+    }
+
+    bool operator == (const arrow::Scalar& firstKey) const {
+        // TODO: avoid ToScalar()
+        return NArrow::ScalarCompare(*NArrow::TReplaceKey::ToScalar(Border, 0), firstKey) == 0;
+    }
+
+    std::partial_ordering operator <=> (const arrow::Scalar& firstKey) const {
+        // TODO: avoid ToScalar()
+        const int cmp = NArrow::ScalarCompare(*NArrow::TReplaceKey::ToScalar(Border, 0), firstKey);
+        if (cmp < 0) {
+            return std::partial_ordering::less;
+        } else if (cmp > 0) {
+            return std::partial_ordering::greater;
+        } else {
+            return std::partial_ordering::equivalent;
+        }
     }
 
     const NArrow::TReplaceKey& GetBorder() const noexcept {
@@ -160,7 +193,9 @@ public:
             case INSERT:
                 return "insert";
             case COMPACTION:
-                return "compaction";
+                return CompactionInfo
+                    ? (CompactionInfo->InGranule ? "compaction in granule" : "compaction split granule" )
+                    : "compaction";
             case CLEANUP:
                 return "cleanup";
             case TTL:

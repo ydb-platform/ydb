@@ -306,7 +306,14 @@ enum class EStoreType : ui32 {
     Column = 1
 };
 
+enum class ESourceType : ui32 {
+    Unknown = 0,
+    ExternalTable = 1,
+    ExternalDataSource = 2
+};
+
 struct TExternalSource {
+    ESourceType SourceType = ESourceType::Unknown;
     TString Type;
     TString TableLocation;
     TString TableContent;
@@ -657,8 +664,14 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithExternalDatasources(bool enable) {
+            WithExternalDatasources_ = enable;
+            return *this;
+        }
+
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
+        bool WithExternalDatasources_ = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {

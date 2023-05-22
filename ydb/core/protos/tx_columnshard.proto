@@ -263,6 +263,7 @@ message TIndexPortionMeta {
         bool IsEvicted = 4;
     }
     optional string TierName = 5;
+    optional bytes IndexKeyBorders = 6; // arrow::RecordBatch with first and last IndexKey rows
 }
 
 message TIndexColumnMeta {

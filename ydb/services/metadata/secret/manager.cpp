@@ -29,16 +29,16 @@ NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings
     TStringBuf l;
     TStringBuf r;
     if (!sb.TrySplit(':', l, r)) {
-        return "incorrect objectId format (secretId:accessSID)";
+        return TConclusionStatus::Fail("incorrect objectId format (secretId:accessSID)");
     }
     result.SetColumn(TAccess::TDecoder::SecretId, NInternal::TYDBValue::Utf8(l));
     result.SetColumn(TAccess::TDecoder::AccessSID, NInternal::TYDBValue::Utf8(r));
     if (!context.GetExternalData().GetUserToken()) {
-        auto it = settings.GetFeatures().find(TAccess::TDecoder::OwnerUserId);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(it->second));
+        auto fValue = settings.GetFeaturesExtractor().Extract(TAccess::TDecoder::OwnerUserId);
+        if (fValue) {
+            result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(*fValue));
         } else {
-            return "OwnerUserId not defined";
+            return TConclusionStatus::Fail("OwnerUserId not defined");
         }
     } else {
         result.SetColumn(TAccess::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetExternalData().GetUserToken()->GetUserSID()));
@@ -50,11 +50,11 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
     TInternalModificationContext& context) const {
     NInternal::TTableRecord result;
     if (!context.GetExternalData().GetUserToken()) {
-        auto it = settings.GetFeatures().find(TSecret::TDecoder::OwnerUserId);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(it->second));
+        auto fValue = settings.GetFeaturesExtractor().Extract(TSecret::TDecoder::OwnerUserId);
+        if (fValue) {
+            result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(*fValue));
         } else {
-            return "OwnerUserId not defined";
+            return TConclusionStatus::Fail("OwnerUserId not defined");
         }
     } else {
         result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetExternalData().GetUserToken()->GetUserSID()));
@@ -72,15 +72,15 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
         if (c == '_') {
             continue;
         }
-        return "incorrect character for secret id: '" + TString(c) + "'";
+        return TConclusionStatus::Fail("incorrect character for secret id: '" + TString(c) + "'");
     }
     {
         result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     }
     {
-        auto it = settings.GetFeatures().find(TSecret::TDecoder::Value);
-        if (it != settings.GetFeatures().end()) {
-            result.SetColumn(TSecret::TDecoder::Value, NInternal::TYDBValue::Utf8(it->second));
+        auto fValue = settings.GetFeaturesExtractor().Extract(TSecret::TDecoder::Value);
+        if (fValue) {
+            result.SetColumn(TSecret::TDecoder::Value, NInternal::TYDBValue::Utf8(*fValue));
         }
     }
     return result;

@@ -114,7 +114,7 @@ bool TUserTable::HasAsyncIndexes() const {
 static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
     switch (format) {
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDocApiJson:
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
         return true;
     default:
         return false;

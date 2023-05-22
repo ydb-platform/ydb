@@ -81,6 +81,9 @@ struct TTestSchema {
 
     struct TTableSpecials : public TStorageTier {
         std::vector<TStorageTier> Tiers;
+        bool CompositeMarks = false;
+
+        TTableSpecials() noexcept = default;
 
         bool HasTiers() const {
             return !Tiers.empty();
@@ -90,9 +93,15 @@ struct TTestSchema {
             return EvictAfter.has_value();
         }
 
-        TTableSpecials WithCodec(const TString& codec) {
+        TTableSpecials WithCodec(const TString& codec) const {
             TTableSpecials out = *this;
             out.SetCodec(codec);
+            return out;
+        }
+
+        TTableSpecials WithCompositeMarks(bool composite) const {
+            TTableSpecials out = *this;
+            out.CompositeMarks = composite;
             return out;
         }
 
@@ -214,6 +223,7 @@ struct TTestSchema {
         if (specials.CompressionLevel) {
             schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
         }
+        schema->SetCompositeMarks(specials.CompositeMarks);
     }
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
@@ -400,6 +410,7 @@ struct TTestBlobOptions {
     ui32 SameValue = 42;
 };
 
+TCell MakeTestCell(const TTypeInfo& typeInfo, ui32 value, std::vector<TString>& mem);
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
                      const TTestBlobOptions& options = {});
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,

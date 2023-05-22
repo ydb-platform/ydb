@@ -5,108 +5,19 @@
 #include <ydb/core/tx/datashard/sys_tables.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/library/conclusion/result.h>
 #include <ydb/library/yql/ast/yql_expr_builder.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/metadata/abstract/parsing.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
-namespace NYql {
-class TObjectSettingsImpl {
-private:
-    YDB_READONLY_DEF(TString, TypeId);
-    YDB_READONLY_DEF(TString, ObjectId);
-
-    using TFeatures = std::map<TString, TString>;
-    YDB_READONLY_DEF(TFeatures, Features);
-public:
-    template <class T>
-    std::optional<T> GetFeature(const TString& featureId, const std::optional<T> noExistsValue = {}) const {
-        T result;
-        auto it = Features.find(featureId);
-        if (it == Features.end()) {
-            return noExistsValue;
-        } else if (TryFromString(it->second, result)) {
-            return result;
-        } else {
-            return {};
-        }
-    }
-
-    template <class TKiObject>
-    bool DeserializeFromKi(const TKiObject& data) {
-        ObjectId = data.ObjectId();
-        TypeId = data.TypeId();
-        for (auto&& i : data.Features()) {
-            if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
-                Features.emplace(maybeAtom.Cast().StringValue(), "");
-            } else if (auto maybeTuple = i.template Maybe<NNodes::TCoNameValueTuple>()) {
-                auto tuple = maybeTuple.Cast();
-                if (auto tupleValue = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
-                    Features.emplace(tuple.Name().Value(), tupleValue.Cast().Value());
-                }
-            }
-        }
-        return true;
-    }
-};
-
-using TCreateObjectSettings = TObjectSettingsImpl;
-using TAlterObjectSettings = TObjectSettingsImpl;
-using TDropObjectSettings = TObjectSettingsImpl;
-
-}
-
 namespace NKikimr::NMetadata::NModifications {
 
-class TOperationParsingResult {
-private:
-    YDB_READONLY_FLAG(Success, false);
-    YDB_READONLY_DEF(TString, ErrorMessage);
-    YDB_READONLY_DEF(NInternal::TTableRecord, Record);
-public:
-    TOperationParsingResult(const char* errorMessage)
-        : SuccessFlag(false)
-        , ErrorMessage(errorMessage) {
-
-    }
-
-    TOperationParsingResult(const TString& errorMessage)
-        : SuccessFlag(false)
-        , ErrorMessage(errorMessage) {
-
-    }
-
-    TOperationParsingResult(NInternal::TTableRecord&& record)
-        : SuccessFlag(true)
-        , Record(record) {
-
-    }
-};
-
-class TObjectOperatorResult {
-private:
-    YDB_READONLY_FLAG(Success, false);
-    YDB_ACCESSOR_DEF(TString, ErrorMessage);
-public:
-    explicit TObjectOperatorResult(const bool success)
-        : SuccessFlag(success) {
-
-    }
-
-    TObjectOperatorResult(const TString& errorMessage)
-        : SuccessFlag(false)
-        , ErrorMessage(errorMessage) {
-
-    }
-
-    TObjectOperatorResult(const char* errorMessage)
-        : SuccessFlag(false)
-        , ErrorMessage(errorMessage) {
-
-    }
-};
+using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
 
 class TColumnInfo {
 private:
@@ -148,8 +59,7 @@ public:
     class TExternalModificationContext {
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
-    public:
-        TExternalModificationContext() = default;
+        YDB_ACCESSOR_DEF(TString, Database);
     };
 
     class TInternalModificationContext {
@@ -166,18 +76,18 @@ public:
 private:
     YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
 protected:
-    virtual NThreading::TFuture<TObjectOperatorResult> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
+    virtual NThreading::TFuture<TConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, TInternalModificationContext& context) const = 0;
 public:
     virtual ~IOperationsManager() = default;
 
-    NThreading::TFuture<TObjectOperatorResult> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
+    NThreading::TFuture<TConclusionStatus> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
-    NThreading::TFuture<TObjectOperatorResult> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
+    NThreading::TFuture<TConclusionStatus> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
-    NThreading::TFuture<TObjectOperatorResult> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
+    NThreading::TFuture<TConclusionStatus> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     const TTableSchema& GetSchema() const {
@@ -199,7 +109,13 @@ public:
 
     TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         IOperationsManager::TInternalModificationContext& context) const {
-        return DoBuildPatchFromSettings(settings, context);
+        TOperationParsingResult result = DoBuildPatchFromSettings(settings, context);
+        if (result) {
+            if (!settings.GetFeaturesExtractor().IsFinished()) {
+                return TConclusionStatus::Fail("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
+            }
+        }
+        return result;
     }
 
     void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,

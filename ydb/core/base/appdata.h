@@ -108,7 +108,6 @@ struct TAppData {
     static TIntrusivePtr<IRandomProvider> RandomProvider;
     static TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
-    TIntrusivePtr<IBootTimeProvider> BootTimeProvider;
     TIntrusivePtr<TDomainsInfo> DomainsInfo;
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
     TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig;

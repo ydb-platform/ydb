@@ -113,9 +113,15 @@ class TPartitionConsumerStats {
 public:
     TPartitionConsumerStats(const Ydb::Topic::DescribeConsumerResult::PartitionConsumerStats& partitionStats);
     ui64 GetCommittedOffset() const;
+    ui64 GetLastReadOffset() const;
+    TString GetReaderName() const;
+    TString GetReadSessionId() const;
 
 private:
     ui64 CommittedOffset_;
+    i64 LastReadOffset_;
+    TString ReaderName_;
+    TString ReadSessionId_;
 };
 
 class TPartitionInfo {

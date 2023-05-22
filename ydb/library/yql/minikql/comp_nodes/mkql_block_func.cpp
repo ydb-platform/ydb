@@ -38,7 +38,7 @@ const TKernel& ResolveKernel(const IBuiltinFunctionRegistry& builtins, const TSt
 class TBlockBitCastWrapper : public TBlockFuncNode {
 public:
     TBlockBitCastWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* argType, TType* to)
-        : TBlockFuncNode(mutables, { arg }, { argType }, ResolveKernel(argType, to), {}, &CastOptions)
+        : TBlockFuncNode(mutables, "BitCast", { arg }, { argType }, ResolveKernel(argType, to), {}, &CastOptions)
         , CastOptions(false)
     {
     }
@@ -74,7 +74,7 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     }
 
     const TKernel& kernel = ResolveKernel(*ctx.FunctionRegistry.GetBuiltins(), funcName, argsTypes, callableType->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, std::move(argsNodes), argsTypes, kernel.GetArrowKernel(), {}, kernel.Family.FunctionOptions);
+    return new TBlockFuncNode(ctx.Mutables, funcName, std::move(argsNodes), argsTypes, kernel.GetArrowKernel(), {}, kernel.Family.FunctionOptions);
 }
 
 IComputationNode* WrapBlockBitCast(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

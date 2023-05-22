@@ -5,6 +5,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 /* Headers below used to instantiate concrete 'Get' & 'List' methods */
+#include <ydb/public/sdk/cpp/client/draft/ydb_query/query.h>
 #include <ydb/public/sdk/cpp/client/ydb_export/export.h>
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -191,6 +192,12 @@ template TFuture<NTable::TBuildIndexOperation> TOperationClient::Get(const TOper
 template <>
 TFuture<TOperationsList<NTable::TBuildIndexOperation>> TOperationClient::List(ui64 pageSize, const TString& pageToken) {
     return List<NTable::TBuildIndexOperation>("buildindex", pageSize, pageToken);
+}
+
+template TFuture<NQuery::TScriptExecutionOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+TFuture<TOperationsList<NQuery::TScriptExecutionOperation>> TOperationClient::List(ui64 pageSize, const TString& pageToken) {
+    return List<NQuery::TScriptExecutionOperation>("scriptexec", pageSize, pageToken);
 }
 
 } // namespace NOperation

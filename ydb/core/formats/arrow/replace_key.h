@@ -102,6 +102,8 @@ public:
 
     const arrow::Array& Column(int i) const {
         Y_VERIFY_DEBUG(Columns);
+        Y_VERIFY_DEBUG((size_t)i < Columns->size());
+        Y_VERIFY_DEBUG((*Columns)[i]);
         return *(*Columns)[i];
     }
 
@@ -114,13 +116,16 @@ public:
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
-    std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+    std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
         Y_VERIFY(Size() && Size() == schema->num_fields());
         const auto& columns = *Columns;
-        i64 numRows = columns[0]->length();
-        Y_VERIFY(Position < numRows);
+        return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
+    }
 
-        auto batch = arrow::RecordBatch::Make(schema, numRows, columns);
+    template<typename T = TArrayVecPtr> requires IsOwning
+    std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+        auto batch = RestoreBatch(schema);
+        Y_VERIFY(Position < batch->num_rows());
         return batch->Slice(Position, 1);
     }
 

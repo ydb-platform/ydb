@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package Ydb.FederationDiscovery.V1;
+option java_package = "com.yandex.ydb.federation_discovery.v1";
+
+import "ydb/public/api/protos/ydb_federation_discovery.proto";
+
+service FederationDiscoveryService {
+    // Get list of databases.
+    rpc ListFederationDatabases(Ydb.FederationDiscovery.ListFederationDatabasesRequest)
+        returns (Ydb.FederationDiscovery.ListFederationDatabasesResponse);
+}

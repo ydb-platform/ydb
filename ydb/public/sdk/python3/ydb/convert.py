@@ -36,11 +36,7 @@ def _is_decimal_signed(hi_value):
 
 
 def _pb_to_decimal(type_pb, value_pb, table_client_settings):
-    hi = (
-        (value_pb.high_128 - (1 << _SHIFT_BIT_COUNT))
-        if _is_decimal_signed(value_pb.high_128)
-        else value_pb.high_128
-    )
+    hi = (value_pb.high_128 - (1 << _SHIFT_BIT_COUNT)) if _is_decimal_signed(value_pb.high_128) else value_pb.high_128
     int128_value = value_pb.low_128 + (hi << _SHIFT_BIT_COUNT)
     if int128_value == _DecimalNanRepr:
         return decimal.Decimal("Nan")
@@ -48,32 +44,24 @@ def _pb_to_decimal(type_pb, value_pb, table_client_settings):
         return decimal.Decimal("Inf")
     elif int128_value == _DecimalSignedInfRepr:
         return decimal.Decimal("-Inf")
-    return decimal.Decimal(int128_value) / decimal.Decimal(
-        10**type_pb.decimal_type.scale
-    )
+    return decimal.Decimal(int128_value) / decimal.Decimal(10**type_pb.decimal_type.scale)
 
 
 def _pb_to_primitive(type_pb, value_pb, table_client_settings):
-    return _primitive_type_by_id.get(type_pb.type_id).get_value(
-        value_pb, table_client_settings
-    )
+    return _primitive_type_by_id.get(type_pb.type_id).get_value(value_pb, table_client_settings)
 
 
 def _pb_to_optional(type_pb, value_pb, table_client_settings):
     if value_pb.WhichOneof("value") == "null_flag_value":
         return None
     if value_pb.WhichOneof("value") == "nested_value":
-        return _to_native_value(
-            type_pb.optional_type.item, value_pb.nested_value, table_client_settings
-        )
+        return _to_native_value(type_pb.optional_type.item, value_pb.nested_value, table_client_settings)
     return _to_native_value(type_pb.optional_type.item, value_pb, table_client_settings)
 
 
 def _pb_to_list(type_pb, value_pb, table_client_settings):
     return [
-        _to_native_value(
-            type_pb.list_type.item, value_proto_item, table_client_settings
-        )
+        _to_native_value(type_pb.list_type.item, value_proto_item, table_client_settings)
         for value_proto_item in value_pb.items
     ]
 
@@ -88,12 +76,8 @@ def _pb_to_tuple(type_pb, value_pb, table_client_settings):
 def _pb_to_dict(type_pb, value_pb, table_client_settings):
     result = {}
     for kv_pair in value_pb.pairs:
-        key = _to_native_value(
-            type_pb.dict_type.key, kv_pair.key, table_client_settings
-        )
-        payload = _to_native_value(
-            type_pb.dict_type.payload, kv_pair.payload, table_client_settings
-        )
+        key = _to_native_value(type_pb.dict_type.key, kv_pair.key, table_client_settings)
+        payload = _to_native_value(type_pb.dict_type.payload, kv_pair.payload, table_client_settings)
         result[key] = payload
     return result
 
@@ -122,13 +106,13 @@ _to_native_map = {
     "dict_type": _pb_to_dict,
     "struct_type": _pb_to_struct,
     "void_type": _pb_to_void,
+    "empty_list_type": _pb_to_list,
+    "empty_dict_type": _pb_to_dict,
 }
 
 
 def _to_native_value(type_pb, value_pb, table_client_settings=None):
-    return _to_native_map.get(type_pb.WhichOneof("type"))(
-        type_pb, value_pb, table_client_settings
-    )
+    return _to_native_map.get(type_pb.WhichOneof("type"))(type_pb, value_pb, table_client_settings)
 
 
 def _decimal_to_int128(value_type, value):
@@ -211,9 +195,7 @@ def _dict_to_pb(type_pb, value):
         kv_pair = value_pb.pairs.add()
         kv_pair.key.MergeFrom(_from_native_value(type_pb.dict_type.key, key))
         if payload:
-            kv_pair.payload.MergeFrom(
-                _from_native_value(type_pb.dict_type.payload, payload)
-            )
+            kv_pair.payload.MergeFrom(_from_native_value(type_pb.dict_type.payload, payload))
     return value_pb
 
 
@@ -221,11 +203,7 @@ def _struct_to_pb(type_pb, value):
     value_pb = _apis.ydb_value.Value()
     for member in type_pb.struct_type.members:
         value_item_proto = value_pb.items.add()
-        value_item = (
-            value[member.name]
-            if isinstance(value, dict)
-            else getattr(value, member.name)
-        )
+        value_item = value[member.name] if isinstance(value, dict) else getattr(value, member.name)
         value_item_proto.MergeFrom(_from_native_value(member.type, value_item))
     return value_pb
 
@@ -319,7 +297,7 @@ class _ResultSet(object):
     @classmethod
     def from_message(cls, message, table_client_settings=None, snapshot=None):
         rows = []
-        # prepare columnn parsers before actuall parsing
+        # prepare column parsers before actuall parsing
         column_parsers = []
         if len(message.rows) > 0:
             for column in message.columns:
@@ -327,9 +305,7 @@ class _ResultSet(object):
 
         for row_proto in message.rows:
             row = _Row(message.columns)
-            for column, value, column_info in zip(
-                message.columns, row_proto.items, column_parsers
-            ):
+            for column, value, column_info in zip(message.columns, row_proto.items, column_parsers):
                 v_type = value.WhichOneof("value")
                 if v_type == "null_flag_value":
                     row[column.name] = None
@@ -340,9 +316,7 @@ class _ResultSet(object):
                     v_type = value.WhichOneof("value")
 
                 column_parser, unwrapped_type = column_info
-                row[column.name] = column_parser(
-                    unwrapped_type, value, table_client_settings
-                )
+                row[column.name] = column_parser(unwrapped_type, value, table_client_settings)
             rows.append(row)
         return cls(message.columns, rows, message.truncated, snapshot)
 
@@ -383,9 +357,7 @@ class _LazyRowItem:
     def get(self):
         if not self._processed:
 
-            self._item = self._parser(
-                self._type, self._item, self._table_client_settings
-            )
+            self._item = self._parser(self._type, self._item, self._table_client_settings)
             self._processed = True
         return self._item
 
@@ -441,9 +413,7 @@ class _LazyRows:
         return len(self._rows)
 
     def fetchone(self):
-        return _LazyRow(
-            self._columns, self._rows[0], self._table_client_settings, self._parsers
-        )
+        return _LazyRow(self._columns, self._rows[0], self._table_client_settings, self._parsers)
 
     def fetchmany(self, number):
         for index in range(min(len(self), number)):
@@ -473,33 +443,23 @@ class _LazyParser:
 
     def __call__(self, *args, **kwargs):
         if self._prepared is None:
-            self._prepared = _to_native_map.get(
-                self._columns[self._column_index].type.WhichOneof("type")
-            )
+            self._prepared = _to_native_map.get(self._columns[self._column_index].type.WhichOneof("type"))
         return self._prepared(*args, **kwargs)
 
 
 class ResultSets(list):
     def __init__(self, result_sets_pb, table_client_settings=None):
-        make_lazy = (
-            False
-            if table_client_settings is None
-            else table_client_settings._make_result_sets_lazy
-        )
+        make_lazy = False if table_client_settings is None else table_client_settings._make_result_sets_lazy
 
         allow_truncated_result = _default_allow_truncated_result
         if table_client_settings:
             allow_truncated_result = table_client_settings._allow_truncated_result
 
         result_sets = []
-        initializer = (
-            _ResultSet.from_message if not make_lazy else _ResultSet.lazy_from_message
-        )
+        initializer = _ResultSet.from_message if not make_lazy else _ResultSet.lazy_from_message
         for result_set in result_sets_pb:
             result_set = initializer(result_set, table_client_settings)
             if result_set.truncated and not allow_truncated_result:
-                raise issues.TruncatedResponseError(
-                    "Response for the request was truncated by server"
-                )
+                raise issues.TruncatedResponseError("Response for the request was truncated by server")
             result_sets.append(result_set)
         super(ResultSets, self).__init__(result_sets)

@@ -196,6 +196,14 @@ public:
         }
     }
 
+    void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
+        auto itConnection = PgToYdbConnection.find(ev->Sender);
+        if (itConnection != PgToYdbConnection.end()) {
+            Forward(ev, itConnection->second);
+            BLOG_D("Forwarded to ydb connection " << itConnection->second);
+        }
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NPG::TEvPGEvents::TEvAuth, Handle);
@@ -206,6 +214,7 @@ public:
             hFunc(NPG::TEvPGEvents::TEvBind, Handle);
             hFunc(NPG::TEvPGEvents::TEvDescribe, Handle);
             hFunc(NPG::TEvPGEvents::TEvExecute, Handle);
+            hFunc(NPG::TEvPGEvents::TEvClose, Handle);
             hFunc(TEvPrivate::TEvTokenReady, Handle);
             hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
         }

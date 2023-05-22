@@ -23,6 +23,7 @@ target_link_libraries(services-metadata-abstract PUBLIC
   services-metadata-request
   api-protos
   ydb-core-base
+  yql-core-expr_nodes
 )
 target_sources(services-metadata-abstract PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/common.cpp
@@ -30,6 +31,8 @@ target_sources(services-metadata-abstract PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/fetcher.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/initialization.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/parsing.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/request_features.cpp
 )
 generate_enum_serilization(services-metadata-abstract
   ${CMAKE_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.h

@@ -273,9 +273,7 @@ class PartitioningPolicy(object):
                     split_point_type.add_element(column_types[pk_name])
 
                 typed_value.type.MergeFrom(split_point_type.proto)
-                typed_value.value.MergeFrom(
-                    convert.from_native_value(split_point_type.proto, split_point.value)
-                )
+                typed_value.value.MergeFrom(convert.from_native_value(split_point_type.proto, split_point.value))
 
         return self._pb
 
@@ -447,9 +445,7 @@ class TableProfile(object):
             pb.compaction_policy.MergeFrom(self.compaction_policy.to_pb())
 
         if self.partitioning_policy is not None:
-            pb.partitioning_policy.MergeFrom(
-                self.partitioning_policy.to_pb(table_description)
-            )
+            pb.partitioning_policy.MergeFrom(self.partitioning_policy.to_pb(table_description))
 
         return pb
 
@@ -499,17 +495,11 @@ class TtlSettings(object):
         self.value_since_unix_epoch = None
 
     def with_date_type_column(self, column_name, expire_after_seconds=0):
-        self.date_type_column = DateTypeColumnModeSettings(
-            column_name, expire_after_seconds
-        )
+        self.date_type_column = DateTypeColumnModeSettings(column_name, expire_after_seconds)
         return self
 
-    def with_value_since_unix_epoch(
-        self, column_name, column_unit, expire_after_seconds=0
-    ):
-        self.value_since_unix_epoch = ValueSinceUnixEpochModeSettings(
-            column_name, column_unit, expire_after_seconds
-        )
+    def with_value_since_unix_epoch(self, column_name, column_unit, expire_after_seconds=0):
+        self.value_since_unix_epoch = ValueSinceUnixEpochModeSettings(column_name, column_unit, expire_after_seconds)
         return self
 
     def to_pb(self):
@@ -860,9 +850,7 @@ class BackoffSettings(object):
         slots_count = 1 << min(retry_number, self.ceiling)
         max_duration_ms = slots_count * self.slot_duration * 1000.0
         # duration_ms = random.random() * max_duration_ms * uncertain_ratio) + max_duration_ms * (1 - uncertain_ratio)
-        duration_ms = max_duration_ms * (
-            random.random() * self.uncertain_ratio + 1.0 - self.uncertain_ratio
-        )
+        duration_ms = max_duration_ms * (random.random() * self.uncertain_ratio + 1.0 - self.uncertain_ratio)
         return duration_ms / 1000.0
 
 
@@ -881,14 +869,8 @@ class RetrySettings(object):
     ):
         self.max_retries = max_retries
         self.max_session_acquire_timeout = max_session_acquire_timeout
-        self.on_ydb_error_callback = (
-            (lambda e: None) if on_ydb_error_callback is None else on_ydb_error_callback
-        )
-        self.fast_backoff = (
-            BackoffSettings(10, 0.005)
-            if fast_backoff_settings is None
-            else fast_backoff_settings
-        )
+        self.on_ydb_error_callback = (lambda e: None) if on_ydb_error_callback is None else on_ydb_error_callback
+        self.fast_backoff = BackoffSettings(10, 0.005) if fast_backoff_settings is None else fast_backoff_settings
         self.slow_backoff = (
             BackoffSettings(backoff_ceiling, backoff_slot_duration)
             if slow_backoff_settings is None
@@ -900,9 +882,7 @@ class RetrySettings(object):
         self.unknown_error_handler = lambda e: None
         self.get_session_client_timeout = get_session_client_timeout
         if max_session_acquire_timeout is not None:
-            self.get_session_client_timeout = min(
-                self.max_session_acquire_timeout, self.get_session_client_timeout
-            )
+            self.get_session_client_timeout = min(self.max_session_acquire_timeout, self.get_session_client_timeout)
 
     def with_fast_backoff(self, backoff_settings):
         self.fast_backoff = backoff_settings
@@ -930,11 +910,7 @@ class YdbRetryOperationFinalResult(object):
         self.exc = None
 
     def __eq__(self, other):
-        return (
-            type(self) == type(other)
-            and self.result == other.result
-            and self.exc == other.exc
-        )
+        return type(self) == type(other) and self.result == other.result and self.exc == other.exc
 
     def __repr__(self):
         return "YdbRetryOperationFinalResult(%s, exc=%s)" % (self.result, self.exc)
@@ -1051,9 +1027,7 @@ class ScanQueryResult(object):
     def __init__(self, result, table_client_settings):
         self._result = result
         self.query_stats = result.query_stats
-        self.result_set = convert.ResultSet.from_message(
-            self._result.result_set, table_client_settings
-        )
+        self.result_set = convert.ResultSet.from_message(self._result.result_set, table_client_settings)
 
 
 @enum.unique
@@ -1292,11 +1266,7 @@ class BaseTableClient(ITableClient):
     def __init__(self, driver, table_client_settings=None):
         # type:(ydb.Driver, ydb.TableClientSettings) -> None
         self._driver = driver
-        self._table_client_settings = (
-            TableClientSettings()
-            if table_client_settings is None
-            else table_client_settings
-        )
+        self._table_client_settings = TableClientSettings() if table_client_settings is None else table_client_settings
 
     def session(self):
         # type: () -> ydb.Session
@@ -1365,9 +1335,7 @@ class TableClient(BaseTableClient):
 
 
 def _make_index_description(index):
-    result = TableIndex(index.name).with_index_columns(
-        *tuple(col for col in index.index_columns)
-    )
+    result = TableIndex(index.name).with_index_columns(*tuple(col for col in index.index_columns))
     result.status = IndexStatus(index.status)
     return result
 
@@ -1398,20 +1366,10 @@ class TableSchemeEntry(scheme.SchemeEntry):
     ):
 
         super(TableSchemeEntry, self).__init__(
-            name,
-            owner,
-            type,
-            effective_permissions,
-            permissions,
-            size_bytes,
-            *args,
-            **kwargs
+            name, owner, type, effective_permissions, permissions, size_bytes, *args, **kwargs
         )
         self.primary_key = [pk for pk in primary_key]
-        self.columns = [
-            Column(column.name, convert.type_to_native(column.type), column.family)
-            for column in columns
-        ]
+        self.columns = [Column(column.name, convert.type_to_native(column.type), column.family) for column in columns]
         self.indexes = [_make_index_description(index) for index in indexes]
         self.shard_key_ranges = []
         self.column_families = []
@@ -1426,9 +1384,7 @@ class TableSchemeEntry(scheme.SchemeEntry):
             )
 
             if column_family.HasField("data"):
-                self.column_families[-1].with_data(
-                    StoragePool(column_family.data.media)
-                )
+                self.column_families[-1].with_data(StoragePool(column_family.data.media))
 
         for shard_key_bound in shard_key_bounds:
             # for next key range
@@ -1436,9 +1392,7 @@ class TableSchemeEntry(scheme.SchemeEntry):
             current_bound = convert.to_native_value(shard_key_bound)
             self.shard_key_ranges.append(
                 KeyRange(
-                    None
-                    if left_key_bound is None
-                    else KeyBound.inclusive(left_key_bound, key_bound_type),
+                    None if left_key_bound is None else KeyBound.inclusive(left_key_bound, key_bound_type),
                     KeyBound.exclusive(current_bound, key_bound_type),
                 )
             )
@@ -1471,23 +1425,15 @@ class TableSchemeEntry(scheme.SchemeEntry):
         self.storage_settings = None
         if storage_settings is not None:
             self.storage_settings = StorageSettings()
-            self.storage_settings.store_external_blobs = FeatureFlag(
-                self.storage_settings.store_external_blobs
-            )
+            self.storage_settings.store_external_blobs = FeatureFlag(self.storage_settings.store_external_blobs)
             if storage_settings.HasField("tablet_commit_log0"):
-                self.storage_settings.with_tablet_commit_log0(
-                    StoragePool(storage_settings.tablet_commit_log0.media)
-                )
+                self.storage_settings.with_tablet_commit_log0(StoragePool(storage_settings.tablet_commit_log0.media))
 
             if storage_settings.HasField("tablet_commit_log1"):
-                self.storage_settings.with_tablet_commit_log1(
-                    StoragePool(storage_settings.tablet_commit_log1.media)
-                )
+                self.storage_settings.with_tablet_commit_log1(StoragePool(storage_settings.tablet_commit_log1.media))
 
             if storage_settings.HasField("external"):
-                self.storage_settings.with_external(
-                    StoragePool(storage_settings.external.media)
-                )
+                self.storage_settings.with_external(StoragePool(storage_settings.external.media))
 
         self.partitioning_settings = None
         if partitioning_settings is not None:
@@ -1523,14 +1469,10 @@ class TableSchemeEntry(scheme.SchemeEntry):
         if table_stats is not None:
             self.table_stats = TableStats()
             if table_stats.partitions != 0:
-                self.table_stats = self.table_stats.with_partitions(
-                    table_stats.partitions
-                )
+                self.table_stats = self.table_stats.with_partitions(table_stats.partitions)
 
             if table_stats.store_size != 0:
-                self.table_stats = self.table_stats.with_store_size(
-                    table_stats.store_size
-                )
+                self.table_stats = self.table_stats.with_store_size(table_stats.store_size)
 
         self.attributes = attributes
 
@@ -1629,9 +1571,7 @@ class BaseSession(ISession):
             _apis.TableService.StreamReadTable,
             settings=settings,
         )
-        return _utilities.SyncResponseIterator(
-            stream_it, _session_impl.wrap_read_table_response
-        )
+        return _utilities.SyncResponseIterator(stream_it, _session_impl.wrap_read_table_response)
 
     def keep_alive(self, settings=None):
         return self._driver(
@@ -1650,9 +1590,7 @@ class BaseSession(ISession):
         create_settings = settings_impl.BaseRequestSettings()
         if settings is not None:
             create_settings = settings.make_copy()
-        create_settings = create_settings.with_header(
-            "x-ydb-client-capabilities", "session-balancer"
-        )
+        create_settings = create_settings.with_header("x-ydb-client-capabilities", "session-balancer")
         return self._driver(
             _apis.ydb_table.CreateSessionRequest(),
             _apis.TableService.Stub,
@@ -1741,9 +1679,7 @@ class BaseSession(ISession):
         :return: A description of created scheme entry or error otherwise.
         """
         return self._driver(
-            _session_impl.create_table_request_factory(
-                self._state, path, table_description
-            ),
+            _session_impl.create_table_request_factory(self._state, path, table_description),
             _apis.TableService.Stub,
             _apis.TableService.CreateTable,
             _session_impl.wrap_operation,
@@ -1833,9 +1769,7 @@ class BaseSession(ISession):
 
     def copy_tables(self, source_destination_pairs, settings=None):
         return self._driver(
-            _session_impl.copy_tables_request_factory(
-                self._state, source_destination_pairs
-            ),
+            _session_impl.copy_tables_request_factory(self._state, source_destination_pairs),
             _apis.TableService.Stub,
             _apis.TableService.CopyTables,
             _session_impl.wrap_operation,
@@ -1897,9 +1831,7 @@ class Session(BaseSession):
             _apis.TableService.StreamReadTable,
             settings=settings,
         )
-        return _utilities.AsyncResponseIterator(
-            stream_it, _session_impl.wrap_read_table_response
-        )
+        return _utilities.AsyncResponseIterator(stream_it, _session_impl.wrap_read_table_response)
 
     @_utilities.wrap_async_call_exceptions
     def async_keep_alive(self, settings=None):
@@ -1920,9 +1852,7 @@ class Session(BaseSession):
         create_settings = settings_impl.BaseRequestSettings()
         if settings is not None:
             create_settings = settings.make_copy()
-        create_settings = create_settings.with_header(
-            "x-ydb-client-capabilities", "session-balancer"
-        )
+        create_settings = create_settings.with_header("x-ydb-client-capabilities", "session-balancer")
         return self._driver.future(
             _apis.ydb_table.CreateSessionRequest(),
             _apis.TableService.Stub,
@@ -1978,9 +1908,7 @@ class Session(BaseSession):
     @_utilities.wrap_async_call_exceptions
     def async_create_table(self, path, table_description, settings=None):
         return self._driver.future(
-            _session_impl.create_table_request_factory(
-                self._state, path, table_description
-            ),
+            _session_impl.create_table_request_factory(self._state, path, table_description),
             _apis.TableService.Stub,
             _apis.TableService.CreateTable,
             _session_impl.wrap_operation,
@@ -2049,16 +1977,12 @@ class Session(BaseSession):
         )
 
     def async_copy_table(self, source_path, destination_path, settings=None):
-        return self.async_copy_tables(
-            [(source_path, destination_path)], settings=settings
-        )
+        return self.async_copy_tables([(source_path, destination_path)], settings=settings)
 
     @_utilities.wrap_async_call_exceptions
     def async_copy_tables(self, source_destination_pairs, settings=None):
         return self._driver.future(
-            _session_impl.copy_tables_request_factory(
-                self._state, source_destination_pairs
-            ),
+            _session_impl.copy_tables_request_factory(self._state, source_destination_pairs),
             _apis.TableService.Stub,
             _apis.TableService.CopyTables,
             _session_impl.wrap_operation,
@@ -2215,15 +2139,7 @@ class BaseTxContext(ITxContext):
     _COMMIT = "commit"
     _ROLLBACK = "rollback"
 
-    def __init__(
-        self,
-        driver,
-        session_state,
-        session,
-        tx_mode=None,
-        *,
-        allow_split_transactions=None
-    ):
+    def __init__(self, driver, session_state, session, tx_mode=None, *, allow_split_transactions=None):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
@@ -2570,9 +2486,7 @@ class SessionPool(object):
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         def wrapped_callee():
-            with self.checkout(
-                timeout=retry_settings.get_session_client_timeout
-            ) as session:
+            with self.checkout(timeout=retry_settings.get_session_client_timeout) as session:
                 return callee(session, *args, **kwargs)
 
         return retry_operation_sync(wrapped_callee, retry_settings)

@@ -41,13 +41,13 @@ namespace {
 class TDqDataProviderSource: public TDataProviderBase {
 public:
     TDqDataProviderSource(const TDqState::TPtr& state, TExecTransformerFactory execTransformerFactory)
-        : State(state)
-        , ConfigurationTransformer([this]() {
-            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State->Settings, *State->TypeCtx, TString{DqProviderName});
+        : State_(state)
+        , ConfigurationTransformer_([this]() {
+            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Settings, *State_->TypeCtx, TString{DqProviderName});
         })
-        , ExecTransformer([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State)); })
-        , TypeAnnotationTransformer([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
-        , ConstraintsTransformer([] () { return CreateDqDataSourceConstraintTransformer(); })
+        , ExecTransformer_([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State_)); })
+        , TypeAnnotationTransformer_([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
+        , ConstraintsTransformer_([] () { return CreateDqDataSourceConstraintTransformer(); })
     { }
 
     TStringBuf GetName() const override {
@@ -56,16 +56,16 @@ public:
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
-        return *TypeAnnotationTransformer;
+        return *TypeAnnotationTransformer_;
     }
 
     IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
         Y_UNUSED(instantOnly && subGraph);
-        return *ConstraintsTransformer;
+        return *ConstraintsTransformer_;
     }
 
     IGraphTransformer& GetConfigurationTransformer() override {
-        return *ConfigurationTransformer;
+        return *ConfigurationTransformer_;
     }
 
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
@@ -174,9 +174,9 @@ public:
             return false;
         }
 
-        canRef = State->Settings->EnableFullResultWrite.Get().GetOrElse(false);
+        canRef = State_->Settings->EnableFullResultWrite.Get().GetOrElse(false);
         if (canRef) {
-            if (auto fullResultTableProvider = State->TypeCtx->DataSinkMap.Value(State->TypeCtx->FullResultDataSink, nullptr)) {
+            if (auto fullResultTableProvider = State_->TypeCtx->DataSinkMap.Value(State_->TypeCtx->FullResultDataSink, nullptr)) {
                 canRef = !!fullResultTableProvider->GetDqIntegration();
             } else {
                 canRef = false;
@@ -225,31 +225,31 @@ public:
     }
 
     bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override {
-        return ValidateDqExecution(node, *State->TypeCtx, ctx);
+        return ValidateDqExecution(node, *State_->TypeCtx, ctx, State_);
     }
 
     bool CanParse(const TExprNode& node) override {
-        return TypeAnnotationTransformer->CanParse(node);
+        return TypeAnnotationTransformer_->CanParse(node);
     }
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
-        return *ExecTransformer;
+        return *ExecTransformer_;
     }
 
     void Reset() final {
-        if (ExecTransformer) {
-            ExecTransformer->Rewind();
-            TypeAnnotationTransformer->Rewind();
-            ConstraintsTransformer->Rewind();
+        if (ExecTransformer_) {
+            ExecTransformer_->Rewind();
+            TypeAnnotationTransformer_->Rewind();
+            ConstraintsTransformer_->Rewind();
         }
     }
 
 private:
-    const TDqState::TPtr State;
-    TLazyInitHolder<IGraphTransformer> ConfigurationTransformer;
-    TLazyInitHolder<IGraphTransformer> ExecTransformer;
-    TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer;
-    TLazyInitHolder<IGraphTransformer> ConstraintsTransformer;
+    const TDqState::TPtr State_;
+    TLazyInitHolder<IGraphTransformer> ConfigurationTransformer_;
+    TLazyInitHolder<IGraphTransformer> ExecTransformer_;
+    TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    TLazyInitHolder<IGraphTransformer> ConstraintsTransformer_;
 };
 
 }

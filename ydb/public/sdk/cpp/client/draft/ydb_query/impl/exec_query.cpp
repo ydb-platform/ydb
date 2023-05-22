@@ -11,6 +11,26 @@ namespace NYdb::NQuery {
 
 using namespace NThreading;
 
+static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto) {
+    switch (txSettings.Mode_) {
+        case TTxSettings::TS_SERIALIZABLE_RW:
+            proto->mutable_serializable_read_write();
+            break;
+        case TTxSettings::TS_ONLINE_RO:
+            proto->mutable_online_read_only()->set_allow_inconsistent_reads(
+                txSettings.OnlineSettings_.AllowInconsistentReads_);
+            break;
+        case TTxSettings::TS_STALE_RO:
+            proto->mutable_stale_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RO:
+            proto->mutable_snapshot_read_only();
+            break;
+        default:
+            throw TContractViolation("Unexpected transaction mode.");
+    }
+}
+
 class TExecuteQueryIterator::TReaderImpl {
 public:
     using TSelf = TExecuteQueryIterator::TReaderImpl;
@@ -147,11 +167,20 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
 TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryImpl(
     const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& driverState,
-    const TString& query, const TExecuteQuerySettings& settings)
+    const TString& query, const TTxControl& txControl, const TExecuteQuerySettings& settings)
 {
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
     request.mutable_query_content()->set_text(query);
+
+    auto requestTxControl = request.mutable_tx_control();
+    requestTxControl->set_commit_tx(txControl.CommitTx_);
+    if (txControl.TxId_) {
+        requestTxControl->set_tx_id(*txControl.TxId_);
+    } else {
+        Y_ASSERT(txControl.TxSettings_);
+        SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());
+    }
 
     auto promise = NewPromise<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>>();
 
@@ -173,7 +202,8 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 }
 
 TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
-    const TDbDriverStatePtr& driverState, const TString& query, const TExecuteQuerySettings& settings)
+    const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
+    const TExecuteQuerySettings& settings)
 {
     auto promise = NewPromise<TExecuteQueryIterator>();
 
@@ -188,14 +218,15 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
         );
     };
 
-    StreamExecuteQueryImpl(connections, driverState, query, settings).Subscribe(iteratorCallback);
+    StreamExecuteQueryImpl(connections, driverState, query, txControl, settings).Subscribe(iteratorCallback);
     return promise.GetFuture();
 }
 
 TAsyncExecuteQueryResult TExecQueryImpl::ExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
-    const TDbDriverStatePtr& driverState, const TString& query, const TExecuteQuerySettings& settings)
+    const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
+    const TExecuteQuerySettings& settings)
 {
-    return StreamExecuteQuery(connections, driverState, query, settings)
+    return StreamExecuteQuery(connections, driverState, query, txControl, settings)
         .Apply([](TAsyncExecuteQueryIterator itFuture){
             auto it = itFuture.ExtractValue();
 

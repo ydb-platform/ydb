@@ -1746,12 +1746,15 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         auto structType = type->Cast<TStructExprType>();
         TSet<TStringBuf> usedFields;
         auto extractor = node->Child(2);
-        TSet<TStringBuf> lambdaSubset;
-        if (!HaveFieldsSubset(extractor->ChildPtr(1), *extractor->Child(0)->Child(0), lambdaSubset, *optCtx.ParentsMap)) {
-            return node;
+        for (ui32 i = 1; i < extractor->ChildrenSize(); ++i) {
+            TSet<TStringBuf> lambdaSubset;            
+            if (!HaveFieldsSubset(extractor->ChildPtr(i), *extractor->Child(0)->Child(0), lambdaSubset, *optCtx.ParentsMap)) {
+                return node;
+            }
+
+            usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
         }
 
-        usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
         if (usedFields.size() == structType->GetSize()) {
             return node;
         }

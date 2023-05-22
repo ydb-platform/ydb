@@ -870,6 +870,10 @@ private:
 
 public:
     std::optional<TRowVersion> MvccReadWriteVersion;
+
+public:
+    // Orbit used for tracking operation progress
+    NLWTrace::TOrbit Orbit;
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

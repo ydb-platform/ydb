@@ -1,12 +1,13 @@
 #pragma once
 #include "predicate.h"
 #include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <ydb/library/accessor/accessor.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <optional>
 
 namespace NKikimr::NOlap {
+
+struct TIndexInfo;
 
 class TPredicateContainer {
 private:
@@ -70,7 +71,17 @@ public:
 
     std::optional<NArrow::TReplaceKey> ExtractKey(const std::shared_ptr<arrow::Schema>& key) const {
         if (Object) {
-            return NArrow::TReplaceKey::FromBatch(Object->Batch, key, 0);
+            const auto& batchFields = Object->Batch->schema()->fields();
+            const auto& keyFields = key->fields();
+            size_t minSize = std::min(batchFields.size(), keyFields.size());
+            for (size_t i = 0; i < minSize; ++i) {
+                Y_VERIFY_DEBUG(batchFields[i]->Equals(*keyFields[i]));
+            }
+            if (batchFields.size() <= keyFields.size()) {
+                return NArrow::TReplaceKey::FromBatch(Object->Batch, Object->Batch->schema(), 0);
+            } else {
+                return NArrow::TReplaceKey::FromBatch(Object->Batch, key, 0);
+            }
         }
         return {};
     }

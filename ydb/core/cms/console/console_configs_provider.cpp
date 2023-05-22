@@ -747,6 +747,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                            << "  ItemKinds: " << KindsToString(s->ItemKinds) << Endl
                            << "  ConfigVersions: " << s->LastProvided.ShortDebugString() << Endl
                            << "  ServeYaml: " << s->ServeYaml << Endl
+                           << "  YamlApiVersion: " << s->YamlApiVersion << Endl
                            << "  YamlVersion: " << s->YamlConfigVersion << ".[";
                         bool first = true;
                         for (auto &[id, hash] : s->VolatileYamlConfigHashes) {
@@ -804,8 +805,9 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end());
     subscription->LastProvided.CopyFrom(rec.GetKnownVersion());
 
-    if (rec.HasServeYaml()) {
+    if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         subscription->ServeYaml = rec.GetServeYaml();
+        subscription->YamlApiVersion = rec.GetYamlApiVersion();
         subscription->YamlConfigVersion = rec.GetYamlVersion();
         for (auto &volatileConfigVersion : rec.GetVolatileYamlVersion()) {
             subscription->VolatileYamlConfigHashes[volatileConfigVersion.GetId()] = volatileConfigVersion.GetHash();
@@ -1088,7 +1090,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "Send TEvGetNodeConfigResponse: " << response->Record.ShortDebugString());
 
-    if (rec.HasServeYaml() && rec.GetServeYaml()) {
+    if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         response->Record.SetYamlConfig(YamlConfig);
 
         for (auto &[id, config] : VolatileYamlConfigs) {

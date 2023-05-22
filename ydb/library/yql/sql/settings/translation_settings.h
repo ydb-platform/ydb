@@ -90,6 +90,7 @@ namespace NSQLTranslation {
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
         bool AssumeYdbOnClusterWithSlash;
+        TString DynamicClusterProvider;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

@@ -616,7 +616,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
                     << ", current freeSpace: " << freeSpace);
                 return false;
             } else {
-                LOG_D("do poll, channelId: " << channelId << ", last freeSpace: " << lastFreeSpace
+                LOG_T("do poll, channelId: " << channelId << ", last freeSpace: " << lastFreeSpace
                     << ", current freeSpace: " << freeSpace << ", seqNo: " << inputChannel.LastRecvSeqNo);
             }
         }

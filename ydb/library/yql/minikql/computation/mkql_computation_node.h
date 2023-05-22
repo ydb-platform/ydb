@@ -143,6 +143,8 @@ private:
 #endif
 };
 
+class IArrowKernelComputationNode;
+
 class IComputationNode {
 public:
     typedef TIntrusivePtr<IComputationNode> TPtr;
@@ -177,6 +179,8 @@ public:
     virtual void Ref() = 0;
     virtual void UnRef() = 0;
     virtual ui32 RefCount() const = 0;
+
+    virtual std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const;
 };
 
 class IComputationExternalNode : public IComputationNode {
@@ -209,6 +213,31 @@ public:
     virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
 };
 
+using TDatumProvider = std::function<arrow::Datum()>;
+
+TDatumProvider MakeDatumProvider(const arrow::Datum& datum);
+TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationContext& ctx);
+
+class IArrowKernelComputationNode {
+public:
+    virtual ~IArrowKernelComputationNode() = default;
+
+    virtual TStringBuf GetKernelName() const = 0;
+    virtual const arrow::compute::ScalarKernel& GetArrowKernel() const = 0;
+    virtual const std::vector<arrow::ValueDescr>& GetArgsDesc() const = 0;
+    virtual const IComputationNode* GetArgument(ui32 index) const = 0;
+};
+
+struct TArrowKernelsTopologyItem {
+    std::vector<ui32> Inputs;
+    std::unique_ptr<IArrowKernelComputationNode> Node;
+};
+
+struct TArrowKernelsTopology {
+    ui32 InputArgsCount = 0;
+    std::vector<TArrowKernelsTopologyItem> Items;
+};
+
 using TComputationNodePtrVector = std::vector<IComputationNode*, TMKQLAllocator<IComputationNode*>>;
 using TComputationWideFlowNodePtrVector = std::vector<IComputationWideFlowNode*, TMKQLAllocator<IComputationWideFlowNode*>>;
 using TComputationExternalNodePtrVector = std::vector<IComputationExternalNode*, TMKQLAllocator<IComputationExternalNode*>>;
@@ -223,6 +252,7 @@ public:
     virtual NUdf::TUnboxedValue GetValue() = 0;
     virtual TComputationContext& GetContext() = 0;
     virtual IComputationExternalNode* GetEntryPoint(size_t index, bool require) = 0;
+    virtual const TArrowKernelsTopology* GetKernelsTopology() = 0;
     virtual const TComputationNodePtrDeque& GetNodes() const = 0;
     virtual void Invalidate() = 0;
     virtual TMemoryUsageInfo& GetMemInfo() const = 0;
@@ -310,7 +340,8 @@ struct TComputationPatternOpts {
         const TString& optLLVM,
         EGraphPerProcess graphPerProcess,
         IStatsRegistry* stats = nullptr,
-        NUdf::ICountersProvider* countersProvider = nullptr)
+        NUdf::ICountersProvider* countersProvider = nullptr,
+        const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr)
         : AllocState(allocState)
         , Env(env)
         , Factory(factory)
@@ -321,12 +352,14 @@ struct TComputationPatternOpts {
         , GraphPerProcess(graphPerProcess)
         , Stats(stats)
         , CountersProvider(countersProvider)
+        , SecureParamsProvider(secureParamsProvider)
     {}
 
     void SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy,
         const TString& optLLVM, EGraphPerProcess graphPerProcess, IStatsRegistry* stats = nullptr,
-        NUdf::ICountersProvider* counters = nullptr, const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr) {
+        NUdf::ICountersProvider* counters = nullptr,
+        const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr) {
         Factory = factory;
         FunctionRegistry = functionRegistry;
         ValidateMode = validateMode;

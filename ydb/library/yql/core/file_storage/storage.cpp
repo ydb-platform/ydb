@@ -276,7 +276,7 @@ public:
         const i64 prevFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str()));
 
         if (!NFs::Rename(src, dstStorageFile)) {
-            ythrow yexception() << "Failed to rename file from " << src << " to " << dstStorageFile;
+            ythrow TSystemError() << "Failed to rename file from " << src << " to " << dstStorageFile;
         }
         SetCacheFilePermissionsNoThrow(dstStorageFile);
 

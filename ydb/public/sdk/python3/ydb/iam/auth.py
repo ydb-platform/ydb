@@ -22,9 +22,7 @@ except ImportError:
     requests = None
 
 
-DEFAULT_METADATA_URL = (
-    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
-)
+DEFAULT_METADATA_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
 
 
 def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout):
@@ -47,18 +45,12 @@ def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout):
 class TokenServiceCredentials(credentials.AbstractExpiringTokenCredentials):
     def __init__(self, iam_endpoint=None, iam_channel_credentials=None, tracer=None):
         super(TokenServiceCredentials, self).__init__(tracer)
-        assert (
-            iam_token_service_pb2_grpc is not None
-        ), "run pip install==ydb[yc] to use service account credentials"
+        assert iam_token_service_pb2_grpc is not None, "run pip install==ydb[yc] to use service account credentials"
         self._get_token_request_timeout = 10
         self._iam_token_service_pb2 = iam_token_service_pb2
         self._iam_token_service_pb2_grpc = iam_token_service_pb2_grpc
-        self._iam_endpoint = (
-            "iam.api.cloud.yandex.net:443" if iam_endpoint is None else iam_endpoint
-        )
-        self._iam_channel_credentials = (
-            {} if iam_channel_credentials is None else iam_channel_credentials
-        )
+        self._iam_endpoint = "iam.api.cloud.yandex.net:443" if iam_endpoint is None else iam_endpoint
+        self._iam_channel_credentials = {} if iam_channel_credentials is None else iam_channel_credentials
 
     def _channel_factory(self):
         return grpc.secure_channel(
@@ -75,9 +67,7 @@ class TokenServiceCredentials(credentials.AbstractExpiringTokenCredentials):
         with self._channel_factory() as channel:
             tracing.trace(self.tracer, {"iam_token.from_service": True})
             stub = self._iam_token_service_pb2_grpc.IamTokenServiceStub(channel)
-            response = stub.Create(
-                self._get_token_request(), timeout=self._get_token_request_timeout
-            )
+            response = stub.Create(self._get_token_request(), timeout=self._get_token_request_timeout)
             expires_in = max(0, response.expires_at.seconds - int(time.time()))
             return {"access_token": response.iam_token, "expires_in": expires_in}
 
@@ -141,9 +131,7 @@ class YandexPassportOAuthIamCredentials(TokenServiceCredentials):
         iam_channel_credentials=None,
     ):
         self._yandex_passport_oauth_token = yandex_passport_oauth_token
-        super(YandexPassportOAuthIamCredentials, self).__init__(
-            iam_endpoint, iam_channel_credentials
-        )
+        super(YandexPassportOAuthIamCredentials, self).__init__(iam_endpoint, iam_channel_credentials)
 
     def _get_token_request(self):
         return iam_token_service_pb2.CreateIamTokenRequest(
@@ -158,20 +146,16 @@ class MetadataUrlCredentials(credentials.AbstractExpiringTokenCredentials):
         :param ydb.Tracer tracer: ydb tracer
         """
         super(MetadataUrlCredentials, self).__init__(tracer)
-        assert (
-            requests is not None
-        ), "Install requests library to use metadata credentials provider"
-        self.extra_error_message = "Check that metadata service configured properly since we failed to fetch it from metadata_url."
-        self._metadata_url = (
-            DEFAULT_METADATA_URL if metadata_url is None else metadata_url
+        assert requests is not None, "Install requests library to use metadata credentials provider"
+        self.extra_error_message = (
+            "Check that metadata service configured properly since we failed to fetch it from metadata_url."
         )
+        self._metadata_url = DEFAULT_METADATA_URL if metadata_url is None else metadata_url
         self._tp.submit(self._refresh)
 
     @tracing.with_trace()
     def _make_token_request(self):
-        response = requests.get(
-            self._metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=3
-        )
+        response = requests.get(self._metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=3)
         response.raise_for_status()
         return json.loads(response.text)
 

@@ -183,9 +183,7 @@ class ExportToS3Settings(s_impl.BaseRequestSettings):
 
 def _export_to_yt_request_factory(settings):
     request = ydb_export_pb2.ExportToYtRequest(
-        settings=ydb_export_pb2.ExportToYtSettings(
-            host=settings.host, token=settings.token
-        )
+        settings=ydb_export_pb2.ExportToYtSettings(host=settings.host, token=settings.token)
     )
 
     if settings.number_of_retries > 0:
@@ -195,9 +193,7 @@ def _export_to_yt_request_factory(settings):
         request.settings.port = settings.port
 
     for source_path, destination_path in settings.items:
-        request.settings.items.add(
-            source_path=source_path, destination_path=destination_path
-        )
+        request.settings.items.add(source_path=source_path, destination_path=destination_path)
 
     return request
 

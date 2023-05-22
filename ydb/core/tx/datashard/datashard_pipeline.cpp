@@ -1197,6 +1197,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     tx->SetTarget(ev->Get()->GetSource());
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
+    tx->Orbit = std::move(ev->Get()->Orbit);
 
     auto malformed = [&](const TStringBuf txType, const TString& txBody) {
         const TString error = TStringBuilder() << "Malformed " << txType << " tx"

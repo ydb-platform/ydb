@@ -37,6 +37,8 @@ constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 constexpr ui64 PERIODIC_ACTION_BATCH_SIZE = 10; //Max number of tasks to perform during one interval
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
+constexpr TDuration CREATE_SESSION_INTERNAL_TIMEOUT = TDuration::Seconds(2); //Timeout for createSession call inside session pool
+constexpr TDuration MAX_WAIT_SESSION_TIMEOUT = TDuration::Seconds(5); //Max time to wait session
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1382,7 +1384,10 @@ public:
     // NOTE: O(n) under session pool lock, should not be used often
     bool DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, ui64 nodeId);
     // Returns true if session returned to pool successfully
-    bool ReturnSession(TSession::TImpl* impl, bool active);
+    bool ReturnSession(TSession::TImpl* impl, bool active, std::shared_ptr<TTableClient::TImpl> client);
+    // Returns trun if has waiter and scheduled to create new session
+    // too feed it
+    bool CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client);
     TPeriodicCb CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient, TKeepAliveCmd&& cmd, TDeletePredicate&& predicate);
     i64 GetActiveSessions() const;
     i64 GetActiveSessionsLimit() const;
@@ -1399,11 +1404,14 @@ private:
 
     mutable std::mutex Mtx_;
     TMultiMap<TInstant, std::unique_ptr<TSession::TImpl>> Sessions_;
+    TMultiMap<TInstant, NThreading::TPromise<TCreateSessionResult>> Waiters_;
+
     bool Closed_;
     i64 ActiveSessions_;
     const ui32 MaxActiveSessions_;
     NSdkStats::TSessionCounter ActiveSessionsCounter_;
     NSdkStats::TSessionCounter InPoolSessionsCounter_;
+    NSdkStats::TSessionCounter SessionWaiterCounter_;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> FakeSessionsCounter_;
 };
 
@@ -1612,6 +1620,7 @@ public:
         };
 
         auto keepAliveCmd = [](TSession session) {
+
             Y_VERIFY(session.GetId());
 
             const auto sessionPoolSettings = session.Client_->Settings_.SessionPoolSettings_;
@@ -2315,7 +2324,7 @@ public:
         // Also removes NeedUpdateActiveCounter flag
         sessionImpl->MarkIdle();
         sessionImpl->SetTimeInterval(TDuration::Zero());
-        if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
+        if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter, shared_from_this())) {
             sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
             return false;
         }
@@ -2323,6 +2332,16 @@ public:
     }
 
     void DeleteSession(TSession::TImpl* sessionImpl) {
+        // Closing S_STANDALONE session should not fire getting new session
+        if (sessionImpl->GetState() != TSession::TImpl::S_STANDALONE) {
+            if (SessionPool_.CheckAndFeedWaiterNewSession(shared_from_this())) {
+                // We requested new session for waiter which already incremented
+                // active session counter and old session will be deleted
+                // - skip update active counter in this case
+                sessionImpl->SetNeedUpdateActiveCounter(false);
+            }
+        }
+
         if (sessionImpl->NeedUpdateActiveCounter()) {
             SessionPool_.DecrementActiveCounter();
         }
@@ -2711,8 +2730,8 @@ void TSessionPoolImpl::CreateFakeSession(
     std::shared_ptr<TTableClient::TImpl> client)
 {
     TSession session(client, "", "");
-    // Mark broken to prevent returning to session pool
-    session.SessionImpl_->MarkBroken();
+    // Mark standalone to prevent returning to session pool
+    session.SessionImpl_->MarkStandalone();
     TCreateSessionResult val(
         TStatus(
             TPlainStatus(
@@ -2734,8 +2753,14 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
 {
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     std::unique_ptr<TSession::TImpl> sessionImpl;
+    // TODO: Remove this flag
     bool needUpdateActiveSessionCounter = false;
-    bool returnFakeSession = false;
+    enum class TSessionSource {
+        Pool,
+        Waiter,
+        Error
+    } sessionSource = TSessionSource::Pool;
+
     {
         std::lock_guard guard(Mtx_);
         if (MaxActiveSessions_) {
@@ -2743,7 +2768,12 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
                 ActiveSessions_++;
                 needUpdateActiveSessionCounter = true;
             } else {
-                returnFakeSession = true;
+                if (Waiters_.size() < (MaxActiveSessions_ * 10)) {
+                    Waiters_.insert(std::make_pair(TInstant::Now(), createSessionPromise));
+                    sessionSource = TSessionSource::Waiter;
+                } else {
+                    sessionSource = TSessionSource::Error;
+                }
             }
         } else {
             ActiveSessions_++;
@@ -2756,7 +2786,9 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
         }
         UpdateStats();
     }
-    if (returnFakeSession) {
+    if (sessionSource == TSessionSource::Waiter) {
+        return createSessionPromise.GetFuture();
+    } else if (sessionSource == TSessionSource::Error) {
         FakeSessionsCounter_.Inc();
         CreateFakeSession(createSessionPromise, client);
         return createSessionPromise.GetFuture();
@@ -2764,6 +2796,7 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
         Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_IDLE);
         Y_VERIFY(!sessionImpl->GetTimeInterval());
         Y_VERIFY(needUpdateActiveSessionCounter);
+        Y_VERIFY(sessionSource == TSessionSource::Pool);
         sessionImpl->MarkActive();
         sessionImpl->SetNeedUpdateActiveCounter(true);
 
@@ -2778,8 +2811,9 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
 
         return createSessionPromise.GetFuture();
     } else {
+        Y_VERIFY(needUpdateActiveSessionCounter);
         const auto& sessionResult = client->CreateSession(settings, false);
-        sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(createSessionPromise, client, settings, 0, needUpdateActiveSessionCounter));
+        sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(createSessionPromise, client, settings, 0, true));
         return createSessionPromise.GetFuture();
     }
 }
@@ -2805,19 +2839,80 @@ bool TSessionPoolImpl::DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl
     return true;
 }
 
-bool TSessionPoolImpl::ReturnSession(TSession::TImpl* impl, bool active) {
+bool TSessionPoolImpl::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client) {
+    NThreading::TPromise<TCreateSessionResult> createSessionPromise;
     {
         std::lock_guard guard(Mtx_);
         if (Closed_)
             return false;
-        Sessions_.emplace(std::make_pair(impl->GetTimeToTouchFast(), impl));
-        if (active) {
-            Y_VERIFY(ActiveSessions_);
-            ActiveSessions_--;
-            impl->SetNeedUpdateActiveCounter(false);
+
+        if (Waiters_.empty())
+            return false;
+
+        auto it = Waiters_.begin();
+        createSessionPromise = it->second;
+        Waiters_.erase(it);
+    }
+
+    // This code can be called from client dtors. It may be unsafe to
+    // execute grpc call directly...
+    client->ScheduleTaskUnsafe([createSessionPromise, client]() mutable {
+        TCreateSessionSettings settings;
+        settings.ClientTimeout(CREATE_SESSION_INTERNAL_TIMEOUT);
+
+        const auto& sessionResult = client->CreateSession(settings, false);
+        sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(createSessionPromise, client, settings, 0, true));
+    }, TDuration());
+    return true;
+}
+
+bool TSessionPoolImpl::ReturnSession(TSession::TImpl* impl, bool active, std::shared_ptr<TTableClient::TImpl> client) {
+    // Do not set promise under the session pool lock
+    NThreading::TPromise<TCreateSessionResult> createSessionPromise;
+    {
+        std::lock_guard guard(Mtx_);
+        if (Closed_)
+            return false;
+
+        if (!Waiters_.empty()) {
+            auto it = Waiters_.begin();
+            createSessionPromise = it->second;
+            Waiters_.erase(it);
+
+            impl->MarkActive();
+
+            // Check session returned from keep-alive task.
+            // See the code below. We did ActiveSessions_--
+            // when returned user session in to the pool so
+            // we must increment it before returning session
+            // to user.
+            if (!active)
+                ActiveSessions_++;
+            impl->SetNeedUpdateActiveCounter(true);
+        } else {
+            Sessions_.emplace(std::make_pair(impl->GetTimeToTouchFast(), impl));
+
+            if (active) {
+                Y_VERIFY(ActiveSessions_);
+                ActiveSessions_--;
+                impl->SetNeedUpdateActiveCounter(false);
+            }
         }
         UpdateStats();
     }
+
+    if (createSessionPromise.Initialized()) {
+        TCreateSessionResult val(TStatus(TPlainStatus()),
+            TSession(client, std::shared_ptr<TSession::TImpl>(
+                impl,
+                TSession::TImpl::GetSmartDeleter(client))));
+
+        client->ScheduleTaskUnsafe([createSessionPromise, val{std::move(val)}]() mutable {
+            createSessionPromise.SetValue(std::move(val));
+        }, TDuration());
+
+    }
+
     return true;
 }
 
@@ -2859,23 +2954,41 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
             sessionsToTouch.reserve(keepAliveBatchSize);
             TVector<std::unique_ptr<TSession::TImpl>> sessionsToDelete;
             sessionsToDelete.reserve(keepAliveBatchSize);
-            auto now = TInstant::Now();
+            TVector<NThreading::TPromise<TCreateSessionResult>> waitersToReplyError;
+            waitersToReplyError.reserve(keepAliveBatchSize);
+            const auto now = TInstant::Now();
             {
                 std::lock_guard guard(Mtx_);
-                auto& sessions = Sessions_;
+                {
+                    auto& sessions = Sessions_;
 
-                auto it = sessions.begin();
-                while (it != sessions.end() && keepAliveBatchSize--) {
-                    if (now < it->second->GetTimeToTouchFast())
-                        break;
+                    auto it = sessions.begin();
+                    while (it != sessions.end() && keepAliveBatchSize--) {
+                        if (now < it->second->GetTimeToTouchFast())
+                            break;
 
-                    if (deletePredicate(it->second.get(), strongClient.get(), sessions.size())) {
-                        sessionsToDelete.emplace_back(std::move(it->second));
-                    } else {
-                        sessionsToTouch.emplace_back(std::move(it->second));
+                        if (deletePredicate(it->second.get(), strongClient.get(), sessions.size())) {
+                            sessionsToDelete.emplace_back(std::move(it->second));
+                        } else {
+                            sessionsToTouch.emplace_back(std::move(it->second));
+                        }
+                        sessions.erase(it++);
                     }
-                    sessions.erase(it++);
                 }
+
+                {
+                    auto it = Waiters_.begin();
+
+                    while (it != Waiters_.end()) {
+                        if (now < it->first + MAX_WAIT_SESSION_TIMEOUT)
+                            break;
+
+                        waitersToReplyError.emplace_back(std::move(it->second));
+
+                        Waiters_.erase(it++);
+                    }
+                }
+
                 UpdateStats();
             }
 
@@ -2894,6 +3007,11 @@ TPeriodicCb TSessionPoolImpl::CreatePeriodicTask(std::weak_ptr<TTableClient::TIm
                     Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_IDLE);
                     TTableClient::TImpl::CloseAndDeleteSession(std::move(sessionImpl), strongClient);
                 }
+            }
+
+            for (auto& waiter : waitersToReplyError) {
+                FakeSessionsCounter_.Inc();
+                CreateFakeSession(waiter, strongClient);
             }
         }
 
@@ -2961,11 +3079,13 @@ void TSessionPoolImpl::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolS
     ActiveSessionsCounter_.Set(statCollector.ActiveSessions);
     InPoolSessionsCounter_.Set(statCollector.InPoolSessions);
     FakeSessionsCounter_.Set(statCollector.FakeSessions);
+    SessionWaiterCounter_.Set(statCollector.Waiters);
 }
 
 void TSessionPoolImpl::UpdateStats() {
     ActiveSessionsCounter_.Apply(ActiveSessions_);
     InPoolSessionsCounter_.Apply(Sessions_.size());
+    SessionWaiterCounter_.Apply(Waiters_.size());
 }
 
 TTableClient::TTableClient(const TDriver& driver, const TClientSettings& settings)
@@ -4275,6 +4395,11 @@ TChangefeedDescription& TChangefeedDescription::SetAttributes(THashMap<TString, 
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const TString& value) {
+    AwsRegion_ = value;
+    return *this;
+}
+
 const TString& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -4301,6 +4426,10 @@ bool TChangefeedDescription::GetInitialScan() const {
 
 const THashMap<TString, TString>& TChangefeedDescription::GetAttributes() const {
     return Attributes_;
+}
+
+const TString& TChangefeedDescription::GetAwsRegion() const {
+    return AwsRegion_;
 }
 
 template <typename TProto>
@@ -4332,8 +4461,8 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         format = EChangefeedFormat::Json;
         break;
-    case Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON:
-        format = EChangefeedFormat::DocumentTableJson;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
+        format = EChangefeedFormat::DynamoDBStreamsJson;
         break;
     default:
         format = EChangefeedFormat::Unknown;
@@ -4343,6 +4472,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     auto ret = TChangefeedDescription(proto.name(), mode, format);
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
+    }
+    if (!proto.aws_region().empty()) {
+        ret.WithAwsRegion(proto.aws_region());
     }
 
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
@@ -4373,6 +4505,7 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     proto.set_name(Name_);
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_initial_scan(InitialScan_);
+    proto.set_aws_region(AwsRegion_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -4398,8 +4531,8 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     case EChangefeedFormat::Json:
         proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
         break;
-    case EChangefeedFormat::DocumentTableJson:
-        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
+    case EChangefeedFormat::DynamoDBStreamsJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
         break;
     case EChangefeedFormat::Unknown:
         break;
@@ -4433,6 +4566,10 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
         o << ", retention_period: " << *RetentionPeriod_;
     }
 
+    if (AwsRegion_) {
+        o << ", aws_region: " << AwsRegion_;
+    }
+
     o << " }";
 }
 
@@ -4440,7 +4577,8 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
     return lhs.GetName() == rhs.GetName()
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
-        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps();
+        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
+        && lhs.GetAwsRegion() == rhs.GetAwsRegion();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 StreamDescription {
                   Name: "Stream"
                   Mode: ECdcStreamModeNewAndOldImages
-                  Format: ECdcStreamFormatDocApiJson
+                  Format: ECdcStreamFormatDynamoDBStreamsJson
                   AwsRegion: "ru-central1"
                 }
             )");
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
                     NLs::PathExist,
                     NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages),
-                    NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDocApiJson),
+                    NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson),
                     NLs::StreamAwsRegion("ru-central1"),
                 });
             }

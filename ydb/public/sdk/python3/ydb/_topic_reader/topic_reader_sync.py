@@ -47,9 +47,7 @@ class TopicReaderSync:
         async def create_reader():
             return PublicAsyncIOReader(driver, settings)
 
-        self._async_reader = asyncio.run_coroutine_threadsafe(
-            create_reader(), loop
-        ).result()
+        self._async_reader = asyncio.run_coroutine_threadsafe(create_reader(), loop).result()
 
         self._parent = _parent
 
@@ -62,9 +60,7 @@ class TopicReaderSync:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def receive_message(
-        self, *, timeout: TimeoutType = None
-    ) -> datatypes.PublicMessage:
+    def receive_message(self, *, timeout: TimeoutType = None) -> datatypes.PublicMessage:
         """
         Block until receive new message
         It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
@@ -76,9 +72,7 @@ class TopicReaderSync:
         """
         self._check_closed()
 
-        return self._caller.safe_call_with_result(
-            self._async_reader.receive_message(), timeout
-        )
+        return self._caller.safe_call_with_result(self._async_reader.receive_message(), timeout)
 
     def async_wait_message(self) -> concurrent.futures.Future:
         """
@@ -90,9 +84,7 @@ class TopicReaderSync:
         """
         self._check_closed()
 
-        return self._caller.unsafe_call_with_future(
-            self._async_reader._reconnector.wait_message()
-        )
+        return self._caller.unsafe_call_with_future(self._async_reader._reconnector.wait_message())
 
     def receive_batch(
         self,
@@ -115,9 +107,7 @@ class TopicReaderSync:
             timeout,
         )
 
-    def commit(
-        self, mess: typing.Union[datatypes.PublicMessage, datatypes.PublicBatch]
-    ):
+    def commit(self, mess: typing.Union[datatypes.PublicMessage, datatypes.PublicBatch]):
         """
         Put commit message to internal buffer.
 
@@ -140,9 +130,7 @@ class TopicReaderSync:
         """
         self._check_closed()
 
-        return self._caller.unsafe_call_with_result(
-            self._async_reader.commit_with_ack(mess), timeout
-        )
+        return self._caller.unsafe_call_with_result(self._async_reader.commit_with_ack(mess), timeout)
 
     def async_commit_with_ack(
         self, mess: typing.Union[datatypes.PublicMessage, datatypes.PublicBatch]
@@ -152,9 +140,7 @@ class TopicReaderSync:
         """
         self._check_closed()
 
-        return self._caller.unsafe_call_with_future(
-            self._async_reader.commit_with_ack(mess)
-        )
+        return self._caller.unsafe_call_with_future(self._async_reader.commit_with_ack(mess))
 
     def close(self, *, flush: bool = True, timeout: TimeoutType = None):
         if self._closed:

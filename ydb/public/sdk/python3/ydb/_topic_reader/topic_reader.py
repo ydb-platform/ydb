@@ -14,21 +14,36 @@ from ..table import RetrySettings
 from .._grpc.grpcwrapper.ydb_topic import StreamReadMessage, OffsetsRange
 
 
-class Selector:
+@dataclass
+class PublicTopicSelector:
     path: str
-    partitions: Union[None, int, List[int]]
-    read_from_timestamp_ms: Optional[int]
-    max_time_lag_ms: Optional[int]
+    partitions: Optional[Union[int, List[int]]] = None
+    read_from: Optional[datetime.datetime] = None
+    max_lag: Optional[datetime.timedelta] = None
 
-    def __init__(self, path, *, partitions: Union[None, int, List[int]] = None):
-        self.path = path
-        self.partitions = partitions
+    def _to_topic_read_settings(self) -> StreamReadMessage.InitRequest.TopicReadSettings:
+        partitions = self.partitions
+        if partitions is None:
+            partitions = []
+
+        elif not isinstance(partitions, list):
+            partitions = [partitions]
+
+        return StreamReadMessage.InitRequest.TopicReadSettings(
+            path=self.path,
+            partition_ids=partitions,
+            max_lag=self.max_lag,
+            read_from=self.read_from,
+        )
+
+
+TopicSelectorTypes = Union[str, PublicTopicSelector, List[Union[str, PublicTopicSelector]]]
 
 
 @dataclass
 class PublicReaderSettings:
     consumer: str
-    topic: str
+    topic: TopicSelectorTypes
     buffer_size_bytes: int = 50 * 1024 * 1024
 
     decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None
@@ -38,13 +53,29 @@ class PublicReaderSettings:
     decoder_executor: Optional[concurrent.futures.Executor] = None
     update_token_interval: Union[int, float] = 3600
 
+    def __post_init__(self):
+        # check possible create init message
+        _ = self._init_message()
+
     def _init_message(self) -> StreamReadMessage.InitRequest:
+        if not isinstance(self.consumer, str):
+            raise TypeError("Unsupported type for customer field: '%s'" % type(self.consumer))
+
+        if isinstance(self.topic, list):
+            selectors = self.topic
+        else:
+            selectors = [self.topic]
+
+        for index, selector in enumerate(selectors):
+            if isinstance(selector, str):
+                selectors[index] = PublicTopicSelector(path=selector)
+            elif isinstance(selector, PublicTopicSelector):
+                pass
+            else:
+                raise TypeError("Unsupported type for topic field: '%s'" % type(selector))
+
         return StreamReadMessage.InitRequest(
-            topics_read_settings=[
-                StreamReadMessage.InitRequest.TopicReadSettings(
-                    path=self.topic,
-                )
-            ],
+            topics_read_settings=list(map(PublicTopicSelector._to_topic_read_settings, selectors)),  # type: ignore
             consumer=self.consumer,
         )
 

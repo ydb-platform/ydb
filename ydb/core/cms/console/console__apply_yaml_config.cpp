@@ -53,7 +53,10 @@ public:
 
                 db.Table<Schema::YamlConfig>().Key(Version + 1)
                     .Update<Schema::YamlConfig::Config>(UpdatedConfig)
-                    .Update<Schema::YamlConfig::Dropped>(false);
+                    // set config dropped by default to support rollback to previous versions
+                    // where new config layout is not supported
+                    // it will lead to ignoring config from new versions
+                    .Update<Schema::YamlConfig::Dropped>(true);
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::YamlConfig>().Key(Version)

@@ -5,9 +5,7 @@
 namespace NActors {
 
 using IMonotonicTimeProvider = NMonotonic::IMonotonicTimeProvider;
-using IBootTimeProvider = NMonotonic::IBootTimeProvider;
 
 using NMonotonic::CreateDefaultMonotonicTimeProvider;
-using NMonotonic::CreateDefaultBootTimeProvider;
 
 } // namespace NActors

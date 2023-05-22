@@ -59,7 +59,7 @@ public:
             }
 
             auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
-            auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.GetProtoIndex());
+            auto& presetProto = storeInfo->GetDescription().GetSchemaPresets(preset.GetProtoIndex());
             if (!presetProto.HasSchema()) {
                 errors.AddError(NKikimrScheme::StatusSchemeError, "No schema in preset for in-store column table");
                 return nullptr;
@@ -75,33 +75,36 @@ public:
     }
 
     TColumnTableInfo::TPtr BuildTableInfo(const TTablesStorage::TTableExtractedGuard& tableInfo, const TOlapStoreInfo::TPtr& storeInfo, IErrorCollector& errors) const {
-        TColumnTableInfo::TPtr alterData = new TColumnTableInfo(*tableInfo);
-        alterData->AlterBody.ConstructInPlace(AlterRequest);
-        ++alterData->AlterVersion;
+        auto alterData = TColumnTableInfo::BuildTableWithAlter(*tableInfo, AlterRequest);
 
         const NKikimrSchemeOp::TColumnTableSchema* tableSchema = GetTableSchema(tableInfo, storeInfo, errors);
         if (!tableSchema) {
             return nullptr;
         }
 
-        TOlapSchema localSchema;
-        localSchema.Parse(*tableSchema);
+        if (storeInfo && AlterRequest.HasAlterSchema()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, "Can't modify schema for table in store");
+            return nullptr;
+        }
+
+        TOlapSchema currentSchema;
+        currentSchema.Parse(*tableSchema);
         if (!storeInfo) {
             TOlapSchemaUpdate schemaUpdate;
-            if (!schemaUpdate.Parse(AlterRequest, errors)) {
+            if (!schemaUpdate.Parse(AlterRequest.GetAlterSchema(), errors)) {
                 return nullptr;
             }
 
-            if (!localSchema.Update(schemaUpdate, errors)) {
+            if (!currentSchema.Update(schemaUpdate, errors)) {
                 return nullptr;
             }
             NKikimrSchemeOp::TColumnTableSchema schemaUdpateProto;
-            localSchema.Serialize(schemaUdpateProto);
+            currentSchema.Serialize(schemaUdpateProto);
             *alterData->Description.MutableSchema() = schemaUdpateProto;
         }
         
         if (AlterRequest.HasAlterTtlSettings()) {
-            if (!localSchema.ValidateTtlSettings(AlterRequest.GetAlterTtlSettings(), errors)) {
+            if (!currentSchema.ValidateTtlSettings(AlterRequest.GetAlterTtlSettings(), errors)) {
                 return nullptr;
             }
             const ui64 currentTtlVersion = alterData->Description.HasTtlSettings() ? alterData->Description.GetTtlSettings().GetVersion() : 0;
@@ -140,7 +143,7 @@ private:
 
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
-            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddColumns();
+            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
             if (!ParseFromDSRequest(dsColumn, *olapColumn, errors)) {
                 return false;
             }
@@ -253,7 +256,7 @@ public:
               auto &preset = storeInfo->SchemaPresets.at(presetId);
               size_t presetIndex = preset.GetProtoIndex();
               *alter->MutableSchemaPreset() =
-                  storeInfo->Description.GetSchemaPresets(presetIndex);
+                  storeInfo->GetDescription().GetSchemaPresets(presetIndex);
             }
             if (alterData->Description.HasTtlSettings()) {
               *alter->MutableTtlSettings() =

@@ -155,7 +155,7 @@ IComputationNode* WrapBlockAsTuple(TCallable& callable, const TComputationNodeFa
     }
 
     auto kernel = MakeBlockAsTupleKernel(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -175,7 +175,7 @@ IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactor
     TVector<IComputationNode*> argsNodes = { tuple };
     TVector<TType*> argsTypes = { blockType };
     auto kernel = MakeBlockNthKernel(argsTypes, callable.GetType()->GetReturnType(), index, isOptional, needExternalOptional);
-    return new TBlockFuncNode(ctx.Mutables, std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 }

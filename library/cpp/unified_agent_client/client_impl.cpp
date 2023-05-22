@@ -237,7 +237,6 @@ namespace NUnifiedAgent::NPrivate {
         with_lock(InstanceLock) {
             auto result = Instance.lock();
             if (!result && createIfNotExists) {
-                SetEnv("GRPC_ENABLE_FORK_SUPPORT", "true");
                 result = std::make_shared<TForkProtector>();
                 if (!result->Enabled) {
                     TLog log("cerr");
@@ -1259,6 +1258,16 @@ namespace NUnifiedAgent {
     const TDuration TClientParameters::DefaultGrpcSendDelay = TDuration::MilliSeconds(10);
 
     TClientPtr MakeClient(const TClientParameters& parameters) {
+
+        // Initialization of the Fork in newest grcp core is performed
+        // in 'do_basic_init', which is called inside 'grpc_is_initialized'.
+        // So the set of the fork env variable has to be done before
+        // grpc_is_initialized call.
+#ifdef _unix_
+        if (parameters.EnableForkSupport) {
+            SetEnv("GRPC_ENABLE_FORK_SUPPORT", "true");
+        }
+#endif
         if (!grpc_is_initialized()) {
             EnsureGrpcConfigured();
         }

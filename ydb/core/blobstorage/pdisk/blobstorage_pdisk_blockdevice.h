@@ -47,6 +47,7 @@ public:
     virtual void CachedPreadAsync(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction,
             TReqId reqId, NWilson::TTraceId *traceId) = 0;
     virtual void ClearCache() = 0;
+    virtual void EraseCacheRange(ui64 begin, ui64 end) = 0; // erases offsets range [begin, end)
     virtual void FlushAsync(TCompletionAction *completionAction, TReqId reqId) = 0;
     virtual void NoopAsync(TCompletionAction *completionAction, TReqId reqId) = 0;
     virtual void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId reqId) = 0;
@@ -61,11 +62,13 @@ public:
     virtual TString DebugInfo() = 0;
 };
 
+class TPDisk;
+
 IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
-        ui32 maxQueuedCompletionActions, TIntrusivePtr<TSectorMap> sectorMap);
+        ui32 maxQueuedCompletionActions, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk = nullptr);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr);
 
 } // NPDisk
 } // NKikimr

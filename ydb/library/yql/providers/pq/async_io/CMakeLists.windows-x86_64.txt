@@ -23,6 +23,7 @@ target_link_libraries(providers-pq-async_io PUBLIC
   client-ydb_types-credentials
   dq-actors-compute
   providers-pq-proto
+  providers-pq-common
 )
 target_sources(providers-pq-async_io PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.cpp

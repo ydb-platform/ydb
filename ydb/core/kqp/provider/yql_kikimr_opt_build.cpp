@@ -323,7 +323,9 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
     }
 
     for (const auto& dataSource : types.DataSources) {
-        if (auto* dqIntegration = dataSource->GetDqIntegration(); dqIntegration && dqIntegration->CanRead(TDqSettings::TDefault::DataSizePerJob, TDqSettings::TDefault::MaxTasksPerStage, *node.Ptr(), ctx)) {
+        if (auto* dqIntegration = dataSource->GetDqIntegration(); dqIntegration 
+        && dqIntegration->CanRead(*node.Ptr(), ctx)
+        && dqIntegration->EstimateReadSize(TDqSettings::TDefault::DataSizePerJob, TDqSettings::TDefault::MaxTasksPerStage, *node.Ptr(), ctx)) {
             txRes.Ops.insert(node.Raw());
             for (size_t i = 0, childrenSize = node.Raw()->ChildrenSize(); i < childrenSize; ++i) {
                 if (TExprNode::TPtr child = node.Raw()->ChildPtr(i)) {

@@ -17,20 +17,6 @@ class TReplaceKeyTemplate;
 using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
 using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 
-// Arrow inrernally keeps references to Buffer objects with the data
-// This helper class implements arrow::Buffer over TString that owns
-// the actual memory
-class TBufferOverString : public arrow::Buffer {
-    TString Str;
-public:
-    explicit TBufferOverString(TString str)
-        : arrow::Buffer((const unsigned char*)str.data(), str.size())
-        , Str(str)
-    {
-        Y_VERIFY(data() == (const unsigned char*)Str.data());
-    }
-};
-
 std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeInfo);
 std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId);
 

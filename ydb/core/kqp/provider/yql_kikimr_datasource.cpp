@@ -136,7 +136,10 @@ public:
             auto& result = emplaceResult.first->second;
 
             auto future = Gateway->LoadTableMetadata(clusterName, tableName,
-                IKikimrGateway::TLoadTableMetadataSettings().WithTableStats(table.GetNeedsStats()).WithPrivateTables(IsInternalCall));
+                IKikimrGateway::TLoadTableMetadataSettings()
+                            .WithTableStats(table.GetNeedsStats())
+                            .WithPrivateTables(IsInternalCall)
+                            .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()));
 
             futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
@@ -532,8 +535,8 @@ public:
         if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
             auto* typeDesc = typeInfo.GetTypeDesc();
             auto* pg = ydbType.mutable_pg_type();
-            pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-            pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
         } else {
             auto& item = notNull
                 ? ydbType
@@ -596,7 +599,28 @@ public:
         }
 
         auto& tableDesc = SessionCtx->Tables().GetTable(TString{source.Cluster()}, key.GetTablePath());
-        if (key.GetKeyType() == TKikimrKey::Type::Table && tableDesc.Metadata->Kind == EKikimrTableKind::External) {
+        if (key.GetKeyType() == TKikimrKey::Type::Table && tableDesc.Metadata->Kind == EKikimrTableKind::External && tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+            const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+            ctx.Step.Repeat(TExprStep::DiscoveryIO)
+                    .Repeat(TExprStep::Epochs)
+                    .Repeat(TExprStep::Intents)
+                    .Repeat(TExprStep::LoadTablesMetadata)
+                    .Repeat(TExprStep::RewriteIO);
+            auto readArgs = read->ChildrenList();
+            readArgs[1] = Build<TCoDataSource>(ctx, node->Pos())
+                            .Category(ctx.NewAtom(node->Pos(), source->GetName()))
+                            .FreeArgs()
+                                .Add(readArgs[1]->ChildrenList()[1])
+                            .Build()
+                            .Done().Ptr();
+            readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });
+            auto newRead = ctx.ChangeChildren(*read, std::move(readArgs));
+            auto retChildren = node->ChildrenList();
+            retChildren[0] = newRead;
+            return ctx.ChangeChildren(*node, std::move(retChildren));
+        }
+
+        if (key.GetKeyType() == TKikimrKey::Type::Table && tableDesc.Metadata->Kind == EKikimrTableKind::External  && tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
             const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
             ctx.Step.Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)

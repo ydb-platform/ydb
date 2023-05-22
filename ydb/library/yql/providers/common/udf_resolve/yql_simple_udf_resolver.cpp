@@ -9,6 +9,8 @@
 #include <ydb/library/yql/minikql/mkql_utils.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
+#include <library/cpp/digest/md5/md5.h>
+
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
@@ -31,10 +33,18 @@ public:
         , UseFakeMD5_(useFakeMD5)
     {}
 
+    TString GetMD5(const TString& path) const {
+        if (UseFakeMD5_) {
+            return MD5::Calc(path);
+        } else {
+            return {};
+        }
+    }
+
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         with_lock(Lock_) {
             auto path = FunctionRegistry_->FindUdfPath(moduleName);
-            return path ? MakeMaybe<TFilePathWithMd5>(*path, UseFakeMD5_ ? *path : TString()) : Nothing();
+            return path ? MakeMaybe<TFilePathWithMd5>(*path, GetMD5(*path)) : Nothing();
         }
     }
 

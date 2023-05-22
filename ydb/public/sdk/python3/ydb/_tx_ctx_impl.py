@@ -6,9 +6,7 @@ def reset_tx_id_handler(func):
     @functools.wraps(func)
     def decorator(rpc_state, response_pb, session_state, tx_state, *args, **kwargs):
         try:
-            return func(
-                rpc_state, response_pb, session_state, tx_state, *args, **kwargs
-            )
+            return func(rpc_state, response_pb, session_state, tx_state, *args, **kwargs)
         except issues.Error:
             tx_state.tx_id = None
             tx_state.dead = True
@@ -19,13 +17,9 @@ def reset_tx_id_handler(func):
 
 def not_found_handler(func):
     @functools.wraps(func)
-    def decorator(
-        rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs
-    ):
+    def decorator(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs):
         try:
-            return func(
-                rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs
-            )
+            return func(rpc_state, response_pb, session_state, tx_state, query, *args, **kwargs)
         except issues.NotFound:
             session_state.erase(query)
             raise
@@ -37,9 +31,7 @@ def wrap_tx_factory_handler(func):
     @functools.wraps(func)
     def decorator(session_state, tx_state, *args, **kwargs):
         if tx_state.dead:
-            raise issues.PreconditionFailed(
-                "Failed to perform action on broken transaction context!"
-            )
+            raise issues.PreconditionFailed("Failed to perform action on broken transaction context!")
         return func(session_state, tx_state, *args, **kwargs)
 
     return decorator
@@ -47,9 +39,7 @@ def wrap_tx_factory_handler(func):
 
 @_session_impl.bad_session_handler
 @reset_tx_id_handler
-def wrap_result_on_rollback_or_commit_tx(
-    rpc_state, response_pb, session_state, tx_state, tx
-):
+def wrap_result_on_rollback_or_commit_tx(rpc_state, response_pb, session_state, tx_state, tx):
     session_state.complete_query()
     issues._process_response(response_pb.operation)
     # transaction successfully committed or rolled back
@@ -116,12 +106,12 @@ def _construct_tx_settings(tx_state):
 
 
 @wrap_tx_factory_handler
-def execute_request_factory(
-    session_state, tx_state, query, parameters, commit_tx, settings
-):
+def execute_request_factory(session_state, tx_state, query, parameters, commit_tx, settings):
     data_query, query_id = session_state.lookup(query)
     parameters_types = {}
-    keep_in_cache = False
+
+    is_data_query = False
+
     if query_id is not None:
         query_pb = _apis.ydb_table.Query(id=query_id)
         parameters_types = data_query.parameters_types
@@ -130,23 +120,31 @@ def execute_request_factory(
             # client cache disabled for send query text every time
             yql_text = data_query.yql_text
             parameters_types = data_query.parameters_types
+            is_data_query = True
         elif isinstance(query, types.DataQuery):
-            if settings is not None and hasattr(settings, "keep_in_cache"):
-                keep_in_cache = settings.keep_in_cache
-            else:
-                # that is an instance of a data query and we don't know query id for id.
-                # so let's prepare it to keep in cache
-                keep_in_cache = True
             yql_text = query.yql_text
             parameters_types = query.parameters_types
+            is_data_query = True
         else:
             yql_text = query
         query_pb = _apis.ydb_table.Query(yql_text=yql_text)
-    request = _apis.ydb_table.ExecuteDataQueryRequest(
-        parameters=convert.parameters_to_pb(parameters_types, parameters)
-    )
+    request = _apis.ydb_table.ExecuteDataQueryRequest(parameters=convert.parameters_to_pb(parameters_types, parameters))
+
+    if query_id is not None:
+        # SDK not send query text and nothing save to cache
+        keep_in_cache = False
+    elif settings is not None and hasattr(settings, "keep_in_cache"):
+        keep_in_cache = settings.keep_in_cache
+    elif parameters:
+        keep_in_cache = True
+    elif is_data_query:
+        keep_in_cache = True
+    else:
+        keep_in_cache = False
+
     if keep_in_cache:
         request.query_cache_policy.keep_in_cache = True
+
     request.query.MergeFrom(query_pb)
     tx_control = _apis.ydb_table.TransactionControl()
     tx_control.commit_tx = commit_tx
@@ -167,7 +165,7 @@ def wrap_result_and_tx_id(rpc_state, response_pb, session_state, tx_state, query
     issues._process_response(response_pb.operation)
     message = _apis.ydb_table.ExecuteQueryResult()
     response_pb.operation.result.Unpack(message)
-    if message.query_meta.id:
+    if message.query_meta.id and isinstance(query, types.DataQuery):
         session_state.keep(query, message.query_meta.id)
     tx_state.tx_id = None if not message.tx_meta.id else message.tx_meta.id
     return convert.ResultSets(message.result_sets, session_state.table_client_settings)

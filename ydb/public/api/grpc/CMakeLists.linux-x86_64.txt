@@ -195,7 +195,7 @@ target_link_libraries(api-grpc PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(api-grpc PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/federation_discovery_v1.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_federation_discovery_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_auth_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_cms_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_coordination_v1.proto

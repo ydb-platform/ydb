@@ -573,6 +573,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasEnableExternalDataChannel()) {
         result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
     }
+    if (config.HasValidateIncomingPeerViaDirectLookup()) {
+        result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();
+    }
 
     return result;
 }

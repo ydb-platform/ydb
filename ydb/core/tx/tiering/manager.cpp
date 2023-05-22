@@ -116,24 +116,8 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 }
 
 NKikimr::NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
-    NOlap::TCompression out;
-    if (compression.HasCompressionCodec()) {
-        switch (compression.GetCompressionCodec()) {
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                out.Codec = arrow::Compression::UNCOMPRESSED;
-                break;
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                out.Codec = arrow::Compression::LZ4_FRAME;
-                break;
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                out.Codec = arrow::Compression::ZSTD;
-                break;
-        }
-    }
-
-    if (compression.HasCompressionLevel()) {
-        out.Level = compression.GetCompressionLevel();
-    }
+    NOlap::TCompression out = NOlap::TCompression::Default();
+    Y_VERIFY(out.DeserializeFromProto(compression));
     return out;
 }
 }

@@ -449,6 +449,7 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 
         changefeed->set_name(stream.GetName());
         changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
+        changefeed->set_aws_region(stream.GetAwsRegion());
 
         switch (stream.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
@@ -466,8 +467,8 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
             changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
             break;
-        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDocApiJson:
-            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON);
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
+            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
             break;
         default:
             break;
@@ -492,6 +493,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
+    out.SetAwsRegion(in.aws_region());
 
     switch (in.mode()) {
     case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:
@@ -511,8 +513,8 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson);
         break;
-    case Ydb::Table::ChangefeedFormat::FORMAT_DOCUMENT_TABLE_JSON:
-        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDocApiJson);
+    case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson);
         break;
     default:
         status = Ydb::StatusIds::BAD_REQUEST;

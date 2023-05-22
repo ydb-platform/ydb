@@ -20,7 +20,6 @@ TAppData::TAppData(
     , FunctionRegistry(functionRegistry)
     , FormatFactory(formatFactory)
     , MonotonicTimeProvider(CreateDefaultMonotonicTimeProvider())
-    , BootTimeProvider(CreateDefaultBootTimeProvider())
     , ProxySchemeCacheNodes(Max<ui64>() / 4)
     , ProxySchemeCacheDistrNodes(Max<ui64>() / 4)
     , CompilerSchemeCachePaths(Max<ui64>() / 4)

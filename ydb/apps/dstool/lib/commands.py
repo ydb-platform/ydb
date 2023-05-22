@@ -36,7 +36,7 @@ import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_run as cluster_workload_r
 import sys
 import ydb.apps.dstool.lib.common as common
 
-MODULE_PREFIX = 'ydb.apps.dstool.lib.dstool_cmd_'
+MODULE_PREFIX = 'dstool_cmd_'
 
 modules = [
     cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
@@ -64,7 +64,8 @@ default_structure = [
 def make_command_map_by_structure(subparsers, modules=modules, structure=default_structure):
     module_map = {}
     for module in modules:
-        module_map[module.__name__[len(MODULE_PREFIX):].replace('_', '-')] = module
+        last_name = module.__name__.split('.')[-1]
+        module_map[last_name[len(MODULE_PREFIX):].replace('_', '-')] = module
 
     command_map = {}
 

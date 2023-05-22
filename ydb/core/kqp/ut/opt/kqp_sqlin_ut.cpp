@@ -605,8 +605,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryKeys", 5);
+            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryKeys", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -643,10 +643,9 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryKeys", 5);
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"),
-                result.GetIssues().ToString());
+            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryKeys", 2);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -725,10 +724,9 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"),
-                result.GetIssues().ToString());
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -775,10 +773,9 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"),
-                result.GetIssues().ToString());
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 1);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 1);
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -817,8 +814,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
@@ -848,8 +845,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {

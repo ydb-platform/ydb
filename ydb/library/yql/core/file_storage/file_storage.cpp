@@ -77,7 +77,7 @@ public:
     }
 
     TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) final {
-        YQL_LOG(INFO) << "PutFileStripped to cache: " << file;
+        YQL_LOG(INFO) << "PutFileStripped to cache: " << file << ". Provided MD5: " << originalMd5;
         if (originalMd5.empty()) {
             YQL_LOG(WARN) << "Empty md5 for: " << file;
         }
@@ -101,7 +101,7 @@ public:
             TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
             cmd.Run().Wait();
             if (*cmd.GetExitCode() != 0) {
-                ythrow yexception() << "'strip' exited with " << *cmd.GetExitCode() << "code. Stedrr: " << cmd.GetError();
+                ythrow yexception() << "'strip' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();
             }
             md5 = MD5::File(dstPath.GetPath());
             size = TFile(dstPath.GetPath(), OpenExisting | RdOnly).GetLength();

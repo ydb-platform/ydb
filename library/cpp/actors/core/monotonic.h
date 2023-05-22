@@ -6,9 +6,7 @@
 namespace NActors {
 
 using NMonotonic::GetMonotonicMicroSeconds;
-using NMonotonic::GetBootTimeMicroSeconds;
 
 using TMonotonic = NMonotonic::TMonotonic;
-using TBootTime = NMonotonic::TBootTime;
 
 } // namespace NActors

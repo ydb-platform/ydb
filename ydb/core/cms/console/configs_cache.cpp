@@ -96,7 +96,7 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
         kinds.push_back(kind);
     }
 
-    auto client = CreateConfigsSubscriber(SelfId(), kinds, CurrentConfig);
+    auto client = CreateConfigsSubscriber(SelfId(), kinds, CurrentConfig, 1);
     SubscriptionClient = ctx.RegisterWithSameMailbox(client);
 
     Become(&TThis::StateWork);

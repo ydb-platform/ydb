@@ -26,6 +26,23 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKernelComputationNode(TComputationContext& ctx) const {
+    Y_UNUSED(ctx);
+    return {};
+}
+
+TDatumProvider MakeDatumProvider(const arrow::Datum& datum) {
+    return [datum]() {
+        return datum;
+    };
+}
+
+TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationContext& ctx) {
+    return [node, &ctx]() {
+        return TArrowBlock::From(node->GetValue(ctx)).GetDatum();
+    };
+}
+
 TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     const NUdf::IValueBuilder* builder,
     TComputationOptsFull& opts,

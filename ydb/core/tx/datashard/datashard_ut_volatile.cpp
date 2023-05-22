@@ -1706,10 +1706,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteThenLateWriteReadCommit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)
-            .SetEnableKqpImmediateEffects(true)
+            .SetAppConfig(appCfg)
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

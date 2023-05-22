@@ -746,7 +746,8 @@ public:
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
-             TTabletTypes::BlobDepot}) {
+             TTabletTypes::BlobDepot,
+             TTabletTypes::ColumnShard}) {
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -1094,7 +1095,8 @@ public:
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
-             TTabletTypes::BlobDepot}) {
+             TTabletTypes::BlobDepot,
+             TTabletTypes::ColumnShard}) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
                    "<td>" << LongToShortTabletName(TTabletTypes::TypeToStr(tabletType)) << "</td>";

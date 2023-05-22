@@ -172,7 +172,7 @@ static const std::vector<std::pair<TString, TTypeInfo>> testKey = {
 
 TIndexInfo TestTableInfo(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testColumns,
                          const std::vector<std::pair<TString, TTypeInfo>>& key = testKey) {
-    TIndexInfo indexInfo("", 0);
+    TIndexInfo indexInfo = TIndexInfo::BuildDefault();
 
     for (ui32 i = 0; i < ydbSchema.size(); ++i) {
         ui32 id = i + 1;

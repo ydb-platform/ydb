@@ -5,7 +5,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_dict.h>
 #include <util/generic/string.h>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NConstruction {
 
 class IArrayBuilder {
 private:
@@ -42,6 +42,35 @@ protected:
     }
 public:
     TSimpleArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
+        : TBase(fieldName)
+        , Filler(filler) {
+
+    }
+};
+
+template <class TFiller>
+class TBinaryArrayConstructor: public IArrayBuilder {
+private:
+    using TBase = IArrayBuilder;
+    using TBuilder = typename arrow::TypeTraits<typename TFiller::TValue>::BuilderType;
+    const TFiller Filler;
+protected:
+    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
+        TBuilder fBuilder = TBuilder();
+        std::vector<const char*> values;
+        values.reserve(recordsCount);
+        for (ui32 i = 0; i < recordsCount; ++i) {
+            values.emplace_back(Filler.GetValueView(i));
+        }
+        auto addStatus = fBuilder.AppendValues(values.data(), recordsCount);
+        if (!addStatus.ok()) {
+            const std::string errorMessage = addStatus.ToString();
+            Y_VERIFY(false, "%s", errorMessage.data());
+        }
+        return *fBuilder.Finish();
+    }
+public:
+    TBinaryArrayConstructor(const TString& fieldName, const TFiller& filler = TFiller())
         : TBase(fieldName)
         , Filler(filler) {
 

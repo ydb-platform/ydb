@@ -145,6 +145,8 @@ public:
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
@@ -177,9 +179,12 @@ public:
         }
         return true;
     }
-    TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
-    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 public:
+
+    static TIndexInfo BuildDefault() {
+        TIndexInfo result("dummy", 0, false);
+        return result;
+    }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
         TIndexInfo result("", 0, schema.GetCompositeMarks());

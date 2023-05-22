@@ -11,15 +11,15 @@ Y_UNIT_TEST_SUITE(Dictionary) {
 
     using namespace NKikimr::NArrow;
 
-    ui64 Test(IArrayBuilder::TPtr column, const arrow::ipc::IpcWriteOptions& options, const ui32 bSize) {
-        std::shared_ptr<arrow::RecordBatch> batch = TRecordBatchConstructor({ column }).BuildBatch(bSize);
-        const TString data = NKikimr::NArrow::NSerialization::TFullDataSerializer(options).Serialize(batch);
-        auto deserializedBatch = *NKikimr::NArrow::NSerialization::TFullDataDeserializer().Deserialize(data);
+    ui64 Test(NConstruction::IArrayBuilder::TPtr column, const arrow::ipc::IpcWriteOptions& options, const ui32 bSize) {
+        std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
+        const TString data = NSerialization::TFullDataSerializer(options).Serialize(batch);
+        auto deserializedBatch = *NSerialization::TFullDataDeserializer().Deserialize(data);
         Y_VERIFY(!!deserializedBatch);
         auto originalBatchTransformed = DictionaryToArray(batch);
         auto roundBatchTransformed = DictionaryToArray(deserializedBatch);
-        const TString roundUnpacked = NKikimr::NArrow::NSerialization::TFullDataSerializer(options).Serialize(roundBatchTransformed);
-        const TString roundTransformed = NKikimr::NArrow::NSerialization::TFullDataSerializer(options).Serialize(originalBatchTransformed);
+        const TString roundUnpacked = NSerialization::TFullDataSerializer(options).Serialize(roundBatchTransformed);
+        const TString roundTransformed = NSerialization::TFullDataSerializer(options).Serialize(originalBatchTransformed);
         Y_VERIFY(roundBatchTransformed->num_rows() == originalBatchTransformed->num_rows());
         Y_VERIFY(roundUnpacked == roundTransformed);
         return data.size();
@@ -40,11 +40,13 @@ Y_UNIT_TEST_SUITE(Dictionary) {
                         ui64 bytesDict;
                         ui64 bytesRaw;
                         {
-                            IArrayBuilder::TPtr column = std::make_shared<TDictionaryArrayConstructor<TStringPoolFiller>>("field", TStringPoolFiller(pSize, strLen));
+                            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TDictionaryArrayConstructor<NConstruction::TStringPoolFiller>>(
+                                "field", NConstruction::TStringPoolFiller(pSize, strLen));
                             bytesDict = Test(column, options, bSize);
                         }
                         {
-                            IArrayBuilder::TPtr column = std::make_shared<TSimpleArrayConstructor<TStringPoolFiller>>("field", TStringPoolFiller(pSize, strLen));
+                            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+                                "field", NConstruction::TStringPoolFiller(pSize, strLen));
                             bytesRaw = Test(column, options, bSize);
                         }
                         Cerr << "--------" << bytesDict << " / " << bytesRaw << " = " << 1.0 * bytesDict / bytesRaw << Endl;
@@ -69,10 +71,12 @@ Y_UNIT_TEST_SUITE(Dictionary) {
                         ui64 bytesFull;
                         ui64 bytesPayload;
                         {
-                            IArrayBuilder::TPtr column = std::make_shared<TSimpleArrayConstructor<TStringPoolFiller>>("field", TStringPoolFiller(pSize, strLen));
-                            std::shared_ptr<arrow::RecordBatch> batch = TRecordBatchConstructor({ column }).BuildBatch(bSize);
-                            const TString dataFull = NKikimr::NArrow::NSerialization::TFullDataSerializer(options).Serialize(batch);
-                            const TString dataPayload = NKikimr::NArrow::NSerialization::TBatchPayloadSerializer(options).Serialize(batch);
+                            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+                                "field", NConstruction::TStringPoolFiller(pSize, strLen)
+                            );
+                            std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
+                            const TString dataFull = NSerialization::TFullDataSerializer(options).Serialize(batch);
+                            const TString dataPayload = NSerialization::TBatchPayloadSerializer(options).Serialize(batch);
                             bytesFull = dataFull.size();
                             bytesPayload = dataPayload.size();
                         }

@@ -1,5 +1,5 @@
 #include "array.h"
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NConstruction {
 
 }

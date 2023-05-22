@@ -335,7 +335,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             LOG_S_DEBUG("WriteIndex (" << blobs.size() << " blobs) at tablet " << TabletID());
 
             Y_VERIFY(!blobs.empty());
-            ctx.Register(CreateWriteActor(TabletID(), NOlap::TIndexInfo("dummy", 0), ctx.SelfID,
+            ctx.Register(CreateWriteActor(TabletID(), NOlap::TIndexInfo::BuildDefault(), ctx.SelfID,
                 BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
         }
     } else {

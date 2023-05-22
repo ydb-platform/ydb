@@ -2098,7 +2098,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ForwardToTablet(Owner.Runtime, TTestTxConfig::TxTablet0, sender, read.release());
                 }
 
-                {
+                ui32 numRows = 0;
+                std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+                ui32 expected = 100;
+                for (ui32 i = 0; i < expected; ++i) {
                     TAutoPtr<IEventHandle> handle;
                     auto event = Owner.Runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
                     UNIT_ASSERT(event);
@@ -2110,9 +2113,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                     UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                     UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-                    UNIT_ASSERT(resRead.GetFinished());
-                    UNIT_ASSERT(!resRead.GetBatch());
                     if (ExpectedCount && !*ExpectedCount && !DataReadOnEmpty) {
+                        UNIT_ASSERT(!resRead.GetBatch());
+                        UNIT_ASSERT(resRead.GetFinished());
                         UNIT_ASSERT(!resRead.GetData().size());
                     } else {
                         UNIT_ASSERT(resRead.GetData().size());
@@ -2123,25 +2126,37 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         UNIT_ASSERT(schema);
                         auto batch = NArrow::DeserializeBatch(resRead.GetData(), schema);
                         UNIT_ASSERT(batch);
-                        if (ExpectedCount) {
-                            if (batch->num_rows() != *ExpectedCount) {
-                                Cerr << batch->ToString() << "\n";
-                            }
-                            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), *ExpectedCount);
+
+                        numRows += batch->num_rows();
+                        batches.emplace_back(batch);
+
+                        if (resRead.GetFinished()) {
+                            UNIT_ASSERT(meta.HasReadStats());
+                            auto& readStats = meta.GetReadStats();
+
+                            UNIT_ASSERT(readStats.GetBeginTimestamp());
+                            UNIT_ASSERT(readStats.GetDurationUsec());
+                            UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
+                            UNIT_ASSERT(readStats.GetIndexBatches());
+                            //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
+                            UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                            //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
+                            //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
                         }
-
-                        UNIT_ASSERT(meta.HasReadStats());
-                        auto& readStats = meta.GetReadStats();
-
-                        UNIT_ASSERT(readStats.GetBeginTimestamp());
-                        UNIT_ASSERT(readStats.GetDurationUsec());
-                        UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
-                        UNIT_ASSERT(readStats.GetIndexBatches());
-                        //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                        UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                        //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
-                        //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
                     }
+                    if (resRead.GetFinished()) {
+                        expected = resRead.GetBatch();
+                    }
+                }
+                UNIT_ASSERT(expected < 100);
+
+                if (ExpectedCount) {
+                    if (numRows != *ExpectedCount) {
+                        for (auto& batch : batches) {
+                            Cerr << batch->ToString() << "\n";
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(numRows, *ExpectedCount);
                 }
             }
 

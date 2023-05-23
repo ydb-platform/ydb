@@ -1114,6 +1114,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
     }
 
+    if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
+        AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

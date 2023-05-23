@@ -27,7 +27,7 @@ public:
         CdcDataChange,
     };
 
-    struct TDocApiJsonOptions {
+    struct TAwsJsonOptions {
         TString AwsRegion;
         NKikimrSchemeOp::ECdcStreamMode StreamMode;
         ui64 ShardId;
@@ -49,7 +49,7 @@ public:
 
     void SerializeToProto(NKikimrChangeExchange::TChangeRecord& record) const;
     void SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTimestamps) const;
-    void SerializeToDocApiJson(NJson::TJsonValue& json, const TDocApiJsonOptions& opts) const;
+    void SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, const TAwsJsonOptions& opts) const;
 
     TConstArrayRef<TCell> GetKey() const;
     i64 GetSeqNo() const;

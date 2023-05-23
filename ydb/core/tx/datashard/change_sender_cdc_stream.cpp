@@ -82,6 +82,12 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
+        const auto awsJsonOpts = TChangeRecord::TAwsJsonOptions{
+            .AwsRegion = Stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
+            .StreamMode = Stream.Mode,
+            .ShardId = DataShard.TabletId,
+        };
+
         for (const auto& record : ev->Get()->Records) {
             if (record.GetSeqNo() <= MaxSeqNo) {
                 continue;
@@ -108,11 +114,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
                     NJson::TJsonValue json;
                     if (Stream.Format == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
-                        record.SerializeToDocApiJson(json, TChangeRecord::TDocApiJsonOptions{
-                            .AwsRegion = Stream.AwsRegion,
-                            .StreamMode = Stream.Mode,
-                            .ShardId = DataShard.TabletId,
-                        });
+                        record.SerializeToDynamoDBStreamsJson(json, awsJsonOpts);
                     } else {
                         record.SerializeToYdbJson(json, Stream.VirtualTimestamps);
                     }

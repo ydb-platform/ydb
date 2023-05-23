@@ -829,6 +829,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return streamDesc;
     }
 
+    TCdcStream WithAwsRegion(const TString& awsRegion, TCdcStream streamDesc) {
+        streamDesc.AwsRegion = awsRegion;
+        return streamDesc;
+    }
+
     TString CalcPartitionKey(const TString& data) {
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(data, &json));
@@ -2358,6 +2363,51 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"erase":{},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });
+    }
+
+    Y_UNIT_TEST(AwsRegion) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetAwsRegion("defaultRegion")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", DocApiTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream1")));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithAwsRegion("customRegion", KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream2"))));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )");
+
+        auto checkAwsRegion = [&](const TString& path, const char* awsRegion) {
+            while (true) {
+                const auto records = GetRecords(runtime, edgeActor, path, 0);
+                if (records.size() >= 1) {
+                    for (const auto& [_, record] : records) {
+                        UNIT_ASSERT_STRING_CONTAINS(record, Sprintf(R"("awsRegion":"%s")", awsRegion));
+                    }
+
+                    break;
+                }
+
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+        };
+
+        checkAwsRegion("/Root/Table/Stream1", "defaultRegion");
+        checkAwsRegion("/Root/Table/Stream2", "customRegion");
     }
 
 } // Cdc

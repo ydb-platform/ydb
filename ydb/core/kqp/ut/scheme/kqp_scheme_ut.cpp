@@ -2888,7 +2888,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
-                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'DOCUMENT_TABLE_JSON', AWS_REGION = 'aws:region'
+                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'DYNAMODB_STREAMS_JSON', AWS_REGION = 'aws:region'
                 );
             )";
 

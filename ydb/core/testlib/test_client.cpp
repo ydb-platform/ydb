@@ -173,6 +173,7 @@ namespace Tests {
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
+        app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
 

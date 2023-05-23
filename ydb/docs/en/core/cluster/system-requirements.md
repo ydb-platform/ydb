@@ -30,8 +30,8 @@ The number of servers and disks is determined by the fault-tolerance requirement
 
 ## Software configuration {#software}
 
-A {{ ydb-short-name }} server can be run on servers running a Linux operating system with kernel 4.19 and higher and libc 2.30 (Ubuntu 20.04, Debian 11, Fedora34). We recommend enabling hugepages or transparent hugepages.
+A {{ ydb-short-name }} server can be run on servers running a Linux operating system with kernel 4.19 and higher and libc 2.30 (Ubuntu 20.04, Debian 11, Fedora34). YDB uses [TCMalloc](https://google.github.io/tcmalloc) allocator, and we recommend to [enable](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) the Transparent Huge Pages and Memory overcommitment features for optimization.
 
 If the server hosts more than 32 CPU cores, to increase YDB performance, it makes sense to run each dynamic node in a separate taskset/cpuset of 10 to 32 cores. For example, in the case of 128 CPU cores, the best choice is to run four 32-CPU dynamic nodes, each in its taskset.
 
-MacOS and Windows operating systems are currently not supported.
+MacOS and Windows operating systems are currently not supported for running {{ ydb-short-name }} servers.

@@ -111,7 +111,7 @@ public:
         if (Compression) {
             sb << Compression->DebugString();
         } else {
-            sb << TCompression::Default().DebugString();
+            sb << "NOT_SPECIFIED(Default)";
         }
         return sb;
     }

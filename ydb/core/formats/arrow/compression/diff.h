@@ -2,7 +2,6 @@
 
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
@@ -11,14 +10,16 @@
 
 namespace NKikimr::NArrow {
 
+class TCompression;
+
 class TCompressionDiff {
 private:
     std::optional<arrow::Compression::type> Codec;
     std::optional<int> Level;
-public:
     bool IsEmpty() const {
         return !Level && !Codec;
     }
+public:
     NKikimrSchemeOp::TCompressionOptions SerializeToProto() const;
     bool DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
     TConclusionStatus DeserializeFromRequestFeatures(NYql::TFeaturesExtractor& features);
@@ -28,5 +29,6 @@ public:
     const std::optional<int>& GetLevel() const {
         return Level;
     }
+    TConclusionStatus Apply(std::optional<TCompression>& settings) const;
 };
 }

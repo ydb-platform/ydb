@@ -1,5 +1,6 @@
 #include "abstract.h"
 #include <ydb/core/formats/arrow/compression/diff.h>
+#include <ydb/core/formats/arrow/dictionary/diff.h>
 
 namespace NKikimr::NKqp::NColumnshard {
 
@@ -14,7 +15,7 @@ private:
     TString ColumnName;
 
     NArrow::TCompressionDiff CompressionDiff;
-    std::optional<bool> LowCardinality;
+    NArrow::NDictionary::TEncodingDiff DictionaryEncodingDiff;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

@@ -380,6 +380,10 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 }
 
+message TDictionaryEncodingSettings {
+   optional bool Enabled = 1;
+}
+
 message TCompressionOptions {
     optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
     optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
@@ -388,7 +392,7 @@ message TCompressionOptions {
 message TOlapColumnDiff {
     optional string Name = 1;
     optional TCompressionOptions Compression = 2;
-    optional bool LowCardinality = 3;
+    optional TDictionaryEncodingSettings DictionaryEncoding = 4;
 }
 
 message TOlapColumnDescription {
@@ -404,7 +408,7 @@ message TOlapColumnDescription {
     optional bool NotNull = 7;
 
     optional TCompressionOptions Compression = 8;
-    optional bool LowCardinality = 9;
+    optional TDictionaryEncodingSettings DictionaryEncoding = 9;
 }
 
 enum EColumnTableEngine {

@@ -206,7 +206,7 @@ namespace NDiscoveryPrivate {
             if (result.second) {
                 CLOG_D("Lookup"
                     << ": path# " << database);
-                Register(CreateBoardLookupActor(database, SelfId(), groupId, EBoardLookupMode::Second, false, false));
+                Register(CreateBoardLookupActor(database, SelfId(), groupId, EBoardLookupMode::Second));
             }
 
             return result.first;

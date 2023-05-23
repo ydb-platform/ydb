@@ -24,6 +24,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     const TActorId Owner;
     const EBoardLookupMode Mode;
     const ui32 StateStorageGroupId;
+    const bool Subscriber;
 
     enum class EReplicaState {
         Unknown,
@@ -35,10 +36,13 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     struct TReplica {
         TActorId Replica;
         EReplicaState State = EReplicaState::Unknown;
+        THashSet<TActorId> Infos;
     };
 
     TVector<TReplica> Replicas;
+
     TMap<TActorId, TEvStateStorage::TEvBoardInfo::TInfoEntry> Info;
+    THashMap<TActorId, THashSet<ui32>> InfoReplicas;
 
     ui32 WaitForReplicasToSuccess;
 
@@ -46,31 +50,63 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ui32 Replied = 0;
         ui32 NoInfo = 0;
         ui32 HasInfo = 0;
+        ui32 NotAvailable = 0;
     } Stats;
 
     void PassAway() override {
-        for (const auto &replica : Replicas)
-            if (replica.Replica.NodeId() != SelfId().NodeId())
+        for (const auto &replica : Replicas) {
+            if (Subscriber) {
+                Send(replica.Replica, new TEvStateStorage::TEvReplicaBoardUnsubscribe());
+            }
+            if (replica.Replica.NodeId() != SelfId().NodeId()) {
                 Send(TActivationContext::InterconnectProxy(replica.Replica.NodeId()), new TEvents::TEvUnsubscribe());
+            }
+        }
         TActor::PassAway();
     }
 
     void NotAvailable() {
-        Send(Owner, new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path));
+        if (CurrentStateFunc() != &TThis::StateSubscribe) {
+            Send(Owner, new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path));
+        } else {
+            Send(Owner,
+                new TEvStateStorage::TEvBoardInfoUpdate(
+                    TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path
+                )
+            );
+        }
         return PassAway();
     }
 
     void CheckCompletion() {
-        if (Stats.HasInfo == WaitForReplicasToSuccess) {
-            auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
-            reply->InfoEntries = std::move(Info);
-            Send(Owner, std::move(reply));
+        if (CurrentStateFunc() != &TThis::StateSubscribe) {
+            if ((!Subscriber && Stats.HasInfo == WaitForReplicasToSuccess) ||
+                    (Subscriber && Stats.HasInfo + Stats.NoInfo == WaitForReplicasToSuccess)) {
+                auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                reply->InfoEntries = std::move(Info);
+                Send(Owner, std::move(reply));
+                if (Subscriber) {
+                    Become(&TThis::StateSubscribe);
+                    return;
+                }
+                return PassAway();
+            }
 
-            return PassAway();
+            if (!Subscriber) {
+                if (Stats.Replied == Replicas.size()) {
+                    return NotAvailable();
+                }
+            } else {
+                if (Stats.NotAvailable > (Replicas.size() - WaitForReplicasToSuccess)) {
+                    return NotAvailable();
+                }
+            }
+        } else {
+            if (Stats.NotAvailable > (Replicas.size() - WaitForReplicasToSuccess)) {
+                return NotAvailable();
+            }
         }
-
-        if (Stats.Replied == Replicas.size())
-            return NotAvailable();
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
@@ -84,7 +120,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         Replicas.resize(msg->Replicas.size());
         for (auto idx : xrange(msg->Replicas.size())) {
             const TActorId &replica = msg->Replicas[idx];
-            Send(replica, new TEvStateStorage::TEvReplicaBoardLookup(Path, TActorId(), false), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, idx);
+            Send(replica,
+                new TEvStateStorage::TEvReplicaBoardLookup(Path, TActorId(), Subscriber),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, idx);
             Replicas[idx].Replica = replica;
             Replicas[idx].State = EReplicaState::Unknown;
         }
@@ -100,6 +138,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             break;
         case EBoardLookupMode::Majority:
         case EBoardLookupMode::MajorityDoubleTime:
+        case EBoardLookupMode::Subscription:
             WaitForReplicasToSuccess = (Replicas.size() / 2 + 1);
             break;
         default:
@@ -107,6 +146,65 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         Become(&TThis::StateLookup);
+    }
+
+    void Handle(TEvStateStorage::TEvReplicaBoardInfoUpdate::TPtr &ev) {
+        const auto &record = ev->Get()->Record;
+        const ui32 idx = ev->Cookie;
+        if (idx >= Replicas.size()) {
+            return;
+        }
+        auto &replica = Replicas[idx];
+        if (replica.State == EReplicaState::NotAvailable) {
+            return;
+        }
+
+        replica.State = EReplicaState::Ready;
+
+        auto& info = record.GetInfo();
+        const TActorId oid = ActorIdFromProto(info.GetOwner());
+
+        auto& replicas = InfoReplicas[oid];
+        if (info.GetDropped()) {
+            replicas.erase(idx);
+            replica.Infos.erase(oid);
+        } else {
+            replicas.insert(idx);
+            replica.Infos.insert(oid);
+        }
+
+        if (CurrentStateFunc() == &TThis::StateSubscribe) {
+            TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate update;
+            update.Owner = oid;
+            if (info.GetDropped()) {
+                if (!replicas.empty()) {
+                    return;
+                }
+                InfoReplicas.erase(oid);
+                Info.erase(oid);
+                update.Dropped = true;
+            } else {
+                if (Info[oid].Payload != info.GetPayload()) {
+                    Info[oid].Payload = info.GetPayload();
+                    update.Payload = std::move(info.GetPayload());
+                }
+            }
+
+            auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+            reply->Update = std::move(update);
+            Send(Owner, std::move(reply));
+        } else {
+            if (info.GetDropped()) {
+                if (!replicas.empty()) {
+                    return;
+                }
+                InfoReplicas.erase(oid);
+                Info.erase(oid);
+            } else {
+                Info[oid].Payload = std::move(info.GetPayload());
+            }
+        }
     }
 
     void Handle(TEvStateStorage::TEvReplicaBoardInfo::TPtr &ev) {
@@ -117,7 +215,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         auto &replica = Replicas[idx];
         if (replica.State != EReplicaState::Unknown)
             return;
-
         ++Stats.Replied;
         if (record.GetDropped()) {
             replica.State = EReplicaState::NoInfo;
@@ -129,7 +226,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
             for (auto &x : record.GetInfo()) {
                 const TActorId oid = ActorIdFromProto(x.GetOwner());
-                Info[oid].Payload = x.GetPayload();
+                Info[oid].Payload = std::move(x.GetPayload());
+                InfoReplicas[oid].insert(idx);
+                replica.Infos.insert(oid);
             }
         }
 
@@ -138,12 +237,43 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const ui32 nodeId = ev->Get()->NodeId;
-        for (auto &replica : Replicas) {
-            if (replica.Replica.NodeId() == nodeId && replica.State == EReplicaState::Unknown) {
-                replica.State = EReplicaState::NotAvailable;
-                ++Stats.Replied;
-                ++Stats.NoInfo;
+        for (ui32 idx = 0; idx < Replicas.size(); idx++) {
+            auto& replica = Replicas[idx];
+            if (replica.Replica.NodeId() == nodeId) {
+                if (replica.State == EReplicaState::Unknown) {
+                    ++Stats.Replied;
+                }
+                if (replica.State != EReplicaState::NotAvailable) {
+                    replica.State = EReplicaState::NotAvailable;
+                    ++Stats.NotAvailable;
+                }
+
+                for (auto infoId : replica.Infos) {
+                    InfoReplicas[infoId].erase(idx);
+                }
             }
+        }
+
+        CheckCompletion();
+    }
+
+    void Handle(TEvStateStorage::TEvReplicaShutdown::TPtr &ev) {
+        const ui32 idx = ev->Cookie;
+        if (idx >= Replicas.size())
+            return;
+        auto &replica = Replicas[idx];
+        Y_VERIFY(replica.Replica == ev->Sender);
+
+        if (replica.State == EReplicaState::Unknown) {
+            ++Stats.Replied;
+        }
+        if (replica.State != EReplicaState::NotAvailable) {
+            replica.State = EReplicaState::NotAvailable;
+            ++Stats.NotAvailable;
+        }
+
+        for (auto infoId : replica.Infos) {
+            InfoReplicas[infoId].erase(idx);
         }
 
         CheckCompletion();
@@ -161,7 +291,11 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             return;
         replica.State = EReplicaState::NotAvailable;
         ++Stats.Replied;
-        ++Stats.NoInfo;
+        ++Stats.NotAvailable;
+
+        for (auto infoId : replica.Infos) {
+            InfoReplicas[infoId].erase(idx);
+        }
 
         CheckCompletion();
     }
@@ -175,6 +309,7 @@ public:
         , Owner(owner)
         , Mode(mode)
         , StateStorageGroupId(groupId)
+        , Subscriber(Mode == EBoardLookupMode::Subscription)
     {}
 
     void Bootstrap() {
@@ -194,16 +329,26 @@ public:
     STATEFN(StateLookup) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaBoardInfo, Handle);
+            hFunc(TEvStateStorage::TEvReplicaBoardInfoUpdate, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvStateStorage::TEvReplicaShutdown, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateSubscribe) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvReplicaBoardInfoUpdate, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvStateStorage::TEvReplicaShutdown, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode, bool sub, bool useNodeSubsriptions) {
-    Y_UNUSED(useNodeSubsriptions);
-    Y_VERIFY(!sub, "subscribe mode for board lookup not implemented yet");
+IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode) {
     return new TBoardLookupActor(path, owner, mode, groupId);
 }
 

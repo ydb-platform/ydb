@@ -742,7 +742,7 @@ public:
         }
 
         if (PublishBoardPath) {
-            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), *groupId, EBoardLookupMode::Majority, false, false);
+            auto actor = CreateBoardLookupActor(PublishBoardPath, SelfId(), *groupId, EBoardLookupMode::Majority);
             BoardLookupActor = Register(actor);
         }
     }

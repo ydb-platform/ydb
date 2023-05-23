@@ -62,7 +62,7 @@ jobs:
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
-        aws_bucket: ${{secrets.AWS_BUCKET}}
+        aws_bucket: ${{vars.AWS_BUCKET}}
         testman_token: ${{secrets.TESTMO_TOKEN}}
         testman_url: ${{vars.TESTMO_URL}}
         testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
@@ -74,5 +74,5 @@ jobs:
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
-        aws_bucket: ${{secrets.AWS_BUCKET}}
+        aws_bucket: ${{vars.AWS_BUCKET}}
       

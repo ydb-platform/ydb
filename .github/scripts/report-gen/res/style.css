@@ -1,0 +1,73 @@
+html {
+    font-family: sans-serif;
+}
+table {
+    width: 100%;
+    max-width: 1200px;
+    table-layout: fixed;
+
+    border-collapse: collapse;
+    white-space: nowrap;
+    /*overflow: hidden;*/
+}
+
+th.time {
+    width: 80px;
+}
+
+th.status {
+    width: 100px;
+}
+
+th.stdout {
+    width: 75px;
+}
+
+th.stderr {
+    width: 75px;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: 4px;
+    text-align: right;
+
+}
+tr.suite {
+    background-color: #eeeeee;
+    /*cursor: pointer;*/
+    font-weight: bold;
+}
+tr.suite td:nth-child(3) {
+    text-align: right;
+}
+
+tbody > tr > td:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+}
+
+tr.case {
+    /*display: none;*/
+}
+tr.case > td:first-child {
+    text-align: right;
+}
+span.classname {
+    color: #8080805e;
+}
+
+td.suite {
+    font-style: italic;
+}
+
+td.ok, span.ok {
+    font-weight: bold;
+    color: green;
+}
+
+td.fail, span.fail {
+    font-weight: bold;
+    color: red;
+}

@@ -84,12 +84,28 @@ runs:
         --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
+  - name: make LOG_URL_PREFIX
+    shell: python3 {0}
+    run: |
+      import os
+      from urllib.parse import quote
+      log_url_prefix = '/'.join([
+        "https://storage.yandexcloud.net",
+        "${{ inputs.aws_bucket }}",
+        "${{ github.repository }}",
+        quote("${{ github.workflow }}"),
+        "${{ github.run_id }}",
+      ])
+      
+      with open(os.environ['GITHUB_ENV'], 'at') as fp:
+        fp.write(f"LOG_URL_PREFIX={log_url_prefix}\n")
+
   - name: Test
     shell: bash
     run: |
       cd $WORKDIR/../build/ydb
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
+      echo "[Stdout log (gzip archive)](${LOG_URL_PREFIX}/${{ steps.init.outputs.logfilename }})." >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
@@ -101,6 +117,9 @@ runs:
         tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log
+    env:
+      GTEST_COLOR: off
+
   - name: Test history upload results
     if: always() && inputs.testman_token
     shell: bash
@@ -113,6 +132,16 @@ runs:
         --results $TESTREPDIR/suites/*.xml \
         -- cat $WORKDIR/short.log
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
+  - name: Make test report
+    shell: bash
+    if: success() || failure()
+    run: |
+      export REPORTS_DIR=$WORKDIR/artifacts/reports/
+      mkdir $REPORTS_DIR
+
+      echo "[Html Test report](${LOG_URL_PREFIX}/reports/index.html)." >> $GITHUB_STEP_SUMMARY
+
+      ./.github/scripts/report-gen/report-gen.py $TESTREPDIR/unittests/ $REPORTS_DIR
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

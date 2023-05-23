@@ -49,7 +49,7 @@ The information about each operation is saved to the audit log as a separate eve
 
 ## Enabling audit log {#enabling-audit-log}
 
-Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) or their combination:
+Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `stderr_backend`) or their combination:
 
 ```yaml
 audit_config:
@@ -59,7 +59,7 @@ audit_config:
   unified_agent_backend:
     format: audit_log_format
     log_name: session_meta_log_name
-  unified_agent_backend:
+  stderr_backend:
     format: audit_log_format
 ```
 

@@ -49,7 +49,7 @@ _Аудитный лог_ — это поток, который содержит
 
 ## Включение аудитного лога {#enabling-audit-log}
 
-Отправка событий в поток аудитного лога включается целиком для кластера {{ ydb-short-name }}. Для включения необходимо в [конфигурацию кластера](../deploy/configuration/config.md) добавить секцию `audit_config`, указать в ней одно из назначений для потока (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) или их комбинацию:
+Отправка событий в поток аудитного лога включается целиком для кластера {{ ydb-short-name }}. Для включения необходимо в [конфигурацию кластера](../deploy/configuration/config.md) добавить секцию `audit_config`, указать в ней одно из назначений для потока (`file_backend`, `unified_agent_backend`, `stderr_backend`) или их комбинацию:
 
 ```yaml
 audit_config:
@@ -59,7 +59,7 @@ audit_config:
   unified_agent_backend:
     format: audit_log_format
     log_name: session_meta_log_name
-  unified_agent_backend:
+  stderr_backend:
     format: audit_log_format
 ```
 

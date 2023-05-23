@@ -278,20 +278,12 @@ private:
     void MergeToTaskMeta(TTaskMeta& meta, TShardInfoWithId& shardInfo, const TPhysicalShardReadSettings& readSettings, const TVector<TTaskMeta::TColumn>& columns,
         const NKqpProto::TKqpPhyTableOperation& op) const {
         YQL_ENSURE(!shardInfo.KeyWriteRanges);
-        for (auto& [name, value] : shardInfo.Params) {
-            auto ret = meta.Params.emplace(name, std::move(value));
-            YQL_ENSURE(ret.second);
-        }
 
         TTaskMeta::TShardReadInfo readInfo = {
             .Ranges = std::move(*shardInfo.KeyReadRanges), // sorted & non-intersecting
             .Columns = columns,
             .ShardId = shardInfo.ShardId,
         };
-
-        if (readSettings.ItemsLimitParamName && !meta.Params.contains(readSettings.ItemsLimitParamName)) {
-            meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
-        }
 
         if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
             const auto& readRange = op.GetReadOlapRange();

@@ -22,8 +22,8 @@ struct TColumnStats {
 };
 
 struct TShardParamValuesAndRanges {
-    NDqProto::TData ParamValues;
-    NKikimr::NMiniKQL::TType* ParamType;
+    NMiniKQL::TUnboxedValueVector UnboxedValues;
+    NKikimr::NMiniKQL::TType* ItemType;
     // either FullRange or Ranges are set
     TVector<TSerializedPointOrRange> Ranges;
     std::optional<TSerializedTableRange> FullRange;
@@ -33,7 +33,7 @@ struct TShardParamValuesAndRanges {
 THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
     const NUdf::TUnboxedValue& value, NKikimr::NMiniKQL::TType* type,
     const TTableId& tableId,
-    const TKqpTableKeys& tableKeys, const TKeyDesc& key, const NMiniKQL::THolderFactory& holderFactory,
+    const TKqpTableKeys& tableKeys, const TKeyDesc& key, const NMiniKQL::THolderFactory&,
     const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     auto guard = typeEnv.BindAllocator();
@@ -41,7 +41,6 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
     auto& table = tableKeys.GetTable(tableId);
 
     THashMap<ui64, TShardParamValuesAndRanges> ret;
-    THashMap<ui64, NMiniKQL::TUnboxedValueVector> shardParamValues;
 
     YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::List);
     auto* itemType = static_cast<NMiniKQL::TListType*>(type)->GetItemType();
@@ -103,15 +102,8 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
             columnWrite.MaxValueSizeBytes = std::max(columnWrite.MaxValueSizeBytes, sizeBytes);
         }
 
-        shardParamValues[shardId].emplace_back(std::move(paramValue));
-
-        shardData.ParamType = itemType;
-    }
-
-    NDq::TDqDataSerializer dataSerializer{typeEnv, holderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0};
-    for (auto& [shardId, data] : ret) {
-        auto& batch = shardParamValues[shardId];
-        ret[shardId].ParamValues = dataSerializer.Serialize(batch.begin(), batch.end(), itemType);
+        shardData.UnboxedValues.emplace_back(std::move(paramValue));
+        shardData.ItemType = itemType;
     }
 
     return ret;
@@ -120,14 +112,13 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
 THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(
     const NUdf::TUnboxedValue& value, NKikimr::NMiniKQL::TType* type,
     const TTableId& tableId, const TKqpTableKeys& tableKeys, const TKeyDesc& key,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+    const NMiniKQL::THolderFactory&, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     auto guard = typeEnv.BindAllocator();
     YQL_ENSURE(tableId.HasSamePath(key.TableId));
     auto& table = tableKeys.GetTable(tableId);
 
     THashMap<ui64, TShardParamValuesAndRanges> ret;
-    THashMap<ui64, NMiniKQL::TUnboxedValueVector> shardParamValues;
 
     YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::List);
     auto itemType = static_cast<NMiniKQL::TListType&>(*type).GetItemType();
@@ -180,26 +171,17 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(
 
         for (TPartitionWithRange& partitionWithRange : rangePartitions) {
             ui64 shardId = partitionWithRange.PartitionInfo->ShardId;
-
-            shardParamValues[shardId].emplace_back(paramValue);
-
             auto& shardData = ret[shardId];
+            shardData.UnboxedValues.emplace_back(paramValue);
+            shardData.ItemType = itemType;
             if (partitionWithRange.FullRange) {
                 shardData.FullRange = std::move(partitionWithRange.FullRange);
                 shardData.Ranges.clear();
             } else if (!shardData.FullRange) {
                 shardData.Ranges.emplace_back(std::move(partitionWithRange.PointOrRange));
             }
-            shardData.ParamType = itemType;
         }
     }
-
-    NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
-    for (auto& [shardId, data] : ret) {
-        auto& batch = shardParamValues[shardId];
-        data.ParamValues = dataSerializer.Serialize(batch.begin(), batch.end(), itemType);
-    }
-
     return ret;
 }
 
@@ -499,11 +481,7 @@ TString TShardInfo::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const 
     sb << "TShardInfo{ ";
     sb << "ReadRanges: " << (KeyReadRanges ? KeyReadRanges->ToString(keyTypes, typeRegistry) : "<none>");
     sb << ", WriteRanges: " << (KeyWriteRanges ? KeyWriteRanges->ToString(keyTypes, typeRegistry) : "<none>");
-    sb << ", Parameters: {";
-    for (auto& param: Params) {
-        sb << param.first << ", ";
-    }
-    sb << "} }";
+    sb << " }";
     return sb;
 }
 
@@ -738,14 +716,11 @@ THashMap<ui64, TShardInfo> PartitionLookupByParameterValue(const NKqpProto::TKqp
 
     for (auto& [shardId, shardData] : shardsMap) {
         auto& shardInfo = shardInfoMap[shardId];
-
         if (!shardInfo.KeyReadRanges) {
             shardInfo.KeyReadRanges.ConstructInPlace();
         }
 
-        auto ret = shardInfo.Params.emplace(name, std::move(shardData.ParamValues));
-        Y_VERIFY_DEBUG(ret.second);
-
+        stageInfo.Meta.Tx.Params->AddShardParam(shardId, name, shardData.ItemType, std::move(shardData.UnboxedValues));
         if (shardData.FullRange) {
             shardInfo.KeyReadRanges->MakeFullRange(std::move(*shardData.FullRange));
         } else {
@@ -835,13 +810,6 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
             shardInfo.KeyReadRanges.ConstructInPlace();
         }
 
-        for (const auto& paramName : shardParams[shardId]) {
-            shardInfo.Params.emplace(
-                paramName,
-                stageInfo.Meta.Tx.Params->SerializeParamValue(paramName)
-            );
-        }
-
         if (shardData.FullRange) {
             shardInfo.KeyReadRanges->MakeFullRange(std::move(*shardData.FullRange));
         } else {
@@ -904,8 +872,7 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableK
         for (auto& [shardId, shardData] : shardsMap) {
             auto& shardInfo = shardInfoMap[shardId];
 
-            auto ret = shardInfo.Params.emplace(name, std::move(shardData.ParamValues));
-            YQL_ENSURE(ret.second);
+            stageInfo.Meta.Tx.Params->AddShardParam(shardId, name, shardData.ItemType, std::move(shardData.UnboxedValues));
 
             if (!shardInfo.KeyWriteRanges) {
                 shardInfo.KeyWriteRanges.ConstructInPlace();
@@ -956,10 +923,8 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
     }
 }
 
-void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes,
-    NKikimr::NMiniKQL::TType*& itemsLimitType)
+ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     switch (protoItemsLimit.GetKindCase()) {
         case NKqpProto::TKqpPhyValue::kLiteralValue: {
@@ -969,27 +934,18 @@ void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValu
                 literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
 
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-            itemsLimit = value.Get<ui64>();
-            itemsLimitType = type;
-
-            return;
+            return value.Get<ui64>();
         }
 
         case NKqpProto::TKqpPhyValue::kParamValue: {
-            itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
+            const TString& itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
             if (!itemsLimitParamName) {
-                return;
+                return 0;
             }
 
             auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(itemsLimitParamName);
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-            itemsLimit = value.Get<ui64>();
-
-            NYql::NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-            itemsLimitBytes = dataSerializer.Serialize(value, type);
-            itemsLimitType = type;
-
-            return;
+            return value.Get<ui64>();
         }
 
         case NKqpProto::TKqpPhyValue::kParamElementValue:
@@ -997,7 +953,7 @@ void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValu
             YQL_ENSURE(false, "Unexpected ItemsLimit kind " << protoItemsLimit.DebugString());
 
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
-            return;
+            return 0;
     }
 }
 
@@ -1008,16 +964,13 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
 
     switch(operation.GetTypeCase()){
         case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
-            ExtractItemsLimit(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv,
-                readSettings.ItemsLimit, readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes, readSettings.ItemsLimitType);
+            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv);
             readSettings.Reverse = operation.GetReadRanges().GetReverse();
-
             break;
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-            ExtractItemsLimit(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv,
-                readSettings.ItemsLimit, readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes, readSettings.ItemsLimitType);
+            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv);
             readSettings.Reverse = operation.GetReadRange().GetReverse();
             break;
         }
@@ -1025,8 +978,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
         case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
             readSettings.Sorted = operation.GetReadOlapRange().GetSorted();
             readSettings.Reverse = operation.GetReadOlapRange().GetReverse();
-            ExtractItemsLimit(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
-                readSettings.ItemsLimit, readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes, readSettings.ItemsLimitType);
+            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv);
             NKikimrMiniKQL::TType minikqlProtoResultType;
             ConvertYdbTypeToMiniKQLType(operation.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
             readSettings.ResultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);

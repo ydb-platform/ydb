@@ -1318,19 +1318,11 @@ private:
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
                         auto& task = getShardTask(shardId);
-                        for (auto& [name, value] : shardInfo.Params) {
-                            task.Meta.Params.emplace(name, std::move(value));
-                        }
-
                         FillGeneralReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse);
 
                         TTaskMeta::TShardReadInfo readInfo;
                         readInfo.Ranges = std::move(*shardInfo.KeyReadRanges);
                         readInfo.Columns = columns;
-
-                        if (readSettings.ItemsLimitParamName) {
-                            task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
-                        }
 
                         if (!task.Meta.Reads) {
                             task.Meta.Reads.ConstructInPlace();
@@ -1379,7 +1371,6 @@ private:
                             YQL_ENSURE(shardInfo.KeyWriteRanges);
 
                             auto& task = getShardTask(shardId);
-                            task.Meta.Params = std::move(shardInfo.Params);
 
                             if (!task.Meta.Writes) {
                                 task.Meta.Writes.ConstructInPlace();

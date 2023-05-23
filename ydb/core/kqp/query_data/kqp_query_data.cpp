@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/core/util/yverify_stream.h>
 
 namespace NKikimr::NKqp {
 
@@ -136,6 +137,9 @@ TQueryData::~TQueryData() {
         TxResults.swap(emptyResultMap);
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
+
+        TPartitionedParamMap empty;
+        empty.swap(PartitionedParams);
     }
 }
 
@@ -268,6 +272,15 @@ TQueryData::TTypedUnboxedValue& TQueryData::GetParameterUnboxedValue(const TStri
     return it->second;
 }
 
+TQueryData::TTypedUnboxedValue* TQueryData::GetParameterUnboxedValuePtr(const TString& name) {
+    auto it = UnboxedData.find(name);
+    if (it == UnboxedData.end()) {
+        return nullptr;
+    }
+
+    return &it->second;
+}
+
 const NKikimrMiniKQL::TParams* TQueryData::GetParameterMiniKqlValue(const TString& name) {
     if (UnboxedData.find(name) == UnboxedData.end())
         return nullptr;
@@ -334,6 +347,42 @@ bool TQueryData::MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyPara
     return false;
 }
 
+void TQueryData::AddShardParam(ui64 shardId, const TString& name, NKikimr::NMiniKQL::TType* type, NKikimr::NMiniKQL::TUnboxedValueVector&& value) {
+    auto guard = TypeEnv().BindAllocator();
+    auto [it, inserted] = PartitionedParams.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(shardId, name),
+        std::forward_as_tuple(type, std::move(value)));
+    YQL_ENSURE(inserted, "duplicate parameter, shardId#: "
+        << shardId << ", paramName#: " << name);
+}
+
+void TQueryData::ClearPrunedParams() {
+    if (PartitionedParams.empty())
+        return;
+
+    auto guard = TypeEnv().BindAllocator();
+    for(auto& [key, value]: PartitionedParams) {
+        TUnboxedValueVector emptyVector;
+        value.Values.swap(emptyVector);
+    }
+
+    TPartitionedParamMap emptyMap;
+    emptyMap.swap(PartitionedParams);
+}
+
+NDqProto::TData TQueryData::GetShardParam(ui64 shardId, const TString& name) {
+    auto kv = std::make_pair(shardId, name);
+    auto it = PartitionedParams.find(kv);
+    if (it == PartitionedParams.end()) {
+        return SerializeParamValue(name);
+    }
+
+    auto guard = TypeEnv().BindAllocator();
+    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0};
+    return dataSerializer.Serialize(it->second.Values.begin(), it->second.Values.end(), it->second.ItemType);
+}
+
 NDqProto::TData TQueryData::SerializeParamValue(const TString& name) {
     auto guard = TypeEnv().BindAllocator();
     const auto& [type, value] = GetParameterUnboxedValue(name);
@@ -344,10 +393,20 @@ void TQueryData::Clear() {
     {
         auto g = TypeEnv().BindAllocator();
         Params.clear();
+        
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
+
         THashMap<ui32, TVector<TKqpExecuterTxResult>> emptyResultMap;
         TxResults.swap(emptyResultMap);
+
+        for(auto& [key, param]: PartitionedParams) {
+            NKikimr::NMiniKQL::TUnboxedValueVector emptyValues;
+            param.Values.swap(emptyValues);
+        }
+
+        PartitionedParams.clear();
+
         AllocState->Reset();
     }
 }

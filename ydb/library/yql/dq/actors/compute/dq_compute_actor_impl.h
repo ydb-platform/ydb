@@ -1475,7 +1475,8 @@ protected:
         TaskRunner = taskRunner;
     }
 
-    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) {
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext(),
+        const TDqTaskRunnerParameterProvider& parameterProvider = {}) {
         YQL_ENSURE(TaskRunner);
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota->GetMkqlMemoryLimit());
@@ -1487,7 +1488,7 @@ protected:
         limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
-        TaskRunner->Prepare(Task, limits, execCtx);
+        TaskRunner->Prepare(Task, limits, execCtx, parameterProvider);
 
         FillIoMaps(
             TaskRunner->GetHolderFactory(),

@@ -1084,6 +1084,7 @@ public:
 
         YQL_ENSURE(QueryState);
         LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->ResultRowsCount);
+        QueryState->QueryData->ClearPrunedParams();
 
         if (!ev->GetTxResults().empty()) {
             QueryState->QueryData->AddTxResults(QueryState->CurrentTx - 1, std::move(ev->GetTxResults()));

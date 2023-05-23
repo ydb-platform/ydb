@@ -2634,36 +2634,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         return pqConfig;
     }
 
-    static const char* ModeToString(EChangefeedMode mode) {
-        switch (mode) {
-        case EChangefeedMode::KeysOnly:
-            return "KEYS_ONLY";
-        case EChangefeedMode::Updates:
-            return "UPDATES";
-        case EChangefeedMode::NewImage:
-            return "NEW_IMAGE";
-        case EChangefeedMode::OldImage:
-            return "OLD_IMAGE";
-        case EChangefeedMode::NewAndOldImages:
-            return "NEW_AND_OLD_IMAGES";
-        case EChangefeedMode::Unknown:
-            UNIT_ASSERT(false);
-            return "";
-        }
-    }
-
-    static const char* FormatToString(EChangefeedFormat format) {
-        switch (format) {
-        case EChangefeedFormat::Json:
-            return "JSON";
-        case EChangefeedFormat::DynamoDBStreamsJson:
-            return "DYNAMODB_STREAMS_JSON";
-        case EChangefeedFormat::Unknown:
-            UNIT_ASSERT(false);
-            return "";
-        }
-    }
-
     void AddChangefeed(EChangefeedMode mode, EChangefeedFormat format) {
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
@@ -2694,7 +2664,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
                     MODE = '%s', FORMAT = '%s'
                 );
-            )", ModeToString(mode), FormatToString(format));
+            )", ToString(mode).c_str(), ToString(format).c_str());
 
             const auto result = session.ExecuteSchemeQuery(query, execOpts).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

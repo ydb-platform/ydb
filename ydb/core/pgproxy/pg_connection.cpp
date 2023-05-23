@@ -38,6 +38,7 @@ public:
     ui64 IncomingSequenceNumber = 1;
     ui64 OutgoingSequenceNumber = 1;
     ui64 SyncSequenceNumber = 1;
+    char TransactionStatus = 'I'; // could be 'I' (idle), 'T' (transaction), 'E' (failed transaction)
     std::deque<TAutoPtr<IEventHandle>> PostponedEvents;
 
     TPGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const TActorId& databaseProxy)
@@ -288,7 +289,7 @@ protected:
 
     void SendReadyForQuery() {
         TPGStreamOutput<TPGReadyForQuery> readyForQuery;
-        readyForQuery << 'I';
+        readyForQuery << TransactionStatus;
         SendStream(readyForQuery);
     }
 
@@ -469,12 +470,15 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvQueryResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
+            if (ev->Get()->TransactionStatus) {
+                TransactionStatus = ev->Get()->TransactionStatus;
+            }
             if (ev->Get()->ErrorFields.empty()) {
                 if (ev->Get()->EmptyQuery) {
                     SendMessage(TPGEmptyQueryResponse());
                 } else {
                     TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
-                    { // rowDescription
+                    if (!ev->Get()->DataFields.empty()) { // rowDescription
                         TPGStreamOutput<TPGRowDescription> rowDescription;
                         rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
                         for (const auto& field : ev->Get()->DataFields) {

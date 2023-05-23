@@ -194,6 +194,7 @@ public:
             // HACK
             if (ev->Get()->Message->GetQuery().starts_with("BEGIN")) {
                 response->Tag = "BEGIN";
+                response->TransactionStatus = 'T';
             }
             // HACK
             try {

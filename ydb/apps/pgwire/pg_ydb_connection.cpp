@@ -290,6 +290,16 @@ public:
         Send(ev->Sender, bindComplete.release());
     }
 
+    void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
+        auto closeData = ev->Get()->Message->GetCloseData();
+        ParsedStatements.erase(closeData.StatementName);
+        CurrentStatement.clear();
+        BLOG_D("TEvClose CurrentStatement changed to <empty>");
+
+        auto closeComplete = ev->Get()->Reply();
+        Send(ev->Sender, closeComplete.release());
+    }
+
     struct TConvertedQuery {
         TString Query;
         NYdb::TParams Params;
@@ -486,6 +496,7 @@ public:
             hFunc(NPG::TEvPGEvents::TEvBind, Handle);
             hFunc(NPG::TEvPGEvents::TEvDescribe, Handle);
             hFunc(NPG::TEvPGEvents::TEvExecute, Handle);
+            hFunc(NPG::TEvPGEvents::TEvClose, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

@@ -103,6 +103,7 @@ struct TEvPGEvents {
         std::vector<std::pair<char, TString>> ErrorFields;
         TString Tag;
         bool EmptyQuery = false;
+        char TransactionStatus = 0;
     };
 
         /*

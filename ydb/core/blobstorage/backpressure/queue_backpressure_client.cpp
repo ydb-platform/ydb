@@ -700,14 +700,6 @@ private:
             const auto& [sender, cookie] = it->second;
             ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(ev->TraceId));
             AssimilateRequests.erase(it);
-        } else {
-            const TString message = TStringBuilder() << "unexpected TEvVAssimilateResult received"
-                << " Cookie# " << ev->Cookie
-                << " Sender# " << ev->Sender
-                << " Msg# " << ev->Get()->ToString()
-                << " VDiskId# " << VDiskId;
-            Y_VERIFY_DEBUG(false, "%s", message.data());
-            QLOG_CRIT_S("BSQ39", message);
         }
         ResetWatchdogTimer(ctx.Now());
     }

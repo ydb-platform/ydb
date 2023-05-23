@@ -2277,6 +2277,11 @@ private:
             }
         }
 
+        TJoinOptions options;
+        if (const auto status = ValidateEquiJoinOptions(input->Pos(), input->Tail(), options, ctx); status != IGraphTransformer::TStatus::Ok || options.Flatten) {
+            return status;
+        }
+
         const TUniqueConstraintNode* unique = nullptr;
         const TDistinctConstraintNode* distinct = nullptr;
         if (const auto status = EquiJoinConstraints(input->Pos(), unique, distinct, labels, *joinTree, ctx); status != IGraphTransformer::TStatus::Ok) {

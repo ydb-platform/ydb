@@ -219,6 +219,9 @@ private:
                 valueParser.OpenTagged();
                 return ColumnValueToJsonValue(valueParser);
 
+            case NYdb::TTypeParser::ETypeKind::Pg:
+                return valueParser.GetPg().Content_;
+
             default:
                 return NJson::JSON_UNDEFINED;
         }

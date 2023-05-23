@@ -241,7 +241,7 @@ public:
             return true;
         }
 
-        if (TxCtx->HasUncommittedChangesRead) {
+        if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             YQL_ENSURE(TxCtx->EnableImmediateEffects);
 
             if (tx && tx->GetHasEffects()) {

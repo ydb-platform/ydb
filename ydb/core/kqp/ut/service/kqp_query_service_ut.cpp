@@ -13,9 +13,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
+        auto params = TParamsBuilder()
+            .AddParam("$value").Int64(17).Build()
+            .Build();
+
         auto it = db.StreamExecuteQuery(R"(
-            SELECT 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            SELECT $value;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
         ui64 count = 0;
@@ -39,12 +43,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
+        auto params = TParamsBuilder()
+            .AddParam("$value").Int64(17).Build()
+            .Build();
+
         auto result = db.ExecuteQuery(R"(
-            SELECT 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            SELECT $value;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[17]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(StreamExecuteQuery) {

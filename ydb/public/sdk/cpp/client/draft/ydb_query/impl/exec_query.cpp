@@ -167,7 +167,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
 TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryImpl(
     const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& driverState,
-    const TString& query, const TTxControl& txControl, const TExecuteQuerySettings& settings)
+    const TString& query, const TTxControl& txControl, const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
+    const TExecuteQuerySettings& settings)
 {
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
@@ -180,6 +181,10 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     } else {
         Y_ASSERT(txControl.TxSettings_);
         SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());
+    }
+
+    if (params) {
+        *request.mutable_parameters() = *params;
     }
 
     auto promise = NewPromise<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>>();
@@ -203,7 +208,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 
 TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
     const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
-    const TExecuteQuerySettings& settings)
+    const TMaybe<TParams>& params, const TExecuteQuerySettings& settings)
 {
     auto promise = NewPromise<TExecuteQueryIterator>();
 
@@ -218,15 +223,20 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
         );
     };
 
-    StreamExecuteQueryImpl(connections, driverState, query, txControl, settings).Subscribe(iteratorCallback);
+    auto paramsProto = params
+        ? &params->GetProtoMap()
+        : nullptr;
+
+    StreamExecuteQueryImpl(connections, driverState, query, txControl, paramsProto, settings)
+        .Subscribe(iteratorCallback);
     return promise.GetFuture();
 }
 
 TAsyncExecuteQueryResult TExecQueryImpl::ExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
     const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
-    const TExecuteQuerySettings& settings)
+    const TMaybe<TParams>& params, const TExecuteQuerySettings& settings)
 {
-    return StreamExecuteQuery(connections, driverState, query, txControl, settings)
+    return StreamExecuteQuery(connections, driverState, query, txControl, params, settings)
         .Apply([](TAsyncExecuteQueryIterator itFuture){
             auto it = itFuture.ExtractValue();
 

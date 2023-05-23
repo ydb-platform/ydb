@@ -25,7 +25,7 @@ enum class EExecMode {
     Parse = 10,
     Validate = 20,
     Explain = 30,
-    Execute = 3,
+    Execute = 50,
 };
 
 enum class EExecStatus {

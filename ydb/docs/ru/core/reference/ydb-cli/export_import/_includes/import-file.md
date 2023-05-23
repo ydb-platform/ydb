@@ -11,17 +11,18 @@
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options]
+{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options] <input files>
 ```
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+, `<input files>` — пути к файлам на локальной файловой системе, данные которых нужно импортировать.
 
 ## Параметры подкоманды {#options}
 
 ### Обязательные параметры {#required}
 
 * `-p, --path STRING` — путь к таблице в базе данных.
-* `--input-file STRING` — путь к файлу на локальной файловой системе, данные которого нужно импортировать.
 
 ### Дополнительные параметры {#optional}
 
@@ -42,7 +43,7 @@
 
 ### Импортировать файл {#simple}
 
-Файл содержит данные без дополнительной информации. в качестве разделителя используется символ `,`:
+Файл содержит данные без дополнительной информации. В качестве разделителя используется символ `,`:
 
 ```text
 1,Айтишники,The IT Crowd is a British sitcom.,13182
@@ -58,7 +59,7 @@
 Чтобы импортировать такой файл, выполните команду:
 
 ```bash
-ydb import file csv -p series --input-file series.csv
+ydb import file csv -p series series.csv
 ```
 
 В результате будут импортированы следующие данные:
@@ -73,9 +74,29 @@ ydb import file csv -p series --input-file series.csv
 └──────────────┴───────────┴───────────────────────────────────────────────────────────┴──────────────────┘
 ```
 
+### Импортировать несколько файлов {#multiple-files}
+
+Файлы содержат данные без дополнительной информации. В качестве разделителя используется символ `,`:
+
+series1.csv:
+```text
+1,Айтишники,The IT Crowd is a British sitcom.,13182
+```
+
+series2.csv:
+```text
+2,Silicon Valley,Silicon Valley is an American comedy television series.,16166
+```
+
+Чтобы импортировать такие файлы, выполните команду:
+
+```bash
+ydb import file csv -p series series1.csv series2.csv
+```
+
 ### Импортировать файл с разделителем `|` {#custom-delimiter}
 
-Файл содержит данные без дополнительной информации. в качестве разделителя используется символ `|`:
+Файл содержит данные без дополнительной информации. В качестве разделителя используется символ `|`:
 
 ```text
 1|IT Crowd|The IT Crowd is a British sitcom.|13182
@@ -85,7 +106,7 @@ ydb import file csv -p series --input-file series.csv
 Чтобы импортировать такой файл, укажите параметр `--delimiter` со значением `|`:
 
 ```bash
-ydb import file csv -p series --input-file series.csv  --delimiter "|"
+ydb import file csv -p series --delimiter "|" series.csv
 ```
 
 ### Пропустить строки и считать заголовки столбцов {#skip}
@@ -103,7 +124,7 @@ series_id,title,release_date,series_info
 Чтобы пропустить комментарии в первой и второй строке, укажите параметр `--skip-rows 2`. Чтобы обработать строку третью строку как заголовки и сопоставить данные файла нужным столбцам таблицы, укажите параметр `--header`:
 
 ```bash
-ydb import file csv -p series --input-file series.csv --skip-rows 2 --header
+ydb import file csv -p series --skip-rows 2 --header series.csv
 ```
 
 ### Заменить значения на `NULL` {#replace-with-null}
@@ -119,7 +140,7 @@ ydb import file csv -p series --input-file series.csv --skip-rows 2 --header
 Укажите параметр `--null-value "\N"`, чтобы интерпретировать значение `\N` как `NULL`:
 
 ```bash
-ydb import file csv -p series --input-file series.csv --null-value "\N"
+ydb import file csv -p series --null-value "\N" series.csv
 ```
 
 В результате будут импортированы следующие данные:

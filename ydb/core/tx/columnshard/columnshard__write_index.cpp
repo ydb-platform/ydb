@@ -59,11 +59,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
     bool ok = false;
     if (Ev->Get()->PutStatus == NKikimrProto::OK) {
-        NOlap::TSnapshot snapshot = changes->ApplySnapshot;
-        if (snapshot.IsZero()) {
-            snapshot = NOlap::TSnapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
-            Y_VERIFY(Ev->Get()->IndexInfo.GetLastSchema()->GetSnapshot() <= snapshot);
-        }
+        NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
+        Y_VERIFY(Ev->Get()->IndexInfo.GetLastSchema()->GetSnapshot() <= snapshot);
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);

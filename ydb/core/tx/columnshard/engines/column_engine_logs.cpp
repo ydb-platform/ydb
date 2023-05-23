@@ -454,11 +454,8 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
-    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(dataToIndex), limits);
+    auto changes = TChanges::BuildInsertChanges(DefaultMark(), std::move(dataToIndex), LastSnapshot, limits);
     ui32 reserveGranules = 0;
-
-    changes->InitSnapshot = LastSnapshot;
-
     for (const auto& data : changes->DataToIndex) {
         const ui64 pathId = data.PathId;
 
@@ -496,7 +493,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     Y_VERIFY(info);
     Y_VERIFY(info->Granules.size() == 1);
 
-    auto changes = std::make_shared<TChanges>(DefaultMark(), std::move(info), limits, LastSnapshot);
+    auto changes = TChanges::BuildCompactionChanges(DefaultMark(), std::move(info), limits, LastSnapshot);
 
     const ui64 granule = *changes->CompactionInfo->Granules.begin();
     const auto gi = Granules.find(granule);
@@ -541,7 +538,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
                                                                          const TCompactionLimits& limits,
                                                                          THashSet<ui64>& pathsToDrop,
                                                                          ui32 maxRecords) {
-    auto changes = std::make_shared<TChanges>(DefaultMark(), snapshot, limits);
+    auto changes = TChanges::BuildClenupChanges(DefaultMark(), snapshot, limits);
     ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
@@ -627,8 +624,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
         return {};
     }
 
-    TSnapshot fakeSnapshot(1, 1); // TODO: better snapshot
-    auto changes = std::make_shared<TChanges>(DefaultMark(), TColumnEngineChanges::TTL, fakeSnapshot);
+    auto changes = TChanges::BuildTtlChanges(DefaultMark());
     ui64 evicttionSize = 0;
     bool allowEviction = true;
     ui64 dropBlobs = 0;
@@ -758,9 +754,6 @@ void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr
 bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                                         const TSnapshot& snapshot) {
     auto changes = std::static_pointer_cast<TChanges>(indexChanges);
-    if (changes->ApplySnapshot.Valid()) {
-        Y_VERIFY(changes->ApplySnapshot == snapshot);
-    }
 
     const auto& indexInfo = GetIndexInfo();
 

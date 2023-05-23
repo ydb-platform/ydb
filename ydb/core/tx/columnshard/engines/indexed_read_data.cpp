@@ -188,19 +188,20 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
 
     // Extract columns (without check), filter, attach snapshot, extract columns with check
     // (do not filter snapshot columns)
-    auto loadSchema = ReadMetadata->GetLoadSchema(snapshot);
+    auto dataSchema = ReadMetadata->GetLoadSchema(snapshot);
 
-    auto batch = NArrow::ExtractExistedColumns(srcBatch, loadSchema->GetSchema());
+    auto batch = NArrow::ExtractExistedColumns(srcBatch, dataSchema->GetSchema());
     Y_VERIFY(batch);
-
+    
     auto filter = FilterNotIndexed(batch, *ReadMetadata);
     if (filter.IsTotalDenyFilter()) {
         return nullptr;
     }
     auto preparedBatch = batch;
-
     preparedBatch = TIndexInfo::AddSpecialColumns(preparedBatch, snapshot);
-    preparedBatch = NArrow::ExtractColumns(preparedBatch, loadSchema->GetSchema());
+    auto resultSchema = ReadMetadata->GetLoadSchema();
+    preparedBatch = resultSchema->NormalizeBatch(*dataSchema, preparedBatch);
+    preparedBatch = NArrow::ExtractColumns(preparedBatch, resultSchema->GetSchema());
     Y_VERIFY(preparedBatch);
 
     filter.Apply(preparedBatch);

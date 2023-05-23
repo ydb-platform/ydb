@@ -197,9 +197,11 @@ struct Schema : NIceDb::Schema {
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
         struct BlobId : Column<6, NScheme::NTypeIds::String> {};
         struct Meta : Column<7, NScheme::NTypeIds::String> {};
+        struct IndexPlanStep : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct IndexTxId : Column<9, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Committed, ShardOrPlan, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, PathId, DedupId, BlobId, Meta>;
+        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -416,10 +418,19 @@ struct Schema : NIceDb::Schema {
     // InsertTable activities
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
-            NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
-            NIceDb::TUpdate<InsertTable::Meta>(data.Metadata)
-        );
+        if (data.GetSchemaSnapshot().Valid()) {
+            db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
+                NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::Meta>(data.Metadata),
+                NIceDb::TUpdate<InsertTable::IndexPlanStep>(data.GetSchemaSnapshot().GetPlanStep()),
+                NIceDb::TUpdate<InsertTable::IndexTxId>(data.GetSchemaSnapshot().GetTxId())
+            );
+        } else {
+            db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
+                NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::Meta>(data.Metadata)
+            );
+        }
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
@@ -469,6 +480,13 @@ struct Schema : NIceDb::Schema {
             TString strBlobId = rowset.GetValue<InsertTable::BlobId>();
             TString metaStr = rowset.GetValue<InsertTable::Meta>();
 
+            std::optional<NOlap::TSnapshot> indexSnapshot;
+            if (rowset.HaveValue<InsertTable::IndexPlanStep>()) {
+                ui64 indexPlanStep = rowset.GetValue<InsertTable::IndexPlanStep>();
+                ui64 indexTxId = rowset.GetValue<InsertTable::IndexTxId>();
+                indexSnapshot = NOlap::TSnapshot(indexPlanStep, indexTxId);
+            }
+            
             TString error;
             NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
             Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
@@ -479,7 +497,7 @@ struct Schema : NIceDb::Schema {
                 writeTime = TInstant::Seconds(meta.GetDirtyWriteTimeSeconds());
             }
 
-            TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, metaStr, writeTime);
+            TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, metaStr, writeTime, indexSnapshot);
 
             switch (recType) {
                 case EInsertTableIds::Inserted:

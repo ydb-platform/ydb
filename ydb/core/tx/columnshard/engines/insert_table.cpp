@@ -198,7 +198,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
 
     for (const auto& data : *committed) {
         if (std::less_equal<TSnapshot>()(data.GetSnapshot(), snapshot)) {
-            ret.emplace_back(TCommittedBlob{data.BlobId, data.GetSnapshot()});
+            ret.emplace_back(TCommittedBlob(data.BlobId, data.GetSnapshot(), data.GetSchemaSnapshot()));
         }
     }
 

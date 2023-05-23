@@ -65,7 +65,8 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-        NOlap::TInsertedData insertData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time);
+        const auto& snapshotSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
+        NOlap::TInsertedData insertData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time, snapshotSchema->GetSnapshot());
         ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
         if (ok) {
             THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
@@ -221,7 +222,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
 
         ++WritesInFly; // write started
-        ctx.Register(CreateWriteActor(TabletID(), TablesManager.GetIndexInfo(), ctx.SelfID,
+
+        const auto& snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
+        ctx.Register(CreateWriteActor(TabletID(), snapshotSchema->GetIndexInfo(), ctx.SelfID,
             BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
     }
 

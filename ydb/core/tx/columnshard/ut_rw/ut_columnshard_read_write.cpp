@@ -2568,7 +2568,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
                 if (msg->IndexChanges->CompactionInfo) {
                     ++compactionsHappened;
-                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->ApplySnapshot
+                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : msg->IndexChanges->SwitchedPortions) {
@@ -2645,6 +2645,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         {
             TAtomic unusedPrev;
             runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unusedPrev);
+        }
+
+        {
+            TAtomic unusedPrev;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.MaxPortionsInGranule", 10, unusedPrev);
         }
 
         // Write different keys: grow on compaction

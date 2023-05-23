@@ -37,6 +37,11 @@ public:
     virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;
+
+    std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+    std::shared_ptr<arrow::RecordBatch> NormalizeFullBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+private:
+    std::shared_ptr<arrow::RecordBatch> NormalizeBatchImpl(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& newSchema) const;
 };
 
 class TSnapshotSchema: public ISnapshotSchema {
@@ -65,7 +70,10 @@ public:
     }
 
     virtual int GetFieldIndex(const ui32 columnId) const override {
-        TString columnName = IndexInfo.GetColumnName(columnId);
+        TString columnName = IndexInfo.GetColumnName(columnId, false);
+        if (!columnName) {
+            return -1;
+        }
         std::string name(columnName.data(), columnName.size());
         return Schema->GetFieldIndex(name);
     }
@@ -128,7 +136,10 @@ public:
         if (!ColumnIds.contains(columnId)) {
             return -1;
         }
-        TString columnName = OriginalSnapshot->GetIndexInfo().GetColumnName(columnId);
+        TString columnName = OriginalSnapshot->GetIndexInfo().GetColumnName(columnId, false);
+        if (!columnName) {
+            return -1;
+        }
         std::string name(columnName.data(), columnName.size());
         return Schema->GetFieldIndex(name);
     }
@@ -290,11 +301,9 @@ struct TPortionInfo {
     }
 
     void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap, const TSnapshot& snapshot) {
+        Y_UNUSED(snapshot);;
         for (auto& rec : Records) {
             rec.Portion = portion;
-            if (!rec.ValidSnapshot()) {
-                rec.SetSnapshot(snapshot);
-            }
         }
         if (!granuleRemap.empty()) {
             for (auto& rec : Records) {

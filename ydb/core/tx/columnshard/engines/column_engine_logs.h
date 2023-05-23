@@ -49,6 +49,11 @@ public:
     };
 
     class TChanges : public TColumnEngineChanges {
+    private:
+        TChanges(TColumnEngineChanges::EType type, const TMark& defaultMark, const TCompactionLimits& limits)
+            : TColumnEngineChanges(type, limits)
+            , DefaultMark(defaultMark) {}
+
     public:
         struct TSrcGranule {
             ui64 PathId{0};
@@ -60,37 +65,34 @@ public:
             {}
         };
 
-        TChanges(const TMark& defaultMark,
-                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TCompactionLimits& limits)
-            : TColumnEngineChanges(TColumnEngineChanges::INSERT, limits)
-            , DefaultMark(defaultMark)
-        {
-            DataToIndex = std::move(blobsToIndex);
+        static std::shared_ptr<TChanges> BuildInsertChanges(const TMark& defaultMark,
+                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot,
+                 const TCompactionLimits& limits) {
+            std::shared_ptr<TChanges> changes(new TChanges(TColumnEngineChanges::INSERT, defaultMark, limits));
+            changes->DataToIndex = blobsToIndex;
+            changes->InitSnapshot = initSnapshot;
+            return std::move(changes);
         }
 
-        TChanges(const TMark& defaultMark,
-                 std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits, const TSnapshot& snapshot)
-            : TColumnEngineChanges(TColumnEngineChanges::COMPACTION, limits)
-            , DefaultMark(defaultMark)
-        {
-            CompactionInfo = std::move(info);
-            InitSnapshot = snapshot;
+        static std::shared_ptr<TChanges> BuildCompactionChanges(const TMark& defaultMark,
+                 std::unique_ptr<TCompactionInfo>&& info,
+                 const TCompactionLimits& limits,
+                 const TSnapshot& initSnapshot) {
+            std::shared_ptr<TChanges> changes(new TChanges(TColumnEngineChanges::COMPACTION, defaultMark, limits));
+            changes->CompactionInfo = std::move(info);
+            changes->InitSnapshot = initSnapshot;
+            return std::move(changes);
         }
 
-        TChanges(const TMark& defaultMark,
-                 const TSnapshot& snapshot, const TCompactionLimits& limits)
-            : TColumnEngineChanges(TColumnEngineChanges::CLEANUP, limits)
-            , DefaultMark(defaultMark)
-        {
-            InitSnapshot = snapshot;
+        static std::shared_ptr<TChanges> BuildClenupChanges(const TMark& defaultMark, const TSnapshot& initSnapshot, const TCompactionLimits& limits) {
+            std::shared_ptr<TChanges> changes(new TChanges(TColumnEngineChanges::CLEANUP, defaultMark, limits));
+            changes->InitSnapshot = initSnapshot;
+            return std::move(changes);
         }
 
-        TChanges(const TMark& defaultMark,
-                 TColumnEngineChanges::EType type, const TSnapshot& applySnapshot)
-            : TColumnEngineChanges(type, TCompactionLimits())
-            , DefaultMark(defaultMark)
-        {
-            ApplySnapshot = applySnapshot;
+        static std::shared_ptr<TChanges> BuildTtlChanges(const TMark& defaultMark) {
+            std::shared_ptr<TChanges> changes(new TChanges(TColumnEngineChanges::TTL, defaultMark, TCompactionLimits()));
+            return std::move(changes);
         }
 
         bool AddPathIfNotExists(ui64 pathId) {

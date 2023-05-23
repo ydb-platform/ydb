@@ -169,7 +169,6 @@ public:
     EType Type;
     TCompactionLimits Limits;
     TSnapshot InitSnapshot = TSnapshot::Zero();
-    TSnapshot ApplySnapshot = TSnapshot::Zero();
     std::unique_ptr<TCompactionInfo> CompactionInfo;
     std::vector<NOlap::TInsertedData> DataToIndex;
     std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones

@@ -8,19 +8,19 @@ namespace NKikimr::NOlap {
 
 class TIndexLogicBase {
 protected:
-    const TVersionedIndex& IndexInfo;
+    const TVersionedIndex& SchemaVersions;
 private:
     const THashMap<ui64, NKikimr::NOlap::TTiering>* TieringMap = nullptr;
 
 public:
     TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap)
-        : IndexInfo(indexInfo)
+        : SchemaVersions(indexInfo)
         , TieringMap(&tieringMap)
     {
     }
 
     TIndexLogicBase(const TVersionedIndex& indexInfo)
-        : IndexInfo(indexInfo)
+        : SchemaVersions(indexInfo)
     {
     }
 
@@ -72,7 +72,7 @@ public:
 private:
     std::vector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;
     std::vector<TString> CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const;
-    std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(ui64 granule, const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
+    std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> CompactInOneGranule(ui64 granule, const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
 
     /// @return vec({ts, batch}). ts0 <= ts1 <= ... <= tsN
     /// @note We use ts from PK for split but there could be lots PK with the same ts.
@@ -90,7 +90,7 @@ private:
                         std::vector<std::pair<TMark, ui64>>& tsIds,
                         std::vector<std::pair<TPortionInfo, ui64>>& toMove) const;
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> PortionsToBatches(const std::vector<TPortionInfo>& portions,
+    std::pair<std::vector<std::shared_ptr<arrow::RecordBatch>>, TSnapshot> PortionsToBatches(const std::vector<TPortionInfo>& portions,
                                                                     const THashMap<TBlobRange, TString>& blobs,
                                                                     bool insertedOnly = false) const;
 };

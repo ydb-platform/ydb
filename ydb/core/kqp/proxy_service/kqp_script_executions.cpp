@@ -537,15 +537,17 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
         Become(&TCreateScriptExecutionActor::StateFunc);
 
         // Start request
-        const NActors::TActorId actorId = Register(CreateRunScriptActor(Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1));
-        TString executionId = actorId.ToString();
+        RunScriptActorId = Register(CreateRunScriptActor(Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1));
+        TString executionId = RunScriptActorId.ToString();
         Register(new TCreateScriptOperationQuery(executionId, Event->Get()->Record));
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            Send(RunScriptActorId, new NActors::TEvents::TEvWakeup());
             Send(Event->Sender, new TEvKqp::TEvScriptResponse(ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId), ev->Get()->ExecutionId, Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_MODE_EXECUTE));
         } else {
+            Send(RunScriptActorId, new NActors::TEvents::TEvPoison());
             Send(Event->Sender, new TEvKqp::TEvScriptResponse(ev->Get()->Status, std::move(ev->Get()->Issues)));
         }
     }
@@ -556,6 +558,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
 
 private:
     TEvKqp::TEvScriptRequest::TPtr Event;
+    NActors::TActorId RunScriptActorId;
 };
 
 class TScriptExecutionFinisher : public TQueryBase {

@@ -39,7 +39,18 @@ public:
 
     void Bootstrap() {
         Become(&TRunScriptActor::StateFunc);
+    }
 
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        hFunc(NActors::TEvents::TEvPoison, Handle);
+        hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+        hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+        hFunc(NKqp::TEvKqp::TEvFetchScriptResultsRequest, Handle);
+    )
+
+    void Start() {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record = Request;
 
@@ -51,12 +62,14 @@ public:
         }
     }
 
-private:
-    STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-        hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-        hFunc(NKqp::TEvKqp::TEvFetchScriptResultsRequest, Handle);
-    )
+    // TODO: remove this after there will be a normal way to store results and generate execution id
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        Start();
+    }
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();

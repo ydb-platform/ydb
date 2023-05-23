@@ -1781,10 +1781,6 @@ private:
         *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
-        auto* attr = gatewaysConfig.MutableS3()->MutableDefaultSettings()->Add();
-        attr->SetName("ArrowThreadPool");
-        attr->SetValue("false");
-
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();

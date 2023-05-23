@@ -15,7 +15,6 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, SerializeMemoryLimit);
     REGISTER_SETTING(*this, InFlightMemoryLimit);
     REGISTER_SETTING(*this, JsonListSizeLimit).Upper(100'000);
-    REGISTER_SETTING(*this, ArrowThreadPool);
     REGISTER_SETTING(*this, ArrowParallelRowGroupCount).Lower(1);
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
     REGISTER_SETTING(*this, ParallelDownloadCount);

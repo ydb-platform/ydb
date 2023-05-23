@@ -79,6 +79,28 @@ private:
         }
     };
 
+    /// Hash TBlobRange by BlobId only.
+    struct BlobRangeHash {
+        size_t operator()(const TBlobRange& range) const {
+            return range.BlobId.Hash();
+        }
+
+        size_t operator()(const TUnifiedBlobId& id) const {
+            return id.Hash();
+        }
+    };
+
+    /// Compares TBlobRange by BlobId only.
+    struct BlobRangeEqual {
+        bool operator()(const TBlobRange& a, const TBlobRange& b) const {
+            return a.BlobId == b.BlobId;
+        }
+
+        bool operator()(const TBlobRange& a, const TUnifiedBlobId& id) const {
+            return a.BlobId == id;
+        }
+    };
+
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_IN_FLIGHT_FALLBACK_BYTES = 100ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
@@ -86,9 +108,11 @@ private:
     static constexpr TDuration FAST_READ_DEADLINE = TDuration::Seconds(10);
 
     TLRUCache<TBlobRange, TString> Cache;
-    THashMap<TUnifiedBlobId, THashSet<TBlobRange>> CachedRanges;   // List of cached ranges by blob id
-                                                            // It is used to remove all blob ranges from cache when
-                                                            // it gets a notification that a blob has been deleted
+    /// List of cached ranges by blob id.
+    /// It is used to remove all blob ranges from cache when
+    /// it gets a notification that a blob has been deleted.
+    THashMultiSet<TBlobRange, BlobRangeHash, BlobRangeEqual> CachedRanges;
+
     TControlWrapper MaxCacheDataSize;
     TControlWrapper MaxInFlightDataSize;
     TControlWrapper MaxFallbackDataSize; // It's expected to be less then MaxInFlightDataSize
@@ -301,26 +325,26 @@ private:
 
         Forgets->Inc();
 
-        auto blobIdIt = CachedRanges.find(blobId);
-        if (blobIdIt == CachedRanges.end()) {
+        const auto [begin, end] = CachedRanges.equal_range(blobId);
+        if (begin == end) {
             return;
         }
 
         // Remove all ranges of this blob that are present in cache
-        for (const auto& blobRange: blobIdIt->second) {
-            auto rangeIt = Cache.FindWithoutPromote(blobRange);
+        for (auto bi = begin; bi != end; ++bi) {
+            auto rangeIt = Cache.FindWithoutPromote(*bi);
             if (rangeIt == Cache.End()) {
                 continue;
             }
 
             Cache.Erase(rangeIt);
-            CacheDataSize -= blobRange.Size;
-            SizeBytes->Sub(blobRange.Size);
+            CacheDataSize -= bi->Size;
+            SizeBytes->Sub(bi->Size);
             SizeBlobs->Dec();
-            ForgetBytes->Add(blobRange.Size);
+            ForgetBytes->Add(bi->Size);
         }
 
-        CachedRanges.erase(blobIdIt);
+        CachedRanges.erase(begin, end);
     }
 
     void EnqueueRead(TReadItem&& readItem, const TActorId& sender) {
@@ -690,7 +714,7 @@ private:
         }
 
         Cache.Insert(blobRange, data);
-        CachedRanges[blobRange.BlobId].insert(blobRange);
+        CachedRanges.insert(blobRange);
     }
 
     void Evict(const TActorContext&) {
@@ -706,16 +730,8 @@ private:
                 << " MaxCacheDataSize: " << (i64)MaxCacheDataSize
                 << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize);
 
-            {
-                // Remove the range from list of ranges by blob id
-                auto blobIdIt = CachedRanges.find(it.Key().BlobId);
-                if (blobIdIt != CachedRanges.end()) {
-                    blobIdIt->second.erase(it.Key());
-                    if (blobIdIt->second.empty()) {
-                        CachedRanges.erase(blobIdIt);
-                    }
-                }
-            }
+            // Remove the range from list of ranges by blob id.
+            CachedRanges.erase(it.Key());
 
             Evictions->Inc();
             EvictedBytes->Add(it.Key().Size);

@@ -2299,50 +2299,68 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
-                TTopicTabletInfo::TTopicPartitionInfo pqInfo;
+                auto pqInfo = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueues::PathId>();
                 TPathId pathId(selfId, localPathId);
-                pqInfo.PqId = rowset.GetValue<Schema::PersQueues::PqId>();
-                pqInfo.GroupId = rowset.GetValueOrDefault<Schema::PersQueues::GroupId>(pqInfo.PqId + 1);
+                pqInfo->PqId = rowset.GetValue<Schema::PersQueues::PqId>();
+                pqInfo->GroupId = rowset.GetValueOrDefault<Schema::PersQueues::GroupId>(pqInfo->PqId + 1);
                 TLocalShardIdx localShardIdx = rowset.GetValue<Schema::PersQueues::ShardIdx>();
                 TShardIdx shardIdx = Self->MakeLocalId(localShardIdx);
-                pqInfo.AlterVersion = rowset.GetValue<Schema::PersQueues::AlterVersion>();
+                pqInfo->AlterVersion = rowset.GetValue<Schema::PersQueues::AlterVersion>();
+                pqInfo->CreateVersion =
+                    rowset.GetValueOrDefault<Schema::PersQueues::CreateVersion>(pqInfo->AlterVersion);
 
                 if (rowset.HaveValue<Schema::PersQueues::RangeBegin>()) {
-                    if (!pqInfo.KeyRange) {
-                        pqInfo.KeyRange.ConstructInPlace();
+                    if (!pqInfo->KeyRange) {
+                         pqInfo->KeyRange.ConstructInPlace();
                     }
 
-                    pqInfo.KeyRange->FromBound = rowset.GetValue<Schema::PersQueues::RangeBegin>();
+                    pqInfo->KeyRange->FromBound = rowset.GetValue<Schema::PersQueues::RangeBegin>();
                 }
 
                 if (rowset.HaveValue<Schema::PersQueues::RangeEnd>()) {
-                    if (!pqInfo.KeyRange) {
-                        pqInfo.KeyRange.ConstructInPlace();
+                    if (!pqInfo->KeyRange) {
+                         pqInfo->KeyRange.ConstructInPlace();
                     }
 
-                    pqInfo.KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
+                    pqInfo->KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
+                }
+
+                if (rowset.HaveValue<Schema::PersQueues::Status>()) {
+                    pqInfo->SetStatus(ctx, rowset.GetValue<Schema::PersQueues::Status>());
+                } else {
+                    pqInfo->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+                }
+
+                if (rowset.HaveValue<Schema::PersQueues::Parent>() &&
+                    rowset.GetValue<Schema::PersQueues::Parent>() != Max<ui32>()) {
+                    pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::Parent>());
+                }
+                if (rowset.HaveValue<Schema::PersQueues::AdjacentParent>() &&
+                    rowset.GetValue<Schema::PersQueues::AdjacentParent>() != Max<ui32>()) {
+                    pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::AdjacentParent>());
                 }
 
                 auto it = Self->Topics.find(pathId);
                 Y_VERIFY(it != Self->Topics.end());
                 Y_VERIFY(it->second);
                 TTopicInfo::TPtr pqGroup = it->second;
-                if (pqInfo.AlterVersion <= pqGroup->AlterVersion)
+                if (pqInfo->AlterVersion <= pqGroup->AlterVersion)
                     ++pqGroup->TotalPartitionCount;
-                if (pqInfo.PqId >= pqGroup->NextPartitionId) {
-                    pqGroup->NextPartitionId = pqInfo.PqId + 1;
-                    pqGroup->TotalGroupCount = pqInfo.PqId + 1;
+                if (pqInfo->PqId >= pqGroup->NextPartitionId) {
+                    pqGroup->NextPartitionId = pqInfo->PqId + 1;
+                    pqGroup->TotalGroupCount = pqInfo->PqId + 1;
                 }
 
-                TTopicTabletInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
-                if (!pqShard) {
-                    pqShard.Reset(new TTopicTabletInfo());
-                }
-                pqShard->Partitions.push_back(pqInfo);
+                pqGroup->AddPartition(shardIdx, pqInfo.Release());
 
                 if (!rowset.Next())
                     return false;
+            }
+
+            // Initializing partition split/merge graph
+            for (auto& [_, topic] : Self->Topics) {
+                topic->InitSplitMergeGraph();
             }
         }
 

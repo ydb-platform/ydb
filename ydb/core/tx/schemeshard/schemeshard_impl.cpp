@@ -2508,7 +2508,7 @@ void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId path
 
         for (const auto& shard : pqGroup->Shards) {
             for (const auto& pqInfo : shard.second->Partitions) {
-                PersistRemovePersQueue(db, pathId, pqInfo.PqId);
+                PersistRemovePersQueue(db, pathId, pqInfo->PqId);
             }
         }
 
@@ -2541,10 +2541,20 @@ void TSchemeShard::PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId
 void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo) {
     Y_VERIFY(IsLocalId(pathId));
 
-    db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, pqInfo.PqId).Update(
-        NIceDb::TUpdate<Schema::PersQueues::ShardIdx>(shardIdx.GetLocalId()),
-        NIceDb::TUpdate<Schema::PersQueues::GroupId>(pqInfo.GroupId),
-        NIceDb::TUpdate<Schema::PersQueues::AlterVersion>(pqInfo.AlterVersion));
+    Y_VERIFY(pqInfo.ParentPartitionIds.size() <= 2);
+    auto it = pqInfo.ParentPartitionIds.begin();
+    const auto parent = it != pqInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+    const auto adjacentParent = it != pqInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+
+    db.Table<Schema::PersQueues>()
+        .Key(pathId.LocalPathId, pqInfo.PqId)
+        .Update(NIceDb::TUpdate<Schema::PersQueues::ShardIdx>(shardIdx.GetLocalId()),
+                NIceDb::TUpdate<Schema::PersQueues::GroupId>(pqInfo.GroupId),
+                NIceDb::TUpdate<Schema::PersQueues::AlterVersion>(pqInfo.AlterVersion),
+                NIceDb::TUpdate<Schema::PersQueues::CreateVersion>(pqInfo.CreateVersion),
+                NIceDb::TUpdate<Schema::PersQueues::Status>(pqInfo.Status),
+                NIceDb::TUpdate<Schema::PersQueues::Parent>(parent),
+                NIceDb::TUpdate<Schema::PersQueues::AdjacentParent>(adjacentParent));
 
     if (pqInfo.KeyRange) {
         if (pqInfo.KeyRange->FromBound) {

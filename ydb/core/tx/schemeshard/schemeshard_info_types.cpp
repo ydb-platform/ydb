@@ -1939,6 +1939,16 @@ void TTopicTabletInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange
     }
 }
 
+void TTopicTabletInfo::TKeyRange::DeserializeFromProto(const NKikimrPQ::TPartitionKeyRange& proto) {
+    if (proto.HasFromBound()) {
+        FromBound = proto.GetFromBound();
+    }
+
+    if (proto.HasToBound()) {
+        ToBound = proto.GetToBound();
+    }
+}
+
 bool TTopicInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error) {
     KeySchema.clear();
     KeySchema.reserve(tabletConfig.PartitionKeySchemaSize());

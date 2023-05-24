@@ -144,6 +144,14 @@ public:
             return result;
         }
 
+        if (allocateDesc.HasPQTabletConfig() && allocateDesc.GetPQTabletConfig().HasPartitionStrategy()) {
+            const auto strategy = allocateDesc.GetPQTabletConfig().GetPartitionStrategy();
+            if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+                errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
+                return nullptr;
+            }
+        }
+
         pqGroupInfo->TotalPartitionCount = allocateDesc.PartitionsSize();
         if (pqGroupInfo->TotalPartitionCount != pqGroupInfo->TotalGroupCount) {
             auto errStr = TStringBuilder() << "not all partitions has beed described, there is only: " << pqGroupInfo->TotalPartitionCount;
@@ -360,20 +368,33 @@ public:
             pqGroupInfo->Shards[idx] = pqShard;
         }
 
-        for (const auto& item: partitionToGroupAndTablet) {
-            ui64 partId = item.first;
-            ui64 groupId = item.second.first;
-            auto tabletId = item.second.second;
+        for (auto& partition : allocateDesc.GetPartitions()) {
+            const auto& p = partitionToGroupAndTablet[partition.GetPartitionId()];
+
+            ui64 partId = partition.GetPartitionId();
+            ui64 groupId = p.first;
+            auto tabletId = p.second;
 
             auto idx = context.SS->TabletIdToShardIdx.at(tabletId);
-            TTopicTabletInfo::TPtr pqShard = pqGroupInfo->Shards.at(idx);
 
-            TTopicTabletInfo::TTopicPartitionInfo pqInfo;
-            pqInfo.PqId = partId;
-            pqInfo.GroupId = groupId;
-            pqInfo.AlterVersion = pqGroupInfo->AlterVersion;
-            pqShard->Partitions.push_back(pqInfo);
+            auto pqInfo = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+            pqInfo->PqId = partId;
+            pqInfo->GroupId = groupId;
+            pqInfo->AlterVersion = pqGroupInfo->AlterVersion;
+
+            pqInfo->Status = partition.GetStatus();
+            for (const auto parent : partition.GetParentPartitionIds()) {
+                pqInfo->ParentPartitionIds.emplace(parent);
+            }
+            if (partition.HasKeyRange()) {
+                pqInfo->KeyRange.ConstructInPlace();
+                (*pqInfo->KeyRange).DeserializeFromProto(partition.GetKeyRange());
+            }
+
+            pqGroupInfo->AddPartition(idx, pqInfo.Release());
         }
+
+        pqGroupInfo->InitSplitMergeGraph();
 
         {
             const auto balancerIdx = context.SS->NextShardIdx(startShardIdx, shardsToCreate-1);
@@ -394,7 +415,7 @@ public:
         for (auto& shard : pqGroupInfo->Shards) {
             auto shardIdx = shard.first;
             for (const auto& pqInfo : shard.second->Partitions) {
-                context.SS->PersistPersQueue(db, pathId, shardIdx, pqInfo);
+                context.SS->PersistPersQueue(db, pathId, shardIdx, *pqInfo);
             }
         }
 

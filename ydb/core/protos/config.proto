@@ -806,6 +806,7 @@ message TFeatureFlags {
     optional bool EnableScriptExecutionOperations = 92 [default = false];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
+    optional bool EnableTopicSplitMerge = 95 [default = false];
 }
 
 

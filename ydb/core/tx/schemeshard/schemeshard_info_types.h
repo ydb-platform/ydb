@@ -1028,16 +1028,42 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         TMaybe<TString> ToBound;
 
         void SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const;
+        void DeserializeFromProto(const NKikimrPQ::TPartitionKeyRange& proto);
     };
 
     struct TTopicPartitionInfo {
+        // Partition id
         ui32 PqId = 0;
         ui32 GroupId = 0;
+        // AlterVersion of topic which partition was updated last.
         ui64 AlterVersion = 0;
+        // AlterVersion of topic which partition was created.
+        // For example, it required for generate "timebased" offsets for kinesis protocol.
+        ui64 CreateVersion;
+
+        NKikimrPQ::ETopicPartitionStatus Status = NKikimrPQ::ETopicPartitionStatus::Active;
+
         TMaybe<TKeyRange> KeyRange;
+
+        // Split and merge operations form the partitions graph. Each partition created in this way has a parent
+        // partition. In turn, the parent partition knows about the partitions formed after the split and merge
+        // operations.
+        THashSet<ui32> ParentPartitionIds;
+        THashSet<ui32> ChildPartitionIds;
+
+        void SetStatus(const TActorContext& ctx, ui32 value) {
+            if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
+                value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
+                Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
+            } else {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Read unknown topic partition status value " << value);
+                Status = NKikimrPQ::ETopicPartitionStatus::Active;
+            }
+        }
     };
 
-    TVector<TTopicPartitionInfo> Partitions;
+    TVector<TAutoPtr<TTopicPartitionInfo>> Partitions;
 
     size_t PartsCount() const {
         return Partitions.size();
@@ -1172,12 +1198,14 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         ui32 PartitionId;
         ui32 GroupId;
         TMaybe<TKeyRange> KeyRange;
+        THashSet<ui32> ParentPartitionIds;
 
-        explicit TPartitionToAdd(ui32 partitionId, ui32 groupId, const TMaybe<TKeyRange>& keyRange = Nothing())
+        explicit TPartitionToAdd(ui32 partitionId, ui32 groupId, const TMaybe<TKeyRange>& keyRange = Nothing(),
+                                 const THashSet<ui32>& parentPartitionIds = {})
             : PartitionId(partitionId)
             , GroupId(groupId)
             , KeyRange(keyRange)
-        {
+            , ParentPartitionIds(parentPartitionIds) {
         }
 
         bool operator==(const TPartitionToAdd& rhs) const {
@@ -1207,11 +1235,41 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTopicInfo::TPtr AlterData; // changes to be applied
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
+    THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
 
     TTopicStats Stats;
+
+    void AddPartition(TShardIdx shardIdx, TTopicTabletInfo::TTopicPartitionInfo* partition) {
+        TTopicTabletInfo::TPtr& pqShard = Shards[shardIdx];
+        if (!pqShard) {
+            pqShard.Reset(new TTopicTabletInfo());
+        }
+        pqShard->Partitions.push_back(partition);
+        Partitions[partition->PqId] = pqShard->Partitions.back().Get();
+    }
+
+    void UpdateSplitMergeGraph(const TTopicTabletInfo::TTopicPartitionInfo& partition) {
+        for (const auto parent : partition.ParentPartitionIds) {
+            auto it = Partitions.find(parent);
+            Y_VERIFY(it != Partitions.end(),
+                     "Partition %" PRIu32 " has parent partition %" PRIu32 " which doesn't exists", partition.GroupId,
+                     parent);
+            it->second->ChildPartitionIds.emplace(partition.PqId);
+        }
+    }
+
+    void InitSplitMergeGraph() {
+        for (const auto& [_, partition] : Partitions) {
+            UpdateSplitMergeGraph(*partition);
+        }
+    }
+
+    bool SupportSplitMerge() {
+        return KeySchema.empty();
+    }
 
     bool FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error);
     bool FillKeySchema(const TString& tabletConfig);
@@ -1272,6 +1330,15 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         BalancerTabletID = AlterData->BalancerTabletID;
         BalancerShardIdx = AlterData->BalancerShardIdx;
         AlterData.Reset();
+
+        Partitions.clear();
+        for (const auto& [_, shard] : Shards) {
+            for (auto& partition : shard->Partitions) {
+                Partitions[partition->PqId] = partition.Get();
+            }
+        }
+
+        InitSplitMergeGraph();
     }
 };
 

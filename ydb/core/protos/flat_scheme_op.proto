@@ -983,6 +983,10 @@ message TPersQueueGroupAllocate {
 
         optional uint64 OwnerId = 4;
         optional uint64 ShardId = 5;
+
+        optional NKikimrPQ.ETopicPartitionStatus Status = 6;
+        repeated uint32 ParentPartitionIds = 7;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
     }
 
     optional string Name = 1;
@@ -1005,10 +1009,14 @@ message TPersQueueGroupDeallocate {
 }
 
 message TPersQueueGroupDescription {
+
     message TPartition {
         optional uint32 PartitionId = 1;
         optional uint64 TabletId = 2;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 3;
+        optional NKikimrPQ.ETopicPartitionStatus Status = 4;
+        repeated uint32 ParentPartitionIds = 5;
+        repeated uint32 ChildPartitionIds = 6;
     }
 
     optional string Name = 1; // mandatory
@@ -1036,6 +1044,18 @@ message TPersQueueGroupDescription {
     optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
 
     optional TPersQueueGroupAllocate Allocate = 14;
+
+    message TPartitionSplit {
+        required uint32 Partition = 1;
+        required bytes SplitBoundary = 2;
+    }
+    repeated TPartitionSplit Split = 15;
+
+    message TPartitionMerge {
+        required uint32 Partition = 1;
+        required uint32 AdjacentPartition = 2;
+    }
+    repeated TPartitionMerge Merge = 16;
 }
 
 message TRtmrVolumeDescription {

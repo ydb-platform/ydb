@@ -1,6 +1,10 @@
 #include "blob.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <util/generic/size_literals.h>
+#include <util/stream/format.h>
+
 
 namespace NKikimr::NPQ {
 namespace {
@@ -198,6 +202,29 @@ Y_UNIT_TEST(TestBatchPacking) {
     batch3.Unpack();
     Y_VERIFY(batch3.Blobs.size() == 1);
 }
+
+const TString ToHex(const TString& value) {
+    return TStringBuilder() << HexText(TBasicStringBuf(value));
+}
+
+Y_UNIT_TEST(TestKeyRange) {
+    char expected_[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 
+                        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18};
+    TString expected(expected_, sizeof(expected_));
+
+    NYql::TWide<ui64> v (0x0102030405060708ull, 0x1112131415161718ull);
+
+    TString result = AsKeyBound(v);
+
+    UNIT_ASSERT_STRINGS_EQUAL(ToHex(result), ToHex(expected));
+
+    NYql::NDecimal::TUint128 v2 = 0x0102030405060708ull;
+    v2 <<= sizeof(ui64) << 3;
+    v2 |= 0x1112131415161718ull;
+    result = AsKeyBound(v2);
+
+    UNIT_ASSERT_STRINGS_EQUAL(ToHex(result), ToHex(expected));
+} // Y_UNIT_TEST(TestKeyRange)
 
 
 } //Y_UNIT_TEST_SUITE

@@ -454,9 +454,16 @@ struct Schema : NIceDb::Schema {
         struct GroupId :        Column<5, NScheme::NTypeIds::Uint32> {};
         struct RangeBegin :     Column<6, NScheme::NTypeIds::String> { using Type = TString; };
         struct RangeEnd :       Column<7, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CreateVersion:   Column<8, NScheme::NTypeIds::Uint64> {};
+        struct Status:          Column<9, NScheme::NTypeIds::Uint32> {};
+        // Parent partition for split and merge operations
+        struct Parent:          Column<10, NScheme::NTypeIds::Uint32> {};
+        // Adjacent parent partition for merge operation
+        struct AdjacentParent:  Column<11, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<PathId, PqId>;
-        using TColumns = TableColumns<PathId, PqId, ShardIdx, AlterVersion, GroupId, RangeBegin, RangeEnd>;
+        using TColumns = TableColumns<PathId, PqId, ShardIdx, AlterVersion, GroupId, RangeBegin, RangeEnd,
+                                      CreateVersion, Status, Parent, AdjacentParent>;
     };
 
     struct RtmrVolumes : Table<20> {

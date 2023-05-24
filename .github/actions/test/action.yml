@@ -92,7 +92,7 @@ runs:
     run: |
       cd $WORKDIR/../build/ydb
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): ${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       

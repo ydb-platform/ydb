@@ -127,6 +127,12 @@ def gen_report(suites, out_path: Path, copy_logs):
 <html>
 <head>
     <style>{get_resource("style.css")}</style>
+    <title>YDB Tests report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="font" href="https://fonts.gstatic.com/s/robotomono/v22/L0xTDF4xlVMF-BfR8bXMIhJHg45mwgGEFl0_3vrtSM1J-gEPT5Ese6hmHSh0me8iUI0.woff2" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap">
 </head>
 <body>
     <table>

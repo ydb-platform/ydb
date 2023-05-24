@@ -33,6 +33,10 @@ th, td {
     text-align: right;
 
 }
+tbody > tr {
+    font-family: 'Roboto Mono', monospace;
+}
+
 tr.suite {
     background-color: #eeeeee;
     /*cursor: pointer;*/

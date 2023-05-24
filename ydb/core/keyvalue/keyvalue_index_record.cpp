@@ -11,8 +11,8 @@ TIndexRecord::TChainItem::TChainItem(const TLogoBlobID &id, ui64 offset)
 {
 }
 
-TIndexRecord::TChainItem::TChainItem(TString &inlineData, ui64 offset)
-    : InlineData(inlineData)
+TIndexRecord::TChainItem::TChainItem(TRcBuf&& inlineData, ui64 offset)
+    : InlineData(std::move(inlineData))
     , Offset(offset)
 {
 }
@@ -218,10 +218,10 @@ bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
                 outErrorInfo = " Deserialization error# DEA4";
                 return false;
             }
-            TString inlineData = TString::Uninitialized(size);
-            memcpy(const_cast<char *>(inlineData.data()), data->Serialized + offset, size);
+            TRcBuf inlineData = TRcBuf::Uninitialized(size);
+            memcpy(inlineData.GetDataMut(), data->Serialized + offset, size);
             offset += size;
-            Chain.push_back(TIndexRecord::TChainItem(inlineData, chainOffset));
+            Chain.push_back(TIndexRecord::TChainItem(std::move(inlineData), chainOffset));
             chainOffset += size;
         }
     }

@@ -185,6 +185,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterExternalDataSource = 150          [(CounterOpts) = {Name: "InFlightOps/AlterExternalDataSource"}];
 
     COUNTER_PQ_STATS_QUEUE_SIZE = 151                         [(CounterOpts) = {Name: "PQStatsQueueSize"}];
+    COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES = 152               [(CounterOpts) = {Name: "DiskSpaceTopicsTotalBytes"}];
 }
 
 enum ECumulativeCounters {

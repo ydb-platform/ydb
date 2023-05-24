@@ -260,6 +260,7 @@ struct TTabletPreparationParameters {
     TString databaseId{"PQ"};
     TString databasePath{"/Root/PQ"};
     TString account{"federationAccount"};
+    ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,

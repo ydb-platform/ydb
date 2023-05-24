@@ -6690,6 +6690,10 @@ void TSchemeShard::ChangeDiskSpaceTablesTotalBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES].Add(delta);
 }
 
+void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
+}
+
 void TSchemeShard::ChangeDiskSpaceQuotaExceeded(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_QUOTA_EXCEEDED].Add(delta);
 }

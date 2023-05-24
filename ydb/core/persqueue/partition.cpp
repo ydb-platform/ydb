@@ -181,9 +181,23 @@ ui64 TPartition::MeteringDataSize(const TActorContext& ctx) const {
     return size;
 }
 
+ui64 TPartition::ReserveSize() const {
+    return TopicPartitionReserveSize(Config);
+}
+
+ui64 TPartition::StorageSize(const TActorContext& ctx) const {
+    return std::max<ui64>(MeteringDataSize(ctx), ReserveSize());
+}
+
+ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
+    return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
+}
+
+
 ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
-    auto duration = ctx.Now() - LastUsedStorageMeterTimestamp;
-    LastUsedStorageMeterTimestamp = ctx.Now();
+    const auto now = ctx.Now(); 
+    const auto duration = now - LastUsedStorageMeterTimestamp;
+    LastUsedStorageMeterTimestamp = now;
     ui64 size = MeteringDataSize(ctx);
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
@@ -203,7 +217,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ProcessHasDataRequests(ctx);
 
-    auto now = ctx.Now();
+    const auto now = ctx.Now();
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
         userInfo.second.UpdateReadingTimeAndState(now);
         for (auto& avg : userInfo.second.AvgReadBytes) {
@@ -237,8 +251,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     }
 
     if (haveChanges) {
-        WriteCycleStartTime = ctx.Now();
-        WriteStartTime = ctx.Now();
+        WriteCycleStartTime = now;
+        WriteStartTime = now;
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
         Become(&TThis::StateWrite);
@@ -1178,11 +1192,25 @@ bool TPartition::UpdateCounters(const TActorContext& ctx) {
         }
     }
 
-    ui64 partSize = Size();
-    if (partSize != PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
+    ui64 storageSize = StorageSize(ctx);
+    if (storageSize != PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
         haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MAX_PART_SIZE].Set(partSize);
-        PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(partSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_MAX_PART_SIZE].Set(storageSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(storageSize);
+    }
+
+    if (NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY == Config.GetMeteringMode()) {
+        ui64 reserveSize = ReserveSize();
+        if (reserveSize != PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_LIMIT_BYTES].Get()) {
+            haveChanges = true;
+            PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_LIMIT_BYTES].Set(reserveSize);
+        }
+
+        ui64 reserveUsed = UsedReserveSize(ctx);
+        if (reserveUsed != PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_USED_BYTES].Get()) {
+            haveChanges = true;
+            PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_USED_BYTES].Set(reserveUsed);
+        }
     }
 
     ui64 ts = (WriteTimestamp.MilliSeconds() < MIN_TIMESTAMP_MS) ? Max<i64>() : WriteTimestamp.MilliSeconds();

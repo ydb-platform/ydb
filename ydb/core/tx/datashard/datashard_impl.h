@@ -2592,6 +2592,11 @@ private:
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
+    TList<std::pair<TActorId, NKikimrChangeExchange::TEvHandshake>> PendingChangeExchangeHandshakes;
+    bool ChangeExchangeHandshakeTxScheduled = false;
+
+    void RunChangeExchangeHandshakeTx();
+    bool ChangeExchangeHandshakeExecuted(bool result);
 
     // compactionId, actorId
     using TCompactionWaiter = std::tuple<ui64, TActorId>;

@@ -7,11 +7,11 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxChangeExchangeHandshake: public TTransactionBase<TDataShard> {
     using Schema = TDataShard::Schema;
+    static constexpr ui64 MaxPrechargeRows = 10000;
 
 public:
-    explicit TTxChangeExchangeHandshake(TDataShard* self, TEvChangeExchange::TEvHandshake::TPtr ev)
+    explicit TTxChangeExchangeHandshake(TDataShard* self)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
         , Status(new TEvChangeExchange::TEvStatus)
     {
     }
@@ -21,13 +21,15 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Y_VERIFY(!Self->PendingChangeExchangeHandshakes.empty());
+        const auto& [sender, msg] = Self->PendingChangeExchangeHandshakes.front();
+        Sender = sender;
+
         if (Self->State != TShardState::Ready) {
             Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             Status->Record.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
-            return true;
+            return Self->ChangeExchangeHandshakeExecuted(true);
         }
-
-        const auto& msg = Ev->Get()->Record;
 
         auto it = Self->InChangeSenders.find(msg.GetOrigin());
         if (it == Self->InChangeSenders.end()) {
@@ -35,6 +37,7 @@ public:
 
             auto rowset = db.Table<Schema::ChangeSenders>().Key(msg.GetOrigin()).Select();
             if (!rowset.IsReady()) {
+                db.Table<Schema::ChangeSenders>().Range().Precharge(MaxPrechargeRows);
                 return false;
             }
 
@@ -62,16 +65,17 @@ public:
             );
         }
 
-        return true;
+        return Self->ChangeExchangeHandshakeExecuted(true);
     }
 
     void Complete(const TActorContext& ctx) override {
+        Y_VERIFY(Sender);
         Y_VERIFY(Status);
-        ctx.Send(Ev->Sender, Status.Release());
+        ctx.Send(Sender, Status.Release());
     }
 
 private:
-    TEvChangeExchange::TEvHandshake::TPtr Ev;
+    TActorId Sender;
     THolder<TEvChangeExchange::TEvStatus> Status;
 
 }; // TTxChangeExchangeHandshake
@@ -354,8 +358,23 @@ private:
 
 }; // TTxApplyChangeRecords
 
-void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxChangeExchangeHandshake(this, ev), ctx);
+void TDataShard::RunChangeExchangeHandshakeTx() {
+    if (!ChangeExchangeHandshakeTxScheduled && !PendingChangeExchangeHandshakes.empty()) {
+        ChangeExchangeHandshakeTxScheduled = true;
+        EnqueueExecute(new TTxChangeExchangeHandshake(this));
+    }
+}
+
+bool TDataShard::ChangeExchangeHandshakeExecuted(bool result) {
+    PendingChangeExchangeHandshakes.pop_front();
+    ChangeExchangeHandshakeTxScheduled = false;
+    RunChangeExchangeHandshakeTx();
+    return result;
+}
+
+void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext&) {
+    PendingChangeExchangeHandshakes.emplace_back(ev->Sender, std::move(ev->Get()->Record));
+    RunChangeExchangeHandshakeTx();
 }
 
 void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx) {

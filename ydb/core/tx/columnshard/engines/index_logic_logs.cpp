@@ -82,7 +82,7 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
     std::vector<TPortionInfo> out;
 
     TString tierName;
-    std::optional<TCompression> compression;
+    std::optional<NArrow::TCompression> compression;
     if (pathId) {
         if (auto* tiering = GetTieringMap().FindPtr(pathId)) {
             tierName = tiering->GetHottestTierName();

@@ -115,8 +115,8 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 {
 }
 
-NKikimr::NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
-    auto out = NOlap::TCompression::BuildFromProto(compression);
+NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
+    auto out = NArrow::TCompression::BuildFromProto(compression);
     Y_VERIFY(out, "%s", out.GetErrorMessage().data());
     return *out;
 }

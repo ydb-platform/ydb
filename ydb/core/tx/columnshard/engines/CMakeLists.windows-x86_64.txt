@@ -9,6 +9,12 @@
 add_subdirectory(predicate)
 add_subdirectory(reader)
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(tx-columnshard-engines)
 target_compile_options(tx-columnshard-engines PRIVATE
@@ -28,6 +34,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-predicate
   formats-arrow-compression
   udf-service-exception_policy
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
@@ -41,4 +48,9 @@ target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scalars.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/tier_info.cpp
+)
+generate_enum_serilization(tx-columnshard-engines
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/portion_info.h
 )

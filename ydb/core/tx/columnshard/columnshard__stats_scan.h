@@ -67,9 +67,6 @@ private:
 
     TMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
 
-    static constexpr const ui64 NUM_KINDS = 5;
-    static_assert(NUM_KINDS == NOlap::TPortionMeta::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
-
     std::shared_ptr<arrow::RecordBatch> FillStatsBatch();
 
     void ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& batch);

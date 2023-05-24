@@ -11,8 +11,6 @@
 
 namespace NKikimr::NOlap {
 
-using TCompression = NArrow::TCompression;
-
 class TTierInfo {
 private:
     TString Name;
@@ -21,7 +19,7 @@ private:
     bool NeedExport = false;
 
     ui32 TtlUnitsInSecond;
-    std::optional<TCompression> Compression;
+    std::optional<NArrow::TCompression> Compression;
     mutable std::shared_ptr<arrow::Scalar> Scalar;
 
 public:
@@ -56,12 +54,12 @@ public:
         return *this;
     }
 
-    TTierInfo& SetCompression(const TCompression& value) {
+    TTierInfo& SetCompression(const NArrow::TCompression& value) {
         Compression = value;
         return *this;
     }
 
-    const std::optional<TCompression> GetCompression() const {
+    const std::optional<NArrow::TCompression> GetCompression() const {
         if (NeedExport) {
             return {};
         }
@@ -194,7 +192,7 @@ public:
         return NArrow::ScalarLess(ttlTs, tierTs) ? tierTs : ttlTs; // either TTL or tier border appear
     }
 
-    std::optional<TCompression> GetCompression(const TString& name) const {
+    std::optional<NArrow::TCompression> GetCompression(const TString& name) const {
         auto it = TierByName.find(name);
         if (it != TierByName.end()) {
             Y_VERIFY(!name.empty());

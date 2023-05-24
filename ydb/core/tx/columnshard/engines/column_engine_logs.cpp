@@ -196,11 +196,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimit
 }
 
 ui64 TColumnEngineForLogs::MemoryUsage() const {
-    ui64 numPortions = Counters.Inserted.Portions +
-        Counters.Compacted.Portions +
-        Counters.SplitCompacted.Portions +
-        Counters.Inactive.Portions +
-        Counters.Evicted.Portions;
+    auto numPortions = Counters.GetPortionsCount();
 
     return Counters.Granules * (sizeof(TGranuleMeta) + sizeof(ui64)) +
         numPortions * (sizeof(TPortionInfo) + sizeof(ui64)) +
@@ -242,81 +238,49 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 
 void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                                               EStatsUpdateType updateType) const {
+    TColumnEngineStats::TPortionsStats deltaStats;
     ui64 columnRecords = portionInfo.Records.size();
     ui64 metadataBytes = 0;
     THashSet<TUnifiedBlobId> blobs;
     for (auto& rec : portionInfo.Records) {
         metadataBytes += rec.Metadata.size();
         blobs.insert(rec.BlobRange.BlobId);
+        deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
     }
-
-    ui32 rows = portionInfo.NumRows();
-    ui64 rawBytes = portionInfo.RawBytesSum();
-    ui64 bytes = 0;
+    for (auto& rec : portionInfo.Meta.ColumnMeta) {
+        deltaStats.RawBytesByColumn[rec.first] += rec.second.RawBytes;
+    }
+    deltaStats.Rows = portionInfo.NumRows();
+    deltaStats.RawBytes = portionInfo.RawBytesSum();
+    deltaStats.Bytes = 0;
     for (auto& blobId : blobs) {
-        bytes += blobId.BlobSize();
+        deltaStats.Bytes += blobId.BlobSize();
     }
-
-    TColumnEngineStats::TPortionsStats* srcStats = nullptr;
-    switch (portionInfo.Meta.Produced) {
-        case NOlap::TPortionMeta::UNSPECIFIED:
-            Y_VERIFY(false); // unexpected
-        case NOlap::TPortionMeta::INSERTED:
-            srcStats = &engineStats.Inserted;
-            break;
-        case NOlap::TPortionMeta::COMPACTED:
-            srcStats = &engineStats.Compacted;
-            break;
-        case NOlap::TPortionMeta::SPLIT_COMPACTED:
-            srcStats = &engineStats.SplitCompacted;
-            break;
-        case NOlap::TPortionMeta::INACTIVE:
-            Y_VERIFY_DEBUG(false); // Stale portions are not set INACTIVE. They have IsActive() property instead.
-            srcStats = &engineStats.Inactive;
-            break;
-        case NOlap::TPortionMeta::EVICTED:
-            srcStats = &engineStats.Evicted;
-            break;
-    }
-    Y_VERIFY(srcStats);
+    deltaStats.Blobs = blobs.size();
+    deltaStats.Portions = 1;
+    Y_VERIFY(portionInfo.Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
+    TColumnEngineStats::TPortionsStats& srcStats = engineStats.StatsByType[portionInfo.Meta.Produced];
     auto* stats = (updateType == EStatsUpdateType::EVICT)
-        ? &engineStats.Evicted
-        : (portionInfo.IsActive() ? srcStats : &engineStats.Inactive);
+        ? &engineStats.StatsByType[TPortionMeta::EProduced::EVICTED]
+        : (portionInfo.IsActive() ? &srcStats : &engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE]);
 
-    bool isErase = updateType == EStatsUpdateType::ERASE;
-    bool isLoad = updateType == EStatsUpdateType::LOAD;
-    bool isAppended = portionInfo.IsActive() && (updateType != EStatsUpdateType::EVICT);
+    const bool isErase = updateType == EStatsUpdateType::ERASE;
+    const bool isLoad = updateType == EStatsUpdateType::LOAD;
+    const bool isAppended = portionInfo.IsActive() && (updateType != EStatsUpdateType::EVICT);
 
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
         engineStats.ColumnMetadataBytes -= metadataBytes;
 
-        --stats->Portions;
-        stats->Blobs -= blobs.size();
-        stats->Rows -= rows;
-        stats->Bytes -= bytes;
-        stats->RawBytes -= rawBytes;
+        *stats -= deltaStats;
     } else if (isLoad || isAppended) { // AppendedPortions
         engineStats.ColumnRecords += columnRecords;
         engineStats.ColumnMetadataBytes += metadataBytes;
 
-        ++stats->Portions;
-        stats->Blobs += blobs.size();
-        stats->Rows += rows;
-        stats->Bytes += bytes;
-        stats->RawBytes += rawBytes;
+        *stats += deltaStats;
     } else { // SwitchedPortions || PortionsToEvict
-        --srcStats->Portions;
-        srcStats->Blobs -= blobs.size();
-        srcStats->Rows -= rows;
-        srcStats->Bytes -= bytes;
-        srcStats->RawBytes -= rawBytes;
-
-        ++stats->Portions;
-        stats->Blobs += blobs.size();
-        stats->Rows += rows;
-        stats->Bytes += bytes;
-        stats->RawBytes += rawBytes;
+        srcStats -= deltaStats;
+        (*stats) += deltaStats;
     }
 }
 

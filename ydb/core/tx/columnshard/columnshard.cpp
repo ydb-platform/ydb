@@ -204,39 +204,39 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_INDEX_OVERLOADED_GRANULES, stats.OverloadedGranules);
     SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
     SetCounter(COUNTER_INDEX_COLUMN_METADATA_BYTES, stats.ColumnMetadataBytes);
-    SetCounter(COUNTER_INSERTED_PORTIONS, stats.Inserted.Portions);
-    SetCounter(COUNTER_INSERTED_BLOBS, stats.Inserted.Blobs);
-    SetCounter(COUNTER_INSERTED_ROWS, stats.Inserted.Rows);
-    SetCounter(COUNTER_INSERTED_BYTES, stats.Inserted.Bytes);
-    SetCounter(COUNTER_INSERTED_RAW_BYTES, stats.Inserted.RawBytes);
-    SetCounter(COUNTER_COMPACTED_PORTIONS, stats.Compacted.Portions);
-    SetCounter(COUNTER_COMPACTED_BLOBS, stats.Compacted.Blobs);
-    SetCounter(COUNTER_COMPACTED_ROWS, stats.Compacted.Rows);
-    SetCounter(COUNTER_COMPACTED_BYTES, stats.Compacted.Bytes);
-    SetCounter(COUNTER_COMPACTED_RAW_BYTES, stats.Compacted.RawBytes);
-    SetCounter(COUNTER_SPLIT_COMPACTED_PORTIONS, stats.SplitCompacted.Portions);
-    SetCounter(COUNTER_SPLIT_COMPACTED_BLOBS, stats.SplitCompacted.Blobs);
-    SetCounter(COUNTER_SPLIT_COMPACTED_ROWS, stats.SplitCompacted.Rows);
-    SetCounter(COUNTER_SPLIT_COMPACTED_BYTES, stats.SplitCompacted.Bytes);
-    SetCounter(COUNTER_SPLIT_COMPACTED_RAW_BYTES, stats.SplitCompacted.RawBytes);
-    SetCounter(COUNTER_INACTIVE_PORTIONS, stats.Inactive.Portions);
-    SetCounter(COUNTER_INACTIVE_BLOBS, stats.Inactive.Blobs);
-    SetCounter(COUNTER_INACTIVE_ROWS, stats.Inactive.Rows);
-    SetCounter(COUNTER_INACTIVE_BYTES, stats.Inactive.Bytes);
-    SetCounter(COUNTER_INACTIVE_RAW_BYTES, stats.Inactive.RawBytes);
-    SetCounter(COUNTER_EVICTED_PORTIONS, stats.Evicted.Portions);
-    SetCounter(COUNTER_EVICTED_BLOBS, stats.Evicted.Blobs);
-    SetCounter(COUNTER_EVICTED_ROWS, stats.Evicted.Rows);
-    SetCounter(COUNTER_EVICTED_BYTES, stats.Evicted.Bytes);
-    SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.Evicted.RawBytes);
+    SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
+    SetCounter(COUNTER_INSERTED_BLOBS, stats.GetInsertedStats().Blobs);
+    SetCounter(COUNTER_INSERTED_ROWS, stats.GetInsertedStats().Rows);
+    SetCounter(COUNTER_INSERTED_BYTES, stats.GetInsertedStats().Bytes);
+    SetCounter(COUNTER_INSERTED_RAW_BYTES, stats.GetInsertedStats().RawBytes);
+    SetCounter(COUNTER_COMPACTED_PORTIONS, stats.GetCompactedStats().Portions);
+    SetCounter(COUNTER_COMPACTED_BLOBS, stats.GetCompactedStats().Blobs);
+    SetCounter(COUNTER_COMPACTED_ROWS, stats.GetCompactedStats().Rows);
+    SetCounter(COUNTER_COMPACTED_BYTES, stats.GetCompactedStats().Bytes);
+    SetCounter(COUNTER_COMPACTED_RAW_BYTES, stats.GetCompactedStats().RawBytes);
+    SetCounter(COUNTER_SPLIT_COMPACTED_PORTIONS, stats.GetSplitCompactedStats().Portions);
+    SetCounter(COUNTER_SPLIT_COMPACTED_BLOBS, stats.GetSplitCompactedStats().Blobs);
+    SetCounter(COUNTER_SPLIT_COMPACTED_ROWS, stats.GetSplitCompactedStats().Rows);
+    SetCounter(COUNTER_SPLIT_COMPACTED_BYTES, stats.GetSplitCompactedStats().Bytes);
+    SetCounter(COUNTER_SPLIT_COMPACTED_RAW_BYTES, stats.GetSplitCompactedStats().RawBytes);
+    SetCounter(COUNTER_INACTIVE_PORTIONS, stats.GetInactiveStats().Portions);
+    SetCounter(COUNTER_INACTIVE_BLOBS, stats.GetInactiveStats().Blobs);
+    SetCounter(COUNTER_INACTIVE_ROWS, stats.GetInactiveStats().Rows);
+    SetCounter(COUNTER_INACTIVE_BYTES, stats.GetInactiveStats().Bytes);
+    SetCounter(COUNTER_INACTIVE_RAW_BYTES, stats.GetInactiveStats().RawBytes);
+    SetCounter(COUNTER_EVICTED_PORTIONS, stats.GetEvictedStats().Portions);
+    SetCounter(COUNTER_EVICTED_BLOBS, stats.GetEvictedStats().Blobs);
+    SetCounter(COUNTER_EVICTED_ROWS, stats.GetEvictedStats().Rows);
+    SetCounter(COUNTER_EVICTED_BYTES, stats.GetEvictedStats().Bytes);
+    SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.GetEvictedStats().RawBytes);
 
     LOG_S_DEBUG("Index: tables " << stats.Tables
         << " granules " << stats.Granules << " (empty " << stats.EmptyGranules << " overloaded " << stats.OverloadedGranules << ")"
-        << " inserted " << stats.Inserted.Portions << "/" << stats.Inserted.Blobs << "/" << stats.Inserted.Rows
-        << " compacted " << stats.Compacted.Portions << "/" << stats.Compacted.Blobs << "/" << stats.Compacted.Rows
-        << " s-compacted " << stats.SplitCompacted.Portions << "/" << stats.SplitCompacted.Blobs << "/" << stats.SplitCompacted.Rows
-        << " inactive " << stats.Inactive.Portions << "/" << stats.Inactive.Blobs << "/" << stats.Inactive.Rows
-        << " evicted " << stats.Evicted.Portions << "/" << stats.Evicted.Blobs << "/" << stats.Evicted.Rows
+        << " inserted " << stats.GetInsertedStats().DebugString()
+        << " compacted " << stats.GetCompactedStats().DebugString()
+        << " s-compacted " << stats.GetSplitCompactedStats().DebugString()
+        << " inactive " << stats.GetInactiveStats().DebugString()
+        << " evicted " << stats.GetEvictedStats().DebugString()
         << " column records " << stats.ColumnRecords << " meta bytes " << stats.ColumnMetadataBytes
         << " at tablet " << TabletID());
 }

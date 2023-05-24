@@ -30,12 +30,12 @@ using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 class TSaverContext {
 private:
     TString TierName;
-    std::optional<TCompression> ExternalCompression;
+    std::optional<NArrow::TCompression> ExternalCompression;
 public:
-    const std::optional<TCompression>& GetExternalCompression() const {
+    const std::optional<NArrow::TCompression>& GetExternalCompression() const {
         return ExternalCompression;
     }
-    TSaverContext& SetExternalCompression(const std::optional<TCompression>& value) {
+    TSaverContext& SetExternalCompression(const std::optional<NArrow::TCompression>& value) {
         ExternalCompression = value;
         return *this;
     }
@@ -300,7 +300,7 @@ private:
     std::shared_ptr<arrow::Schema> IndexKey;
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
-    std::optional<TCompression> DefaultCompression;
+    std::optional<NArrow::TCompression> DefaultCompression;
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials = false);

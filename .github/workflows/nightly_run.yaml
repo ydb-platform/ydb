@@ -12,8 +12,7 @@ jobs:
   build_ondemand:
     name: Build/test X64
     strategy:
-      matrix:
-        sanitizer: [ "", "address", "thread" ]
+      matrix: ${{ fromJSON(vars.NIGHTLY_ONDEMAND_MATRIX) }}
       fail-fast: false
 
     uses: ./.github/workflows/build_and_test_ondemand.yml
@@ -25,8 +24,7 @@ jobs:
   build_provisioned:
     name: Build/test ARM64
     strategy:
-      matrix:
-        sanitizer: [ "", "address", "thread" ]
+      matrix: ${{ fromJSON(vars.NIGHTLY_PROVISIONED_MATRIX) }}
       fail-fast: false
     uses: ./.github/workflows/build_and_test_provisioned.yml
     with:

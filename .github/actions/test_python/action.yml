@@ -16,6 +16,9 @@ inputs:
   aws_bucket:
     required: true
     type: string
+  aws_endpoint:
+    required: true
+    type: string
     
 runs:
   using: "composite"
@@ -29,7 +32,7 @@ runs:
       rm -rf ../artifacts/*
       source ${source_root}/ydb/tests/oss/launch/prepare.sh
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
       export suite=''
       if [[ "${{inputs.test_label_regexp}}" != "" ]]; then
@@ -49,4 +52,4 @@ runs:
       aws_bucket: ${{inputs.aws_bucket}}
       source_dir: ../artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
-      endpoint: https://storage.yandexcloud.net
+      endpoint: ${{inputs.aws_endpoint}}

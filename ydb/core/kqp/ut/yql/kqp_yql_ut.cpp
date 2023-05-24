@@ -398,6 +398,24 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             "1.844674407370955e+19"]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(JsonCast) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT
+                CAST("" as JsonDocument)
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+
+        CompareYson(R"([[
+            #
+        ]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

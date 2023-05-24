@@ -1,4 +1,4 @@
-name: Build-and-Test On-demand VM
+name: Build-and-Test-On-demand
 
 on:
   workflow_call:

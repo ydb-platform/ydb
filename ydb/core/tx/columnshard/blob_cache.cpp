@@ -704,17 +704,18 @@ private:
     }
 
     void InsertIntoCache(const TBlobRange& blobRange, TString data) {
-        CacheDataSize += blobRange.Size;
-        SizeBytes->Add(blobRange.Size);
-        SizeBlobs->Inc();
-
         // Shrink the buffer if it has to much extra capacity
         if (data.capacity() > data.size() * 1.1) {
             data = TString(data.begin(), data.end());
         }
 
-        Cache.Insert(blobRange, data);
-        CachedRanges.insert(blobRange);
+        if (Cache.Insert(blobRange, data)) {
+            CachedRanges.insert(blobRange);
+
+            CacheDataSize += blobRange.Size;
+            SizeBytes->Add(blobRange.Size);
+            SizeBlobs->Inc();
+        }
     }
 
     void Evict(const TActorContext&) {
@@ -730,13 +731,11 @@ private:
                 << " MaxCacheDataSize: " << (i64)MaxCacheDataSize
                 << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize);
 
-            // Remove the range from list of ranges by blob id.
-            CachedRanges.erase(it.Key());
-
             Evictions->Inc();
             EvictedBytes->Add(it.Key().Size);
 
             CacheDataSize -= it.Key().Size;
+            CachedRanges.erase(it.Key());
             Cache.Erase(it);
 
             SizeBytes->Set(CacheDataSize);

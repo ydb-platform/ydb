@@ -36,7 +36,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: true
+        default: false
     
 jobs:
 

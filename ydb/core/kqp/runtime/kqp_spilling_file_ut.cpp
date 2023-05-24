@@ -388,7 +388,7 @@ Y_UNIT_TEST(StartError) {
     runtime.Initialize(TAppPrepare().Unwrap());
     SetupLogs(runtime);
 
-    auto spillingService = StartSpillingService(runtime, 100, 500, 100, "/root/" + GetSpillingPrefix());
+    auto spillingService = StartSpillingService(runtime, 100, 500, 100, "/nonexistent/" + GetSpillingPrefix());
     auto tester = runtime.AllocateEdgeActor();
     auto spillingActor = StartSpillingActor(runtime, tester);
 

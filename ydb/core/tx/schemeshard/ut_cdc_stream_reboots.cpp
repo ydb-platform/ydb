@@ -68,6 +68,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
     Y_UNIT_TEST(CreateStreamWithAwsRegion) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableChangefeedDynamoDBStreamsFormat(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

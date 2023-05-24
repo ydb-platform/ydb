@@ -47,6 +47,7 @@ public:
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
     FEATURE_FLAG_SETTER(EnableTopicSplitMerge)
+    FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -716,7 +716,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
                 .SetDomainName(root)
-                .SetGrpcPort(PortManager.GetPort(2135));
+                .SetGrpcPort(PortManager.GetPort(2135))
+                .SetEnableChangefeedDynamoDBStreamsFormat(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -2371,6 +2372,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetAwsRegion("defaultRegion")
+            .SetEnableChangefeedDynamoDBStreamsFormat(true)
         );
 
         auto& runtime = *server->GetRuntime();

@@ -55,6 +55,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);
         OPTION(std::optional<bool>, EnablePQConfigTransactionsAtSchemeShard, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicSplitMerge, std::nullopt);
+        OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
 
         #undef OPTION
     };

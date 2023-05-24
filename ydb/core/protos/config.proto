@@ -807,8 +807,8 @@ message TFeatureFlags {
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
+    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
 }
-
 
 message THttpProxyConfig {
     optional bool Enabled = 1;

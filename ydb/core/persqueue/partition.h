@@ -326,7 +326,7 @@ public:
     }
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-               const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
+               const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
                bool newPartition = false,
                TVector<TTransaction> distrTxs = {});

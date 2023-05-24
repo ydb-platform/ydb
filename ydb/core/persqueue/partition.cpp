@@ -101,7 +101,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 }
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-                       const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
+                       const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace,
                        bool newPartition,
                        TVector<TTransaction> distrTxs)
@@ -111,7 +111,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , TabletConfig(tabletConfig)
     , Counters(counters)
     , TopicConverter(topicConverter)
-    , IsLocalDC(isLocalDC)
+    , IsLocalDC(TabletConfig.GetLocalDC())
     , DCId(std::move(dcId))
     , StartOffset(0)
     , EndOffset(0)

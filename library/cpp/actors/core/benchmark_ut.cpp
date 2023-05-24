@@ -16,9 +16,13 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
+#include <string>
+#include <thread>
 #include <utility>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #define BENCH_START(label)  auto label##Start = std::chrono::steady_clock::now()
@@ -31,10 +35,11 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
 
     enum ESimpleEventType {
         EvQuickSort,
-        EvActorStatus,
         EvSumVector,
         EvSumVectorResult,
         EvSumSendRequests,
+        EvKvSearch,
+        EvKvSendRequests,
     };
 
     using TContainer = std::vector<i32>;
@@ -56,7 +61,9 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
         void SetInactive(const TId& id) {
             std::unique_lock lock(ActiveIdsMutex_);
             ActiveIds_.erase(id);
-            ActiveIdsCv_.notify_all();
+            if (ActiveIds_.empty()) {
+                ActiveIdsCv_.notify_all();
+            }
         }
 
         bool WaitForAllInactive(std::chrono::microseconds timeout = 1ms) {
@@ -366,7 +373,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
 
             BENCH_START(thread);
 
-            Y_VERIFY(threadPoolParams.ThreadPool.AddAndOwn(THolder(new TQuickSortTask(params, activeThreadRegistry))));
+            Y_VERIFY(threadPool.AddAndOwn(THolder(new TQuickSortTask(params, activeThreadRegistry))));
             UNIT_ASSERT_C(activeThreadRegistry.WaitForAllInactive(60s), "timeout");
 
             threaPoolSortDurationTotal += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(thread));
@@ -414,6 +421,401 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             }
 
             std::cerr << "-----" << std::endl << std::endl;
+        }
+    }
+
+    // KV-storage benchmark
+
+    using TKvKey = std::string;
+    using TKvValue = i32;
+    using TDict = std::unordered_map<TKvKey, TKvValue>;
+
+    struct TSearchStat {
+        ui32 Found = 0;
+        ui32 NotFound = 0;
+
+        bool operator==(const TSearchStat& other) {
+            return Found == other.Found && NotFound == other.NotFound;
+        }
+    };
+
+    class TKvSearchTask : public IObjectInQueue {
+    private:
+        TKvKey Key_;
+        const TDict& Dict_;
+        TSearchStat SearchStat_ = {};
+
+    public:
+        TKvSearchTask() = delete;
+        TKvSearchTask(TKvKey key, const TDict& dict)
+            : Key_(key)
+            , Dict_(dict)
+        {}
+
+        void Process(void*) override {
+            if (Dict_.contains(Key_)) {
+                SearchStat_.Found++;
+            } else {
+                SearchStat_.NotFound++;
+            }
+        }
+    };
+
+    class TEvKvSearch : public TEventLocal<TEvKvSearch, EvKvSearch> {
+    public:
+        TKvKey Key;
+
+    public:
+        TEvKvSearch() = delete;
+        TEvKvSearch(TKvKey key)
+            : Key(std::move(key))
+        {}
+    };
+
+    class TEvKvSendRequests : public TEventLocal<TEvKvSendRequests, EvKvSendRequests> {
+    public:
+        const std::vector<std::string>& KeysToSearch;
+        const std::vector<TActorId> SearchActorIds;
+
+    public:
+        TEvKvSendRequests() = delete;
+        TEvKvSendRequests(const std::vector<std::string>& keysToSearch, std::vector<TActorId>&& searchActorIds)
+            : KeysToSearch(keysToSearch)
+            , SearchActorIds(std::move(searchActorIds))
+        {}
+    };
+
+    class TKvSendRequestActor : public TActorBootstrapped<TKvSendRequestActor> {
+    public:
+        STFUNC(StateInit) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKvSendRequests, Handle);
+                default:
+                    Y_VERIFY(false);
+            }
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateInit);
+        }
+
+    private:
+        void Handle(TEvKvSendRequests::TPtr& ev) {
+            auto evPtr = ev->Get();
+            ui32 actorIdx = 0;
+            for (auto& key : evPtr->KeysToSearch) {
+                auto actorId = evPtr->SearchActorIds[actorIdx];
+                actorIdx = (actorIdx + 1) % evPtr->SearchActorIds.size();
+
+                Send(actorId, new TEvKvSearch(key));
+            }
+        }
+    };
+
+    class TKvSearchActor : public TActorBootstrapped<TKvSearchActor> {
+    private:
+        const TDict& Dict_;
+        TSearchStat SearchStat_ = {};
+        std::atomic<ui32> CompletedEvents_ = 0;
+
+    public:
+        TKvSearchActor() = delete;
+        TKvSearchActor(const TDict& dict)
+            : TActorBootstrapped<TKvSearchActor>()
+            , Dict_(dict)
+        {}
+
+        STFUNC(StateInit) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKvSearch, Handle);
+                default:
+                    Y_VERIFY(false);
+            }
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateInit);
+        }
+
+        const TSearchStat& SearchStat() {
+            return SearchStat_;
+        }
+
+        ui32 CompletedEvents() {
+            return CompletedEvents_;
+        }
+    private:
+        void Handle(TEvKvSearch::TPtr& ev) {
+            auto evPtr = ev->Get();
+
+            if (Dict_.contains(evPtr->Key)) {
+                SearchStat_.Found++;
+            } else {
+                SearchStat_.NotFound++;
+            }
+            CompletedEvents_++;
+        }
+    };
+
+    TDict prepareKvSearchDict(const i32 dictSize) {
+        std::string permutableString = "abcdefghijklm";
+        TDict dict;
+        for (i32 i = 0; i < dictSize; i++) {
+            dict.emplace(permutableString, i);
+            std::next_permutation(permutableString.begin(), permutableString.end());
+        }
+
+        return dict;
+    }
+
+    std::vector<std::string> prepareKeysToSearch(const TDict &dict, ui32 requestsNumber) {
+        std::vector<std::string> keys;
+        auto keyAppearances = requestsNumber / dict.size() + 1;
+        keys.reserve(keyAppearances * dict.size());
+
+        for (auto& [key, _] : dict) {
+            for (ui32 i = 0; i < keyAppearances; i++) {
+                keys.push_back(key);
+
+                // keep the original key value to search
+                if (i % 4 == 0) {
+                    continue;
+                }
+
+                // make non-exising key
+                keys.back() += "nonexistingkey";
+            }
+        }
+
+        Y_VERIFY(keys.size() >= requestsNumber);
+
+        std::random_shuffle(keys.begin(), keys.end());
+        keys.resize(requestsNumber);
+
+        return keys;
+    }
+
+    std::pair<std::vector<TKvSearchActor*>, std::vector<TActorId>> prepareKvSearchActors(
+        TActorSystem* actorSystem, ui32 searchActorsNum, const std::vector<TDict>& dicts
+    ) {
+        std::vector<TKvSearchActor*> searchActors;
+        std::vector<TActorId> searchActorIds;
+        searchActors.reserve(searchActorsNum);
+        searchActorIds.reserve(searchActorsNum);
+        for (ui32 i = 0, dictIdx = 0; i < searchActorsNum; i++) {
+            const auto& dict = dicts[dictIdx];
+            dictIdx = (dictIdx + 1) % dicts.size();
+
+            auto kvSearchActor = new TKvSearchActor(dict);
+            auto kvSearchActorId = actorSystem->Register(kvSearchActor);
+            searchActors.push_back(kvSearchActor);
+            searchActorIds.push_back(kvSearchActorId);
+        }
+
+        return {searchActors, searchActorIds};
+    }
+
+    ui32 CalculateCompletedEvents(const std::vector<TKvSearchActor*>& actors) {
+        ui32 completedEvents = 0;
+        for (auto actor : actors) {
+            completedEvents += actor->CompletedEvents();
+        }
+        return completedEvents;
+    }
+
+    TSearchStat CollectKvSearchActorStat(const std::vector<TKvSearchActor*>& actors) {
+        TSearchStat stat;
+        for (auto actor : actors) {
+            stat.Found += actor->SearchStat().Found;
+            stat.NotFound += actor->SearchStat().NotFound;
+        }
+        return stat;
+    }
+
+    std::pair<std::chrono::microseconds, TSearchStat> BenchmarkKvActor(
+        ui32 threads, ui32 actors, ui32 iterations, const std::vector<TDict>& dicts, const std::vector<std::string>& keysToSearch
+    ) {
+        TSearchStat stat = {};
+        auto kvSearchActorDuration = 0us;
+
+        for (ui32 i = 0; i < iterations; i++) {
+            auto actorSystem = PrepareActorSystem(threads);
+            actorSystem->Start();
+
+            auto [kvSearchActors, kvSearchActorIds] = prepareKvSearchActors(actorSystem.get(), actors, dicts);
+
+            auto kvSendRequestActorId = actorSystem->Register(new TKvSendRequestActor());
+
+            BENCH_START(kvSearch);
+            actorSystem->Send(kvSendRequestActorId, new TEvKvSendRequests(keysToSearch, std::move(kvSearchActorIds)));
+
+            // CondVar logic gives too much of overhead (2-10 times more than just sleep_for)
+            while (CalculateCompletedEvents(kvSearchActors) < keysToSearch.size()) {
+                std::this_thread::sleep_for(1us);
+            }
+
+            kvSearchActorDuration += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(kvSearch));
+
+            if (i + 1 == iterations) {
+                stat = CollectKvSearchActorStat(kvSearchActors);
+            }
+        }
+
+        return {kvSearchActorDuration / iterations, stat};
+    }
+
+    std::pair<std::chrono::microseconds, TSearchStat> BenchmarkKvActorExternalSender(
+        ui32 threads, ui32 actors, ui32 iterations, const std::vector<TDict>& dicts, const std::vector<std::string>& keysToSearch
+    ) {
+        TSearchStat stat = {};
+        auto kvSearchActorDuration = 0us;
+        for (ui32 i = 0; i < iterations; i++) {
+            auto actorSystem = PrepareActorSystem(threads);
+            actorSystem->Start();
+
+            auto [kvSearchActors, kvSearchActorIds] = prepareKvSearchActors(actorSystem.get(), actors, dicts);
+
+            BENCH_START(kvSearch);
+            ui32 actorIdToUseIndex = 0;
+            for (auto& key : keysToSearch) {
+                actorSystem->Send(kvSearchActorIds[actorIdToUseIndex], new TEvKvSearch(key));
+                actorIdToUseIndex = (actorIdToUseIndex + 1) % kvSearchActorIds.size();
+            }
+
+            // CondVar logic gives too much of overhead (2-10 times more than just sleep_for)
+            while (CalculateCompletedEvents(kvSearchActors) < keysToSearch.size()) {
+                std::this_thread::sleep_for(1us);
+            }
+
+            kvSearchActorDuration += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(kvSearch));
+
+            if (i + 1 == iterations) {
+                stat = CollectKvSearchActorStat(kvSearchActors);
+            }
+        }
+
+        return {kvSearchActorDuration / iterations, stat};
+    }
+
+    std::chrono::microseconds BenchmarkKvThreadPool(
+        ui32 threads, ui32 iterations, const TDict& dict, const std::vector<std::string>& keysToSearch
+    ) {
+        TThreadPool threadPool;
+
+        auto kvSearchActorDuration = 0us;
+        for (ui32 i = 0; i < iterations; i++) {
+            threadPool.Start(threads);
+
+            BENCH_START(kvSearch);
+
+            for (auto& key : keysToSearch) {
+                Y_VERIFY(threadPool.AddAndOwn(THolder(new TKvSearchTask(key, dict))));
+            }
+
+            // CondVar logic gives too much of overhead (2-10 times more than just sleep_for)
+            while (threadPool.Size() > 0) {
+                std::this_thread::sleep_for(1us);
+            }
+            threadPool.Stop();
+
+            kvSearchActorDuration += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(kvSearch));
+        }
+
+        return {kvSearchActorDuration / iterations};
+    }
+
+    std::pair<std::chrono::microseconds, TSearchStat> BenchmarkKvSingleThread(
+        ui32 iterations, const TDict& dict, const std::vector<std::string>& keysToSearch
+    ) {
+        TSearchStat stat = {};
+        auto kvSearchDuration = 0us;
+        for (ui32 i = 0; i < iterations; i++) {
+            TSearchStat iterationStat = {};
+            BENCH_START(kvSearch);
+            for (auto& key : keysToSearch) {
+                if (dict.contains(key)) {
+                    iterationStat.Found++;
+                } else {
+                    iterationStat.NotFound++;
+                }
+            }
+            kvSearchDuration += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(kvSearch));
+
+            if (i + 1 == iterations) {
+                stat = iterationStat;
+            }
+        }
+
+        return {kvSearchDuration / iterations, stat};
+    }
+
+    Y_UNIT_TEST(KvActor) {
+        const bool forCI = true;
+
+        using TNumbers = std::vector<ui32>;
+        const TNumbers threadNumbers = forCI ? TNumbers{1} : TNumbers{1, 4, 8};
+        const TNumbers actorNumbers = forCI ? TNumbers{1, 8} : TNumbers{1, 4, 8, 16, 32, 64};
+        const TNumbers dictSizes = forCI ? TNumbers{1'000} : TNumbers{1'000, 1'000'000};
+        const TNumbers dictsNumbers = forCI ? TNumbers{1} : TNumbers{1, 8};
+        const ui32 iterations = 5;
+
+        std::cout << "sep=," << std::endl;
+        std::cout << "requests_number,dicts_number,dict_size,threads,actors,actor_time(us),actor_ext_time(us),thread_pool_time(us),single_thread_time(us)" << std::endl;
+
+        for (auto dictsNumber : dictsNumbers) {
+            for (auto dictSize : dictSizes) {
+                const auto dict = prepareKvSearchDict(dictSize);
+                const ui32 requestsNumber = forCI ? 10'000 : 1'000'000;
+                const auto keysToSearch = prepareKeysToSearch(dict, requestsNumber);
+
+                for (auto threads : threadNumbers) {
+                    std::cerr << "requestsNumber: " << requestsNumber
+                            << ", dictSize: " << dictSize
+                            << ", threads: " << threads << std::endl;
+
+                    auto tpKvDuration = BenchmarkKvThreadPool(threads, iterations, dict, keysToSearch);
+                    std::cerr << "kv search threadpool duration: " << tpKvDuration.count() << "us" << std::endl;
+
+                    auto [singleThreadKvDuration, singleThreadKvStat] = BenchmarkKvSingleThread(iterations, dict, keysToSearch);
+                    std::cerr << "kv search single thread duration: " << singleThreadKvDuration.count() << "us" << std::endl;
+
+                    std::vector<TDict> dicts(dictsNumber, dict);
+
+                    for (auto actors : actorNumbers) {
+                        std::cerr << "----" << std::endl
+                                << "requestsNumber: " << requestsNumber
+                                << ", dictsNumber: " << dictsNumber
+                                << ", dictSize: " << dictSize
+                                << ", threads: " << threads
+                                << ", actors: " << actors << std::endl;
+
+                        auto [actorKvDuration, actorKvStat] = BenchmarkKvActor(threads, actors, iterations, dicts, keysToSearch);
+                        std::cerr << "kv search actor duration: " << actorKvDuration.count() << "us" << std::endl;
+
+                        auto [actorKvExtDuration, actorKvExtStat] =
+                            BenchmarkKvActorExternalSender(threads, actors, iterations, dicts, keysToSearch);
+                        std::cerr << "kv search actor with external message sender duration: "
+                                << actorKvExtDuration.count() << "us" << std::endl;
+                        Y_UNUSED(actorKvExtStat);
+
+
+                        UNIT_ASSERT_EQUAL_C(actorKvStat, singleThreadKvStat,
+                            "single thread found/not found: " << singleThreadKvStat.Found << "/" << singleThreadKvStat.NotFound << "; "
+                            "actor stat found/not found: " << actorKvStat.Found << "/" << actorKvStat.NotFound);
+
+                        std::cout << requestsNumber << ","
+                                << dictsNumber << ","
+                                << dictSize << ","
+                                << threads << ","
+                                << actors << ","
+                                << actorKvDuration.count() << ","
+                                << actorKvExtDuration.count() << ","
+                                << tpKvDuration.count() << ","
+                                << singleThreadKvDuration.count() << std::endl;
+                    }
+                    std::cerr << "----" << std::endl;
+                }
+            }
         }
     }
 

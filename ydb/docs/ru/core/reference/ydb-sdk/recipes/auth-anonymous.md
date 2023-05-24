@@ -8,14 +8,14 @@
 
 - Go (native)
 
-  Анонимная аутентификация является аутентификацией по умолчанию. 
+  Анонимная аутентификация является аутентификацией по умолчанию.
   Явным образом анонимную аутентификацию можно включить так:
   ```go
   package main
 
   import (
     "context"
-      
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -36,7 +36,7 @@
 
 - Go (database/sql)
 
-  Анонимная аутентификация является аутентификацией по умолчанию. 
+  Анонимная аутентификация является аутентификацией по умолчанию.
   Явным образом анонимную аутентификацию можно включить так:
   ```go
   package main
@@ -45,7 +45,7 @@
     "context"
     "database/sql"
     "os"
-    
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -59,7 +59,7 @@
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -79,7 +79,7 @@
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -93,4 +93,12 @@
 
   {% include [auth-anonymous](../../../../_includes/nodejs/auth-anonymous.md) %}
 
-{% endlist %}
+- Python
+
+  {% include [auth-anonymous](../../../../_includes/python/auth-anonymous.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-anonymous](../../../../_includes/python/async/auth-anonymous.md) %}
+
+- {% endlist %}

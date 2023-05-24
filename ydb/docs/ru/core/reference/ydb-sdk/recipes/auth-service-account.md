@@ -32,7 +32,7 @@
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     ...
   }
   ```
@@ -64,7 +64,7 @@
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -84,7 +84,7 @@
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -95,7 +95,7 @@
   ```
 
 - Node.js
-  
+
   Загрузка данных сервисного аккаунта из файла:
 
   {% include [auth-sa-file](../../../../_includes/nodejs/auth-sa-file.md) %}
@@ -103,5 +103,13 @@
   Загрузка данных сервисного аккаунта из стороннего источника (например, из хранилища секретов):
 
   {% include [auth-sa-data](../../../../_includes/nodejs/auth-sa-data.md) %}
+
+- Python
+
+  {% include [auth-sa-data](../../../../_includes/python/auth-service-account.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-sa-data](../../../../_includes/python/async/auth-service-account.md) %}
 
 {% endlist %}

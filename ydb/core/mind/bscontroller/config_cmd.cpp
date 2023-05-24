@@ -342,8 +342,10 @@ namespace NKikimr::NBsController {
 
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
-                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId));
-                    state->ApplyConfigUpdates();
+                    ui64 configTxSeqNo = state->ApplyConfigUpdates();
+                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),
+                            (NextConfigTxSeqNo, configTxSeqNo));
+                    Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();

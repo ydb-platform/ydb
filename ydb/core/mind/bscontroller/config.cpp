@@ -492,7 +492,7 @@ namespace NKikimr::NBsController {
             }
             if (sh->GroupsToUpdate) {
                 FillInSelfHealGroups(*sh, &state);
-                state.Outbox.push_back(std::make_unique<IEventHandle>(SelfHealId, SelfId(), sh.Release()));
+                state.UpdateSelfHealInfoMsg = std::move(sh);
             }
         }
 
@@ -577,13 +577,20 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void TBlobStorageController::TConfigState::ApplyConfigUpdates() {
+        ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
             for (auto& msg : Outbox) {
                 TActivationContext::Send(msg.release());
             }
+
+            if (UpdateSelfHealInfoMsg) {
+                UpdateSelfHealInfoMsg->ConfigTxSeqNo = Self.NextConfigTxSeqNo;
+                TActivationContext::Send(std::make_unique<IEventHandle>(Self.SelfHealId, Self.SelfId(), UpdateSelfHealInfoMsg.Release()));
+            }
+
             for (auto& fn : Callbacks) {
                 fn();
             }
+            return Self.NextConfigTxSeqNo++;
         }
 
         void TBlobStorageController::TConfigState::DestroyVSlot(TVSlotId vslotId, const TVSlotInfo *ensureAcceptorSlot) {

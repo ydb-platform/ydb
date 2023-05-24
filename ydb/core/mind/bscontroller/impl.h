@@ -1424,7 +1424,6 @@ public:
 
 private:
     TString InstanceId;
-    TActorId SelfHealId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
     TVSlots VSlots; // ordering is important
@@ -1728,6 +1727,7 @@ public:
     // It interacts with BS_CONTROLLER and group observer (which provides information about group state on a per-vdisk
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
+    TActorId SelfHealId;
 
     bool IsGroupLayoutSanitizerEnabled() const {
         return GroupLayoutSanitizerEnabled;
@@ -1738,6 +1738,8 @@ public:
         TEvInterconnect::TEvNodesInfo nodes;
         HostRecords = std::make_shared<THostRecordMapImpl>(&nodes);
     }
+
+    ui64 NextConfigTxSeqNo = 1;
 
 private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

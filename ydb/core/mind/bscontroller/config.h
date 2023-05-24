@@ -89,6 +89,7 @@ namespace NKikimr {
 
             // outgoing messages
             std::deque<std::unique_ptr<IEventHandle>> Outbox;
+            THolder<TEvControllerUpdateSelfHealInfo> UpdateSelfHealInfoMsg;
 
             // deferred callbacks
             std::deque<std::function<void()>> Callbacks;
@@ -210,7 +211,7 @@ namespace NKikimr {
 
             void CheckConsistency() const;
 
-            void ApplyConfigUpdates();
+            ui64 ApplyConfigUpdates();
 
             std::optional<TPDiskId> FindStaticPDiskByLocation(ui32 nodeId, const TString& path) const {
                 for (auto it = StaticPDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != StaticPDisks.end() &&

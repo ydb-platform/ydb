@@ -27,6 +27,8 @@ namespace NKikimr::NBsController {
         THashMap<TGroupId, std::optional<TGroupContent>> GroupsToUpdate; // groups with faulty groups that are changed or got faulty PDisks for the first time
         TVector<std::tuple<TVDiskID, NKikimrBlobStorage::EVDiskStatus, bool>> VDiskStatusUpdate;
         std::optional<bool> GroupLayoutSanitizerEnabled;
+
+        ui64 ConfigTxSeqNo = 0;
     };
 
 } // NKikimr::NBsController

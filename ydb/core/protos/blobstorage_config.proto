@@ -774,4 +774,5 @@ message TConfigResponse {
     repeated TStatus Status = 1;
     bool Success = 2;
     string ErrorDescription = 3;
+    uint64 ConfigTxSeqNo = 4;
 }

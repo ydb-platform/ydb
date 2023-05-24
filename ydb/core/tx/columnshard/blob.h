@@ -357,7 +357,11 @@ struct TEvictedBlob {
     }
 
     bool IsExternal() const {
-        return ExternBlob.IsValid();
+        if (State == EEvictState::EXTERN) {
+            Y_VERIFY(ExternBlob.IsValid());
+            return true;
+        }
+        return false;
     }
 
     TString ToString() const {

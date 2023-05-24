@@ -292,6 +292,9 @@ public:
         for (ui32 idx = 0; idx < QuerySize; ++idx) {
             BlobStatus.emplace_back(Queries[idx].Id, Info.Get());
         }
+
+        // phantom checks are for non-index queries only
+        Y_VERIFY(!ev->PhantomCheck);
     }
 
     void Bootstrap() {

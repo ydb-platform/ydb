@@ -25,6 +25,9 @@ inputs:
   aws_bucket:
     required: true
     type: string
+  aws_endpoint:
+    required: true
+    type: string
 
 runs:
   using: "composite"
@@ -89,7 +92,7 @@ runs:
     run: |
       cd $WORKDIR/../build/ydb
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{vars.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
@@ -119,7 +122,7 @@ runs:
     with:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
-      aws_bucket: ${{vars.aws_bucket}}
+      aws_bucket: ${{inputs.aws_bucket}}
       source_dir: artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
-      endpoint: ${{vars.aws_endpoint}}
+      endpoint: ${{inputs.aws_endpoint}}

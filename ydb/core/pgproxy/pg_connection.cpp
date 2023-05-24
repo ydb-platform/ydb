@@ -31,6 +31,7 @@ public:
         {"DateStyle", "ISO"},
         {"IntervalStyle", "postgres"},
         {"integer_datetimes", "on"},
+        {"server_version", "14.5 (ydb stable-23-3)"},
     };
     TSocketBuffer BufferOutput;
     TActorId DatabaseProxy;

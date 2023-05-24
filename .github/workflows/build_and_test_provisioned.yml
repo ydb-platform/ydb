@@ -1,4 +1,4 @@
-name: Build-and-Test Provisioned VM
+name: Build-and-Test-Provisioned
 
 on:
   workflow_call:

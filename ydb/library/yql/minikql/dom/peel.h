@@ -6,6 +6,6 @@
 namespace NYql::NDom {
 
 template<bool Strict, bool AutoConvert>
-NUdf::TUnboxedValuePod PeelDom(const NUdf::ITypeInfoHelper::TPtr typeHelper, const NUdf::TType* shape, const NUdf::TUnboxedValuePod value, const NUdf::IValueBuilder* valueBuilder, const NUdf::TSourcePosition& pos);
+NUdf::TUnboxedValuePod PeelDom(const NUdf::ITypeInfoHelper* typeHelper, const NUdf::TType* shape, const NUdf::TUnboxedValuePod value, const NUdf::IValueBuilder* valueBuilder, const NUdf::TSourcePosition& pos);
 
 }

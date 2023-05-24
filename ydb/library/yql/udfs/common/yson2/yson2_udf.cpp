@@ -858,7 +858,7 @@ protected:
 
 class TFrom: public TBase {
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
-        return MakeDom(TypeHelper_, Shape_, *args, valueBuilder);
+        return MakeDom(TypeHelper_.Get(), Shape_, *args, valueBuilder);
     }
 public:
     static const TStringRef& Name() {
@@ -926,9 +926,9 @@ public:
 class TConvert: public TBase {
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         if (const auto options = ParseOptions(args[1]); options.Strict)
-            return (options.AutoConvert ? &PeelDom<true, true> : &PeelDom<true, false>)(TypeHelper_, Shape_, args[0], valueBuilder, Pos_);
+            return (options.AutoConvert ? &PeelDom<true, true> : &PeelDom<true, false>)(TypeHelper_.Get(), Shape_, args[0], valueBuilder, Pos_);
         else
-            return (options.AutoConvert ? &PeelDom<false, true> : &PeelDom<false, false>)(TypeHelper_, Shape_, args[0], valueBuilder, Pos_);
+            return (options.AutoConvert ? &PeelDom<false, true> : &PeelDom<false, false>)(TypeHelper_.Get(), Shape_, args[0], valueBuilder, Pos_);
     }
 
 public:

@@ -35,7 +35,7 @@ TUnboxedValuePod MakeData(const TDataTypeId nodeType, const TUnboxedValuePod val
     Y_FAIL("Unsupported data type.");
 }
 
-TUnboxedValuePod MakeList(const ITypeInfoHelper::TPtr typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod MakeList(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     if (const auto elements = value.GetElements()) {
         if (const auto size = value.GetListLength()) {
             TUnboxedValue* items = nullptr;
@@ -63,7 +63,7 @@ TUnboxedValuePod MakeList(const ITypeInfoHelper::TPtr typeHelper, const TType* i
     return SetNodeType<ENodeType::List>(TUnboxedValuePod::Void());
 }
 
-TUnboxedValuePod MakeDict(const ITypeInfoHelper::TPtr typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod MakeDict(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     TSmallVec<TPair, TStdAllocatorForUdf<TPair>> items;
     items.reserve(value.GetDictLength());
     const auto it = value.GetDictIterator();
@@ -78,7 +78,7 @@ TUnboxedValuePod MakeDict(const ITypeInfoHelper::TPtr typeHelper, const TType* i
     return SetNodeType<ENodeType::Dict>(TUnboxedValuePod(new TMapNode(items.data(), items.size())));
 }
 
-TUnboxedValuePod MakeTuple(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod MakeTuple(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     if (const auto tupleTypeInspector = TTupleTypeInspector(*typeHelper, shape); const auto size = tupleTypeInspector.GetElementsCount()) {
         TUnboxedValue* items = nullptr;
         auto res = valueBuilder->NewArray(size, items);
@@ -91,7 +91,7 @@ TUnboxedValuePod MakeTuple(const ITypeInfoHelper::TPtr typeHelper, const TType* 
     return SetNodeType<ENodeType::List>(TUnboxedValuePod::Void());
 }
 
-TUnboxedValuePod MakeStruct(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod MakeStruct(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     if (const auto structTypeInspector = TStructTypeInspector(*typeHelper, shape); const auto size = structTypeInspector.GetMembersCount()) {
         TSmallVec<TPair, TStdAllocatorForUdf<TPair>> items;
         items.reserve(size);
@@ -109,7 +109,7 @@ TUnboxedValuePod MakeStruct(const ITypeInfoHelper::TPtr typeHelper, const TType*
     return SetNodeType<ENodeType::Dict>(TUnboxedValuePod::Void());
 }
 
-TUnboxedValuePod MakeVariant(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod MakeVariant(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     const auto index = value.GetVariantIndex();
     const auto& item = value.GetVariantItem();
     const auto underlyingType = TVariantTypeInspector(*typeHelper, shape).GetUnderlyingType();
@@ -130,7 +130,7 @@ TUnboxedValuePod MakeVariant(const ITypeInfoHelper::TPtr typeHelper, const TType
 
 }
 
-TUnboxedValuePod MakeDom(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod MakeDom(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     switch (const auto kind = typeHelper->GetTypeKind(shape)) {
         case ETypeKind::Null:
             return MakeEntity();

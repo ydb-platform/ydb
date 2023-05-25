@@ -27,7 +27,6 @@ runs:
       export build_root=$(pwd)/../build/
       mkdir -p ../artifacts
       rm -rf ../artifacts/*
-      source ${source_root}/ydb/tests/oss/launch/prepare.sh
 
       echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
@@ -42,6 +41,7 @@ runs:
       if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
         suites="${{inputs.test_label_regexp}}"
       fi
+      source ${source_root}/ydb/tests/oss/launch/prepare.sh
       echo -n "$suites" | parallel -j32 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/{}/res.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \

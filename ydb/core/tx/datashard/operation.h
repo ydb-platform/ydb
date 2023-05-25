@@ -702,6 +702,10 @@ public:
      */
     bool HasRuntimeConflicts() const noexcept;
 
+    virtual bool HasKeysInfo() const
+    {
+        return false;
+    }
     virtual const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const
     {
         return EmptyKeysInfo;

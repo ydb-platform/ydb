@@ -452,4 +452,5 @@ enum ETxTypes {
     TXTYPE_VOLATILE_TX_ABORT = 74                         [(TxTypeOpts) = {Name: "TxVolatileTxAbort"}];
     TXTYPE_CDC_STREAM_SCAN_RUN  = 75                      [(TxTypeOpts) = {Name: "TTxCdcStreamScanRun"}];
     TXTYPE_CDC_STREAM_SCAN_PROGRESS = 76                  [(TxTypeOpts) = {Name: "TTxCdcStreamScanProgress"}];
+    TXTYPE_FIND_WRITE_CONFLICTS = 77                      [(TxTypeOpts) = {Name: "TTxFindWriteConflicts"}];
 }

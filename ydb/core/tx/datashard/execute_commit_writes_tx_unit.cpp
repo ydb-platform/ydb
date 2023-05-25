@@ -45,6 +45,7 @@ public:
         // FIXME: temporary break all locks, but we want to be smarter about which locks we break
         DataShard.SysLocksTable().BreakAllLocks(fullTableId);
         txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, versions.WriteVersion);
+        DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(writeTxId, txc.DB);
 
         if (Pipeline.AddLockDependencies(op, guardLocks)) {
             if (txc.DB.HasChanges()) {

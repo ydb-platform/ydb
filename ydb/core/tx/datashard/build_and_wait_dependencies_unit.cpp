@@ -90,6 +90,9 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
         }
 
         if (!IsReadyToExecute(op)) {
+            // Cache write keys while operation waits in the queue
+            Pipeline.RegisterDistributedWrites(op, txc.DB);
+
             TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
             if (tx) {
                 // We should put conflicting tx into cache

@@ -58,6 +58,7 @@ EExecutionStatus TReceiveSnapshotCleanupUnit::Execute(TOperation::TPtr op,
                 return EExecutionStatus::Reschedule;
             }
             txc.DB.RemoveTx(localTid, txId);
+            DataShard.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(txId, txc.DB);
             ++removedTxs;
         }
     }

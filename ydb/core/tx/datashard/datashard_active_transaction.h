@@ -501,6 +501,15 @@ public:
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;
 
+    bool HasKeysInfo() const override
+    {
+        if (DataTx) {
+            return DataTx->TxInfo().Loaded;
+        }
+
+        return false;
+    }
+
     const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const override
     {
         if (DataTx) {

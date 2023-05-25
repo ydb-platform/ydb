@@ -128,8 +128,10 @@ namespace NDataShard {
             WaitingForGlobalTxId = 1ULL << 45,
             // Operation is waiting for restart
             WaitingForRestart = 1ULL << 46,
+            // Operation has write keys registered in the cache
+            DistributedWritesRegistered = 1ULL << 47,
 
-            LastFlag = WaitingForRestart,
+            LastFlag = DistributedWritesRegistered,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader

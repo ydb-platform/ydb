@@ -20,6 +20,7 @@
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "volatile_tx.h"
+#include "conflicts_cache.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -268,6 +269,7 @@ class TDataShard
     friend class TSnapshotManager;
     friend class TSchemaSnapshotManager;
     friend class TVolatileTxManager;
+    friend class TConflictsCache;
     friend class TCdcStreamScanManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
@@ -1777,6 +1779,8 @@ public:
     TVolatileTxManager& GetVolatileTxManager() { return VolatileTxManager; }
     const TVolatileTxManager& GetVolatileTxManager() const { return VolatileTxManager; }
 
+    TConflictsCache& GetConflictsCache() { return ConflictsCache; }
+
     TCdcStreamScanManager& GetCdcStreamScanManager() { return CdcStreamScanManager; }
     const TCdcStreamScanManager& GetCdcStreamScanManager() const { return CdcStreamScanManager; }
 
@@ -1880,6 +1884,16 @@ public:
      */
     bool BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId,
         TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies);
+
+    /**
+     * Handles a specific write conflict txId
+     *
+     * Prerequisites: TSetupSysLocks is active and caller does not have any
+     * uncommitted write locks.
+     *
+     * Either adds txId to volatile dependencies or breaks a known write lock.
+     */
+    void BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies);
 
 private:
     ///
@@ -2402,6 +2416,7 @@ private:
     TSnapshotManager SnapshotManager;
     TSchemaSnapshotManager SchemaSnapshotManager;
     TVolatileTxManager VolatileTxManager;
+    TConflictsCache ConflictsCache;
     TCdcStreamScanManager CdcStreamScanManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;

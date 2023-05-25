@@ -175,6 +175,7 @@ public:
 
         if (writeTxId) {
             txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
+            Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
             if (!MvccReadWriteVersion) {
                 auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
@@ -184,6 +185,7 @@ public:
 
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
             txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccReadWriteVersion);
+            Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 
         return true;

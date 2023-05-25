@@ -270,6 +270,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         }
 
         txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
+        Self->GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(KeyCells.GetCells(), txc.DB);
         tableInfo.Stats.UpdateTime = TAppData::TimeProvider->Now();
         AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_OK);
 

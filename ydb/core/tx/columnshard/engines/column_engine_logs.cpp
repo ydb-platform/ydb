@@ -725,7 +725,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     auto granuleRemap = changes->TmpToNewGranules(LastGranule);
     ui64 portion = LastPortion;
     for (auto& portionInfo : changes->AppendedPortions) {
-        portionInfo.UpdateRecords(++portion, granuleRemap, snapshot);
+        portionInfo.UpdateRecords(++portion, granuleRemap);
 
         TPortionMeta::EProduced produced = TPortionMeta::INSERTED;
         // If it's a split compaction with moves appended portions are INSERTED (could have overlaps with others)

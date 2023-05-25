@@ -39,9 +39,6 @@ public:
     virtual const TSnapshot& GetSnapshot() const = 0;
 
     std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
-    std::shared_ptr<arrow::RecordBatch> NormalizeFullBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
-private:
-    std::shared_ptr<arrow::RecordBatch> NormalizeBatchImpl(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& newSchema) const;
 };
 
 class TSnapshotSchema: public ISnapshotSchema {
@@ -300,8 +297,7 @@ struct TPortionInfo {
         return sum;
     }
 
-    void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap, const TSnapshot& snapshot) {
-        Y_UNUSED(snapshot);;
+    void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap) {
         for (auto& rec : Records) {
             rec.Portion = portion;
         }

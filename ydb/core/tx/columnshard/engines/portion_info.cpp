@@ -4,37 +4,28 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeFullBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const {
-    auto schema = GetIndexInfo().ArrowSchema();
-    return NormalizeBatchImpl(dataSchema, batch, GetIndexInfo().ArrowSchema());
-}
-
 std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const {
-    return NormalizeBatchImpl(dataSchema, batch, GetSchema());
-}
-
-std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatchImpl(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch,
-                const std::shared_ptr<arrow::Schema>& resultArrowSchema) const {
     if (dataSchema.GetSnapshot() == GetSnapshot()) {    
         return batch;
     }
+    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
     Y_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
     std::vector<std::shared_ptr<arrow::Array>> newColumns;
-    newColumns.resize(resultArrowSchema->num_fields(), 0);
+    newColumns.reserve(resultArrowSchema->num_fields());
 
     for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
-        auto& field = resultArrowSchema->fields()[i];
-        auto columnId = GetIndexInfo().GetColumnId(field->name());
+        auto& resultField = resultArrowSchema->fields()[i];
+        auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldColumnIndex = dataSchema.GetFieldIndex(columnId);
         if (oldColumnIndex >= 0) { // ClumnExists
             auto oldColumnInfo = dataSchema.GetField(oldColumnIndex);
             Y_VERIFY(oldColumnInfo);
             auto columnData = batch->GetColumnByName(oldColumnInfo->name());
             Y_VERIFY(columnData);
-            newColumns[i] = columnData;
+            newColumns.push_back(columnData);
         } else { // AddNullColumn
-            auto nullColumn = NArrow::MakeEmptyBatch(arrow::schema({field}), batch->num_rows());
-            newColumns[i] = nullColumn->column(0);
+            auto nullColumn = NArrow::MakeEmptyBatch(arrow::schema({resultField}), batch->num_rows());
+            newColumns.push_back(nullColumn->column(0));
         }
     }
     return arrow::RecordBatch::Make(resultArrowSchema, batch->num_rows(), newColumns);

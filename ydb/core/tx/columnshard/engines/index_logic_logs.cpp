@@ -251,8 +251,8 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
         }
         Y_VERIFY(batch);
 
-        batch = resultSchema->NormalizeFullBatch(*blobSchema, batch);
-        batch = AddSpecials(batch, resultSchema->GetIndexInfo(), inserted);
+        batch = AddSpecials(batch, blobSchema->GetIndexInfo(), inserted);
+        batch = resultSchema->NormalizeBatch(*blobSchema, batch);
         pathBatches[inserted.PathId].push_back(batch);
         Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }

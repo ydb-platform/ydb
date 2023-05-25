@@ -197,7 +197,8 @@ struct TBatch {
 
 class TBlobIterator {
 public:
-    TBlobIterator(const TKey& key, const TString& blob);
+    TBlobIterator(const TKey& key, const TString& blob, bool createBatch = true);
+
     //return true is there is batch
     bool IsValid();
     //get next batch and return false if there is no next batch
@@ -207,10 +208,16 @@ public:
 private:
     void ParseBatch(bool isFirst);
 
+    // if true, Batch is filled, otherwise only Header.
+    bool CreateBatch;
+
+    TBatch Batch;
+    NKikimrPQ::TBatchHeader Header;
+
     const TKey& Key;
     const char *Data;
     const char *End;
-    TBatch Batch;
+
     ui64 Offset;
     ui32 Count;
     ui16 InternalPartsCount;

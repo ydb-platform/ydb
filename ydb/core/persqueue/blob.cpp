@@ -8,19 +8,19 @@
 namespace NKikimr {
 namespace NPQ {
 
-
-TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
-: Key(key)
-, Data(blob.c_str())
-, End(Data + blob.size())
-, Batch()
-, Offset(key.GetOffset())
-, Count(0)
-, InternalPartsCount(0)
-{
-    Y_VERIFY(Data != End);
-    ParseBatch(true);
-}
+    TBlobIterator::TBlobIterator(const TKey& key, const TString& blob, bool createBatch)
+        : CreateBatch(createBatch)
+        , Batch()
+        , Key(key)
+        , Data(blob.c_str())
+        , End(Data + blob.size())
+        , Offset(key.GetOffset())
+        , Count(0)
+        , InternalPartsCount(0)
+    {
+        Y_VERIFY(Data != End);
+        ParseBatch(true);
+    }
 
 void TBlobIterator::ParseBatch(bool isFirst) {
     Y_VERIFY(Data < End);
@@ -34,7 +34,10 @@ void TBlobIterator::ParseBatch(bool isFirst) {
     Y_VERIFY(Count <= Key.GetCount());
     Y_VERIFY(InternalPartsCount <= Key.GetInternalPartsCount());
 
-    Batch = TBatch(header, Data + sizeof(ui16) + header.ByteSize());
+    if(CreateBatch)
+        Batch = TBatch(header, Data + sizeof(ui16) + header.ByteSize());
+    else
+        Header = std::move(header);
 }
 
 bool TBlobIterator::IsValid()
@@ -45,7 +48,7 @@ bool TBlobIterator::IsValid()
 bool TBlobIterator::Next()
 {
     Y_VERIFY(IsValid());
-    auto& header = Batch.Header;
+    NKikimrPQ::TBatchHeader& header = CreateBatch ? Batch.Header : Header;
     Data += header.GetPayloadSize() + sizeof(ui16) + header.ByteSize();
     if (Data == End) { //this was last batch
         Y_VERIFY(Count == Key.GetCount());
@@ -58,13 +61,14 @@ bool TBlobIterator::Next()
 
 const TBatch& TBlobIterator::GetBatch()
 {
+    Y_VERIFY(CreateBatch);
     Y_VERIFY(IsValid());
     return Batch;
 }
 
 void CheckBlob(const TKey& key, const TString& blob)
 {
-    for (TBlobIterator it(key, blob); it.IsValid(); it.Next());
+    for (TBlobIterator it(key, blob, false); it.IsValid(); it.Next());
 }
 
 

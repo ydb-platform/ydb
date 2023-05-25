@@ -28,7 +28,7 @@ runs:
       mkdir -p ../artifacts
       rm -rf ../artifacts/*
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/ydb-tech-ci/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-pytest-stdout.gz" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-pytest-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
       bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed -e 's/ignore=//g')
       suites=""

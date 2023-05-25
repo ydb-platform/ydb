@@ -17,7 +17,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
       test_label_regexp:
         required: false
         type: string
@@ -58,7 +58,7 @@ jobs:
       uses: ./.github/actions/test
       if: inputs.run_unit_tests
       with: 
-        log_suffix: ${{format('{0}{1}{2}', inputs.runner_label, inputs.sanitizer, 'unit')}}
+        log_suffix: ${{format('{0}{1}', inputs.runner_label, inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
@@ -70,7 +70,7 @@ jobs:
       if: inputs.run_functional_tests && (success() || failure()) && steps.build.conclusion != 'failure'
       uses: ./.github/actions/test_python
       with:
-        log_suffix: ${{format('{0}{1}{2}', inputs.runner_label, inputs.sanitizer, 'functional')}}
+        log_suffix: ${{format('{0}{1}', inputs.runner_label, inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}

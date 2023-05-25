@@ -18,7 +18,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
   workflow_dispatch:
     inputs: 
       sanitizer:
@@ -110,7 +110,7 @@ jobs:
       if: inputs.run_functional_tests && (success() || failure()) && steps.build.conclusion != 'failure'
       uses: ./.github/actions/test_python
       with:
-        log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
+        log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}

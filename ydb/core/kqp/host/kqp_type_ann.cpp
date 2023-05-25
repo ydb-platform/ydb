@@ -860,6 +860,14 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         return true;
     }
 
+    if (TKqpOlapJsonValue::Match(node)) {
+        return true;
+    }
+
+    if (TKqpOlapJsonExists::Match(node)) {
+        return true;
+    }
+
     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
         TStringBuilder() << "Expected literal or column as OLAP filter value, got: " << node->Content()
     ));
@@ -888,6 +896,70 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     node->SetTypeAnn(input->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+bool ValidateOlapJsonOperation(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto column = node->Child(TKqpOlapJsonOperationBase::idx_Column);
+    if (!EnsureAtom(*column, ctx)) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+            TStringBuilder() << "Expected column name in OLAP JSON function, got: " << column->Content()
+        ));
+        return false;
+    }
+    auto path = node->Child(TKqpOlapJsonOperationBase::idx_Path);
+    if (!EnsureAtom(*path, ctx)) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+            TStringBuilder() << "Expected string as path in OLAP JSON function, got: " << path->Content()
+        ));
+        return false;
+    }
+    return true;
+}
+
+TStatus AnnotateOlapJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!ValidateOlapJsonOperation(node, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto returningTypeArg = node->Child(TKqpOlapJsonValue::idx_ReturningType);
+
+    const auto* returningTypeAnn = returningTypeArg->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureDataType(returningTypeArg->Pos(), *returningTypeAnn, ctx)) {
+        return TStatus::Error;
+    }
+    EDataSlot resultSlot = returningTypeAnn->Cast<TDataExprType>()->GetSlot();
+
+    if (!IsDataTypeNumeric(resultSlot)
+        && !IsDataTypeDate(resultSlot)
+        && resultSlot != EDataSlot::Utf8
+        && resultSlot != EDataSlot::String
+        && resultSlot != EDataSlot::Bool)
+    {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Returning argument of KqpOlapJsonValue callable supports only Utf8, String, Bool, date and numeric types"));
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.MakeType<TDataExprType>(resultSlot);
+    node->SetTypeAnn(ctx.MakeType<TOptionalExprType>(resultType));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOlapJsonExists(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!ValidateOlapJsonOperation(node, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
+    node->SetTypeAnn(ctx.MakeType<TOptionalExprType>(resultType));
     return TStatus::Ok;
 }
 
@@ -1339,6 +1411,14 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapExtractMembers::Match(input.Get())) {
                 return AnnotateOlapExtractMembers(input, ctx);
+            }
+
+            if (TKqpOlapJsonValue::Match(input.Get())) {
+                return AnnotateOlapJsonValue(input, ctx);
+            }
+
+            if (TKqpOlapJsonExists::Match(input.Get())) {
+                return AnnotateOlapJsonExists(input, ctx);
             }
 
             if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {

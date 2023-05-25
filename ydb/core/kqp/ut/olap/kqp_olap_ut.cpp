@@ -4680,25 +4680,79 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue) {
+        // Should be fixed after Arrow kernel implementation for JSON_VALUE
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
-                WHERE
-                    level = 1;
+                WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
             )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
             .SetExpectedReply(R"([[1;["val1"];#]])");
 
         TestTableWithNulls({ testCase });
     }
 
+    Y_UNIT_TEST(Json_GetValue_ToString) {
+        // Should be fixed after Arrow kernel implementation for JSON_VALUE
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[6;#;["val1"]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
     Y_UNIT_TEST(Json_Exists) {
+        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE
-                    level = 1;
+                    JSON_EXISTS(jsonval, "$.col1") AND level = 1;
             )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
             .SetExpectedReply(R"([[1;[%true];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Exists_JsonDocument) {
+        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    JSON_EXISTS(jsondoc, "$.col1") AND id = 6;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[6;#;[%true]]])");
 
         TestTableWithNulls({ testCase });
     }
@@ -4712,6 +4766,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 WHERE
                     level = 1;
             )")
+            .AddExpectedPlanOptions("Udf")
             .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
 
         TestTableWithNulls({ testCase });

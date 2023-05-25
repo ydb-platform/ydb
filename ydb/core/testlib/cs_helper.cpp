@@ -2,6 +2,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/library/binary_json/write.h>
 
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -406,7 +407,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     arrow::Int32Builder bLevel;
     arrow::StringBuilder bBinaryStr;
     arrow::StringBuilder bJsonVal;
-    arrow::StringBuilder bJsonDoc;
+    arrow::BinaryBuilder bJsonDoc;
 
     for (size_t i = 1; i <= rowCount / 2; ++i) {
         Y_VERIFY(bId.Append(i).ok());
@@ -417,13 +418,15 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
         Y_VERIFY(bJsonDoc.AppendNull().ok());
     }
 
+    auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(R"({"col1": "val1", "obj": {"obj_col2": "val2"}})");
+    Y_VERIFY(maybeJsonDoc.Defined());
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
         Y_VERIFY(bId.Append(i).ok());
         Y_VERIFY(bResourceId.Append(std::to_string(i)).ok());
         Y_VERIFY(bLevel.AppendNull().ok());
         Y_VERIFY(bBinaryStr.Append(std::to_string(i)).ok());
         Y_VERIFY(bJsonVal.AppendNull().ok());
-        Y_VERIFY(bJsonDoc.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2": "val2"}})")).ok());
+        Y_VERIFY(bJsonDoc.Append(maybeJsonDoc->Data(), maybeJsonDoc->Size()).ok());
     }
 
     std::shared_ptr<arrow::Int32Array> aId;
@@ -431,7 +434,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     std::shared_ptr<arrow::Int32Array> aLevel;
     std::shared_ptr<arrow::StringArray> aBinaryStr;
     std::shared_ptr<arrow::StringArray> aJsonVal;
-    std::shared_ptr<arrow::StringArray> aJsonDoc;
+    std::shared_ptr<arrow::BinaryArray> aJsonDoc;
 
     Y_VERIFY(bId.Finish(&aId).ok());
     Y_VERIFY(bResourceId.Finish(&aResourceId).ok());

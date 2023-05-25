@@ -142,6 +142,17 @@ public:
         }
     }
 
+    static uint32_t GetPgOidFromYdbType(NYdb::TType type) {
+        NYdb::TTypeParser parser(type);
+        switch (parser.GetKind()) {
+            case NYdb::TTypeParser::ETypeKind::Pg: {
+                return parser.GetPg().Oid;
+            default:
+                return {};
+            }
+        }
+    }
+
     TString ToPgSyntax(TStringBuf query) {
         auto itOptions = ConnectionParams.find("options");
         if (itOptions == ConnectionParams.end()) {
@@ -213,6 +224,7 @@ public:
                                             // TODO: fill data types and sizes
                                             response->DataFields.push_back({
                                                 .Name = column.Name,
+                                                .DataType = GetPgOidFromYdbType(column.Type),
                                             });
                                         }
                                     }
@@ -387,6 +399,7 @@ public:
                                             // TODO: fill data types and sizes
                                             response->DataFields.push_back({
                                                 .Name = column.Name,
+                                                .DataType = GetPgOidFromYdbType(column.Type),
                                             });
                                         }
                                     }

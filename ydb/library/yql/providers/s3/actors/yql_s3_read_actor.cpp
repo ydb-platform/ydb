@@ -38,6 +38,7 @@
 
 #include <ydb/core/protos/services.pb.h>
 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -2910,13 +2911,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (readSpec->Arrow) {
             fileSizeLimit = cfg.BlockFileSizeLimit;
             arrow::SchemaBuilder builder;
-            const TStringBuf blockLengthColumn("_yql_block_length"sv);
-            auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, blockLengthColumn,
+            auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, BlockLengthColumnName,
                 pb->NewBlockType(pb->NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar)));
 
             for (ui32 i = 0U; i < extraStructType->GetMembersCount(); ++i) {
                 TStringBuf memberName = extraStructType->GetMemberName(i);
-                if (memberName == blockLengthColumn) {
+                if (memberName == BlockLengthColumnName) {
                     readSpec->BlockLengthPosition = i;
                     continue;
                 }

@@ -143,24 +143,25 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
     return out;
 }
 
-std::pair<std::vector<std::shared_ptr<arrow::RecordBatch>>, TSnapshot> TCompactionLogic::PortionsToBatches(const std::vector<TPortionInfo>& portions,
-                                                                                        const THashMap<TBlobRange, TString>& blobs,
-                                                                                        bool insertedOnly) const {
+std::pair<std::vector<std::shared_ptr<arrow::RecordBatch>>, TSnapshot>
+TCompactionLogic::PortionsToBatches(const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs,
+                                    const bool insertedOnly) const {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(portions.size());
-    auto resultSchema = SchemaVersions.GetLastSchema();
+    const auto resultSchema = SchemaVersions.GetLastSchema();
     TSnapshot maxSnapshot = resultSchema->GetSnapshot();
-    for (auto& portionInfo : portions) {
-        auto blobSchema = SchemaVersions.GetSchema(portionInfo.GetSnapshot());
-        auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs);
+    for (const auto& portionInfo : portions) {
         if (!insertedOnly || portionInfo.IsInserted()) {
-            batches.push_back(batch);
+            const auto blobSchema = SchemaVersions.GetSchema(portionInfo.GetSnapshot());
+
+            batches.push_back(portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs));
+
             if (maxSnapshot < portionInfo.GetSnapshot()) {
                 maxSnapshot = portionInfo.GetSnapshot();
             }
         }
     }
-    return std::make_pair(batches, maxSnapshot);
+    return std::make_pair(std::move(batches), maxSnapshot);
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TIndexLogicBase::SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
@@ -238,7 +239,7 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
             batch = it->second;
         } else if (auto* blobData = changes->Blobs.FindPtr(blobRange)) {
             Y_VERIFY(!blobData->empty(), "Blob data not present");
-            // Prepare batch 
+            // Prepare batch
             batch = NArrow::DeserializeBatch(*blobData, indexInfo.ArrowSchema());
             if (!batch) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)

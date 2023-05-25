@@ -92,7 +92,7 @@ struct TClientBlob {
 
     static const ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/ + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
 
-    void Serialize(TBuffer& buffer) const;
+    void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);
 
 };
@@ -189,7 +189,7 @@ struct TBatch {
     void UnpackToType0(TVector<TClientBlob> *result);
     void UnpackToType1(TVector<TClientBlob> *result);
 
-    TString Serialize();
+    void SerializeTo(TString& res);
 
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 

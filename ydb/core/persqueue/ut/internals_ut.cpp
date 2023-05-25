@@ -52,7 +52,8 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     UNIT_ASSERT(head.Batches.back().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     head.Batches.back().Unpack();
     head.Batches.back().Pack();
-    TString str = head.Batches.back().Serialize();
+    TString str;
+    head.Batches.back().SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch.Unpack();
@@ -186,7 +187,8 @@ Y_UNIT_TEST(TestBatchPacking) {
     batch.Unpack();
     batch.Pack();
     UNIT_ASSERT(batch.PackedData == s);
-    TString str = batch.Serialize();
+    TString str;
+    batch.SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch2(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch2.Unpack();

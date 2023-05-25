@@ -1147,12 +1147,12 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         Y_VERIFY(Head.Batches[pp].GetPartNo() == key.GetPartNo());
         for (; pp < Head.Batches.size(); ++pp) { //TODO - merge small batches here
             Y_VERIFY(Head.Batches[pp].Packed);
-            valueD += Head.Batches[pp].Serialize();
+            Head.Batches[pp].SerializeTo(valueD);
         }
     }
     for (auto& b : NewHead.Batches) {
         Y_VERIFY(b.Packed);
-        valueD += b.Serialize();
+        b.SerializeTo(valueD);
     }
 
     Y_VERIFY(res.second >= valueD.size());

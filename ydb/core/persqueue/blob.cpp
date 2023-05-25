@@ -72,7 +72,7 @@ void CheckBlob(const TKey& key, const TString& blob)
 }
 
 
-void TClientBlob::Serialize(TBuffer& res) const
+void TClientBlob::SerializeTo(TBuffer& res) const
 {
     ui32 totalSize = GetBlobSize();
     ui32 psize = res.Size();
@@ -185,13 +185,16 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     return TClientBlob(sourceId, seqNo, dt, std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey);
 }
 
-TString TBatch::Serialize() {
+void TBatch::SerializeTo(TString& res) {
     Y_VERIFY(Packed);
-    TString res;
+
     ui16 sz = Header.ByteSize();
-    bool rs = Header.SerializeToString(&res);
+    res.append((const char*)&sz, sizeof(ui16));
+
+    bool rs = Header.AppendToString(&res);
     Y_VERIFY(rs);
-    return TStringBuf((const char*)&sz, sizeof(ui16)) + res + PackedData;
+
+    res += PackedData;
 }
 
 template <typename TCodec>
@@ -371,7 +374,7 @@ void TBatch::Pack() {
         Header.SetFormat(NKikimrPQ::TBatchHeader::EUncompressed);
         res.Clear();
         for (ui32 i = 0; i < Blobs.size(); ++i) {
-            Blobs[i].Serialize(res);
+            Blobs[i].SerializeTo(res);
         }
         PackedData = TString{res.Data(), res.Size()};
         Header.SetPayloadSize(PackedData.size());
@@ -760,7 +763,7 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
     if (glueHead) {
         for (ui32 pp = 0; pp < head.Batches.size(); ++pp) {
             Y_VERIFY(head.Batches[pp].Packed);
-            valueD += head.Batches[pp].Serialize();
+            head.Batches[pp].SerializeTo(valueD);
         }
     }
     if (glueNewHead) {
@@ -774,7 +777,7 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
                 b = &batch;
             }
             Y_VERIFY(b->Packed);
-            valueD += b->Serialize();
+            b->SerializeTo(valueD);
         }
     }
     return valueD;
@@ -815,7 +818,7 @@ std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
             Blobs.clear();
             batch.Pack();
             Y_VERIFY(batch.Packed);
-            valueD += batch.Serialize();
+            batch.SerializeTo(valueD);
         }
         res.second = valueD;
         Y_VERIFY(res.second.size() <= MaxBlobSize && (res.second.size() + size + 1_MB > MaxBlobSize

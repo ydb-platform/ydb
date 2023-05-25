@@ -734,9 +734,16 @@ TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
 
     TStringStream sstr;
     auto serializeMetadata = [&]() {
-        sstr << "metadata:\n  version: " << *metadata.Version << "\n  cluster: " << *metadata.Cluster;
+        sstr
+          << "metadata:\n  cluster: \""
+          << *metadata.Cluster << "\""
+          << "\n  version: "
+          << *metadata.Version;
     };
     if (doc.Root().Style() == NFyaml::ENodeStyle::Flow) {
+        if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
+            doc.Root().Map().Remove(pair);
+        }
         serializeMetadata();
         sstr << "\n" << doc;
     } else {
@@ -745,6 +752,9 @@ TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
             auto end = pair.Value().EndMark().InputPos;
             sstr << config.substr(0, begin);
             serializeMetadata();
+            if (end < config.length() && config[end] == ':') {
+                end = end + 1;
+            }
             sstr << config.substr(end, TString::npos);
         } else {
             if (doc.HasExplicitDocumentStart()) {

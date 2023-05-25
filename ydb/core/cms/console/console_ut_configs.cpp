@@ -672,8 +672,8 @@ selector_config: []
 const TString YAML_CONFIG_1_UPDATED = R"(
 ---
 metadata:
+  cluster: ""
   version: 1
-  cluster: )" R"(
 config:
   log_config:
     cluster_name: cluster1
@@ -706,8 +706,8 @@ selector_config: []
 const TString YAML_CONFIG_2_UPDATED = R"(
 ---
 metadata:
+  cluster: ""
   version: 2
-  cluster: )" R"(
 config:
   log_config:
     cluster_name: cluster2

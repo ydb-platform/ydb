@@ -1529,8 +1529,30 @@ metadata: {}
 )";
 
             TString exp = R"(metadata:
+  cluster: "test"
   version: 1
-  cluster: test
+value: 1
+array:
+- test: "1"
+obj:
+  value: 2
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+# comment1
+{value: 1, metadata: {version: 1, cluster: "test"}, array: [{test: "1"}], obj: {value: 2}} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  cluster: "test"
+  version: 1
 value: 1
 array:
 - test: "1"
@@ -1552,8 +1574,8 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  cluster: "test"
   version: 1
-  cluster: test
 # comment1
 value: 1
 array: [{test: "1"}]
@@ -1576,8 +1598,8 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  cluster: "test"
   version: 1
-  cluster: test
 # comment1
 value: 1
 array: [{test: "1"}]
@@ -1602,8 +1624,8 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  cluster: "test"
   version: 1
-  cluster: test
 # comment1
 value: 1
 array: [{test: "1"}]
@@ -1629,8 +1651,8 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  cluster: "test"
   version: 1
-  cluster: test
 # comment1
 value: 1
 array: [{test: "1"}]
@@ -1648,8 +1670,8 @@ obj: {value: 2} # comment2
 
 ---
 metadata:
-  version: 0
   cluster: tes
+  version: 0
 # comment1
 value: 1
 array: [{test: "1"}]
@@ -1661,8 +1683,8 @@ obj: {value: 2} # comment2
 
 ---
 metadata:
+  cluster: "test"
   version: 1
-  cluster: test
 # comment1
 value: 1
 array: [{test: "1"}]
@@ -1677,7 +1699,6 @@ obj: {value: 2} # comment2
 
         {
             TString str = R"(
-
 ---
 # comment1
 value: 1
@@ -1687,11 +1708,42 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(
+---
+metadata:
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
 
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        metadata.Cluster = "";
+
+        {
+            TString str = R"(
 ---
 metadata:
   version: 1
-  cluster: test
+  cluster:
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
 # comment1
 value: 1
 array: [{test: "1"}]

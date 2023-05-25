@@ -771,10 +771,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     Y_UNIT_TEST_TWIN(LogTsRangeDescending, NotNull) {
-        if (NotNull) {
-            // Wait for fix https://st.yandex-team.ru/KIKIMR-16920
-            return;
-        }
         TString query(R"(
                 --PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 

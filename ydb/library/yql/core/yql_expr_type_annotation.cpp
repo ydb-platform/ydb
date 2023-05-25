@@ -1225,6 +1225,9 @@ const TTupleExprType* DryType(const TTupleExprType* type, bool& hasOptional, TEx
 
 template<bool Strict = true>
 const TStructExprType* DryType(const TStructExprType* type, bool& hasOptional, TExprContext& ctx) {
+    if (!type->GetSize())
+        return type;
+
     auto items = type->GetItems();
     auto it = items.begin();
     for (const auto& item : items) {
@@ -5751,7 +5754,7 @@ IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda
     return IGraphTransformer::TStatus::Ok;
 }
 
-TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow, 
+TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
     const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx) {
     auto idLambda = ctx.Builder(pos)
         .Lambda()

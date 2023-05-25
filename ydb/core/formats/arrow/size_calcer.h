@@ -47,6 +47,7 @@ public:
 
 class TSerializedBatch {
 private:
+    YDB_READONLY_DEF(TString, SchemaData);
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
 public:
@@ -58,8 +59,9 @@ public:
     static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch);
 
-    TSerializedBatch(TString&& data, const ui32 rowsCount)
-        : Data(data)
+    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount)
+        : SchemaData(schemaData)
+        , Data(data)
         , RowsCount(rowsCount)
     {
 

@@ -170,7 +170,7 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
 }
 
 NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow::RecordBatch> batch) {
-    return TSerializedBatch(NArrow::SerializeBatchNoCompression(batch), batch->num_rows());
+    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows());
 }
 
 bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage) {

@@ -56,7 +56,7 @@ struct TKqpReadTableSettings {
     TExprNode::TPtr ItemsLimit;
     bool Reverse = false;
     bool Sorted = false;
-    TMaybe<ui64> SequentialHint;
+    TMaybe<ui64> SequentialInFlight;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

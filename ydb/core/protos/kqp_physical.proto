@@ -281,7 +281,7 @@ message TKqpReadRangesSource {
     }
 
     repeated string SkipNullKeys = 8;
-    uint64 SequentialAccessHint = 9;
+    uint64 SequentialInFlightShards = 9;
 }
 
 message TKqpExternalSource {

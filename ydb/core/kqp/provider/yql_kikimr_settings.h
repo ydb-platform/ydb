@@ -141,7 +141,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePredicateExtractForScanQuery = true;
     bool EnablePredicateExtractForDataQuery = false;
     bool EnableKqpImmediateEffects = false;
-    bool EnableSequentialHints = false;
+    bool EnableSequentialReads = false;
 };
 
 }

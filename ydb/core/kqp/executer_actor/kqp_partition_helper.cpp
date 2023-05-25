@@ -588,7 +588,7 @@ TVector<TSerializedPointOrRange> ExtractRanges(const TKqpTableKeys& tableKeys,
     return ranges;
 }
 
-TShardInfo MakeFakePartition(const TKqpTableKeys& tableKeys,
+TShardInfo MakeVirtualTablePartition(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {

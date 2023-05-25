@@ -805,10 +805,10 @@ protected:
             input.SourceType = NYql::KqpReadRangesSourceName;
         };
 
-        if (source.GetSequentialAccessHint()) {
-            auto shardInfo = MakeFakePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+        if (source.GetSequentialInFlightShards()) {
+            auto shardInfo = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
             if (shardInfo.KeyReadRanges) {
-                addPartiton({}, shardInfo, source.GetSequentialAccessHint());
+                addPartiton({}, shardInfo, source.GetSequentialInFlightShards());
                 return {};
             } else {
                 return 0;

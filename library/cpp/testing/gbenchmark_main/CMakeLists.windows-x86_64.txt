@@ -6,13 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(benchmark)
-add_subdirectory(common)
-add_subdirectory(gbenchmark_main)
-add_subdirectory(gmock_in_unittest)
-add_subdirectory(gtest)
-add_subdirectory(gtest_extensions)
-add_subdirectory(gtest_main)
-add_subdirectory(hook)
-add_subdirectory(unittest)
-add_subdirectory(unittest_main)
+
+add_library(cpp-testing-gbenchmark_main)
+target_link_libraries(cpp-testing-gbenchmark_main PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-benchmark
+  cpp-testing-hook
+)
+target_sources(cpp-testing-gbenchmark_main PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/testing/gbenchmark_main/main.cpp
+)

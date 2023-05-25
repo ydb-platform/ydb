@@ -1,5 +1,6 @@
 Версия | Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
+v.2.4.0 | 24.05.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.4.0/darwin/arm64/ydb)
 v.2.3.0 | 01.05.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.3.0/darwin/arm64/ydb) | [См. список](../../../changelog-cli.md#2-3-0)
 v.2.2.0 | 03.03.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.2.0/darwin/arm64/ydb) | [См. список](../../../changelog-cli.md#2-2-0)
 v.2.1.1 | 30.12.22 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.1/darwin/arm64/ydb) | [См. список](../../../changelog-cli.md#2-1-1)

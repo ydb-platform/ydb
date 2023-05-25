@@ -1,5 +1,6 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+| v.2.4.0 | 24/05/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.4.0/windows/amd64/ydb.exe)
 | v.2.3.0 | 01/05/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.3.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-3-0) |
 | v.2.2.0 | 03/03/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.2.0/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-2-0) |
 | v.2.1.1 | 30/12/2022 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.1.1/windows/amd64/ydb.exe) | [See the changelog](../../../changelog-cli.md#2-1-1) |

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeArray.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDateTime64.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesDecimal.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
@@ -2792,6 +2793,11 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
                 return std::make_shared<NDB::DataTypeUUID>();
             case NUdf::EDataSlot::Interval:
                 return NSerialization::GetInterval(unit);
+            case NUdf::EDataSlot::Decimal: {
+                const auto decimalType = static_cast<const TDataDecimalType*>(type);
+                auto [precision, scale] = decimalType->GetParams();
+                return std::make_shared<const NDB::DataTypeDecimal<NDB::Decimal128>>(precision, scale);
+            }
             default:
                 throw yexception() << "Unsupported data slot in MetaToClickHouse: " << slot;
             }

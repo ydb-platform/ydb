@@ -1,6 +1,5 @@
 #include "proxy.h"
 #include "clusters_from_connections.h"
-#include "system_clusters.h"
 #include "table_bindings_from_bindings.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -1787,7 +1786,6 @@ private:
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
         AddClustersFromConnections(YqConnections,
             Params.Config.GetCommon().GetUseBearerForYdb(),
             Params.Config.GetCommon().GetObjectStorageEndpoint(),

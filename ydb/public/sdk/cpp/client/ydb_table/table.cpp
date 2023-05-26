@@ -305,6 +305,11 @@ class TTableDescription::TImpl {
             break;
         }
 
+        // tiering
+        if (proto.tiering().size()) {
+            Tiering_ = proto.tiering();
+        }
+
         // column families
         ColumnFamilies_.reserve(proto.column_families_size());
         for (const auto& family : proto.column_families()) {
@@ -521,6 +526,10 @@ public:
         return TtlSettings_;
     }
 
+    const TMaybe<TString>& GetTiering() const {
+        return Tiering_;
+    }
+
     const TString& GetOwner() const {
         return Owner_;
     }
@@ -597,6 +606,7 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
+    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -659,6 +669,10 @@ TVector<TChangefeedDescription> TTableDescription::GetChangefeedDescriptions() c
 
 TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
     return Impl_->GetTtlSettings();
+}
+
+TMaybe<TString> TTableDescription::GetTiering() const {
+    return Impl_->GetTiering();
 }
 
 const TString& TTableDescription::GetOwner() const {
@@ -839,6 +853,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
         ttl->SerializeTo(*request.mutable_ttl_settings());
+    }
+
+    if (const auto& tiering = Impl_->GetTiering()) {
+        request.set_tiering(*tiering);
     }
 
     if (Impl_->HasStorageSettings()) {

@@ -465,6 +465,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    TMaybe<TString> GetTiering() const;
 
     // Deprecated. Use GetEntry() of TDescribeTableResult instead
     const TString& GetOwner() const;

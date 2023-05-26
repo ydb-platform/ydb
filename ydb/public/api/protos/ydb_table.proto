@@ -509,7 +509,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering name for table
+    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
     string tiering = 18;
 }
 
@@ -706,6 +706,8 @@ message DescribeTableResult {
     ReadReplicasSettings read_replicas_settings = 14;
     // List of changefeeds
     repeated ChangefeedDescription changefeeds = 15;
+    // Tiering rules name
+    string tiering = 16;
 }
 
 message Query {

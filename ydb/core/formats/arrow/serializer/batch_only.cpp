@@ -35,16 +35,19 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TBatchPayloadDeserializer::Do
 
 TString TBatchPayloadSerializer::DoSerialize(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     arrow::ipc::IpcPayload payload;
+    // Build payload. Compression if set up performed here.
     TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
 
     int32_t metadata_length = 0;
     arrow::io::MockOutputStream mock;
+    // Process prepared payload through mock stream. Fast and efficient.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &mock, &metadata_length));
 
     TString str;
     str.resize(mock.GetExtentBytesWritten());
 
     TFixedStringOutputStream out(&str);
+    // Write prepared payload into the resultant string. No extra allocation will be made.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
     Y_VERIFY(out.GetPosition() == str.size());
     Y_VERIFY_DEBUG(TBatchPayloadDeserializer(batch->schema()).Deserialize(str).ok());

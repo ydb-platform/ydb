@@ -65,7 +65,7 @@ namespace NKikimr::NStLog {
         auto& ctx = (CTX); \
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, component)) { \
+        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
             STLOG_STREAM(__stream, 0, __VA_ARGS__); \
             ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
         }; \
@@ -78,7 +78,7 @@ namespace NKikimr::NStLog {
         auto& ctx = (CTX); \
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
         const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
-        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, component)) { \
+        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
             STLOG_STREAM(__stream, 1, __VA_ARGS__); \
             ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
         }; \

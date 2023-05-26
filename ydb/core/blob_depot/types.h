@@ -248,7 +248,7 @@ namespace NKikimr::NBlobDepot {
         auto& ctx = *TlsActivationContext; \
         const auto priority = NLog::PRI_TRACE; \
         const auto component = NKikimrServices::BLOB_DEPOT_EVENTS; \
-        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, component)) { \
+        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
             struct MARKER {}; \
             TStringStream __stream; \
             { \

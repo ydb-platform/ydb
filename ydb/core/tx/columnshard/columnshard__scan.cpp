@@ -948,7 +948,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
 
     TStringStream detailedInfo;
-    if (IS_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
+    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
         detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
     }
     std::vector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;

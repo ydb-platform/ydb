@@ -623,7 +623,6 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         for (ui32 i = 1; i < argsCount + 1; ++i) {
                             parent.Add(i + (overState ? 1 : 0), ExpandType(Node->Pos(), *trait->Child(2)->Child(i)->GetTypeAnn(), Ctx));
-                            return parent;
                         }
 
                         return parent;
@@ -727,7 +726,16 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         return Ctx.Builder(Node->Pos())
             .Callable("LMap")
                 .Add(0, AggList)
-                .Add(1, lambdaStream)
+                .Lambda(1)
+                    .Param("stream")
+                    .Apply(GetContextLambda())
+                        .With(0)
+                            .Apply(lambdaStream)
+                                .With(0, "stream")
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
             .Seal()
             .Build();
     } else {

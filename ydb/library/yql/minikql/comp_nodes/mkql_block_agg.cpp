@@ -370,6 +370,7 @@ struct TAggParams {
     std::unique_ptr<IPreparedBlockAggregator<T>> Prepared_;
     ui32 Column_ = 0;
     TType* StateType_ = nullptr;
+    TType* ReturnType_ = nullptr;
 };
 
 struct TKeyParams {
@@ -1152,14 +1153,17 @@ std::unique_ptr<IPreparedBlockAggregator<TAggregator>> PrepareBlockAggregator(co
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    const TTypeEnvironment& env);
+    const TTypeEnvironment& env,
+    TType* returnType);
 
 template <>
 std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineAll>> PrepareBlockAggregator<IBlockAggregatorCombineAll>(const IBlockAggregatorFactory& factory,
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    const TTypeEnvironment& env) {
+    const TTypeEnvironment& env,
+    TType* returnType) {
+    MKQL_ENSURE(!returnType, "Unexpected return type");
     return factory.PrepareCombineAll(tupleType, filterColumn, argsColumns, env);
 }
 
@@ -1168,8 +1172,11 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareBl
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    const TTypeEnvironment& env) {
-    return factory.PrepareCombineKeys(tupleType, filterColumn, argsColumns, env);
+    const TTypeEnvironment& env,
+    TType* returnType) {
+    MKQL_ENSURE(!filterColumn, "Unexpected filter column");
+    MKQL_ENSURE(!returnType, "Unexpected return type");
+    return factory.PrepareCombineKeys(tupleType, argsColumns, env);
 }
 
 template <>
@@ -1177,14 +1184,16 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareB
     TTupleType* tupleType,
     std::optional<ui32> filterColumn,
     const std::vector<ui32>& argsColumns,
-    const TTypeEnvironment& env) {
+    const TTypeEnvironment& env,
+    TType* returnType) {
     MKQL_ENSURE(!filterColumn, "Unexpected filter column");
-    return factory.PrepareFinalizeKeys(tupleType, argsColumns, env);
+    MKQL_ENSURE(returnType, "Missing return type");
+    return factory.PrepareFinalizeKeys(tupleType, argsColumns, env, returnType);
 }
 
 template <typename TAggregator>
 ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams<TAggregator>>& aggsParams,
-    const TTypeEnvironment& env, bool overState, bool many) {
+    const TTypeEnvironment& env, bool overState, bool many, TArrayRef<TType* const> returnTypes, ui32 keysCount) {
     TTupleType* unwrappedTupleType = tupleType;
     if (many) {
         TVector<TType*> unwrappedTypes(tupleType->GetElementsCount());
@@ -1219,12 +1228,14 @@ ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<
         }
 
         TAggParams<TAggregator> p;
-        p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), unwrappedTupleType, filterColumn, argColumns, env);
         if (overState) {
             MKQL_ENSURE(argColumns.size() == 1, "Expected exactly one column");
             p.Column_ = argColumns[0];
             p.StateType_ = AS_TYPE(TBlockType, tupleType->GetElementType(p.Column_))->GetItemType();
+            p.ReturnType_ = returnTypes[i + keysCount];
         }
+
+        p.Prepared_ = PrepareBlockAggregator<TAggregator>(GetBlockAggregatorFactory(name), unwrappedTupleType, filterColumn, argColumns, env, p.ReturnType_);
 
         totalStateSize += p.Prepared_->StateSize;
         aggsParams.emplace_back(std::move(p));
@@ -1425,6 +1436,8 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto wideComponents = GetWideComponents(flowType);
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+    const auto returnFlowType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(returnFlowType);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1437,7 +1450,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false, returnWideComponents, 0);
     return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
 
@@ -1446,6 +1459,8 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto wideComponents = GetWideComponents(flowType);
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+    const auto returnFlowType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(returnFlowType);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1465,7 +1480,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TAggParams<IBlockAggregatorCombineKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, false, false, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
@@ -1492,6 +1507,8 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto wideComponents = GetWideComponents(flowType);
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+    const auto returnFlowType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(returnFlowType);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1505,7 +1522,7 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, false);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, false, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
@@ -1524,6 +1541,8 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
     const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
     const auto wideComponents = GetWideComponents(flowType);
     const auto tupleType = TTupleType::Create(wideComponents.size(), wideComponents.data(), ctx.Env);
+    const auto returnFlowType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType());
+    const auto returnWideComponents = GetWideComponents(returnFlowType);
 
     auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
@@ -1537,7 +1556,7 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, true);
+    ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, true, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;

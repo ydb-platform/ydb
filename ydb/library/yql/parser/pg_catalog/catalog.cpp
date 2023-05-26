@@ -613,6 +613,7 @@ public:
         if (IsSupported) {
             if (FillSupported()) {
                 auto id = Aggregations.size() + 1;
+                LastAggregation.InternalId = id;
                 Aggregations[id] = LastAggregation;
             }
         }
@@ -1530,6 +1531,13 @@ const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui3
     throw yexception() << "Unable to find an overload for aggregate " << name << " with given state type: " <<
         NPg::LookupType(stateType).Name << " and result type: " <<
         NPg::LookupType(resultType).Name;
+}
+
+void EnumAggregation(std::function<void(ui32, const TAggregateDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& x : catalog.Aggregations) {
+        f(x.first, x.second);
+    }
 }
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId) {

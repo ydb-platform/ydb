@@ -68,6 +68,8 @@ namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
 
+TVPtrHolder TVPtrHolder::Instance;
+
 // use 'false' for native format
 static __thread bool NeedCanonizeFp = false;
 
@@ -77,125 +79,6 @@ struct TMainContext {
     MemoryContext PrevErrorContext = nullptr;
     TimestampTz StartTimestamp;
 };
-
-ui32 GetFullVarSize(const text* s) {
-    return VARSIZE(s);
-}
-
-ui32 GetCleanVarSize(const text* s) {
-    return VARSIZE(s) - VARHDRSZ;
-}
-
-const char* GetVarData(const text* s) {
-    return VARDATA(s);
-}
-
-TStringBuf GetVarBuf(const text* s) {
-    return TStringBuf(GetVarData(s), GetCleanVarSize(s));
-}
-
-char* GetMutableVarData(text* s) {
-    return VARDATA(s);
-}
-
-void UpdateCleanVarSize(text* s, ui32 cleanSize) {
-    SET_VARSIZE(s, cleanSize + VARHDRSZ);
-}
-
-char* MakeCString(TStringBuf s) {
-    char* ret = (char*)palloc(s.Size() + 1);
-    memcpy(ret, s.Data(), s.Size());
-    ret[s.Size()] = '\0';
-    return ret;
-}
-
-text* MakeVar(TStringBuf s) {
-    text* ret = (text*)palloc(s.Size() + VARHDRSZ);
-    UpdateCleanVarSize(ret, s.Size());
-    memcpy(GetMutableVarData(ret), s.Data(), s.Size());
-    return ret;
-}
-
-// allow to construct TListEntry in the space for IBoxedValue
-static_assert(sizeof(NUdf::IBoxedValue) >= sizeof(TAllocState::TListEntry));
-
-constexpr size_t PallocHdrSize = sizeof(void*) + sizeof(NUdf::IBoxedValue);
-
-NUdf::TUnboxedValuePod ScalarDatumToPod(Datum datum) {
-    return NUdf::TUnboxedValuePod((ui64)datum);
-}
-
-Datum ScalarDatumFromPod(const NUdf::TUnboxedValuePod& value) {
-    return (Datum)value.Get<ui64>();
-}
-
-Datum ScalarDatumFromItem(const NUdf::TBlockItem& value) {
-    return (Datum)value.As<ui64>();
-}
-
-class TBoxedValueWithFree : public NUdf::TBoxedValueBase {
-public:
-    void operator delete(void *mem) noexcept {
-        return MKQLFreeDeprecated(mem);
-    }
-};
-
-NUdf::TUnboxedValuePod PointerDatumToPod(Datum datum) {
-    auto original = (char*)datum - PallocHdrSize;
-    // remove this block from list
-    ((TAllocState::TListEntry*)original)->Unlink();
-
-    auto raw = (NUdf::IBoxedValue*)original;
-    new(raw) TBoxedValueWithFree();
-    NUdf::IBoxedValuePtr ref(raw);
-    return NUdf::TUnboxedValuePod(std::move(ref));
-}
-
-NUdf::TUnboxedValuePod OwnedPointerDatumToPod(Datum datum) {
-    auto original = (char*)datum - PallocHdrSize;
-    auto raw = (NUdf::IBoxedValue*)original;
-    NUdf::IBoxedValuePtr ref(raw);
-    return NUdf::TUnboxedValuePod(std::move(ref));
-}
-
-class TVPtrHolder {
-public:
-    TVPtrHolder() {
-        new(Dummy) TBoxedValueWithFree();
-    }
-
-    static bool IsBoxedVPtr(Datum ptr) {
-        return *(const uintptr_t*)((char*)ptr - PallocHdrSize) == *(const uintptr_t*)Instance.Dummy;
-    }
-
-private:
-    char Dummy[sizeof(NUdf::IBoxedValue)];
-
-    static TVPtrHolder Instance;
-};
-
-TVPtrHolder TVPtrHolder::Instance;
-
-NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByValue) {
-    if (passByValue) {
-        return ScalarDatumToPod(datum);
-    }
-
-    if (TVPtrHolder::IsBoxedVPtr(datum)) {
-        // returned one of arguments
-        return OwnedPointerDatumToPod(datum);
-    }
-
-    return PointerDatumToPod(datum);
-}
-
-Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value) {
-    return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
-}
-
-Datum PointerDatumFromItem(const NUdf::TBlockItem& value) {
-    return (Datum)value.AsStringRef().Data();
-}
 
 NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
     // typname => 'cstring', typlen => '-2', the only type with typlen == -2
@@ -281,10 +164,6 @@ const MemoryContextMethods MkqlMethods = {
     ,MkqlAllocSetCheck
 #endif
 };
-
-inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
-    return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
-}
 
 class TPgConst : public TMutableComputationNode<TPgConst> {
     typedef TMutableComputationNode<TPgConst> TBaseComputation;

@@ -136,6 +136,7 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/thread_inits.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/type_cache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_aggs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.0.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.1.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.2.cpp

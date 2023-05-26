@@ -224,6 +224,10 @@ NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
     throw yexception() << "PG types are not supported";
 }
 
+void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFactory>>& registry) {
+    Y_UNUSED(registry);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr
 

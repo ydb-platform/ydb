@@ -4,6 +4,8 @@
 #include "mkql_block_agg_minmax.h"
 #include "mkql_block_agg_some.h"
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -19,6 +21,7 @@ struct TAggregatorFactories {
         Factories["min"] = MakeBlockMinFactory();
         Factories["max"] = MakeBlockMaxFactory();
         Factories["some"] = MakeBlockSomeFactory();
+        RegisterPgBlockAggs(Factories);
     }
 };
 

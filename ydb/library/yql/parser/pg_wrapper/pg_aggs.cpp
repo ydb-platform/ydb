@@ -26,16 +26,31 @@ extern "C" {
 
 namespace NYql {
 
-	extern "C" {
+extern "C" {
 
 #ifdef USE_SLOW_PG_KERNELS
-#include "pg_kernels.slow.3.inc"
+#include "pg_aggs.slow.inc"
 #else
+#include "pg_proc_policies.0.inc"
+#include "pg_proc_policies.1.inc"
+#include "pg_proc_policies.2.inc"
 #include "pg_proc_policies.3.inc"
-#include "pg_kernels.3.inc"
+#include "pg_aggs.inc"
 #endif
 
-	}
+}
 
 }
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+using namespace NYql;
+
+void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFactory>>& registry) {
+#include "pg_aggs_register.inc"
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr
 

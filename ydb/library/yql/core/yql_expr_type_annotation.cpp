@@ -5452,6 +5452,12 @@ bool HasContextFuncs(const TExprNode& input) {
             return false;
         }
 
+        if (node.IsCallable({"AggApply","AggApplyState","AggApplyManyState","AggBlockApply","AggBlockApplyState"}) && 
+            node.Head().Content().StartsWith("pg_")) {
+            needCtx = true;
+            return false;
+        }
+
         return true;
     });
 

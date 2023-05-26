@@ -259,18 +259,19 @@ class TBlockSomeFactory : public IBlockAggregatorFactory {
 
    std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareCombineKeys(
        TTupleType* tupleType,
-       std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
        const TTypeEnvironment& env) const override {
         Y_UNUSED(env);
-        return PrepareSome<TCombineKeysTag>(tupleType, filterColumn, argsColumns[0]);
+        return PrepareSome<TCombineKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0]);
     }
 
     std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareFinalizeKeys(
-       TTupleType* tupleType,
-       const std::vector<ui32>& argsColumns,
-       const TTypeEnvironment& env) const override {
+        TTupleType* tupleType,
+        const std::vector<ui32>& argsColumns,
+        const TTypeEnvironment& env,
+        TType* returnType) const override {
         Y_UNUSED(env);
+        Y_UNUSED(returnType);
         return PrepareSome<TFinalizeKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0]);
     }
 };

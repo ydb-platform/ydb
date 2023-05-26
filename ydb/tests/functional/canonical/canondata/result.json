@@ -914,6 +914,26 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_ct.script-script_/simple_ct.script_Questions.results"
         }
     },
+    "test_sql.TestCanonicalFolder1.test_case[simple/empty_dict_select.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_empty_dict_select.sql-plan_/simple_empty_dict_select.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[simple/empty_dict_select.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_empty_dict_select.sql-result_sets_/simple_empty_dict_select.sql.results"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[simple/empty_list_select.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_empty_list_select.sql-plan_/simple_empty_list_select.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[simple/empty_list_select.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_empty_list_select.sql-result_sets_/simple_empty_list_select.sql.results"
+        }
+    },
     "test_sql.TestCanonicalFolder1.test_case[simple/empty_select.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_empty_select.sql-plan_/simple_empty_select.sql.plan"
@@ -932,6 +952,16 @@
     "test_sql.TestCanonicalFolder1.test_case[simple/multi_select.sql-result_sets]": {
         "result_sets": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_multi_select.sql-result_sets_/simple_multi_select.sql.results"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[simple/null_select.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_null_select.sql-plan_/simple_null_select.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[simple/null_select.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_simple_null_select.sql-result_sets_/simple_null_select.sql.results"
         }
     },
     "test_sql.TestCanonicalFolder1.test_case[simple/q1.sql-plan]": {

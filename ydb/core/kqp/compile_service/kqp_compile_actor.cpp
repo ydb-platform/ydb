@@ -127,11 +127,11 @@ public:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
-                AsyncCompileResult = KqpHost->PrepareQuery(QueryRef, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                AsyncCompileResult = KqpHost->PrepareFederatedQuery(QueryRef, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings);
                 break;
 
             default:

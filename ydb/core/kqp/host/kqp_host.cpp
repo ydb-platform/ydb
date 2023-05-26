@@ -967,14 +967,14 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr PrepareQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, settings] (TExprContext& ctx) mutable {
                 return PrepareQueryInternal(query, EKikimrQueryType::Query, settings, ctx);
             });
     }
 
-    IAsyncQueryResultPtr PrepareFederatedQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, settings] (TExprContext& ctx) mutable {
                 return PrepareQueryInternal(query, EKikimrQueryType::Script, settings, ctx);
@@ -1059,7 +1059,7 @@ private:
             NSQLTranslation::TTranslationSettings settings{};
 
             // TODO: remove this test crutch when dynamic bindings discovery will be implemented // YQ-1964
-            if (SessionCtx->Query().Type == EKikimrQueryType::Script && GetEnv("TEST_S3_CONNECTION")) {
+            if ((SessionCtx->Query().Type == EKikimrQueryType::Script || SessionCtx->Query().Type == EKikimrQueryType::Query) && GetEnv("TEST_S3_CONNECTION")) {
                 NSQLTranslation::TTableBindingSettings binding;
                 binding.ClusterType = "s3";
                 binding.Settings["cluster"] = GetEnv("TEST_S3_CONNECTION");
@@ -1501,7 +1501,7 @@ private:
     }
 
     void Init(EKikimrQueryType queryType) {
-        if (queryType == EKikimrQueryType::Script) {
+        if (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) {
             InitS3Provider();
         }
 

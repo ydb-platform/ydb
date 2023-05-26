@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
-        const TString object = "Root/test_object";
+        const TString object = "test_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -154,10 +154,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_table}`
+            )", "external_table"_a=externalTableName);
+
         auto db = kikimr.GetQueryClient();
-        auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
-            SELECT * FROM `{external_table}`
-        )", "external_table"_a=externalTableName)).ExtractValueSync();
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
         UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
 
@@ -179,12 +181,84 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
     }
 
+    Y_UNIT_TEST(ExecuteQueryWithExternalTableResolve) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket_execute_query";
+        const TString object = "test_object";
+
+        CreateBucketWithObject(bucket, object, TEST_CONTENT);
+
+        auto kikimr = DefaultKikimrRunner();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="{object}",
+                FORMAT="json_each_row"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+            "object"_a = object
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_table}`
+            )", "external_table"_a=externalTableName);
+
+        auto db = kikimr.GetQueryClient();
+        auto executeQueryIterator = db.StreamExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        size_t currentRow = 0;
+        while (true) {
+            auto part = executeQueryIterator.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            UNIT_ASSERT(part.HasResultSet());
+
+            auto result = part.GetResultSet();
+
+            TResultSetParser resultSet(result);
+            while (resultSet.TryNextRow()) {
+                if (currentRow == 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
+                } else if (currentRow == 1) {
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
+                } else {
+                    UNIT_ASSERT(false);
+                }
+                ++currentRow;
+            }
+            UNIT_ASSERT(currentRow > 0);
+        }
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithDataSource) {
         using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString bucket = "test_bucket3";
 
-        CreateBucketWithObject(bucket, "Root/test_object", TEST_CONTENT);
+        CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
         auto kikimr = DefaultKikimrRunner();
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -236,7 +310,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString ydbTable = "/Root/ydb_table";
         const TString bucket = "test_bucket4";
 
-        CreateBucketWithObject(bucket, "Root/test_object", TEST_CONTENT);
+        CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
         auto kikimr = DefaultKikimrRunner();
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -311,7 +385,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket5";
-        const TString object = "Root/test_object";
+        const TString object = "test_object";
 
         CreateBucketWithObject(bucket, object, TEST_CONTENT);
 
@@ -376,7 +450,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString ydbTable = "/Root/ydb_table";
         const TString bucket = "test_bucket6";
 
-        CreateBucketWithObject(bucket, "Root/test_object", TEST_CONTENT);
+        CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
         auto kikimr = DefaultKikimrRunner();
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);

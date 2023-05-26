@@ -15,9 +15,9 @@ static EPhysicalQueryType GetPhysicalQueryType(const TStringBuf& value) {
     } else if (value == "scan_query") {
         return EPhysicalQueryType::Scan;
     } else if (value == "query") {
-        return EPhysicalQueryType::Query;
-    } else if (value == "federated_query") {
-        return EPhysicalQueryType::FederatedQuery;
+        return EPhysicalQueryType::GenericQuery;
+    } else if (value == "script") {
+        return EPhysicalQueryType::GenericScript;
     } else {
         YQL_ENSURE(false, "Unknown physical query type: " << value);
     }
@@ -31,10 +31,10 @@ static TStringBuf PhysicalQueryTypeToString(EPhysicalQueryType type) {
             return "data_query";
         case EPhysicalQueryType::Scan:
             return "scan_query";
-        case EPhysicalQueryType::Query:
+        case EPhysicalQueryType::GenericQuery:
             return "query";
-        case EPhysicalQueryType::FederatedQuery:
-            return "federated_query";
+        case EPhysicalQueryType::GenericScript:
+            return "script";
     }
 
     YQL_ENSURE(false, "Unexpected physical query type: " << type);

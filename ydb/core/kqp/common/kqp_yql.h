@@ -12,8 +12,8 @@ enum class EPhysicalQueryType {
     Unspecified,
     Data,
     Scan,
-    Query,
-    FederatedQuery,
+    GenericQuery,
+    GenericScript,
 };
 
 struct TKqpPhyQuerySettings {

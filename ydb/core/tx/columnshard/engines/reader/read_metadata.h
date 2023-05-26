@@ -77,6 +77,7 @@ public:
 private:
     const ESorting Sorting = ESorting::ASC; // Sorting inside returned batches
     std::optional<TPKRangesFilter> PKRangesFilter;
+    TProgramContainer Program;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
@@ -91,16 +92,15 @@ public:
         return *PKRangesFilter;
     }
 
-    TReadMetadataBase(const ESorting sorting)
+    TReadMetadataBase(const ESorting sorting, const TProgramContainer& ssaProgram)
         : Sorting(sorting)
+        , Program(ssaProgram)
     {
-
     }
     virtual ~TReadMetadataBase() = default;
 
     std::shared_ptr<NOlap::TPredicate> LessPredicate;
     std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
-    std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<const THashSet<TUnifiedBlobId>> ExternBlobs;
     ui64 Limit{0}; // TODO
 
@@ -121,6 +121,10 @@ public:
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
         meta.Dump(out);
         return out;
+    }
+
+    const TProgramContainer& GetProgram() const {
+        return Program;
     }
 };
 
@@ -147,8 +151,8 @@ public:
 
     std::shared_ptr<NIndexedReader::IOrderPolicy> BuildSortingPolicy() const;
 
-    TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting)
-        : TBase(sorting)
+    TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
+        : TBase(sorting, ssaProgram)
         , IndexVersions(info)
         , Snapshot(snapshot)
         , ResultIndexSchema(info.GetSchema(Snapshot))
@@ -251,7 +255,7 @@ public:
             << " index records: " << NumIndexedRecords()
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
-            << " with program steps: " << (Program ? Program->Steps.size() : 0)
+      //      << " with program steps: " << (Program ? Program->Steps.size() : 0)
             << " at snapshot: " << Snapshot.GetPlanStep() << ":" << Snapshot.GetTxId();
         TBase::Dump(out);
         if (SelectInfo) {
@@ -276,8 +280,8 @@ public:
     std::vector<ui32> ResultColumnIds;
     THashMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
 
-    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting)
-        : TBase(sorting)
+    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram)
+        : TBase(sorting, ssaProgram)
         , TabletId(tabletId)
     {}
 

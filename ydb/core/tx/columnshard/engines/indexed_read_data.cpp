@@ -433,12 +433,11 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
             });
         }
     }
-
-    if (ReadMetadata->Program) {
+    
+    if (ReadMetadata->GetProgram().HasProgram()) {
         MergeTooSmallBatches(out);
-
         for (auto& result : out) {
-            auto status = ApplyProgram(result.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
+            auto status = ReadMetadata->GetProgram().ApplyProgram(result.ResultBatch);
             if (!status.ok()) {
                 result.ErrorString = status.message();
             }

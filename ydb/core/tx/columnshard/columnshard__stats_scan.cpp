@@ -20,11 +20,9 @@ NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
         .LastReadKey = std::move(lastKey)
     };
 
-    if (ReadMetadata->Program) {
-        auto status = ApplyProgram(out.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
-        if (!status.ok()) {
-            out.ErrorString = status.message();
-        }
+    auto status = ReadMetadata->GetProgram().ApplyProgram(out.ResultBatch);
+    if (!status.ok()) {
+        out.ErrorString = status.message();
     }
     return out;
 }

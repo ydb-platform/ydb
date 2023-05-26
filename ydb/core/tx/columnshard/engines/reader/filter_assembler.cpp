@@ -20,9 +20,9 @@ bool TAssembleFilter::DoExecuteImpl() {
         FilteredBatch = nullptr;
         return true;
     }
-    if (ReadMetadata->Program) {
+    auto earlyFilter = ReadMetadata->GetProgram().BuildEarlyFilter(batch);
+    if (earlyFilter) {
         if (AllowEarlyFilter) {
-            auto earlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
             Filter = std::make_shared<NArrow::TColumnFilter>(Filter->CombineSequentialAnd(*earlyFilter));
             if (!earlyFilter->Apply(batch)) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
@@ -30,7 +30,7 @@ bool TAssembleFilter::DoExecuteImpl() {
                 return true;
             }
         } else if (BatchesOrderPolicy->NeedNotAppliedEarlyFilter()) {
-            EarlyFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, ReadMetadata->Program));
+            EarlyFilter = earlyFilter;
         }
     }
 

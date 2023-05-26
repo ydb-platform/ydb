@@ -100,11 +100,8 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
         columnIds.insert(columnId);
     }
 
-    Program = readDescription.Program;
-    if (Program) {
-        for (auto& [id, name] : Program->SourceColumns) {
-            columnIds.insert(id);
-        }
+    for (auto& [id, name] : GetProgram().GetSourceColumns()) {
+        columnIds.insert(id);
     }
 
     SelectInfo = dataAccessor.Select(readDescription, columnIds);
@@ -126,13 +123,11 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
         }
     }
-    if (Program) {
-        for (auto&& i : Program->GetEarlyFilterColumns()) {
-            auto id = indexInfo.GetColumnIdOptional(i);
-            if (id) {
-                result.emplace(*id);
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-            }
+    for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
+        auto id = indexInfo.GetColumnIdOptional(i);
+        if (id) {
+            result.emplace(*id);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
         }
     }
     if (Snapshot.GetPlanStep()) {
@@ -217,12 +212,9 @@ NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
             }
             ++idx;
         }
-        if (Program) {
-            for (ui32 i = 1; i < Program->Steps.size(); ++i) {
-                if (Program->Steps[i]->Filters.size()) {
-                    return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
-                }
-            }
+
+        if (!GetProgram().HasEarlyFilterOnly()) {
+            return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
         }
 
         return std::make_shared<NIndexedReader::TPKSortingWithLimit>(this->shared_from_this());

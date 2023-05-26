@@ -12,7 +12,6 @@ protected:
     {}
 
     std::shared_ptr<NOlap::TReadMetadata> PrepareReadMetadata(
-                                    const TActorContext& ctx,
                                     const NOlap::TReadDescription& readDescription,
                                     const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                     const std::unique_ptr<NOlap::IColumnEngine>& index,
@@ -21,7 +20,6 @@ protected:
 
 protected:
     bool ParseProgram(
-        const TActorContext& ctx,
         NKikimrSchemeOp::EOlapProgramType programType,
         TString serializedProgram,
         NOlap::TReadDescription& read,

@@ -24,6 +24,8 @@ struct TDqSettings {
         static constexpr int MaxNetworkRetries = 5;
         static constexpr ui64 LiteralTimeout = 60000; // 1 minutes
         static constexpr ui64 TableTimeout = 600000; // 10 minutes
+        static constexpr ui64 LongWorkersAllocationFailTimeout = TableTimeout;
+        static constexpr ui64 LongWorkersAllocationWarnTimeout = 30000; // 30 seconds
         static constexpr ui32 CloudFunctionConcurrency = 10;
         static constexpr ui64 ChannelBufferSize = 2000_MB;
         static constexpr ui64 OutputChunkMaxSize = 4_MB;

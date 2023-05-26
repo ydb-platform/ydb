@@ -26,6 +26,9 @@ from .._grpc.grpcwrapper.ydb_topic import (
     Codec,
 )
 from .._errors import check_retriable_error
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TopicReaderError(YdbError):
@@ -146,7 +149,6 @@ class ReaderReconnector:
 
     def __init__(self, driver: Driver, settings: topic_reader.PublicReaderSettings):
         self._id = self._static_reader_reconnector_counter.inc_and_get()
-
         self._settings = settings
         self._driver = driver
         self._background_tasks = set()
@@ -395,39 +397,42 @@ class ReaderStream:
                 )
             )
             while True:
-                message = await self._stream.receive()  # type: StreamReadMessage.FromServer
-                _process_response(message.server_status)
+                try:
+                    message = await self._stream.receive()  # type: StreamReadMessage.FromServer
+                    _process_response(message.server_status)
 
-                if isinstance(message.server_message, StreamReadMessage.ReadResponse):
-                    self._on_read_response(message.server_message)
+                    if isinstance(message.server_message, StreamReadMessage.ReadResponse):
+                        self._on_read_response(message.server_message)
 
-                elif isinstance(message.server_message, StreamReadMessage.CommitOffsetResponse):
-                    self._on_commit_response(message.server_message)
+                    elif isinstance(message.server_message, StreamReadMessage.CommitOffsetResponse):
+                        self._on_commit_response(message.server_message)
 
-                elif isinstance(
-                    message.server_message,
-                    StreamReadMessage.StartPartitionSessionRequest,
-                ):
-                    self._on_start_partition_session(message.server_message)
+                    elif isinstance(
+                        message.server_message,
+                        StreamReadMessage.StartPartitionSessionRequest,
+                    ):
+                        self._on_start_partition_session(message.server_message)
 
-                elif isinstance(
-                    message.server_message,
-                    StreamReadMessage.StopPartitionSessionRequest,
-                ):
-                    self._on_partition_session_stop(message.server_message)
+                    elif isinstance(
+                        message.server_message,
+                        StreamReadMessage.StopPartitionSessionRequest,
+                    ):
+                        self._on_partition_session_stop(message.server_message)
 
-                elif isinstance(message.server_message, UpdateTokenResponse):
-                    self._update_token_event.set()
+                    elif isinstance(message.server_message, UpdateTokenResponse):
+                        self._update_token_event.set()
 
-                else:
-                    raise NotImplementedError(
-                        "Unexpected type of StreamReadMessage.FromServer message: %s" % message.server_message
-                    )
+                    else:
+                        raise issues.UnexpectedGrpcMessage(
+                            "Unexpected message in _read_messages_loop: %s" % type(message.server_message)
+                        )
+                except issues.UnexpectedGrpcMessage as e:
+                    logger.exception("unexpected message in stream reader: %s" % e)
 
                 self._state_changed.set()
         except Exception as e:
             self._set_first_error(e)
-            raise
+            return
 
     async def _update_token_loop(self):
         while True:

@@ -26,7 +26,7 @@ except ImportError:
 class TokenServiceCredentials(AbstractExpiringTokenCredentials):
     def __init__(self, iam_endpoint=None, iam_channel_credentials=None):
         super(TokenServiceCredentials, self).__init__()
-        assert iam_token_service_pb2_grpc is not None, "run pip install==ydb[yc] to use service account credentials"
+        assert iam_token_service_pb2_grpc is not None, 'run pip install "ydb[yc]" to use service account credentials'
         self._get_token_request_timeout = 10
         self._iam_endpoint = "iam.api.cloud.yandex.net:443" if iam_endpoint is None else iam_endpoint
         self._iam_channel_credentials = {} if iam_channel_credentials is None else iam_channel_credentials

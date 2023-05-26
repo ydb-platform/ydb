@@ -45,7 +45,7 @@ def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout):
 class TokenServiceCredentials(credentials.AbstractExpiringTokenCredentials):
     def __init__(self, iam_endpoint=None, iam_channel_credentials=None, tracer=None):
         super(TokenServiceCredentials, self).__init__(tracer)
-        assert iam_token_service_pb2_grpc is not None, "run pip install==ydb[yc] to use service account credentials"
+        assert iam_token_service_pb2_grpc is not None, 'run pip install "ydb[yc]" to use service account credentials'
         self._get_token_request_timeout = 10
         self._iam_token_service_pb2 = iam_token_service_pb2
         self._iam_token_service_pb2_grpc = iam_token_service_pb2_grpc

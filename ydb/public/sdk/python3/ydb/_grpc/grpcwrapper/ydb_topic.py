@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import enum
 import typing
@@ -8,6 +10,7 @@ from google.protobuf.message import Message
 
 from . import ydb_topic_public_types
 from ... import scheme
+from ... import issues
 
 # Workaround for good IDE and universal for runtime
 if typing.TYPE_CHECKING:
@@ -588,15 +591,31 @@ class StreamReadMessage:
                 )
 
     @dataclass
-    class PartitionSessionStatusRequest:
+    class PartitionSessionStatusRequest(IToProto):
         partition_session_id: int
 
+        def to_proto(self) -> ydb_topic_pb2.StreamReadMessage.PartitionSessionStatusRequest:
+            return ydb_topic_pb2.StreamReadMessage.PartitionSessionStatusRequest(
+                partition_session_id=self.partition_session_id
+            )
+
     @dataclass
-    class PartitionSessionStatusResponse:
+    class PartitionSessionStatusResponse(IFromProto):
         partition_session_id: int
         partition_offsets: "OffsetsRange"
         committed_offset: int
         write_time_high_watermark: float
+
+        @staticmethod
+        def from_proto(
+            msg: ydb_topic_pb2.StreamReadMessage.PartitionSessionStatusResponse,
+        ) -> "StreamReadMessage.PartitionSessionStatusResponse":
+            return StreamReadMessage.PartitionSessionStatusResponse(
+                partition_session_id=msg.partition_session_id,
+                partition_offsets=OffsetsRange.from_proto(msg.partition_offsets),
+                committed_offset=msg.committed_offset,
+                write_time_high_watermark=msg.write_time_high_watermark,
+            )
 
     @dataclass
     class StartPartitionSessionRequest(IFromProto):
@@ -632,14 +651,29 @@ class StreamReadMessage:
             return res
 
     @dataclass
-    class StopPartitionSessionRequest:
+    class StopPartitionSessionRequest(IFromProto):
         partition_session_id: int
         graceful: bool
         committed_offset: int
 
+        @staticmethod
+        def from_proto(
+            msg: ydb_topic_pb2.StreamReadMessage.StopPartitionSessionRequest,
+        ) -> StreamReadMessage.StopPartitionSessionRequest:
+            return StreamReadMessage.StopPartitionSessionRequest(
+                partition_session_id=msg.partition_session_id,
+                graceful=msg.graceful,
+                committed_offset=msg.committed_offset,
+            )
+
     @dataclass
-    class StopPartitionSessionResponse:
+    class StopPartitionSessionResponse(IToProto):
         partition_session_id: int
+
+        def to_proto(self) -> ydb_topic_pb2.StreamReadMessage.StopPartitionSessionResponse:
+            return ydb_topic_pb2.StreamReadMessage.StopPartitionSessionResponse(
+                partition_session_id=self.partition_session_id,
+            )
 
     @dataclass
     class FromClient(IToProto):
@@ -659,6 +693,10 @@ class StreamReadMessage:
             elif isinstance(self.client_message, UpdateTokenRequest):
                 res.update_token_request.CopyFrom(self.client_message.to_proto())
             elif isinstance(self.client_message, StreamReadMessage.StartPartitionSessionResponse):
+                res.start_partition_session_response.CopyFrom(self.client_message.to_proto())
+            elif isinstance(self.client_message, StreamReadMessage.StopPartitionSessionResponse):
+                res.stop_partition_session_response.CopyFrom(self.client_message.to_proto())
+            elif isinstance(self.client_message, StreamReadMessage.PartitionSessionStatusRequest):
                 res.start_partition_session_response.CopyFrom(self.client_message.to_proto())
             else:
                 raise NotImplementedError("Unknown message type: %s" % type(self.client_message))
@@ -694,7 +732,14 @@ class StreamReadMessage:
                 return StreamReadMessage.FromServer(
                     server_status=server_status,
                     server_message=StreamReadMessage.StartPartitionSessionRequest.from_proto(
-                        msg.start_partition_session_request
+                        msg.start_partition_session_request,
+                    ),
+                )
+            elif mess_type == "stop_partition_session_request":
+                return StreamReadMessage.FromServer(
+                    server_status=server_status,
+                    server_message=StreamReadMessage.StopPartitionSessionRequest.from_proto(
+                        msg.stop_partition_session_request
                     ),
                 )
             elif mess_type == "update_token_response":
@@ -702,9 +747,17 @@ class StreamReadMessage:
                     server_status=server_status,
                     server_message=UpdateTokenResponse.from_proto(msg.update_token_response),
                 )
-
-            # todo replace exception to log
-            raise NotImplementedError()
+            elif mess_type == "partition_session_status_response":
+                return StreamReadMessage.FromServer(
+                    server_status=server_status,
+                    server_message=StreamReadMessage.PartitionSessionStatusResponse.from_proto(
+                        msg.partition_session_status_response
+                    ),
+                )
+            else:
+                raise issues.UnexpectedGrpcMessage(
+                    "Unexpected message while parse ReaderMessagesFromServerToClient: '%s'" % mess_type
+                )
 
 
 ReaderMessagesFromClientToServer = Union[

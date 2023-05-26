@@ -254,7 +254,7 @@ public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
     void operator delete(void *mem, std::size_t sz) {
-        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + offsetof(TDirectArrayHolderInplace, Size));
+        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + sizeof(TComputationValue<TDirectArrayHolderInplace>));
         FreeWithSize(mem, sz + *static_cast<ui64*>(pSize) * sizeof(NUdf::TUnboxedValue));
     }
 
@@ -568,7 +568,7 @@ private:
         return NUdf::TUnboxedValuePod(new TDictIterator(this));
     }
 
-    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const final {
+    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder&) const final {
         if (1U >= TBaseVector::size()) {
             return const_cast<TVectorHolderBase*>(this);
         }

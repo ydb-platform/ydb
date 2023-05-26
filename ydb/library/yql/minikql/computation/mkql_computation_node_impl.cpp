@@ -177,7 +177,7 @@ void TExternalComputationNode::SetGetter(TGetter&& getter) {
 }
 
 void TExternalComputationNode::InvalidateValue(TComputationContext& ctx) const {
-    for (const auto index : InvalidationSet) {
+    for (const auto& index : InvalidationSet) {
         ctx.MutableValues[index.first] = NUdf::TUnboxedValuePod::Invalid();
     }
 }
@@ -236,7 +236,7 @@ void TWideFlowProxyComputationNode::CollectDependentIndexes(const IComputationNo
 }
 
 void TWideFlowProxyComputationNode::InvalidateValue(TComputationContext& ctx) const {
-    for (const auto index : InvalidationSet) {
+    for (const auto& index : InvalidationSet) {
         ctx.MutableValues[index.first] = NUdf::TUnboxedValuePod::Invalid();
     }
 }

@@ -132,7 +132,7 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
 
     const auto &keyDefaults = *Tool.Scheme.Keys;
 
-    ui32 it = 0;
+    ui64 it = 0;
     for (auto _ : state) {
         ui32 lower = ++it % 50;
         ui32 upper = lower + items;
@@ -143,21 +143,23 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
         TCharge::Range(Env.Get(), from, to, *Run.Get(), keyDefaults, Tags, items, Max<ui64>());
     }
 
-    state.counters["Touched"] = Env->TouchedCount;
+    state.counters["Touched"] = benchmark::Counter(Env->TouchedCount, benchmark::Counter::kAvgIterations);
 }
 
 BENCHMARK_DEFINE_F(TModel, PrechargeByRows)(benchmark::State& state) {
     ui64 items = state.range(0);
 
-    ui32 it = 0;
+    const auto &keyDefaults = *Tool.Scheme.Keys;
+
+    ui64 it = 0;
     for (auto _ : state) {
         ui32 lower = ++it % 50;
         ui32 upper = lower + items;
 
-        TCharge(Env.Get(), *(Run.Get())->begin()->Part, Tags, false).Do(lower, upper, items, Max<ui64>());
+        TCharge(Env.Get(), *(Run.Get())->begin()->Part, Tags, false).Do(lower, upper, keyDefaults, items, Max<ui64>());
     }
 
-    state.counters["Touched"] = Env->TouchedCount;
+    state.counters["Touched"] = Env->TouchedCount / it;
 }
 
 BENCHMARK_REGISTER_F(TModel, PrechargeByKeys)

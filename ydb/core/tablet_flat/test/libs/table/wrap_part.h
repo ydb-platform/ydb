@@ -113,6 +113,10 @@ namespace NTest {
             }
         }
 
+        void StopAfter(TArrayRef<const TCell> key) {
+            StopKey = TOwnedCellVec::Make(key);
+        }
+
         EReady Next() noexcept
         {
             if (std::exchange(NoBlobs, false)) {
@@ -142,6 +146,13 @@ namespace NTest {
 
             TDbTupleRef key = Iter->GetKey();
 
+            if (StopKey) {
+                auto cmp = CompareTypedCellVectors(key.Cells().data(), StopKey.data(), Scheme->Keys->Types.data(), StopKey.size());
+                if (cmp > 0) {
+                   return EReady::Gone;
+                }
+            }
+
             for (auto &pin: Remap_.KeyPins())
                 State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
 
@@ -161,6 +172,7 @@ namespace NTest {
         TRowState State;
         TRun Run;
         THolder<TRunIt> Iter;
+        TOwnedCellVec StopKey;
     };
 
     using TWrapPart = TWrapPartImpl<EDirection::Forward>;

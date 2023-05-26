@@ -40,6 +40,7 @@ extern "C" {
 #include "nodes/execnodes.h"
 #include "executor/executor.h"
 #include "lib/stringinfo.h"
+#include "miscadmin.h"
 #include "thread_inits.h"
 
 #undef Abs
@@ -78,6 +79,7 @@ struct TMainContext {
     MemoryContext PrevCurrentMemoryContext = nullptr;
     MemoryContext PrevErrorContext = nullptr;
     TimestampTz StartTimestamp;
+    pg_stack_base_t PrevStackBase;
 };
 
 NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
@@ -3291,6 +3293,7 @@ void PgAcquireThreadContext(void* ctx) {
         main->PrevErrorContext = ErrorContext;
         CurrentMemoryContext = ErrorContext = (MemoryContext)&main->Data;
         SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
+        main->PrevStackBase = set_stack_base();
     }
 }
 
@@ -3299,6 +3302,7 @@ void PgReleaseThreadContext(void* ctx) {
         auto main = (TMainContext*)ctx;
         CurrentMemoryContext = main->PrevCurrentMemoryContext;
         ErrorContext = main->PrevErrorContext;
+        restore_stack_base(main->PrevStackBase);
     }
 }
 

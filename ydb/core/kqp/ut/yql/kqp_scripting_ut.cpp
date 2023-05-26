@@ -15,6 +15,18 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NScripting;
 
+static const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
+[
+    [[1];[101u];["Value1"]];
+    [[2];[201u];["Value1"]];
+    [[3];[301u];["Value1"]];
+    [[1];[401u];["Value1"]];
+    [[2];[501u];["Value1"]];
+    [[3];[601u];["Value1"]];
+    [[1];[701u];["Value1"]];
+    [[2];[801u];["Value1"]]
+])";
+
 Y_UNIT_TEST_SUITE(KqpScripting) {
     Y_UNIT_TEST(EndOfQueryCommit) {
         TKikimrRunner kikimr;
@@ -583,7 +595,23 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
     }
 
-    Y_UNIT_TEST(StreamExecuteYqlScriptScanTimeoutBruteForce) {
+    std::function<TExecuteYqlRequestSettings(int)> GetExecuteYqlRequestSettingsFn(bool client, bool operation) {
+        return [client, operation](int i) {
+            TExecuteYqlRequestSettings settings;
+            if (client && operation) {
+                settings.ClientTimeout(TDuration::MilliSeconds(i))
+                    .UseClientTimeoutForOperation(true);
+            } else if (client) {
+                settings.ClientTimeout(TDuration::MilliSeconds(i))
+                    .UseClientTimeoutForOperation(false);
+            } else if (operation) {
+                settings.OperationTimeout(TDuration::MilliSeconds(i));
+            }
+            return settings;
+        };
+    }
+
+    void DoStreamExecuteYqlScriptScanTimeoutBruteForce(bool clientTimeout, bool operationTimeout) {
         TKikimrRunner kikimr;
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
@@ -591,20 +619,22 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         int maxTimeoutMs = 1000;
 
+        auto getExecuteYqlRequestSettings = GetExecuteYqlRequestSettingsFn(clientTimeout, operationTimeout);
+        auto expected = TString("[") + EXPECTED_EIGHTSHARD_VALUE1 + "]";
+
+        int unsuccessStatus = 0;
+
         for (int i = 1; i < maxTimeoutMs; i++) {
             auto it = client.StreamExecuteYqlScript(R"(
                 SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
-            )",
-            TExecuteYqlRequestSettings()
-                .ClientTimeout(TDuration::MilliSeconds(i))
-                .UseClientTimeoutForOperation(false)
-            ).GetValueSync();
+            )", getExecuteYqlRequestSettings(i)).GetValueSync();
 
             if (it.IsSuccess()) {
                 try {
                     auto yson = StreamResultToYson(it, true);
-                    CompareYson(R"([[[[1];[101u];["Value1"]];[[2];[201u];["Value1"]];[[3];[301u];["Value1"]];[[1];[401u];["Value1"]];[[2];[501u];["Value1"]];[[3];[601u];["Value1"]];[[1];[701u];["Value1"]];[[2];[801u];["Value1"]]]])", yson);
+                    CompareYson(expected, yson);
                 } catch (const TStreamReadError& ex) {
+                    unsuccessStatus++;
                     if (ex.Status != NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED && ex.Status != NYdb::EStatus::TIMEOUT) {
                         TStringStream msg;
                         msg << "unexpected status: " << ex.Status;
@@ -618,15 +648,187 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
                 UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
             }
         }
+        UNIT_ASSERT(unsuccessStatus);
+        WaitForZeroSessions(counters);
+    }
 
-        int count = 60;
-        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
-            Cerr << "SESSIONS: " << counters.GetActiveSessionActors()->Val() << Endl;
-            count--;
-            Sleep(TDuration::Seconds(1));
+    void DoStreamExecuteYqlScriptTimeoutBruteForce(bool clientTimeout, bool operationTimeout) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        TScriptingClient client(kikimr.GetDriver());
+
+        int maxTimeoutMs = 1000;
+
+        auto getExecuteYqlRequestSettings = GetExecuteYqlRequestSettingsFn(clientTimeout, operationTimeout);
+
+        for (int i = 1; i < maxTimeoutMs; i++) {
+            auto result = client.ExecuteYqlScript(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+            )", getExecuteYqlRequestSettings(i)).GetValueSync();
+
+            if (result.IsSuccess()) {
+                CompareYson(EXPECTED_EIGHTSHARD_VALUE1, FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                switch (result.GetStatus()) {
+                    case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+                    case NYdb::EStatus::TIMEOUT:
+                        break;
+                    default: {
+                        TStringStream msg;
+                        msg << "unexpected status: " << result.GetStatus();
+                        UNIT_ASSERT_C(false, msg.Str().data());
+                    }
+                }
+            }
         }
 
-        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanCancelAfterBruteForce) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        TScriptingClient client(kikimr.GetDriver());
+
+        int maxTimeoutMs = 1000;
+
+        auto expected = TString("[") + EXPECTED_EIGHTSHARD_VALUE1 + "]";
+
+        for (int i = 1; i < maxTimeoutMs; i++) {
+            auto it = client.StreamExecuteYqlScript(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+            )", TExecuteYqlRequestSettings().CancelAfter(TDuration::MilliSeconds(i))).GetValueSync();
+
+            UNIT_ASSERT(it.IsSuccess());
+            try {
+                auto yson = StreamResultToYson(it, true);
+                CompareYson(expected, yson);
+            } catch (const TStreamReadError& ex) {
+                if (ex.Status != NYdb::EStatus::CANCELLED) {
+                    TStringStream msg;
+                    msg << "unexpected status: " << ex.Status;
+                    UNIT_ASSERT_C(false, msg.Str().data());
+                }
+            } catch (const std::exception& ex) {
+                auto msg = TString("unknown exception during the test: ") + ex.what();
+                UNIT_ASSERT_C(false, msg.data());
+            }
+        }
+
+        WaitForZeroSessions(counters);
+    }
+
+    // Check in case of CANCELED status we have no made changes in the table
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanWriteCancelAfterBruteForced) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        TScriptingClient client(kikimr.GetDriver());
+
+        int maxTimeoutMs = 1000;
+
+        auto createKey = [](int id) -> ui64 {
+            return (1u << 29) + id;
+        };
+
+        auto createExpectedRow = [](ui64 key) -> TString {
+            return Sprintf(R"([[100500];[%luu];["newrecords"]])", key);
+        };
+
+        TString expected;
+
+        for (int i = 1; i <= maxTimeoutMs; i++) {
+            auto it = client.StreamExecuteYqlScript(Sprintf(R"(
+                UPSERT INTO `/Root/EightShard` (Key, Data, Text) VALUES (%lu, 100500, "newrecords");
+                COMMIT;
+                SELECT * FROM `/Root/EightShard` WHERE Text = "newrecords" ORDER BY Key;
+                COMMIT;
+            )", createKey(i)), TExecuteYqlRequestSettings().CancelAfter(TDuration::MilliSeconds(i))).GetValueSync();
+
+            UNIT_ASSERT(it.IsSuccess());
+            try {
+                auto yson = StreamResultToYson(it, true);
+                expected += createExpectedRow(createKey(i));
+                if (i != maxTimeoutMs)
+                    expected += ";";
+                CompareYson(TString("[[") + expected + "]]", yson);
+            } catch (const TStreamReadError& ex) {
+                if (ex.Status != NYdb::EStatus::CANCELLED) {
+                    TStringStream msg;
+                    msg << "unexpected status: " << ex.Status;
+                    UNIT_ASSERT_C(false, msg.Str().data());
+                }
+            } catch (const std::exception& ex) {
+                auto msg = TString("unknown exception during the test: ") + ex.what();
+                UNIT_ASSERT_C(false, msg.data());
+            }
+        }
+
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptWriteCancelAfterBruteForced) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        TScriptingClient client(kikimr.GetDriver());
+
+        int maxTimeoutMs = 1000;
+
+        auto createKey = [](int id) -> ui64 {
+            return (1u << 29) + id;
+        };
+
+        auto createExpectedRow = [](ui64 key) -> TString {
+            return Sprintf(R"([[100500];[%luu];["newrecords"]])", key);
+        };
+
+        TString expected;
+
+        for (int i = 1; i <= maxTimeoutMs; i++) {
+            auto result = client.ExecuteYqlScript(Sprintf(R"(
+                UPSERT INTO `/Root/EightShard` (Key, Data, Text) VALUES (%lu, 100500, "newrecords");
+                COMMIT;
+                SELECT * FROM `/Root/EightShard` WHERE Text = "newrecords" ORDER BY Key;
+                COMMIT;
+            )", createKey(i)), TExecuteYqlRequestSettings().CancelAfter(TDuration::MilliSeconds(i))).GetValueSync();
+
+            if (result.IsSuccess()) {
+                auto yson = FormatResultSetYson(result.GetResultSet(0));
+                expected += createExpectedRow(createKey(i));
+                if (i != maxTimeoutMs)
+                    expected += ";";
+                CompareYson(TString("[") + expected + "]", yson);
+            }
+        }
+
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanClientTimeoutBruteForce) {
+        DoStreamExecuteYqlScriptScanTimeoutBruteForce(true, false);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanClientOperationTimeoutBruteForce) {
+        DoStreamExecuteYqlScriptScanTimeoutBruteForce(true, true);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptScanOperationTmeoutBruteForce) {
+        DoStreamExecuteYqlScriptScanTimeoutBruteForce(false, true);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptClientTimeoutBruteForce) {
+        DoStreamExecuteYqlScriptTimeoutBruteForce(true, false);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptClientOperationTimeoutBruteForce) {
+        DoStreamExecuteYqlScriptTimeoutBruteForce(true, true);
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptOperationTmeoutBruteForce) {
+        DoStreamExecuteYqlScriptTimeoutBruteForce(false, true);
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanScalar) {

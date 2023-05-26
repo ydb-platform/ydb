@@ -170,7 +170,7 @@ public:
         auto selfId = this->SelfId();
         auto as = TActivationContext::ActorSystem();
 
-        Request_->SetClientLostAction([selfId, as]() {
+        Request_->SetFinishAction([selfId, as]() {
             as->Send(selfId, new TEvents::TEvWakeup(EWakeupTag::ClientLostTag));
         });
 

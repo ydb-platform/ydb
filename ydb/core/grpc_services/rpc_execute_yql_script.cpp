@@ -20,7 +20,13 @@ public:
     using TResult = Ydb::Scripting::ExecuteYqlResult;
 
     TExecuteYqlScriptRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg)
+    {
+        // StreamExecuteYqlScript allows write in to table.
+        // But CanselAfter should not trigger cancelation if we chage table
+        // This logic is broken - just disable CancelAfter_ for a while
+        CancelAfter_ = TDuration();
+    }
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
@@ -47,6 +53,8 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
         }
 
+        ::Ydb::Operations::OperationParams operationParams;
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_SQL_SCRIPT,
@@ -59,7 +67,9 @@ public:
             &req->parameters(),
             req->collect_stats(),
             nullptr, // query_cache_policy
-            req->has_operation_params() ? &req->operation_params() : nullptr
+            req->has_operation_params() ? &req->operation_params() : nullptr,
+            false, // keep session
+            false // use cancelAfter
         );
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());

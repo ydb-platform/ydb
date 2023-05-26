@@ -31,7 +31,8 @@ public:
         const ::Ydb::Table::QueryStatsCollection::Mode collectStats,
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
-        bool keepSession = false);
+        bool keepSession = false,
+        bool useCancelAfter = true);
 
     TEvQueryRequest() = default;
 
@@ -251,7 +252,7 @@ public:
 
     void SetClientLostAction(TActorId actorId, NActors::TActorSystem* as) {
         if (RequestCtx) {
-            RequestCtx->SetClientLostAction([actorId, as]() {
+            RequestCtx->SetFinishAction([actorId, as]() {
                 as->Send(actorId, new NGRpcService::TEvClientLost());
                 });
         } else if (Record.HasCancelationActor()) {
@@ -281,7 +282,7 @@ private:
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>* YdbParameters = nullptr;
     const ::Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     const ::Ydb::Table::QueryCachePolicy* QueryCachePolicy = nullptr;
-    const ::Ydb::Operations::OperationParams* OperationParams = nullptr;
+    const bool HasOperationParams = false;
     bool KeepSession = false;
     TDuration OperationTimeout;
     TDuration CancelAfter;

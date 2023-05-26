@@ -13,7 +13,7 @@ void PassSubscription(const TEvSubscribeGrpcCancel* ev, IRequestCtxMtSafe* reque
     NActors::TActorSystem* as)
 {
     auto subscriber = ActorIdFromProto(ev->Record.GetSubscriber());
-    requestCtx->SetClientLostAction([subscriber, as]() {
+    requestCtx->SetFinishAction([subscriber, as]() {
         as->Send(subscriber, new TEvClientLost);
     });
 }

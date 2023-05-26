@@ -1798,6 +1798,7 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
+                hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

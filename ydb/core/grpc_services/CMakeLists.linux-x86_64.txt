@@ -33,6 +33,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   fq-libs-actors
   fq-libs-control_plane_proxy
   libs-control_plane_proxy-events
+  core-grpc_services-base
   core-grpc_services-counters
   core-grpc_services-local_rpc
   core-grpc_services-cancelation

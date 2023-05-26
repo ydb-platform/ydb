@@ -65,6 +65,7 @@ TString MakeQuery(const TString& tmpl) {
 namespace NKikimr {
 namespace NKqp {
 
+class TKqpCounters;
 const TString KikimrDefaultUtDomainRoot = "Root";
 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
@@ -276,6 +277,8 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TAc
 TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+
+void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 
 } // namespace NKqp
 } // namespace NKikimr

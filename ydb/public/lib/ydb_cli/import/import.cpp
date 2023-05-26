@@ -232,9 +232,6 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
     , SchemeClient(std::make_shared<NScheme::TSchemeClient>(driver))
     , TableClient(std::make_shared<NTable::TTableClient>(driver))
 {
-    UpsertSettings
-        .OperationTimeout(TDuration::Seconds(TImportFileSettings::OperationTimeoutSec))
-        .ClientTimeout(TDuration::Seconds(TImportFileSettings::ClientTimeoutSec));
     RetrySettings
         .MaxRetries(TImportFileSettings::MaxRetries)
         .Idempotent(true)
@@ -254,6 +251,10 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
         return MakeStatus(EStatus::SCHEME_ERROR,
             TStringBuilder() <<  result.GetIssues().ToString() << dbPath);
     }
+
+    UpsertSettings
+        .OperationTimeout(settings.OperationTimeout_)
+        .ClientTimeout(settings.ClientTimeout_);
 
     switch (settings.Format_) {
         case EOutputFormat::Default:

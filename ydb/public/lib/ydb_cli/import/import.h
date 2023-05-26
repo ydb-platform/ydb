@@ -35,11 +35,11 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
 
     static constexpr ui64 MaxBytesPerRequest = 8_MB;
     static constexpr const char * DefaultDelimiter = ",";
-    static constexpr ui32 OperationTimeoutSec = 5 * 60;
-    static constexpr ui32 ClientTimeoutSec = OperationTimeoutSec + 5;
     static constexpr ui32 MaxRetries = 10000;
 
     // Allowed values: Csv, Tsv, JsonUnicode, JsonBase64. Default means Csv
+    FLUENT_SETTING_DEFAULT(TDuration, OperationTimeout, TDuration::Seconds(5 * 60));
+    FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, OperationTimeout_ + TDuration::Seconds(5));
     FLUENT_SETTING_DEFAULT(EOutputFormat, Format, EOutputFormat::Default);
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);

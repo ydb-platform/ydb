@@ -170,6 +170,10 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
     config.Opts->SetTrailingArgTitle("<input files...>",
             "One or more file paths to import from");
+    config.Opts->AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
+            "There could also be a delay up to 200ms to receive timeout error from server")
+        .RequiredArgument("VAL").StoreResult(&OperationTimeout).DefaultValue(TDuration::Seconds(5 * 60));
+
     config.Opts->AddLongOption('p', "path", "Database path to table")
         .Required().RequiredArgument("STRING").StoreResult(&Path);
     config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
@@ -245,6 +249,7 @@ void TCommandImportFromCsv::Config(TConfig& config) {
 
 int TCommandImportFromCsv::Run(TConfig& config) {
     TImportFileSettings settings;
+    settings.OperationTimeout(OperationTimeout);
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
@@ -288,6 +293,7 @@ void TCommandImportFromJson::Parse(TConfig& config) {
 
 int TCommandImportFromJson::Run(TConfig& config) {
     TImportFileSettings settings;
+    settings.OperationTimeout(OperationTimeout);
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
@@ -306,6 +312,7 @@ void TCommandImportFromParquet::Config(TConfig& config) {
 
 int TCommandImportFromParquet::Run(TConfig& config) {
     TImportFileSettings settings;
+    settings.OperationTimeout(OperationTimeout);
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));

@@ -62,6 +62,7 @@ protected:
     TString BytesPerRequest;
     ui64 MaxInFlightRequests = 1;
     ui64 Threads = 0;
+    TDuration OperationTimeout;
 };
 
 class TCommandImportFromCsv : public TCommandImportFileBase {

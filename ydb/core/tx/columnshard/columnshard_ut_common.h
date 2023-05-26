@@ -416,4 +416,60 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TS
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
                                     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
+                                    
+}
+
+namespace NKikimr::NColumnShard {
+    class TTableUpdatesBuilder {
+        std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
+        std::shared_ptr<arrow::Schema> Schema;
+        ui32 RowsCount = 0;
+    public:
+        class TRowBuilder {
+            TTableUpdatesBuilder& Owner;
+            YDB_READONLY(ui32, Index, 0);
+        public:
+            TRowBuilder(ui32 index, TTableUpdatesBuilder& owner)
+                : Owner(owner)
+                , Index(index)
+            {}
+
+            template <class T>
+            TRowBuilder Add(const T& data) {
+                Y_VERIFY(Index < Owner.Builders.size());
+                auto dataScalar = arrow::MakeScalar(data);
+                auto res = Owner.Builders[Index]->AppendScalar(*dataScalar);
+                return TRowBuilder(Index + 1, Owner);
+            }
+
+            TRowBuilder AddNull() {
+                Y_VERIFY(Index < Owner.Builders.size());
+                auto res = Owner.Builders[Index]->AppendNull();
+                return TRowBuilder(Index + 1, Owner);
+            }
+        };
+
+        TTableUpdatesBuilder(std::shared_ptr<arrow::Schema> schema)
+            : Schema(schema)
+        {
+            Builders = NArrow::MakeBuilders(schema);
+            Y_VERIFY(Builders.size() == schema->fields().size());
+        }
+
+        TRowBuilder AddRow() {
+            ++RowsCount;
+            return TRowBuilder(0, *this);
+        }
+
+        std::shared_ptr<arrow::RecordBatch> BuildArrow() {
+            TVector<std::shared_ptr<arrow::Array>> columns;
+            columns.reserve(Builders.size());
+            for (auto&& builder : Builders) {
+                auto arrayDataRes = builder->Finish();
+                Y_VERIFY(arrayDataRes.ok());
+                columns.push_back(*arrayDataRes);
+            }
+            return arrow::RecordBatch::Make(Schema, RowsCount, columns);
+        }
+    };
 }

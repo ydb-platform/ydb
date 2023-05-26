@@ -11,20 +11,6 @@
 
 namespace NKikimr::NMiniKQL {
 
-namespace {
-
-std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
-    std::vector<arrow::ValueDescr> res;
-    res.reserve(types.size());
-    for (const auto& type : types) {
-        res.emplace_back(ToValueDescr(type));
-    }
-
-    return res;
-}
-
-} // namespace
-
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {
     MKQL_ENSURE(len > 0, "Invalid block size");
     auto reader = MakeBlockReader(TTypeInfoHelper(), type);
@@ -44,6 +30,16 @@ arrow::ValueDescr ToValueDescr(TType* type) {
     return ret;
 }
 
+std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
+    std::vector<arrow::ValueDescr> res;
+    res.reserve(types.size());
+    for (const auto& type : types) {
+        res.emplace_back(ToValueDescr(type));
+    }
+
+    return res;
+}
+
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes) {
     std::vector<arrow::compute::InputType> result;
     result.reserve(argTypes.size());
@@ -57,7 +53,7 @@ arrow::compute::OutputType ConvertToOutputType(TType* output) {
     return arrow::compute::OutputType(ToValueDescr(output));
 }
 
-TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TVector<IComputationNode*>&& argsNodes,
+TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TVector<IComputationNode*>&& argsNodes,
     const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
     std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
     const arrow::compute::FunctionOptions* functionOptions)
@@ -69,6 +65,7 @@ TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TVector<IComputat
     , KernelHolder(std::move(kernelHolder))
     , Options(functionOptions)
     , ScalarOutput(GetResultShape(argsTypes) == TBlockType::EShape::Scalar)
+    , Name(name.starts_with("Block") ? name.substr(5) : name)
 {
 }
 
@@ -120,6 +117,31 @@ TBlockFuncNode::TState& TBlockFuncNode::GetState(TComputationContext& ctx) const
     }
 
     return *static_cast<TState*>(result.AsBoxed().Get());
+}
+
+std::unique_ptr<IArrowKernelComputationNode> TBlockFuncNode::PrepareArrowKernelComputationNode(TComputationContext& ctx) const {
+    return std::make_unique<TArrowNode>(this);
+}
+
+TBlockFuncNode::TArrowNode::TArrowNode(const TBlockFuncNode* parent)
+    : Parent_(parent)
+{}
+
+TStringBuf TBlockFuncNode::TArrowNode::GetKernelName() const {
+    return Parent_->Name;
+}
+
+const arrow::compute::ScalarKernel& TBlockFuncNode::TArrowNode::GetArrowKernel() const {
+    return Parent_->Kernel;
+}
+
+const std::vector<arrow::ValueDescr>& TBlockFuncNode::TArrowNode::GetArgsDesc() const {
+    return Parent_->ArgsValuesDescr;
+}
+
+const IComputationNode* TBlockFuncNode::TArrowNode::GetArgument(ui32 index) const {
+    MKQL_ENSURE(index < Parent_->ArgsNodes.size(), "Wrong index");
+    return Parent_->ArgsNodes[index];
 }
 
 }

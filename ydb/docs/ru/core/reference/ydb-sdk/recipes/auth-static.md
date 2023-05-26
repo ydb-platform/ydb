@@ -51,7 +51,7 @@
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -64,5 +64,13 @@
 - Node.js
 
   {% include [auth-static](../../../../_includes/nodejs/auth-static.md) %}
+
+- Python
+
+  {% include [auth-static](../../../../_includes/python/auth-static.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-static](../../../../_includes/python/async/auth-static.md) %}
 
 {% endlist %}

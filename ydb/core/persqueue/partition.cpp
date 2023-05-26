@@ -76,7 +76,7 @@ void TPartition::ReplyPropose(const TActorContext& ctx,
                               const NKikimrPQ::TEvProposeTransaction& event,
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
 {
-    ctx.Send(ActorIdFromProto(event.GetActor()),
+    ctx.Send(ActorIdFromProto(event.GetSourceActor()),
              MakeReplyPropose(event, statusCode).Release());
 }
 
@@ -101,7 +101,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 }
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-                       const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId, bool isServerless,
+                       const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace,
                        bool newPartition,
                        TVector<TTransaction> distrTxs)
@@ -111,7 +111,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , TabletConfig(tabletConfig)
     , Counters(counters)
     , TopicConverter(topicConverter)
-    , IsLocalDC(isLocalDC)
+    , IsLocalDC(TabletConfig.GetLocalDC())
     , DCId(std::move(dcId))
     , StartOffset(0)
     , EndOffset(0)
@@ -181,9 +181,23 @@ ui64 TPartition::MeteringDataSize(const TActorContext& ctx) const {
     return size;
 }
 
+ui64 TPartition::ReserveSize() const {
+    return TopicPartitionReserveSize(Config);
+}
+
+ui64 TPartition::StorageSize(const TActorContext& ctx) const {
+    return std::max<ui64>(MeteringDataSize(ctx), ReserveSize());
+}
+
+ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
+    return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
+}
+
+
 ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
-    auto duration = ctx.Now() - LastUsedStorageMeterTimestamp;
-    LastUsedStorageMeterTimestamp = ctx.Now();
+    const auto now = ctx.Now(); 
+    const auto duration = now - LastUsedStorageMeterTimestamp;
+    LastUsedStorageMeterTimestamp = now;
     ui64 size = MeteringDataSize(ctx);
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
@@ -203,7 +217,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ProcessHasDataRequests(ctx);
 
-    auto now = ctx.Now();
+    const auto now = ctx.Now();
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
         userInfo.second.UpdateReadingTimeAndState(now);
         for (auto& avg : userInfo.second.AvgReadBytes) {
@@ -237,8 +251,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     }
 
     if (haveChanges) {
-        WriteCycleStartTime = ctx.Now();
-        WriteStartTime = ctx.Now();
+        WriteCycleStartTime = now;
+        WriteStartTime = now;
         TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
         WritesTotal.Inc();
         Become(&TThis::StateWrite);
@@ -1178,11 +1192,25 @@ bool TPartition::UpdateCounters(const TActorContext& ctx) {
         }
     }
 
-    ui64 partSize = Size();
-    if (partSize != PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
+    ui64 storageSize = StorageSize(ctx);
+    if (storageSize != PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
         haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MAX_PART_SIZE].Set(partSize);
-        PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(partSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_MAX_PART_SIZE].Set(storageSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(storageSize);
+    }
+
+    if (NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY == Config.GetMeteringMode()) {
+        ui64 reserveSize = ReserveSize();
+        if (reserveSize != PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_LIMIT_BYTES].Get()) {
+            haveChanges = true;
+            PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_LIMIT_BYTES].Set(reserveSize);
+        }
+
+        ui64 reserveUsed = UsedReserveSize(ctx);
+        if (reserveUsed != PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_USED_BYTES].Get()) {
+            haveChanges = true;
+            PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_USED_BYTES].Set(reserveUsed);
+        }
     }
 
     ui64 ts = (WriteTimestamp.MilliSeconds() < MIN_TIMESTAMP_MS) ? Max<i64>() : WriteTimestamp.MilliSeconds();
@@ -1406,11 +1434,17 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
         const TString& consumer = operation.GetConsumer();
 
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "' has been removed");
             predicate = false;
             break;
         }
 
         if (!UsersInfoStorage->GetIfExists(consumer)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Unknown consumer '" << consumer << "'");
             predicate = false;
             break;
         }
@@ -1419,13 +1453,28 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
         if (operation.GetBegin() > operation.GetEnd()) {
-            // BAD_REQUEST
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (invalid range) " <<
+                        " Begin " << operation.GetBegin() <<
+                        " End " << operation.GetEnd());
             predicate = false;
         } else if (userInfo.Offset != (i64)operation.GetBegin()) {
-            // ABORTED
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (gap) " <<
+                        " Offset " << userInfo.Offset <<
+                        " Begin " << operation.GetBegin());
             predicate = false;
         } else if (operation.GetEnd() > EndOffset) {
-            // BAD_REQUEST
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Partition " << Partition <<
+                        " Consumer '" << consumer << "'" <<
+                        " Bad request (behind the last offset) " <<
+                        " EndOffset " << EndOffset <<
+                        " End " << operation.GetEnd());
             predicate = false;
         }
 
@@ -1977,7 +2026,7 @@ void TPartition::ScheduleReplyError(const ui64 dst,
 void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                       NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode)
 {
-    Replies.emplace_back(ActorIdFromProto(event.GetActor()),
+    Replies.emplace_back(ActorIdFromProto(event.GetSourceActor()),
                          MakeReplyPropose(event,
                                           statusCode).Release());
 }

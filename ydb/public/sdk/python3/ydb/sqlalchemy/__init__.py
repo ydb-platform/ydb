@@ -38,10 +38,7 @@ try:
 
         def _requires_quotes(self, value):
             # Force all identifiers to get quoted unless already quoted.
-            return not (
-                value.startswith(self.initial_quote)
-                and value.endswith(self.final_quote)
-            )
+            return not (value.startswith(self.initial_quote) and value.endswith(self.final_quote))
 
     class YqlTypeCompiler(GenericTypeCompiler):
         def visit_VARCHAR(self, type_, **kw):
@@ -126,9 +123,7 @@ try:
             name = "::".join(name_parts)
             params = func.params_expr._compiler_dispatch(self, **kwargs)
             args = self.function_argspec(func, **kwargs)
-            return "%(name)s%(params)s%(args)s" % dict(
-                name=name, params=params, args=args
-            )
+            return "%(name)s%(params)s%(args)s" % dict(name=name, params=params, args=args)
 
         def visit_function(self, func, add_to_result_map=None, **kwargs):
             # Copypaste of `sa.sql.compiler.SQLCompiler.visit_function` with

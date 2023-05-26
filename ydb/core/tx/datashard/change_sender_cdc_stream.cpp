@@ -82,19 +82,21 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
+        const auto awsJsonOpts = TChangeRecord::TAwsJsonOptions{
+            .AwsRegion = Stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
+            .StreamMode = Stream.Mode,
+            .ShardId = DataShard.TabletId,
+        };
+
         for (const auto& record : ev->Get()->Records) {
             if (record.GetSeqNo() <= MaxSeqNo) {
                 continue;
             }
 
-            const auto createdAt = record.GetGroup()
-                ? TInstant::FromValue(record.GetGroup())
-                : TInstant::MilliSeconds(record.GetStep());
-
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
             cmd.SetSeqNo(record.GetSeqNo());
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
-            cmd.SetCreateTimeMS(createdAt.MilliSeconds());
+            cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
             cmd.SetIgnoreQuotaDeadline(true);
 
             NKikimrPQClient::TDataChunk data;
@@ -103,14 +105,19 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             switch (Stream.Format) {
                 case NKikimrSchemeOp::ECdcStreamFormatProto: {
                     NKikimrChangeExchange::TChangeRecord protoRecord;
-                    record.SerializeTo(protoRecord);
+                    record.SerializeToProto(protoRecord);
                     data.SetData(protoRecord.SerializeAsString());
                     break;
                 }
 
-                case NKikimrSchemeOp::ECdcStreamFormatJson: {
+                case NKikimrSchemeOp::ECdcStreamFormatJson:
+                case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
                     NJson::TJsonValue json;
-                    record.SerializeTo(json, Stream.VirtualTimestamps);
+                    if (Stream.Format == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
+                        record.SerializeToDynamoDBStreamsJson(json, awsJsonOpts);
+                    } else {
+                        record.SerializeToYdbJson(json, Stream.VirtualTimestamps);
+                    }
 
                     TStringStream str;
                     NJson::TJsonWriterConfig jsonConfig;
@@ -691,7 +698,8 @@ class TCdcChangeSenderMain
                 return it->PartitionId;
             }
 
-            case NKikimrSchemeOp::ECdcStreamFormatJson: {
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
                 using namespace NKikimr::NDataStreams::V1;
                 const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
                 return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());

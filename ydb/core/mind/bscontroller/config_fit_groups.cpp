@@ -189,7 +189,16 @@ namespace NKikimr {
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // scan through all VSlots and find matching PDisks
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
+                // create topology for group
+                auto& topology = *groupInfo->Topology;
+                // fill in vector of failed disks (that are not fully operational)
+                TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
+                auto& checker = *topology.QuorumChecker;
                 for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
+                    if (!vslot->IsOperational()) {
+                        failed |= {&topology, vslot->GetShortVDiskId()};
+                    }
+
                     const auto it = State.ExplicitReconfigureMap.find(vslot->VSlotId);
                     bool replace = it != State.ExplicitReconfigureMap.end();
                     const TPDiskId targetPDiskId = replace ? it->second : TPDiskId();
@@ -238,9 +247,11 @@ namespace NKikimr {
                 }
 
                 if (sanitizingRequest) {
+                    if (checker.OneStepFromDegradedOrWorse(failed)) {
+                        throw TExFitGroupError() << "Sanitizing requst was blocked, group is one step from DEGRADED or worse";
+                    }
                     if (groupInfo->VDisksInGroup.empty()) {
-                        throw TExFitGroupError() << "Group has been decommitted and cannot be sanitized"
-                                << " GroupId# " << groupId;
+                        throw TExFitGroupError() << "Group has been decommitted and cannot be sanitized";
                     }
                     getGroup();
                 }
@@ -342,17 +353,7 @@ namespace NKikimr {
 
                     if (replacedSlots) {
                         if (!IgnoreGroupFailModelChecks) {
-                            // process only groups with changed content; create topology for group
-                            auto& topology = *groupInfo->Topology;
-                            // fill in vector of failed disks (that are not fully operational)
-                            TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
-                            for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
-                                if (!slot->IsOperational()) {
-                                    failed |= {&topology, slot->GetShortVDiskId()};
-                                }
-                            }
-                            // check the failure model
-                            auto& checker = *topology.QuorumChecker;
+                            // process only groups with changed content; check the failure model
                             if (!checker.CheckFailModelForGroup(failed)) {
                                 throw TExMayLoseData(groupId);
                             } else if (!IgnoreDegradedGroupsChecks && checker.IsDegraded(failed)) {

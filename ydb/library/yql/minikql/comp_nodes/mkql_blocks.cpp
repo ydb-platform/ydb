@@ -10,6 +10,8 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
+
 #include <arrow/scalar.h>
 #include <arrow/array.h>
 #include <arrow/datum.h>
@@ -343,6 +345,40 @@ private:
 
 class TAsScalarWrapper : public TMutableComputationNode<TAsScalarWrapper> {
 public:
+    class TArrowNode : public IArrowKernelComputationNode {
+    public:
+        TArrowNode(const arrow::Datum& datum)
+            : Kernel_({}, datum.scalar()->type, [datum](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                *res = datum;
+                return arrow::Status::OK();
+            })
+        {
+            Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+            Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
+        }
+
+        TStringBuf GetKernelName() const final {
+            return "AsScalar";
+        }
+
+        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+            return Kernel_;
+        }
+
+        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+            return EmptyDesc_;
+        }
+
+        const IComputationNode* GetArgument(ui32 index) const {
+            Y_UNUSED(index);
+            ythrow yexception() << "No input arguments";
+        }
+
+    private:
+        arrow::compute::ScalarKernel Kernel_;
+        const std::vector<arrow::ValueDescr> EmptyDesc_;
+    };
+
     TAsScalarWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* type)
         : TMutableComputationNode(mutables)
         , Arg_(arg)
@@ -356,6 +392,12 @@ public:
         auto value = Arg_->GetValue(ctx);
         arrow::Datum result = ConvertScalar(Type_, value, ctx);
         return ctx.HolderFactory.CreateArrowBlock(std::move(result));
+    }
+
+    std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final {
+        auto value = Arg_->GetValue(ctx);
+        arrow::Datum result = ConvertScalar(Type_, value, ctx);
+        return std::make_unique<TArrowNode>(result);
     }
 
 private:
@@ -427,6 +469,10 @@ private:
             default:
                 MKQL_ENSURE(false, "Unsupported data slot");
             }
+        }
+
+        if (type->IsPg()) {
+            return NYql::MakePgScalar(AS_TYPE(TPgType, type), value, ctx.ArrowMemoryPool);
         }
 
         MKQL_ENSURE(false, "Unsupported type");

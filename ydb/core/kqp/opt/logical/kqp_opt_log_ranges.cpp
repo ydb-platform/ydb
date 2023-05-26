@@ -141,6 +141,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
 
     bool onlyPointRanges = false;
     auto readMatch = MatchRead<TKqlReadTableBase>(flatmap.Input());
+    TMaybeNode<TCoAtom> indexName;
 
     //TODO: remove this branch KIKIMR-15255, KIKIMR-15321
     if (!readMatch && kqpCtx.IsDataQuery()) {
@@ -160,6 +161,9 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                             .Build()
                         .Done();
                 onlyPointRanges = true;
+                if (auto indexRead = read.Maybe<TKqlReadTableIndexRanges>()) {
+                    indexName = indexRead.Index();
+                }
             } else {
                 return node;
             }
@@ -187,7 +191,6 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
-    TMaybeNode<TCoAtom> indexName;
     if (auto maybeIndexRead = read.Maybe<TKqlReadTableIndex>()) {
         indexName = maybeIndexRead.Cast().Index();
     }

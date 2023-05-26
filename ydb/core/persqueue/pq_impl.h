@@ -187,7 +187,7 @@ private:
     TString TopicPath;
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     NPersQueue::TTopicConverterPtr TopicConverter;
-    bool IsLocalDC;
+    bool IsLocalDC = false;
     TString DCId;
     bool IsServerless = false;
     TVector<NScheme::TTypeInfo> KeySchema;
@@ -239,10 +239,8 @@ private:
     bool WriteTxsInProgress = false;
 
     struct TReplyToActor;
-    struct TReplyToPipe;
 
     TVector<TReplyToActor> RepliesToActor;
-    TVector<TReplyToPipe> RepliesToPipe;
 
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
     THolder<NTabletPipe::IClientCache> PipeClientCache;
@@ -289,8 +287,6 @@ private:
     void DeleteTx(TDistributedTransaction& tx);
 
     void SendReplies(const TActorContext& ctx);
-    void SendRepliesToActors(const TActorContext& ctx);
-    void SendRepliesToPipes(const TActorContext& ctx);
     void CheckChangedTxStates(const TActorContext& ctx);
 
     bool AllTransactionsHaveBeenProcessed() const;
@@ -351,6 +347,12 @@ private:
     const THashSet<ui64>& GetBindedTxs(ui64 tabletId);
 
     THashMap<ui64, THashSet<ui64>> BindedTxs;
+
+    void InitProcessingParams(const TActorContext& ctx);
+
+    TMaybe<NKikimrSubDomains::TProcessingParams> ProcessingParams;
+
+    void Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr& ev, const TActorContext& ctx);
 };
 
 

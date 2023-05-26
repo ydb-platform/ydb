@@ -1,6 +1,6 @@
 #include "kqp_opt_phy_olap_filter_collection.h"
 
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -61,9 +61,8 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
         return true;
     } else if (predicate.Maybe<TCoCmpLessOrEqual>()) {
         return true;
-    } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
-        // We introduced LIKE pushdown in v2 of SSA program
-        return IsLikeOperator(predicate);
+    } else if (NKikimr::NSsa::RuntimeVersion >= 2U && IsLikeOperator(predicate)) {
+        return true;
     }
 
     return false;
@@ -260,6 +259,15 @@ bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
             return false;
         }
+    } else if (NKikimr::NSsa::RuntimeVersion >= 3U && node.Maybe<TCoJsonQueryBase>()) {
+        if (!node.Maybe<TCoJsonValue>()) {
+            return false;
+        }
+        auto jsonOp = node.Cast<TCoJsonQueryBase>();
+        if (!jsonOp.Json().Maybe<TCoMember>() || !jsonOp.JsonPath().Maybe<TCoUtf8>()) {
+            // Currently we support only simple columns in pushdown
+            return false;
+        }
     } else if (!node.Maybe<TCoNull>() && !node.Maybe<TCoParameter>()) {
         return false;
     }
@@ -365,15 +373,31 @@ bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg) 
     return true;
 }
 
+bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lambdaArg) {
+    auto maybeMember = jsonExists.Json().Maybe<TCoMember>();
+    if (!maybeMember || !jsonExists.JsonPath().Maybe<TCoUtf8>()) {
+        // Currently we support only simple columns in pushdown
+        return false;
+    }
+    if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
+        return false;
+    }
+    return true;
+}
+
 bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
+    auto predicate = coalesce.Predicate();
 
-    if (auto maybeCompare = coalesce.Predicate().Maybe<TCoCompare>()) {
+    if (auto maybeCompare = predicate.Maybe<TCoCompare>()) {
         return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody);
-    } else if (auto maybeFlatmap = coalesce.Predicate().Maybe<TCoFlatMap>()) {
+    } else if (auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
         return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg);
+    } else if (NKikimr::NSsa::RuntimeVersion >= 3U && predicate.Maybe<TCoJsonExists>()) {
+        auto jsonExists = predicate.Cast<TCoJsonExists>();
+        return JsonExistsCanBePushed(jsonExists, lambdaArg);
     }
 
     return false;
@@ -467,6 +491,9 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
     } else if (predicate.Maybe<TCoXor>()) {
         predicateTree.Op = EBoolOp::Xor;
         CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoXor>(), predicateTree, lambdaArg, lambdaBody);
+    } else if (NKikimr::NSsa::RuntimeVersion >= 3U && predicate.Maybe<TCoJsonExists>()) {
+        auto jsonExists = predicate.Cast<TCoJsonExists>();
+        predicateTree.CanBePushed = JsonExistsCanBePushed(jsonExists, lambdaArg);
     } else {
         predicateTree.CanBePushed = false;
     }

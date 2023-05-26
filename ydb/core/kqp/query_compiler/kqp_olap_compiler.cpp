@@ -1,7 +1,7 @@
 #include "kqp_olap_compiler.h"
 
-#include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
@@ -251,6 +251,11 @@ ui64 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ct
     return ConvertSafeCastToColumn(cast.Value(), maybeDataType.Cast().Type().StringValue(), ctx);
 }
 
+ui64 ConvertJsonValueToColumn(const TKqpOlapJsonValue& /*cast*/, TKqpOlapCompileContext& /*ctx*/) {
+    YQL_ENSURE(false, "Not implemented JsonValue in SSA program!");
+    return 0;
+}
+
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     if (auto maybeData = node.Maybe<TCoDataCtor>()) {
         return ConvertValueToColumn(maybeData.Cast(), ctx);
@@ -266,6 +271,10 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
 
     if (auto maybeCast = node.Maybe<TCoSafeCast>()) {
         return ConvertSafeCastToColumn(maybeCast.Cast(), ctx);
+    }
+
+    if (auto maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
+        return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
     }
 
     YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ptr()->Content());
@@ -330,6 +339,11 @@ TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists,
     return notCommand;
 }
 
+TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& /*cast*/, TKqpOlapCompileContext& /*ctx*/) {
+    YQL_ENSURE(false, "Not implemented JsonExists in SSA program!");
+    return nullptr;
+}
+
 TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, ui32 function,
     TKqpOlapCompileContext& ctx)
 {
@@ -368,16 +382,16 @@ TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args,
 }
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
-    auto maybeCompare = condition.Maybe<TKqpOlapFilterCompare>();
-
-    if (maybeCompare.IsValid()) {
+    if (auto maybeCompare = condition.Maybe<TKqpOlapFilterCompare>()) {
         return CompileComparison(maybeCompare.Cast(), ctx);
     }
 
-    auto maybeExists = condition.Maybe<TKqpOlapFilterExists>();
-
-    if (maybeExists.IsValid()) {
+    if (auto maybeExists = condition.Maybe<TKqpOlapFilterExists>()) {
         return CompileExists(maybeExists.Cast(), ctx);
+    }
+
+    if (auto maybeJsonExists = condition.Maybe<TKqpOlapJsonExists>()) {
+        return CompileJsonExists(maybeJsonExists.Cast(), ctx);
     }
 
     if (auto maybeNot = condition.Maybe<TKqpOlapNot>()) {

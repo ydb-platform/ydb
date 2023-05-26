@@ -1224,6 +1224,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
+    template <typename TRowSet>
+    TSchemeLimits LoadSchemeLimits(const TSchemeLimits& defaults, TRowSet& rowSet) {
+        return TSchemeLimits {
+            .MaxDepth = rowSet.template GetValueOrDefault<Schema::SubDomains::DepthLimit>(defaults.MaxDepth),
+            .MaxPaths = rowSet.template GetValueOrDefault<Schema::SubDomains::PathsLimit>(defaults.MaxPaths),
+            .MaxChildrenInDir = rowSet.template GetValueOrDefault<Schema::SubDomains::ChildrenLimit>(defaults.MaxChildrenInDir),
+            .MaxAclBytesSize = rowSet.template GetValueOrDefault<Schema::SubDomains::AclByteSizeLimit>(defaults.MaxAclBytesSize),
+            .MaxPathElementLength = rowSet.template GetValueOrDefault<Schema::SubDomains::PathElementLength>(defaults.MaxPathElementLength),
+            .ExtraPathSymbolsAllowed = rowSet.template GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(defaults.ExtraPathSymbolsAllowed),
+            .MaxTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(defaults.MaxTableColumns),
+            .MaxTableColumnNameLength = rowSet.template GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(defaults.MaxTableColumnNameLength),
+            .MaxTableKeyColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(defaults.MaxTableKeyColumns),
+            .MaxTableIndices = rowSet.template GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(defaults.MaxTableIndices),
+            .MaxTableCdcStreams = rowSet.template GetValueOrDefault<Schema::SubDomains::TableCdcStreamsLimit>(defaults.MaxTableCdcStreams),
+            .MaxShards = rowSet.template GetValueOrDefault<Schema::SubDomains::ShardsLimit>(defaults.MaxShards),
+            .MaxShardsInPath = rowSet.template GetValueOrDefault<Schema::SubDomains::PathShardsLimit>(defaults.MaxShardsInPath),
+            .MaxConsistentCopyTargets = rowSet.template GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(defaults.MaxConsistentCopyTargets),
+            .MaxPQPartitions = rowSet.template GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(defaults.MaxPQPartitions),
+            .MaxExports = rowSet.template GetValueOrDefault<Schema::SubDomains::ExportsLimit>(defaults.MaxExports),
+            .MaxImports = rowSet.template GetValueOrDefault<Schema::SubDomains::ImportsLimit>(defaults.MaxImports),
+        };
+    }
+
     bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
         const TOwnerId selfId = Self->TabletID();
 
@@ -1436,21 +1459,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (row.IsValid()) {
                     version = row.GetValue<Schema::SubDomains::AlterVersion>();
-                    rootLimits.MaxDepth = row.GetValueOrDefault<Schema::SubDomains::DepthLimit>(rootLimits.MaxDepth);
-                    rootLimits.MaxPaths = row.GetValueOrDefault<Schema::SubDomains::PathsLimit>(rootLimits.MaxPathsCompat);
-                    rootLimits.MaxChildrenInDir = row.GetValueOrDefault<Schema::SubDomains::ChildrenLimit>(rootLimits.MaxChildrenInDir);
-                    rootLimits.MaxAclBytesSize = row.GetValueOrDefault<Schema::SubDomains::AclByteSizeLimit>(rootLimits.MaxAclBytesSize);
-                    rootLimits.MaxTableColumns = row.GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(rootLimits.MaxTableColumns);
-                    rootLimits.MaxTableColumnNameLength = row.GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(rootLimits.MaxTableColumnNameLength);
-                    rootLimits.MaxTableKeyColumns = row.GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(rootLimits.MaxTableKeyColumns);
-                    rootLimits.MaxTableIndices = row.GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(rootLimits.MaxTableIndices);
-                    rootLimits.MaxTableCdcStreams = row.GetValueOrDefault<Schema::SubDomains::TableCdcStreamsLimit>(rootLimits.MaxTableCdcStreams);
-                    rootLimits.MaxShards = row.GetValueOrDefault<Schema::SubDomains::ShardsLimit>(rootLimits.MaxShards);
-                    rootLimits.MaxShardsInPath = row.GetValueOrDefault<Schema::SubDomains::PathShardsLimit>(rootLimits.MaxShardsInPath);
-                    rootLimits.MaxConsistentCopyTargets = row.GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(rootLimits.MaxConsistentCopyTargets);
-                    rootLimits.MaxPathElementLength = row.GetValueOrDefault<Schema::SubDomains::PathElementLength>(rootLimits.MaxPathElementLength);
-                    rootLimits.ExtraPathSymbolsAllowed = row.GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(rootLimits.ExtraPathSymbolsAllowed);
-                    rootLimits.MaxPQPartitions = row.GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(rootLimits.MaxPQPartitions);
+                    rootLimits.MaxPaths = rootLimits.MaxPathsCompat;
+                    rootLimits = LoadSchemeLimits(rootLimits, row);
                 }
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
@@ -1494,24 +1504,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomains::SharedHiveId>();
                     domainInfo->SetSharedHive(sharedHiveId);
 
-                    TSchemeLimits limits = rootLimits;
-                    limits.MaxDepth = rowset.GetValueOrDefault<Schema::SubDomains::DepthLimit>(limits.MaxDepth);
-                    limits.MaxPaths = rowset.GetValueOrDefault<Schema::SubDomains::PathsLimit>(limits.MaxPaths);
-                    limits.MaxChildrenInDir = rowset.GetValueOrDefault<Schema::SubDomains::ChildrenLimit>(limits.MaxChildrenInDir);
-                    limits.MaxAclBytesSize = rowset.GetValueOrDefault<Schema::SubDomains::AclByteSizeLimit>(limits.MaxAclBytesSize);
-                    limits.MaxTableColumns = rowset.GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(limits.MaxTableColumns);
-                    limits.MaxTableColumnNameLength = rowset.GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(limits.MaxTableColumnNameLength);
-                    limits.MaxTableKeyColumns = rowset.GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(limits.MaxTableKeyColumns);
-                    limits.MaxTableIndices = rowset.GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(limits.MaxTableIndices);
-                    limits.MaxTableCdcStreams = rowset.GetValueOrDefault<Schema::SubDomains::TableCdcStreamsLimit>(limits.MaxTableCdcStreams);
-                    limits.MaxShards = rowset.GetValueOrDefault<Schema::SubDomains::ShardsLimit>(limits.MaxShards);
-                    limits.MaxShardsInPath = rowset.GetValueOrDefault<Schema::SubDomains::PathShardsLimit>(limits.MaxShardsInPath);
-                    limits.MaxConsistentCopyTargets = rowset.GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(limits.MaxConsistentCopyTargets);
-                    limits.MaxPathElementLength = rowset.GetValueOrDefault<Schema::SubDomains::PathElementLength>(limits.MaxPathElementLength);
-                    limits.ExtraPathSymbolsAllowed = rowset.GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(limits.ExtraPathSymbolsAllowed);
-                    limits.MaxPQPartitions = rowset.GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(limits.MaxPQPartitions);
-
-                    domainInfo->SetSchemeLimits(limits);
+                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset));
 
                     if (rowset.HaveValue<Schema::SubDomains::DeclaredSchemeQuotas>()) {
                         NKikimrSubDomains::TSchemeQuotas declaredSchemeQuotas;
@@ -2306,50 +2299,68 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
-                TTopicTabletInfo::TTopicPartitionInfo pqInfo;
+                auto pqInfo = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueues::PathId>();
                 TPathId pathId(selfId, localPathId);
-                pqInfo.PqId = rowset.GetValue<Schema::PersQueues::PqId>();
-                pqInfo.GroupId = rowset.GetValueOrDefault<Schema::PersQueues::GroupId>(pqInfo.PqId + 1);
+                pqInfo->PqId = rowset.GetValue<Schema::PersQueues::PqId>();
+                pqInfo->GroupId = rowset.GetValueOrDefault<Schema::PersQueues::GroupId>(pqInfo->PqId + 1);
                 TLocalShardIdx localShardIdx = rowset.GetValue<Schema::PersQueues::ShardIdx>();
                 TShardIdx shardIdx = Self->MakeLocalId(localShardIdx);
-                pqInfo.AlterVersion = rowset.GetValue<Schema::PersQueues::AlterVersion>();
+                pqInfo->AlterVersion = rowset.GetValue<Schema::PersQueues::AlterVersion>();
+                pqInfo->CreateVersion =
+                    rowset.GetValueOrDefault<Schema::PersQueues::CreateVersion>(pqInfo->AlterVersion);
 
                 if (rowset.HaveValue<Schema::PersQueues::RangeBegin>()) {
-                    if (!pqInfo.KeyRange) {
-                        pqInfo.KeyRange.ConstructInPlace();
+                    if (!pqInfo->KeyRange) {
+                         pqInfo->KeyRange.ConstructInPlace();
                     }
 
-                    pqInfo.KeyRange->FromBound = rowset.GetValue<Schema::PersQueues::RangeBegin>();
+                    pqInfo->KeyRange->FromBound = rowset.GetValue<Schema::PersQueues::RangeBegin>();
                 }
 
                 if (rowset.HaveValue<Schema::PersQueues::RangeEnd>()) {
-                    if (!pqInfo.KeyRange) {
-                        pqInfo.KeyRange.ConstructInPlace();
+                    if (!pqInfo->KeyRange) {
+                         pqInfo->KeyRange.ConstructInPlace();
                     }
 
-                    pqInfo.KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
+                    pqInfo->KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
+                }
+
+                if (rowset.HaveValue<Schema::PersQueues::Status>()) {
+                    pqInfo->SetStatus(ctx, rowset.GetValue<Schema::PersQueues::Status>());
+                } else {
+                    pqInfo->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+                }
+
+                if (rowset.HaveValue<Schema::PersQueues::Parent>() &&
+                    rowset.GetValue<Schema::PersQueues::Parent>() != Max<ui32>()) {
+                    pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::Parent>());
+                }
+                if (rowset.HaveValue<Schema::PersQueues::AdjacentParent>() &&
+                    rowset.GetValue<Schema::PersQueues::AdjacentParent>() != Max<ui32>()) {
+                    pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::AdjacentParent>());
                 }
 
                 auto it = Self->Topics.find(pathId);
                 Y_VERIFY(it != Self->Topics.end());
                 Y_VERIFY(it->second);
                 TTopicInfo::TPtr pqGroup = it->second;
-                if (pqInfo.AlterVersion <= pqGroup->AlterVersion)
+                if (pqInfo->AlterVersion <= pqGroup->AlterVersion)
                     ++pqGroup->TotalPartitionCount;
-                if (pqInfo.PqId >= pqGroup->NextPartitionId) {
-                    pqGroup->NextPartitionId = pqInfo.PqId + 1;
-                    pqGroup->TotalGroupCount = pqInfo.PqId + 1;
+                if (pqInfo->PqId >= pqGroup->NextPartitionId) {
+                    pqGroup->NextPartitionId = pqInfo->PqId + 1;
+                    pqGroup->TotalGroupCount = pqInfo->PqId + 1;
                 }
 
-                TTopicTabletInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
-                if (!pqShard) {
-                    pqShard.Reset(new TTopicTabletInfo());
-                }
-                pqShard->Partitions.push_back(pqInfo);
+                pqGroup->AddPartition(shardIdx, pqInfo.Release());
 
                 if (!rowset.Next())
                     return false;
+            }
+
+            // Initializing partition split/merge graph
+            for (auto& [_, topic] : Self->Topics) {
+                topic->InitSplitMergeGraph();
             }
         }
 
@@ -2811,6 +2822,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto mode = rowset.GetValue<Schema::CdcStream::Mode>();
                 auto format = rowset.GetValue<Schema::CdcStream::Format>();
                 auto vt = rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false);
+                auto awsRegion = rowset.GetValue<Schema::CdcStream::AwsRegion>();
                 auto state = rowset.GetValue<Schema::CdcStream::State>();
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
@@ -2821,7 +2833,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
                 Y_VERIFY(!Self->CdcStreams.contains(pathId));
-                Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, state);
+                Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, awsRegion, state);
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (state == NKikimrSchemeOp::ECdcStreamStateScan) {
@@ -2854,6 +2866,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto mode = rowset.GetValue<Schema::CdcStreamAlterData::Mode>();
                 auto format = rowset.GetValue<Schema::CdcStreamAlterData::Format>();
                 auto vt = rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false);
+                auto awsRegion = rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>();
                 auto state = rowset.GetValue<Schema::CdcStreamAlterData::State>();
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
@@ -2865,14 +2878,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!Self->CdcStreams.contains(pathId)) {
                     Y_VERIFY(alterVersion == 1);
-                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(mode, format, vt);
+                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(mode, format, vt, awsRegion);
                     Self->IncrementPathDbRefCount(pathId);
                 }
 
                 auto stream = Self->CdcStreams.at(pathId);
                 Y_VERIFY(stream->AlterData == nullptr);
                 Y_VERIFY(stream->AlterVersion < alterVersion);
-                stream->AlterData = new TCdcStreamInfo(alterVersion, mode, format, vt, state);
+                stream->AlterData = new TCdcStreamInfo(alterVersion, mode, format, vt, awsRegion, state);
 
                 Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                     << ", cdc stream pathId: " << pathId
@@ -4451,7 +4464,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 NKikimrSchemeOp::TColumnStoreSharding sharding;
                 Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::OlapStores::Sharding>()));
 
-                Self->OlapStores[pathId] = new TOlapStoreInfo(alterVersion, std::move(description), std::move(sharding));
+                TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo(alterVersion, std::move(sharding));
+                storeInfo->ParseFromLocalDB(description);
+                Self->OlapStores[pathId] = storeInfo;
                 Self->IncrementPathDbRefCount(pathId);
                 Self->SetPartitioning(pathId, Self->OlapStores[pathId]);
 
@@ -4483,7 +4498,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->OlapStores.contains(pathId),
                     "Cannot load alter for olap store " << pathId);
 
-                Self->OlapStores[pathId]->AlterData = new TOlapStoreInfo(alterVersion, std::move(description), std::move(sharding), std::move(alterBody));
+                TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo(alterVersion, std::move(sharding), std::move(alterBody));
+                storeInfo->ParseFromLocalDB(description);
+                Self->OlapStores[pathId]->AlterData = storeInfo;
 
                 if (!rowset.Next()) {
                     return false;

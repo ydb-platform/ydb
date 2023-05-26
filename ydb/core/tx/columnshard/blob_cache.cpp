@@ -13,18 +13,17 @@
 #include <tuple>
 
 namespace NKikimr::NBlobCache {
+namespace {
 
 using namespace NActors;
 
 class TBlobCache: public TActorBootstrapped<TBlobCache> {
 private:
     struct TReadInfo {
-        bool Cache;                 // Put in cache after read?
-        TList<TActorId> Waiting;    // List of readers
-
-        TReadInfo()
-            : Cache(true)
-        {}
+        /// List of readers.
+        TList<TActorId> Waiting;
+        /// Put in cache after read.
+        bool Cache{false};
     };
 
     struct TReadItem : public TReadBlobRangeOptions {
@@ -78,6 +77,28 @@ private:
         }
     };
 
+    /// Hash TBlobRange by BlobId only.
+    struct BlobRangeHash {
+        size_t operator()(const TBlobRange& range) const {
+            return range.BlobId.Hash();
+        }
+
+        size_t operator()(const TUnifiedBlobId& id) const {
+            return id.Hash();
+        }
+    };
+
+    /// Compares TBlobRange by BlobId only.
+    struct BlobRangeEqual {
+        bool operator()(const TBlobRange& a, const TBlobRange& b) const {
+            return a.BlobId == b.BlobId;
+        }
+
+        bool operator()(const TBlobRange& a, const TUnifiedBlobId& id) const {
+            return a.BlobId == id;
+        }
+    };
+
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_IN_FLIGHT_FALLBACK_BYTES = 100ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
@@ -85,9 +106,11 @@ private:
     static constexpr TDuration FAST_READ_DEADLINE = TDuration::Seconds(10);
 
     TLRUCache<TBlobRange, TString> Cache;
-    THashMap<TUnifiedBlobId, THashSet<TBlobRange>> CachedRanges;   // List of cached ranges by blob id
-                                                            // It is used to remove all blob ranges from cache when
-                                                            // it gets a notification that a blob has been deleted
+    /// List of cached ranges by blob id.
+    /// It is used to remove all blob ranges from cache when
+    /// it gets a notification that a blob has been deleted.
+    THashMultiSet<TBlobRange, BlobRangeHash, BlobRangeEqual> CachedRanges;
+
     TControlWrapper MaxCacheDataSize;
     TControlWrapper MaxInFlightDataSize;
     TControlWrapper MaxFallbackDataSize; // It's expected to be less then MaxInFlightDataSize
@@ -212,13 +235,12 @@ private:
 
         LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback << " sender:" << ev->Sender);
 
-        TReadItem readItem(ev->Get()->ReadOptions, blobRange);
-        HandleSingleRangeRead(std::move(readItem), ev->Sender, ctx);
-
-        MakeReadRequests(ctx);
+        if (!HandleSingleRangeRead(TReadItem(ev->Get()->ReadOptions, blobRange), ev->Sender, ctx)) {
+            MakeReadRequests(ctx);
+        }
     }
 
-    void HandleSingleRangeRead(TReadItem&& readItem, const TActorId& sender, const TActorContext& ctx) {
+    bool HandleSingleRangeRead(TReadItem readItem, const TActorId& sender, const TActorContext& ctx) {
         const TBlobRange& blobRange = readItem.BlobRange;
 
         // Is in cache?
@@ -226,7 +248,8 @@ private:
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
-            return SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
+            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
+            return true;
         }
 
         LOG_S_DEBUG("Miss cache: " << blobRange << " sender:" << sender);
@@ -242,15 +265,25 @@ private:
             }
         }
 
-        // Is outstanding?
-        auto readIt = OutstandingReads.find(blobRange);
-        if (readIt != OutstandingReads.end()) {
-            readIt->second.Waiting.push_back(sender);
-            readIt->second.Cache |= readItem.PromoteInCache();
-            return;
-        }
+        // Update set of outstanding requests.
+        TReadInfo& blobInfo = OutstandingReads[blobRange];
+        const bool inserted = blobInfo.Waiting.empty();
 
-        EnqueueRead(std::move(readItem), sender);
+        blobInfo.Waiting.push_back(sender);
+        blobInfo.Cache |= readItem.PromoteInCache();
+
+        if (inserted) {
+            LOG_S_DEBUG("Enqueue read range: " << blobRange);
+
+            ReadQueue.emplace_back(std::move(readItem));
+            ReadsInQueue->Set(ReadQueue.size());
+            // The requested range just put into a read queue.
+            // Extra work should be done to process the queue.
+            return false;
+        } else {
+            // The requested range was already scheduled for read.
+            return true;
+        }
     }
 
     void Handle(TEvBlobCache::TEvReadBlobRangeBatch::TPtr& ev, const TActorContext& ctx) {
@@ -261,8 +294,7 @@ private:
         readOptions.CacheAfterRead = (i64)MaxCacheDataSize && readOptions.CacheAfterRead;
 
         for (const auto& blobRange : ranges) {
-            TReadItem readItem(readOptions, blobRange);
-            HandleSingleRangeRead(std::move(readItem), ev->Sender, ctx);
+            HandleSingleRangeRead(TReadItem(readOptions, blobRange), ev->Sender, ctx);
         }
 
         MakeReadRequests(ctx);
@@ -300,38 +332,26 @@ private:
 
         Forgets->Inc();
 
-        auto blobIdIt = CachedRanges.find(blobId);
-        if (blobIdIt == CachedRanges.end()) {
+        const auto [begin, end] = CachedRanges.equal_range(blobId);
+        if (begin == end) {
             return;
         }
 
         // Remove all ranges of this blob that are present in cache
-        for (const auto& blobRange: blobIdIt->second) {
-            auto rangeIt = Cache.FindWithoutPromote(blobRange);
+        for (auto bi = begin; bi != end; ++bi) {
+            auto rangeIt = Cache.FindWithoutPromote(*bi);
             if (rangeIt == Cache.End()) {
                 continue;
             }
 
             Cache.Erase(rangeIt);
-            CacheDataSize -= blobRange.Size;
-            SizeBytes->Sub(blobRange.Size);
+            CacheDataSize -= bi->Size;
+            SizeBytes->Sub(bi->Size);
             SizeBlobs->Dec();
-            ForgetBytes->Add(blobRange.Size);
+            ForgetBytes->Add(bi->Size);
         }
 
-        CachedRanges.erase(blobIdIt);
-    }
-
-    void EnqueueRead(TReadItem&& readItem, const TActorId& sender) {
-        const auto& blobRange = readItem.BlobRange;
-        TReadInfo& blobInfo = OutstandingReads[blobRange];
-        blobInfo.Waiting.push_back(sender);
-        blobInfo.Cache = readItem.PromoteInCache();
-
-        LOG_S_DEBUG("Enqueue read range: " << blobRange);
-
-        ReadQueue.emplace_back(std::move(readItem));
-        ReadsInQueue->Set(ReadQueue.size());
+        CachedRanges.erase(begin, end);
     }
 
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,
@@ -679,17 +699,18 @@ private:
     }
 
     void InsertIntoCache(const TBlobRange& blobRange, TString data) {
-        CacheDataSize += blobRange.Size;
-        SizeBytes->Add(blobRange.Size);
-        SizeBlobs->Inc();
-
         // Shrink the buffer if it has to much extra capacity
         if (data.capacity() > data.size() * 1.1) {
             data = TString(data.begin(), data.end());
         }
 
-        Cache.Insert(blobRange, data);
-        CachedRanges[blobRange.BlobId].insert(blobRange);
+        if (Cache.Insert(blobRange, data)) {
+            CachedRanges.insert(blobRange);
+
+            CacheDataSize += blobRange.Size;
+            SizeBytes->Add(blobRange.Size);
+            SizeBlobs->Inc();
+        }
     }
 
     void Evict(const TActorContext&) {
@@ -705,21 +726,11 @@ private:
                 << " MaxCacheDataSize: " << (i64)MaxCacheDataSize
                 << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize);
 
-            {
-                // Remove the range from list of ranges by blob id
-                auto blobIdIt = CachedRanges.find(it.Key().BlobId);
-                if (blobIdIt != CachedRanges.end()) {
-                    blobIdIt->second.erase(it.Key());
-                    if (blobIdIt->second.empty()) {
-                        CachedRanges.erase(blobIdIt);
-                    }
-                }
-            }
-
             Evictions->Inc();
             EvictedBytes->Add(it.Key().Size);
 
             CacheDataSize -= it.Key().Size;
+            CachedRanges.erase(it.Key());
             Cache.Erase(it);
 
             SizeBytes->Set(CacheDataSize);
@@ -727,6 +738,8 @@ private:
         }
     }
 };
+
+} // namespace
 
 NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TBlobCache(maxBytes, counters);

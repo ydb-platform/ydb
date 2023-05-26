@@ -1,5 +1,6 @@
 #include "csv.h"
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/serializer/stream.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
 
@@ -90,7 +91,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
         arrow::SchemaBuilder sBuilder;
         for (auto&& f : parsedBatch->schema()->fields()) {
             Y_VERIFY(sBuilder.AddField(std::make_shared<arrow::Field>(f->name(), f->type())).ok());
-            
+
         }
         auto resultSchema = sBuilder.Finish();
         Y_VERIFY(resultSchema.ok());
@@ -162,7 +163,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
             return {};
         }
 
-        auto buffer = std::make_shared<NArrow::TBufferOverString>(csv);
+        auto buffer = std::make_shared<NArrow::NSerialization::TBufferOverString>(csv);
         auto input = std::make_shared<arrow::io::BufferReader>(buffer);
         auto res = arrow::csv::StreamingReader::Make(arrow::io::default_io_context(), input,
                                                      ReadOptions, ParseOptions, ConvertOptions);

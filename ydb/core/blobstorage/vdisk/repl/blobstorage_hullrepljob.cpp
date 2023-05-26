@@ -695,21 +695,20 @@ namespace NKikimr {
             auto [begin, end] = PhantomChecksInFlight.equal_range(ev->Cookie);
             Y_VERIFY(begin != end);
 
-            std::unordered_map<TLogoBlobID, bool> isPhantom;
+            std::unordered_map<TLogoBlobID, std::tuple<bool, bool>> isPhantom;
             auto *msg = ev->Get();
             for (size_t i = 0; i < msg->ResponseSz; ++i) {
                 auto& r = msg->Responses[i];
-                isPhantom.emplace(r.Id, r.Status == NKikimrProto::NODATA);
+                isPhantom.try_emplace(r.Id, r.Status == NKikimrProto::NODATA, r.LooksLikePhantom);
             }
 
             for (auto it = begin; it != end; ++it) {
                 const auto& [_, item] = *it;
                 const auto& [id, parts] = item;
-                const auto isPhantomIt = isPhantom.find(id);
-                Y_VERIFY(isPhantomIt != isPhantom.end());
-                const bool phantom = isPhantomIt->second;
-                isPhantom.erase(isPhantomIt);
-                RecoveryMachine->ProcessPhantomBlob(id, parts, phantom);
+                auto node = isPhantom.extract(id);
+                Y_VERIFY(node);
+                auto [phantom, looksLikePhantom] = node.mapped();
+                RecoveryMachine->ProcessPhantomBlob(id, parts, phantom, looksLikePhantom);
                 if (phantom) {
                     Phantoms.push_back(id);
                 }

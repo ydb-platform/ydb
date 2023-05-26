@@ -6,6 +6,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/logger/priority.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include "grpc_response.h"
 #include "event_callback.h"
@@ -118,7 +119,10 @@ public:
     }
 
     TString GetPeer() const override {
-        return TString(this->Context.peer());
+        // Decode URL-encoded square brackets
+        auto ip = TString(this->Context.peer());
+        CGIUnescape(ip);
+        return ip;
     }
 
     bool SslServer() const override {

@@ -366,7 +366,7 @@ public:
                 blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(x->GetName(), ctx.MakeType<TBlockExprType>(x->GetItemType())));
             }
 
-            blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>("_yql_block_length", ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
+            blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
             itemType = ctx.MakeType<TStructExprType>(blockRowTypeItems);
         } else {
             itemType = ctx.MakeType<TResourceExprType>("ClickHouseClient.Block");

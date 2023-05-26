@@ -1,7 +1,8 @@
 #include "cs_helper.h"
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/library/binary_json/write.h>
 
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -26,7 +27,10 @@ void THelperSchemaless::CreateTestOlapStore(TActorId sender, TString scheme) {
 
     Server.GetRuntime()->Send(new IEventHandle(MakeTxProxyID(), sender, request.release()));
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    Cerr << ev->Get()->Record.DebugString() << Endl;
+    auto status = ev->Get()->Record.GetStatus();
     ui64 txId = ev->Get()->Record.GetTxId();
+    UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
     WaitForSchemeOperation(sender, txId);
 }
 
@@ -50,11 +54,12 @@ void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirN
     auto ev = Server.GetRuntime()->GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     ui64 txId = ev->Get()->Record.GetTxId();
     auto status = ev->Get()->Record.GetStatus();
+    Cerr << ev->Get()->Record.DebugString() << Endl;
     UNIT_ASSERT(status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch) {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch) const {
     auto* runtime = Server.GetRuntime();
 
     UNIT_ASSERT(batch);
@@ -93,14 +98,14 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     runtime->DispatchEvents(options);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) const {
     auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount);
     SendDataViaActorSystem(testTable, batch);
 }
 
 //
 
-std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() {
+std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.emplace_back(arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)));
     fields.emplace_back(arrow::field("resource_id", arrow::utf8()));
@@ -113,7 +118,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() {
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
     arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
@@ -181,9 +186,35 @@ TString THelper::GetTestTableSchema() const {
     return sb;
 }
 
+void THelper::CreateOlapTableWithStore(TString tableName /*= "olapTable"*/, TString storeName /*= "olapStore"*/, ui32 storeShardsCount /*= 4*/, ui32 tableShardsCount /*= 3*/) {
+    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+    CreateTestOlapStore(sender, Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    %s
+                }
+            }
+        )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
+
+    const TString shardingColumns = "[\"" + JoinSeq("\",\"", GetShardingColumns()) + "\"]";
+
+    TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        Name: "%s"
+        ColumnShardCount: %d
+        Sharding {
+            HashSharding {
+                Function: %s
+                Columns: %s
+            }
+        })", tableName.c_str(), tableShardsCount, ShardingMethod.data(), shardingColumns.c_str()));
+}
+
 // Clickbench table
 
-std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() {
+std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(
         std::vector<std::shared_ptr<arrow::Field>> {
             arrow::field("WatchID", arrow::int64()),
@@ -294,7 +325,7 @@ std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() {
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount) {
+std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
     UNIT_ASSERT(schema);
     UNIT_ASSERT(schema->num_fields());
@@ -351,54 +382,68 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
 
 // Table with NULLs
 
-std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() {
+std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(
         std::vector<std::shared_ptr<arrow::Field>>{
             arrow::field("id", arrow::int32()),
             arrow::field("resource_id", arrow::utf8()),
             arrow::field("level", arrow::int32()),
-            arrow::field("binary_str", arrow::binary())
+            arrow::field("binary_str", arrow::binary()),
+            arrow::field("jsonval", arrow::utf8()),
+            arrow::field("jsondoc", arrow::binary())
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() {
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() const {
     return TestArrowBatch(0, 0, 10);
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount) {
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount) const {
     rowCount = 10;
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
-    arrow::Int32Builder b1;
-    arrow::StringBuilder b2;
-    arrow::Int32Builder b3;
-    arrow::StringBuilder b4;
+    arrow::Int32Builder bId;
+    arrow::StringBuilder bResourceId;
+    arrow::Int32Builder bLevel;
+    arrow::StringBuilder bBinaryStr;
+    arrow::StringBuilder bJsonVal;
+    arrow::BinaryBuilder bJsonDoc;
 
     for (size_t i = 1; i <= rowCount / 2; ++i) {
-        Y_VERIFY(b1.Append(i).ok());
-        Y_VERIFY(b2.AppendNull().ok());
-        Y_VERIFY(b3.Append(i).ok());
-        Y_VERIFY(b4.AppendNull().ok());
+        Y_VERIFY(bId.Append(i).ok());
+        Y_VERIFY(bResourceId.AppendNull().ok());
+        Y_VERIFY(bLevel.Append(i).ok());
+        Y_VERIFY(bBinaryStr.AppendNull().ok());
+        Y_VERIFY(bJsonVal.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2": "val2"}})")).ok());
+        Y_VERIFY(bJsonDoc.AppendNull().ok());
     }
 
+    auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(R"({"col1": "val1", "obj": {"obj_col2": "val2"}})");
+    Y_VERIFY(maybeJsonDoc.Defined());
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
-        Y_VERIFY(b1.Append(i).ok());
-        Y_VERIFY(b2.Append(std::to_string(i)).ok());
-        Y_VERIFY(b3.AppendNull().ok());
-        Y_VERIFY(b4.Append(std::to_string(i)).ok());
+        Y_VERIFY(bId.Append(i).ok());
+        Y_VERIFY(bResourceId.Append(std::to_string(i)).ok());
+        Y_VERIFY(bLevel.AppendNull().ok());
+        Y_VERIFY(bBinaryStr.Append(std::to_string(i)).ok());
+        Y_VERIFY(bJsonVal.AppendNull().ok());
+        Y_VERIFY(bJsonDoc.Append(maybeJsonDoc->Data(), maybeJsonDoc->Size()).ok());
     }
 
-    std::shared_ptr<arrow::Int32Array> a1;
-    std::shared_ptr<arrow::StringArray> a2;
-    std::shared_ptr<arrow::Int32Array> a3;
-    std::shared_ptr<arrow::StringArray> a4;
+    std::shared_ptr<arrow::Int32Array> aId;
+    std::shared_ptr<arrow::StringArray> aResourceId;
+    std::shared_ptr<arrow::Int32Array> aLevel;
+    std::shared_ptr<arrow::StringArray> aBinaryStr;
+    std::shared_ptr<arrow::StringArray> aJsonVal;
+    std::shared_ptr<arrow::BinaryArray> aJsonDoc;
 
-    Y_VERIFY(b1.Finish(&a1).ok());
-    Y_VERIFY(b2.Finish(&a2).ok());
-    Y_VERIFY(b3.Finish(&a3).ok());
-    Y_VERIFY(b4.Finish(&a4).ok());
+    Y_VERIFY(bId.Finish(&aId).ok());
+    Y_VERIFY(bResourceId.Finish(&aResourceId).ok());
+    Y_VERIFY(bLevel.Finish(&aLevel).ok());
+    Y_VERIFY(bBinaryStr.Finish(&aBinaryStr).ok());
+    Y_VERIFY(bJsonVal.Finish(&aJsonVal).ok());
+    Y_VERIFY(bJsonDoc.Finish(&aJsonDoc).ok());
 
-    return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4 });
+    return arrow::RecordBatch::Make(schema, rowCount, { aId, aResourceId, aLevel, aBinaryStr, aJsonVal, aJsonDoc });
 }
 
 }

@@ -187,7 +187,7 @@ NSQLTranslation::TTranslationSettings GetSettingsWithS3Binding(const TString& na
                             ]
     ]])__";
     bindSettings.Settings["partitioned_by"] = "[\"key\", \"subkey\"]";
-    settings.PrivateBindings[name] = bindSettings;
+    settings.Bindings[name] = bindSettings;
     return settings;
 }
 
@@ -1823,7 +1823,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     FORMAT = 'json',
                     INITIAL_SCAN = TRUE,
                     VIRTUAL_TIMESTAMPS = FALSE,
-                    RETENTION_PERIOD = Interval("P1D")
+                    RETENTION_PERIOD = Interval("P1D"),
+                    AWS_REGION = 'aws:region'
                 )
             );
         )");
@@ -1841,6 +1842,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("virtual_timestamps"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws_region"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws:region"));
             }
         };
 
@@ -3536,6 +3539,19 @@ select FormatType($f());
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:99: Error: Literal of Interval type is expected for RETENTION_PERIOD\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedAwsRegion) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", AWS_REGION = true)
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:93: Error: Literal of String type is expected for AWS_REGION\n");
     }
 
     Y_UNIT_TEST(ErrJoinWithGroupingSetsWithoutCorrelationName) {

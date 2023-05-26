@@ -20,7 +20,7 @@ public:
     class ITask: public NConveyor::ITask {
     private:
         std::shared_ptr<IDataTasksProcessor> OwnerOperator;
-        YDB_READONLY_FLAG(DataProcessed, false);
+        bool DataProcessed = false;
     protected:
         TDataTasksProcessorContainer GetTasksProcessorContainer() const;
         virtual bool DoApply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const = 0;
@@ -38,6 +38,10 @@ public:
         using TPtr = std::shared_ptr<ITask>;
         virtual ~ITask() = default;
         bool Apply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const;
+
+        bool IsDataProcessed() const noexcept {
+            return DataProcessed;
+        }
     };
 protected:
     virtual bool DoAdd(ITask::TPtr task) = 0;
@@ -64,7 +68,7 @@ public:
 
 class TDataTasksProcessorContainer {
 private:
-    YDB_READONLY_DEF(IDataTasksProcessor::TPtr, Object);
+    IDataTasksProcessor::TPtr Object;
 public:
     TDataTasksProcessorContainer() = default;
     TDataTasksProcessorContainer(IDataTasksProcessor::TPtr object)
@@ -89,6 +93,10 @@ public:
 
     bool IsStopped() const {
         return Object && Object->IsStopped();
+    }
+
+    IDataTasksProcessor::TPtr GetObject() const noexcept {
+        return Object;
     }
 
     void Add(NOlap::NIndexedReader::TGranulesFillingContext& context, IDataTasksProcessor::ITask::TPtr task);

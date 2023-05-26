@@ -1,0 +1,10 @@
+Blocks {
+   ProbeDesc {
+       Name: "BackTrack"
+       Provider: "LWTRACE_EXAMPLE_PROVIDER"
+    }
+    Action {
+        PrintToStderrAction { }
+    }
+}
+

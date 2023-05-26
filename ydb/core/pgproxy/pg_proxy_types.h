@@ -40,27 +40,31 @@ struct TPGMessage {
     bool Empty() const {
         return GetDataSize() == 0;
     }
+
+    TString Dump() const {
+        return {};
+    }
 };
 
-struct TPGInitial : TPGMessage { // it's not true, because we don't receive message code from a network, but imply it on the start
-    TPGInitial() {
-        Message = 'i'; // fake code
+template<char code>
+struct TPGMessageType : TPGMessage {
+    static constexpr char CODE = code;
+    TPGMessageType() {
+        Message = code;
     }
+};
 
+struct TPGInitial : TPGMessageType<'i'> { // it's not true, because we don't receive message code from a network, but imply it on the start
     TString Dump() const;
     std::unordered_map<TString, TString> GetClientParams() const;
     uint32_t GetProtocol() const;
 };
 
-struct TPGAuth : TPGMessage {
+struct TPGAuth : TPGMessageType<'R'> {
     enum class EAuthCode : uint32_t {
         OK = 0,
         ClearText = 3,
     };
-
-    TPGAuth() {
-        Message = 'R';
-    }
 
     EAuthCode GetAuthCode() const {
         return static_cast<EAuthCode>(ntohl(*reinterpret_cast<const uint32_t*>(GetData())));
@@ -77,11 +81,7 @@ struct TPGAuth : TPGMessage {
     }
 };
 
-struct TPGPasswordMessage : TPGMessage {
-    TPGPasswordMessage() {
-        Message = 'r';
-    }
-
+struct TPGPasswordMessage : TPGMessageType<'p'> {
     TStringBuf GetPassword() const {
         TStringBuf password(GetData(), GetDataSize());
         while (!password.empty() && password.EndsWith('\0')) {
@@ -91,11 +91,7 @@ struct TPGPasswordMessage : TPGMessage {
     }
 };
 
-struct TPGParameterStatus : TPGMessage {
-    TPGParameterStatus() {
-        Message = 'S';
-    }
-
+struct TPGParameterStatus : TPGMessageType<'S'> {
     TStringBuf GetValue() const {
         TStringBuf data(GetData(), GetDataSize());
         data = data.SplitOff('\0');
@@ -122,22 +118,17 @@ struct TPGParameterStatus : TPGMessage {
     }
 };
 
-struct TPGReadyForQuery : TPGMessage {
-    TPGReadyForQuery() {
-        Message = 'Z';
-    }
+struct TPGSync : TPGMessageType<'S'> {
+};
 
+struct TPGReadyForQuery : TPGMessageType<'Z'> {
     TString Dump() const {
         TStringBuf data(GetData(), GetDataSize());
         return TStringBuilder() << "Status: " << data;
     }
 };
 
-struct TPGQuery : TPGMessage {
-    TPGQuery() {
-        Message = 'Q';
-    }
-
+struct TPGQuery : TPGMessageType<'Q'> {
     TStringBuf GetQuery() const {
         TStringBuf query(GetData(), GetDataSize());
         while (!query.empty() && query.EndsWith('\0')) {
@@ -151,11 +142,7 @@ struct TPGQuery : TPGMessage {
     }
 };
 
-struct TPGCommandComplete : TPGMessage {
-    TPGCommandComplete() {
-        Message = 'C';
-    }
-
+struct TPGCommandComplete : TPGMessageType<'C'> {
     TStringBuf GetTag() const {
         TStringBuf query(GetData(), GetDataSize());
         while (!query.empty() && query.EndsWith('\0')) {
@@ -169,45 +156,30 @@ struct TPGCommandComplete : TPGMessage {
     }
 };
 
-struct TPGErrorResponse : TPGMessage {
-    TPGErrorResponse() {
-        Message = 'E';
-    }
-
+struct TPGErrorResponse : TPGMessageType<'E'> {
     TString Dump() const;
 };
 
-struct TPGTerminate : TPGMessage {
-    TPGTerminate() {
-        Message = 'X';
-    }
+struct TPGTerminate : TPGMessageType<'X'> {
 };
 
-struct TPGRowDescription : TPGMessage {
-    TPGRowDescription() {
-        Message = 'T';
-    }
+struct TPGRowDescription : TPGMessageType<'T'> {
 };
 
-struct TPGDataRow : TPGMessage {
-    TPGDataRow() {
-        Message = 'D';
-    }
+struct TPGParameterDescription : TPGMessageType<'t'> {
+};
 
+struct TPGNoData : TPGMessageType<'n'> {
+};
+
+struct TPGDataRow : TPGMessageType<'D'> {
     TString Dump() const;
 };
 
-struct TPGEmptyQueryResponse : TPGMessage {
-    TPGEmptyQueryResponse() {
-        Message = 'I';
-    }
+struct TPGEmptyQueryResponse : TPGMessageType<'I'> {
 };
 
-struct TPGParse : TPGMessage {
-    TPGParse() {
-        Message = 'P';
-    }
-
+struct TPGParse : TPGMessageType<'P'> {
     struct TQueryData {
         TString Name;
         TString Query;
@@ -218,17 +190,10 @@ struct TPGParse : TPGMessage {
     TString Dump() const;
 };
 
-struct TPGParseComplete : TPGMessage {
-    TPGParseComplete() {
-        Message = '1';
-    }
+struct TPGParseComplete : TPGMessageType<'1'> {
 };
 
-struct TPGBind : TPGMessage {
-    TPGBind() {
-        Message = 'B';
-    }
-
+struct TPGBind : TPGMessageType<'B'> {
     struct TBindData {
         TString PortalName;
         TString StatementName;
@@ -241,17 +206,10 @@ struct TPGBind : TPGMessage {
     TString Dump() const;
 };
 
-struct TPGBindComplete : TPGMessage {
-    TPGBindComplete() {
-        Message = '2';
-    }
+struct TPGBindComplete : TPGMessageType<'2'> {
 };
 
-struct TPGDescribe : TPGMessage {
-    TPGDescribe() {
-        Message = 'D';
-    }
-
+struct TPGDescribe : TPGMessageType<'D'> {
     struct TDescribeData {
         enum class EDescribeType : char {
             Portal = 'P',
@@ -265,11 +223,7 @@ struct TPGDescribe : TPGMessage {
     TString Dump() const;
 };
 
-struct TPGExecute : TPGMessage {
-    TPGExecute() {
-        Message = 'E';
-    }
-
+struct TPGExecute : TPGMessageType<'E'> {
     struct TExecuteData {
         TString PortalName;
         uint32_t MaxRows;
@@ -277,6 +231,22 @@ struct TPGExecute : TPGMessage {
 
     TExecuteData GetExecuteData() const;
     TString Dump() const;
+};
+
+struct TPGClose : TPGMessageType<'C'> {
+    struct TCloseData {
+        TString PortalName;
+        TString StatementName;
+    };
+
+    TCloseData GetCloseData() const;
+    TString Dump() const;
+};
+
+struct TPGCloseComplete : TPGMessageType<'3'> {
+};
+
+struct TPGFlush : TPGMessageType<'H'> {
 };
 #pragma pack(pop)
 

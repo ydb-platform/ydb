@@ -322,13 +322,13 @@ private:
 
             auto id = Identifier;
             if (id.SkipPrefix("pg")) {
-                if (NPg::HasType(id)) {
+                if (NPg::HasType(TString(id))) {
                     type = MakePgType(id);
                     isPgType = true;
                     GetNextToken();
                 }
             } else if (id.SkipPrefix("_pg")) {
-                if (NPg::HasType(id) && !id.StartsWith('_')) {
+                if (NPg::HasType(TString(id)) && !id.StartsWith('_')) {
                     type = MakePgType(TString("_") + id);
                     isPgType = true;
                     GetNextToken();

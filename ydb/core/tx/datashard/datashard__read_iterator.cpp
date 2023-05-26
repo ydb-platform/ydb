@@ -3,12 +3,15 @@
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+#include "probes.h"
 
-#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
 #include <util/system/hp_timer.h>
 
 #include <utility>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr::NDataShard {
 
@@ -20,7 +23,7 @@ constexpr ui64 MinRowsPerCheck = 1000;
 
 class TRowCountBlockBuilder : public IBlockBuilder {
 public:
-    bool Start(const TVector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
+    bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>&, ui64, ui64, TString&) override
     {
         return true;
     }
@@ -47,7 +50,7 @@ private:
 class TCellBlockBuilder : public IBlockBuilder {
 public:
     bool Start(
-        const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
         ui64 maxRowsInBlock,
         ui64 maxBytesInBlock,
         TString& err) override
@@ -76,7 +79,7 @@ public:
     TVector<TOwnedCellVec> FlushBatch() { return std::move(Rows); }
 
 private:
-    TVector<std::pair<TString, NScheme::TTypeInfo>> Columns;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
     TVector<TOwnedCellVec> Rows;
     ui64 BytesCount = 0;
@@ -1077,6 +1080,7 @@ public:
             }
         }
 
+        LWTRACK(ReadExecute, state.Orbit);
         if (!Read(txc, ctx, state))
             return EExecutionStatus::Restart;
 
@@ -1407,6 +1411,7 @@ public:
         Reader->FillResult(*Result, state);
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {
+            LWTRACK(ReadSendResult, state.Orbit);
             Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
         }
     }
@@ -1700,12 +1705,10 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         auto it = Self->ReadIterators.find(ReadId);
-        if (it == Self->ReadIterators.end()) {
-            // iterator aborted
+        if (it == Self->ReadIterators.end() && !Op) {
+            // iterator aborted before we could start operation
             return true;
         }
-
-        auto& state = *it->second;
 
         try {
             // If tablet is in follower mode then we should sync scheme
@@ -1719,13 +1722,18 @@ public:
                 }
 
                 if (status != NKikimrTxDataShard::TError::OK) {
+                    Y_VERIFY_DEBUG(!Op);
+                    if (Y_UNLIKELY(it == Self->ReadIterators.end())) {
+                        // iterator already aborted
+                        return true;
+                    }
                     std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
                     SetStatusError(
                         result->Record,
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage);
                     result->Record.SetReadId(ReadId.ReadId);
-                    SendViaSession(state.SessionId, ReadId.Sender, Self->SelfId(), result.release());
+                    SendViaSession(it->second->SessionId, ReadId.Sender, Self->SelfId(), result.release());
 
                     return true;
                 }
@@ -1950,6 +1958,7 @@ public:
             AppData()->MonotonicTimeProvider->Now(),
             Self));
 
+        LWTRACK(ReadExecute, state.Orbit);
         if (Reader->Read(txc, ctx)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
@@ -2079,6 +2088,7 @@ public:
             << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
 
         Reader->FillResult(*Result, state);
+        LWTRACK(ReadSendResult, state.Orbit);
         Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
 
         if (Reader->HasUnreadQueries()) {
@@ -2113,6 +2123,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
+    LWTRACK(ReadRequest, request->Orbit, record.GetReadId());
+
     TReadIteratorId readId(ev->Sender, record.GetReadId());
     if (!Pipeline.HandleWaitingReadIterator(readId, request)) {
         // This request has been cancelled
@@ -2144,6 +2156,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     if (MediatorStateWaiting) {
+        LWTRACK(ReadWaitMediatorState, request->Orbit);
         Pipeline.RegisterWaitingReadIterator(readId, request);
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
@@ -2237,6 +2250,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
                 auto prioritizedMvccSnapshotReads = GetEnablePrioritizedMvccSnapshotReads();
                 TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
                 if (readVersion >= unreadableEdge) {
+                    LWTRACK(ReadWaitSnapshot, request->Orbit, readVersion.Step, readVersion.TxId);
                     Pipeline.AddWaitingReadIterator(readVersion, std::move(ev), ctx);
                     return;
                 }
@@ -2325,7 +2339,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     ReadIterators.emplace(
         readId,
-        new TReadIteratorState(sessionId, isHeadRead, AppData()->MonotonicTimeProvider->Now()));
+        new TReadIteratorState(sessionId, isHeadRead, AppData()->MonotonicTimeProvider->Now(), std::move(request->Orbit)));
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 
@@ -2383,6 +2397,8 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
 
         return;
     }
+
+    LWTRACK(ReadAck, state.Orbit);
 
     // We received ACK on message we hadn't sent yet
     if (state.SeqNo < record.GetSeqNo()) {
@@ -2446,6 +2462,8 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
         IncCounter(COUNTER_READ_ITERATOR_LIFETIME_MS, delta.MilliSeconds());
         IncCounter(COUNTER_READ_ITERATOR_CANCEL);
     }
+
+    LWTRACK(ReadCancel, state->Orbit);
 
     DeleteReadIterator(it);
 }

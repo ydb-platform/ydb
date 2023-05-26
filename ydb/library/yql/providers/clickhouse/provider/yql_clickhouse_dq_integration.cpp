@@ -22,7 +22,11 @@ public:
         : State_(state)
     {}
 
-    TMaybe<ui64> CanRead(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext&, bool) override {
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TClReadTable::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext&) override {
         if (TClReadTable::Match(&read)) {
             return 0ul; // TODO: return real size
         }

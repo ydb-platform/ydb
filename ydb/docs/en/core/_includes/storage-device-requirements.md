@@ -6,6 +6,6 @@ The minimum disk size is 80 GB, otherwise the {{ ydb-short-name }} node won't be
 
 Configurations with disks less than 800 GB or any types of storage system virtualization cannot be used for production services or system performance testing.
 
-We don't recommend storing {{ ydb-short-name }} data on disks used by other processes (including the operating system).
+We don't recommend storing {{ ydb-short-name }} data on disks shared with other processes (for example, the operating system).
 
 {% endnote %}

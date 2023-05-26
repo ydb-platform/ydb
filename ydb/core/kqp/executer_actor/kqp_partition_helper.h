@@ -17,8 +17,6 @@ struct TShardInfo {
         ui32 MaxValueSizeBytes = 0;
     };
 
-    TMap<TString, NYql::NDqProto::TData> Params;
-
     TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
     TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
     THashMap<TString, TColumnWriteInfo> ColumnWrites;
@@ -41,9 +39,6 @@ struct TPhysicalShardReadSettings {
     bool Sorted = true;
     bool Reverse = false;
     ui64 ItemsLimit = 0;
-    TString ItemsLimitParamName;
-    NYql::NDqProto::TData ItemsLimitBytes;
-    NKikimr::NMiniKQL::TType* ItemsLimitType = nullptr;
     NKikimr::NMiniKQL::TType* ResultType = nullptr;
 };
 
@@ -71,15 +66,16 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpLookup& lookup, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
+TShardInfo MakeVirtualTablePartition(const TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
 THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
-void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    ui64& itemsLimit, TString& itemsLimitParamName, NYql::NDqProto::TData& itemsLimitBytes,
-    NKikimr::NMiniKQL::TType*& itemsLimitType);
+ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
 // Returns the list of ColumnShards that can store rows from the specified range
 // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range

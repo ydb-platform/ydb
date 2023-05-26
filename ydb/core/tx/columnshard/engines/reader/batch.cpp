@@ -6,8 +6,8 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-TBatch::TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionInfo)
-    : BatchNo(batchNo)
+TBatch::TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo)
+    : BatchAddress(address)
     , Portion(portionInfo.Records[0].Portion)
     , Granule(owner.GetGranuleId())
     , Owner(&owner)
@@ -27,13 +27,22 @@ TBatch::TBatch(const ui32 batchNo, TGranule& owner, const TPortionInfo& portionI
 NColumnShard::IDataTasksProcessor::ITask::TPtr TBatch::AssembleTask(NColumnShard::IDataTasksProcessor::TPtr processor, NOlap::TReadMetadata::TConstPtr readMetadata) {
     Y_VERIFY(WaitIndexed.empty());
     Y_VERIFY(PortionInfo->Produced());
-    Y_VERIFY(!FilteredBatch);
-    auto batchConstructor = PortionInfo->PrepareForAssemble(readMetadata->IndexInfo, readMetadata->LoadSchema, Data, CurrentColumnIds);
-    Data.clear();
-    if (!Filter) {
-        return std::make_shared<TAssembleFilter>(std::move(batchConstructor), readMetadata, *this, PortionInfo->AllowEarlyFilter(), Owner->GetEarlyFilterColumns(), processor);
+    Y_VERIFY(!FetchedInfo.GetFilteredBatch());
+
+    auto blobSchema = readMetadata->GetLoadSchema(PortionInfo->GetSnapshot());
+    auto readSchema = readMetadata->GetLoadSchema(readMetadata->GetSnapshot());
+    ISnapshotSchema::TPtr resultSchema;
+    if (CurrentColumnIds) {
+        resultSchema = std::make_shared<TFilteredSnapshotSchema>(readSchema, *CurrentColumnIds);
     } else {
-        Y_VERIFY(FilterBatch);
+        resultSchema = readSchema;
+    }
+    auto batchConstructor = PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, Data);
+    Data.clear();
+    if (!FetchedInfo.GetFilter()) {
+        return std::make_shared<TAssembleFilter>(std::move(batchConstructor), readMetadata,
+            *this, Owner->GetEarlyFilterColumns(), processor, Owner->GetOwner().GetSortingPolicy());
+    } else {
         return std::make_shared<TAssembleBatch>(std::move(batchConstructor), *this, readMetadata->GetColumnsOrder(), processor);
     }
 }
@@ -81,7 +90,7 @@ void TBatch::ResetCommon(const std::set<ui32>& columnIds) {
 }
 
 void TBatch::ResetNoFilter(const std::set<ui32>& columnIds) {
-    Y_VERIFY(!Filter);
+    Y_VERIFY(!FetchedInfo.GetFilter());
     ResetCommon(columnIds);
     for (const NOlap::TColumnRecord& rec : PortionInfo->Records) {
         if (CurrentColumnIds && !CurrentColumnIds->contains(rec.ColumnId)) {
@@ -97,7 +106,7 @@ void TBatch::ResetNoFilter(const std::set<ui32>& columnIds) {
 }
 
 void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
-    Y_VERIFY(Filter);
+    Y_VERIFY(FetchedInfo.GetFilter());
     ResetCommon(columnIds);
     std::map<ui32, std::map<ui16, const TColumnRecord*>> orderedObjects;
     for (const NOlap::TColumnRecord& rec : PortionInfo->Records) {
@@ -112,7 +121,7 @@ void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
 
     for (auto&& columnInfo : orderedObjects) {
         ui32 expected = 0;
-        auto it = Filter->GetIterator();
+        auto it = FetchedInfo.GetFilter()->GetIterator(false);
         bool undefinedShift = false;
         bool itFinished = false;
         for (auto&& [chunk, rec] : columnInfo.second) {
@@ -136,20 +145,14 @@ void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
 }
 
 bool TBatch::InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch,
-    const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> futureFilter) {
-    Y_VERIFY(filter);
-    Y_VERIFY(!Filter);
-    Y_VERIFY(!FilterBatch);
-    Filter = filter;
-    FilterBatch = filterBatch;
-    OriginalRecordsCount = originalRecordsCount;
-    FutureFilter = futureFilter;
+    const ui32 originalRecordsCount, std::shared_ptr<NArrow::TColumnFilter> notAppliedEarlyFilter)
+{
+    FetchedInfo.InitFilter(filter, filterBatch, originalRecordsCount, notAppliedEarlyFilter);
     return Owner->OnFilterReady(*this);
 }
 
 void TBatch::InitBatch(std::shared_ptr<arrow::RecordBatch> batch) {
-    Y_VERIFY(!FilteredBatch);
-    FilteredBatch = batch;
+    FetchedInfo.InitBatch(batch);
     Owner->OnBatchReady(*this, batch);
 }
 
@@ -164,28 +167,48 @@ bool TBatch::AddIndexedReady(const TBlobRange& bRange, const TString& blobData) 
     return true;
 }
 
-bool TBatch::NeedAdditionalData() const {
-    if (!Filter) {
-        return true;
-    }
-    if (!FilteredBatch || !FilteredBatch->num_rows()) {
-        return false;
-    }
-    if (AskedColumnsAlready(Owner->GetOwner().GetPostFilterColumns())) {
-        return false;
-    }
-    return true;
+ui64 TBatch::GetUsefulBytes(const ui64 bytes) const {
+    return bytes * FetchedInfo.GetUsefulDataKff();
 }
 
-ui64 TBatch::GetUsefulBytes(const ui64 bytes) const {
-    if (!FilteredBatch || !FilteredBatch->num_rows()) {
-        return 0;
+std::shared_ptr<TSortableBatchPosition> TBatch::GetFirstPK(const bool reverse, const TIndexInfo& indexInfo) const {
+    if (!FirstPK || !LastPK) {
+        std::shared_ptr<TSortableBatchPosition> from;
+        std::shared_ptr<TSortableBatchPosition> to;
+        GetPKBorders(reverse, indexInfo, from, to);
     }
-    Y_VERIFY_DEBUG(OriginalRecordsCount);
-    if (!OriginalRecordsCount) {
-        return 0;
+    if (reverse) {
+        return *ReverseFirstPK;
+    } else {
+        return *FirstPK;
     }
-    return bytes * FilteredBatch->num_rows() / OriginalRecordsCount;
+}
+
+void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::shared_ptr<TSortableBatchPosition>& from, std::shared_ptr<TSortableBatchPosition>& to) const {
+    auto indexKey = indexInfo.GetIndexKey();
+    if (!FirstPK) {
+        Y_VERIFY(PortionInfo->Valid());
+        const NArrow::TReplaceKey& minRecord = PortionInfo->IndexKeyStart();
+        auto batch = minRecord.ToBatch(indexKey);
+        Y_VERIFY(batch);
+        FirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), false);
+        ReverseLastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), true);
+    }
+    if (!LastPK) {
+        Y_VERIFY(PortionInfo->Valid());
+        const NArrow::TReplaceKey& maxRecord = PortionInfo->IndexKeyEnd();
+        auto batch = maxRecord.ToBatch(indexKey);
+        Y_VERIFY(batch);
+        LastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), false);
+        ReverseFirstPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), true);
+    }
+    if (reverse) {
+        from = *ReverseFirstPK;
+        to = *ReverseLastPK;
+    } else {
+        from = *FirstPK;
+        to = *LastPK;
+    }
 }
 
 }

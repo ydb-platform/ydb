@@ -28,14 +28,14 @@ public:
 
     void WriteGranule(ui32, const IColumnEngine&, const TGranuleRecord&) override {}
     void EraseGranule(ui32, const IColumnEngine&, const TGranuleRecord&) override {}
-    bool LoadGranules(ui32, const IColumnEngine&, std::function<void(TGranuleRecord&&)>) override { return true; }
+    bool LoadGranules(ui32, const IColumnEngine&, const std::function<void(const TGranuleRecord&)>&) override { return true; }
 
     void WriteColumn(ui32, const TColumnRecord&) override {}
     void EraseColumn(ui32, const TColumnRecord&) override {}
-    bool LoadColumns(ui32, std::function<void(TColumnRecord&&)>) override { return true; }
+    bool LoadColumns(ui32, const std::function<void(const TColumnRecord&)>&) override { return true; }
 
     void WriteCounter(ui32, ui32, ui64) override {}
-    bool LoadCounters(ui32, std::function<void(ui32 id, ui64 value)>) override { return true; }
+    bool LoadCounters(ui32, const std::function<void(ui32 id, ui64 value)>&) override { return true; }
 };
 
 }
@@ -51,25 +51,26 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
 
         TTestInsertTableDB dbTable;
         TInsertTable insertTable;
+        TSnapshot indexSnapshot(1, 1); 
 
         // insert, not commited
         TInstant time = TInstant::Now();
-        bool ok = insertTable.Insert(dbTable, TInsertedData(metaShard, writeId, tableId, dedupId, blobId1, {}, time));
+        bool ok = insertTable.Insert(dbTable, TInsertedData(metaShard, writeId, tableId, dedupId, blobId1, {}, time, indexSnapshot));
         UNIT_ASSERT(ok);
 
         // insert the same blobId1 again
-        ok = insertTable.Insert(dbTable, TInsertedData(metaShard, writeId, tableId, dedupId, blobId1, {}, time));
+        ok = insertTable.Insert(dbTable, TInsertedData(metaShard, writeId, tableId, dedupId, blobId1, {}, time, indexSnapshot));
         UNIT_ASSERT(!ok);
 
         // insert different blodId with the same writeId and dedupId
         TUnifiedBlobId blobId2(2222, 1, 2, 100, 1);
-        ok = insertTable.Insert(dbTable, TInsertedData(metaShard, writeId, tableId, dedupId, blobId2, {}, time));
+        ok = insertTable.Insert(dbTable, TInsertedData(metaShard, writeId, tableId, dedupId, blobId2, {}, time, indexSnapshot));
         UNIT_ASSERT(!ok);
 
         // read nothing
-        auto blobs = insertTable.Read(tableId, 0, 0);
+        auto blobs = insertTable.Read(tableId, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId+1, 0, 0);
+        blobs = insertTable.Read(tableId+1, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
@@ -82,15 +83,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         UNIT_ASSERT_EQUAL(committed.begin()->second.size(), 1);
 
         // read old snapshot
-        blobs = insertTable.Read(tableId, 0, 0);
+        blobs = insertTable.Read(tableId, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId+1, 0, 0);
+        blobs = insertTable.Read(tableId+1, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
-        blobs = insertTable.Read(tableId, planStep, txId);
+        blobs = insertTable.Read(tableId, TSnapshot(planStep, txId));
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId+1, 0, 0);
+        blobs = insertTable.Read(tableId+1, TSnapshot::Zero());
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }

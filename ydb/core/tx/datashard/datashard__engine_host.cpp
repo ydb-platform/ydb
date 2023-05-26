@@ -348,6 +348,7 @@ public:
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
             "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self->TabletID());
         DB.CommitTx(localTid, lockId, writeVersion);
+        Self->GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, DB);
 
         if (!CommittedLockChanges.contains(lockId) && Self->HasLockChangeRecords(lockId)) {
             if (auto* collector = GetChangeCollector(tableId)) {
@@ -516,6 +517,14 @@ public:
         } else {
             TEngineHost::UpdateRow(tableId, row, commands);
         }
+
+        if (VolatileTxId) {
+            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, VolatileTxId, Db);
+        } else if (LockTxId) {
+            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, LockTxId, Db);
+        } else {
+            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).RemoveUncommittedWrites(row, Db);
+        }
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
@@ -534,6 +543,14 @@ public:
 
         Self->SetTableUpdateTime(tableId, Now);
         TEngineHost::EraseRow(tableId, row);
+
+        if (VolatileTxId) {
+            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, VolatileTxId, Db);
+        } else if (LockTxId) {
+            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, LockTxId, Db);
+        } else {
+            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).RemoveUncommittedWrites(row, Db);
+        }
     }
 
     // Returns whether row belong this shard.
@@ -782,7 +799,7 @@ public:
         return false;
     }
 
-    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> row) {
+    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
         // When there are uncommitted changes (write locks) we must find which
         // locks would break upon commit.
         bool mustFindConflicts = Self->SysLocksTable().HasWriteLocks(tableId);
@@ -799,17 +816,20 @@ public:
 
         const auto localTid = LocalTableId(tableId);
         Y_VERIFY(localTid);
-        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
-        TSmallVec<TRawTypeValue> key;
-        ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 
         ui64 skipCount = 0;
 
         NTable::ITransactionObserverPtr txObserver;
         if (LockTxId) {
+            // We cannot use cached conflicts since we need to find skip count
             txObserver = new TLockedWriteTxObserver(this, LockTxId, skipCount, localTid);
             // Locked writes are immediate, increased latency is not critical
             mustFindConflicts = true;
+        } else if (auto* cached = Self->GetConflictsCache().GetTableCache(localTid).FindUncommittedWrites(keyCells)) {
+            for (ui64 txId : *cached) {
+                BreakWriteConflict(txId);
+            }
+            return;
         } else {
             txObserver = new TWriteTxObserver(this);
             // Prefer precise conflicts for non-distributed transactions
@@ -821,7 +841,7 @@ public:
         // We are not actually interested in the row version, we only need to
         // detect uncommitted transaction skips on the path to that version.
         auto res = Db.SelectRowVersion(
-            localTid, key, /* readFlags */ 0,
+            localTid, keyCells, /* readFlags */ 0,
             nullptr, txObserver);
 
         if (res.Ready == NTable::EReady::Page) {
@@ -1055,7 +1075,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
     KqpExecCtx.Alloc = KqpAlloc.Get();
     KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
-    if (auto* rm = NKqp::TryGetKqpResourceManager()) {
+    if (auto rm = NKqp::TryGetKqpResourceManager()) {
         KqpExecCtx.PatternCache = rm->GetPatternCache();
     }
 }

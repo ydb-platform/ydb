@@ -212,6 +212,7 @@ public:
                 OPTIONAL(VirtualGroupName)
                 OPTIONAL(VirtualGroupState)
                 OPTIONAL(HiveId)
+                OPTIONAL(Database)
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)

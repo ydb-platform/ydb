@@ -930,7 +930,7 @@ public:
 
     void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
@@ -1248,6 +1248,7 @@ public:
     void ChangeDiskSpaceTablesDataBytes(i64 delta) override;
     void ChangeDiskSpaceTablesIndexBytes(i64 delta) override;
     void ChangeDiskSpaceTablesTotalBytes(i64 delta) override;
+    void ChangeDiskSpaceTopicsTotalBytes(ui64 value) override;
     void ChangeDiskSpaceQuotaExceeded(i64 delta) override;
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;

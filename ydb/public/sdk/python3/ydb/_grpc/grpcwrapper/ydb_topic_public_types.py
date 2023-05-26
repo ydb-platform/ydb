@@ -87,9 +87,7 @@ class DescribeTopicRequestParams(IToProto):
     include_stats: bool
 
     def to_proto(self) -> ydb_topic_pb2.DescribeTopicRequest:
-        return ydb_topic_pb2.DescribeTopicRequest(
-            path=self.path, include_stats=self.include_stats
-        )
+        return ydb_topic_pb2.DescribeTopicRequest(path=self.path, include_stats=self.include_stats)
 
 
 @dataclass

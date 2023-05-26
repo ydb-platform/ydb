@@ -6,6 +6,8 @@
 
   * [{#T}](cluster_expansion.md).
   * [{#T}](adding_storage_groups.md).
+  * [{#T}](../../administration/state-storage-move.md)
+  * [{#T}](../../administration/static-group-move.md)
 
 * Обслуживание:
 

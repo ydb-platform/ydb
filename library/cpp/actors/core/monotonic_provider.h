@@ -4,8 +4,8 @@
 
 namespace NActors {
 
-using IMonotonicTimeProvider = ::IMonotonicTimeProvider;
+using IMonotonicTimeProvider = NMonotonic::IMonotonicTimeProvider;
 
-TIntrusivePtr<IMonotonicTimeProvider> CreateDefaultMonotonicTimeProvider();
+using NMonotonic::CreateDefaultMonotonicTimeProvider;
 
 } // namespace NActors

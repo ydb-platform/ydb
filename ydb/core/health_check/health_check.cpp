@@ -1661,6 +1661,7 @@ public:
         if (!vDiskInfo.GetReplicated()) {
             context.IssueRecords.clear();
             context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Replication in progress", ETags::VDiskState);
+            storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
 

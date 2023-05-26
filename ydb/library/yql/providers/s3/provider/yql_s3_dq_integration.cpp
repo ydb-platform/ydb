@@ -119,7 +119,11 @@ public:
         return 0;
     }
 
-    TMaybe<ui64> CanRead(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext&, bool) override {
+    bool CanRead(const TExprNode& read, TExprContext&, bool) override {
+        return TS3ReadObject::Match(&read);
+    }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext&) override {
         if (TS3ReadObject::Match(&read)) {
             return 0ul; // TODO: return real size
         }
@@ -282,7 +286,6 @@ public:
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
                 srcDesc.SetArrow(bool(parseSettings.Maybe<TS3ArrowSettings>()));
-                srcDesc.SetThreadPool(State_->Configuration->ArrowThreadPool.Get().GetOrElse(true));
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.Get().GetOrElse(0));
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.Get().GetOrElse(true));
                 srcDesc.SetParallelDownloadCount(State_->Configuration->ParallelDownloadCount.Get().GetOrElse(0));

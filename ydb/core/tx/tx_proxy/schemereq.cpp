@@ -1,5 +1,6 @@
 #include "proxy.h"
 
+#include <ydb/core/docapi/traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -15,9 +16,6 @@
 
 namespace NKikimr {
 namespace NTxProxy {
-
-static constexpr TStringBuf DocApiRequestType = "_document_api_request";
-static constexpr TStringBuf DocApiTableVersionAttribute = "__document_api_version";
 
 template<typename TDerived>
 struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
@@ -967,7 +965,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     }
 
     static bool IsDocApiRestricted(const NKikimrTxUserProxy::TEvProposeTransaction& tx) {
-        if (tx.GetRequestType() == DocApiRequestType) {
+        if (tx.GetRequestType() == NDocApi::RequestType) {
             return false;
         }
 
@@ -983,7 +981,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     bool CheckDocApi(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext &ctx) {
         for (const auto& entry: resolveSet) {
-            if (entry.Attributes.contains(DocApiTableVersionAttribute)) {
+            if (entry.Attributes.contains(NDocApi::VersionAttribute)) {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Document API table cannot be modified"
                     << ": "<< CanonizePath(entry.Path));

@@ -411,9 +411,11 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
     STLOG(PRI_DEBUG, BS_NODE, NW47, "Handle(TEvStatusUpdate)");
     auto *msg = ev->Get();
     const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
-    if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end() && it->second.Status != msg->Status) {
+    if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end() && (it->second.Status != msg->Status ||
+            it->second.OnlyPhantomsRemain != msg->OnlyPhantomsRemain)) {
         auto& vdisk = it->second;
         vdisk.Status = msg->Status;
+        vdisk.OnlyPhantomsRemain = msg->OnlyPhantomsRemain;
         SendDiskMetrics(false);
 
         if (msg->Status == NKikimrBlobStorage::EVDiskStatus::READY && vdisk.WhiteboardVDiskId) {
@@ -428,7 +430,10 @@ void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBl
         const NKikimrBlobStorage::EVDiskStatus status = vdisk.RuntimeData
             ? vdisk.Status
             : NKikimrBlobStorage::EVDiskStatus::ERROR;
-        if (initial || status != vdisk.ReportedVDiskStatus) {
+
+        const bool onlyPhantomsRemain = status == NKikimrBlobStorage::EVDiskStatus::REPLICATING ? vdisk.OnlyPhantomsRemain : false;
+
+        if (initial || status != vdisk.ReportedVDiskStatus || onlyPhantomsRemain != vdisk.ReportedOnlyPhantomsRemain) {
             auto *item = pb->Add();
             VDiskIDFromVDiskID(vdisk.GetVDiskId(), item->MutableVDiskId());
             item->SetNodeId(vslotId.NodeId);
@@ -436,7 +441,9 @@ void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBl
             item->SetVSlotId(vslotId.VDiskSlotId);
             item->SetPDiskGuid(vdisk.Config.GetVDiskLocation().GetPDiskGuid());
             item->SetStatus(status);
+            item->SetOnlyPhantomsRemain(onlyPhantomsRemain);
             vdisk.ReportedVDiskStatus = status;
+            vdisk.ReportedOnlyPhantomsRemain = onlyPhantomsRemain;
         }
     }
 }

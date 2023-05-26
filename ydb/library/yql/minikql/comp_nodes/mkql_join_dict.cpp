@@ -53,7 +53,7 @@ public:
             const auto joinFuncType = FunctionType::get(Type::getInt128Ty(context),
                 { joinFuncArg->getType(), ctx.Ctx->getType(), one->getType(), two->getType() }, false);
             const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);
-            const auto join = CallInst::Create(joinFuncPtr, { joinFuncArg, ctx.Ctx, one, two }, "join", block);
+            const auto join = CallInst::Create(joinFuncType, joinFuncPtr, { joinFuncArg, ctx.Ctx, one, two }, "join", block);
             AddRefBoxed(join, ctx, block);
             new StoreInst(join, pointer, block);
         } else {
@@ -66,8 +66,8 @@ public:
                 { joinFuncArg->getType(), pointer->getType(), ctx.Ctx->getType(), onePtr->getType(), twoPtr->getType() }, false);
 
             const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);
-            CallInst::Create(joinFuncPtr, { joinFuncArg, pointer, ctx.Ctx, onePtr, twoPtr }, "", block);
-            const auto join = new LoadInst(pointer, "join", block);
+            CallInst::Create(joinFuncType, joinFuncPtr, { joinFuncArg, pointer, ctx.Ctx, onePtr, twoPtr }, "", block);
+            const auto join = new LoadInst(Type::getInt128Ty(context), pointer, "join", block);
             AddRefBoxed(join, ctx, block);
         }
     }
@@ -83,7 +83,7 @@ private:
             return true;
         }
 
-        if (KeyTuple) {
+        if constexpr (KeyTuple) {
             for (ui32 index : OptIndicies) {
                 if (!key.GetElement(index)) {
                     return true;

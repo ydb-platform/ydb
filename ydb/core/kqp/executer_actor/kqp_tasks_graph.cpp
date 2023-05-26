@@ -60,13 +60,6 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
             continue;
         }
 
-        if (auto* taskParam = task.Meta.Params.FindPtr(name)) {
-            // This parameter is the list, holding type from task.Meta.ParamTypes
-            // Those parameters can't be used in Olap programs now
-            YQL_ENSURE(false, "OLAP program contains task parameter, not supported yet.");
-            continue;
-        }
-
         auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
         YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
 
@@ -1005,8 +998,8 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, c
     result.MutableProgram()->CopyFrom(stage.GetProgram());
     for (auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result.MutableParameters();
-        if (auto* taskParam = task.Meta.Params.FindPtr(paramName)) {
-            dqParams[paramName] = *taskParam;
+        if (task.Meta.ShardId) {
+            dqParams[paramName] = stageInfo.Meta.Tx.Params->GetShardParam(task.Meta.ShardId, paramName);
         } else {
             dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
         }
@@ -1021,13 +1014,7 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, c
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const
 {
     TStringBuilder sb;
-    sb << "TTaskMeta{ ShardId: " << ShardId << ", Params: [";
-
-    for (auto& [name, value] : Params) {
-        sb << name << ", ";
-    }
-
-    sb << "], Reads: { ";
+    sb << "TTaskMeta{ ShardId: " << ShardId << ", Reads: { ";
 
     if (Reads) {
         for (ui64 i = 0; i < Reads->size(); ++i) {

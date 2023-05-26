@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-tx-columnshard-engines-ut PUBLIC
   ydb-core-base
   ydb-core-tablet
   ydb-core-tablet_flat
+  tx-columnshard-counters
   yql-sql-pg_dummy
 )
 target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE

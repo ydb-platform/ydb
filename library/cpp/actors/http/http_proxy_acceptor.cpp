@@ -69,6 +69,13 @@ protected:
         }
         if (err == 0) {
             err = Socket->Socket.Bind(bindAddress.get());
+            if (err != 0) {
+                LOG_WARN_S(
+                    ctx,
+                    HttpLog,
+                    "Failed to bind " << bindAddress->ToString()
+                    << ", code: " << err);
+            }
         }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
@@ -80,9 +87,15 @@ protected:
                 TBase::Become(&TAcceptorActor::StateListening);
                 ctx.Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
                 return;
+            } else {
+                LOG_WARN_S(
+                    ctx,
+                    HttpLog,
+                    "Failed to listen on " << schema << bindAddress->ToString()
+                    << ", code: " << err);
             }
         }
-        LOG_WARN_S(ctx, HttpLog, "Failed to listen on " << schema << bindAddress->ToString() << " - retrying...");
+        LOG_WARN_S(ctx, HttpLog, "Failed to init - retrying...");
         ctx.ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
     }
 

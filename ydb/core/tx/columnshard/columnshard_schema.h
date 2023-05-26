@@ -197,9 +197,11 @@ struct Schema : NIceDb::Schema {
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
         struct BlobId : Column<6, NScheme::NTypeIds::String> {};
         struct Meta : Column<7, NScheme::NTypeIds::String> {};
+        struct IndexPlanStep : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct IndexTxId : Column<9, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Committed, ShardOrPlan, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, PathId, DedupId, BlobId, Meta>;
+        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -416,10 +418,19 @@ struct Schema : NIceDb::Schema {
     // InsertTable activities
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
-            NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
-            NIceDb::TUpdate<InsertTable::Meta>(data.Metadata)
-        );
+        if (data.GetSchemaSnapshot().Valid()) {
+            db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
+                NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::Meta>(data.Metadata),
+                NIceDb::TUpdate<InsertTable::IndexPlanStep>(data.GetSchemaSnapshot().GetPlanStep()),
+                NIceDb::TUpdate<InsertTable::IndexTxId>(data.GetSchemaSnapshot().GetTxId())
+            );
+        } else {
+            db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
+                NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
+                NIceDb::TUpdate<InsertTable::Meta>(data.Metadata)
+            );
+        }
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
@@ -469,6 +480,13 @@ struct Schema : NIceDb::Schema {
             TString strBlobId = rowset.GetValue<InsertTable::BlobId>();
             TString metaStr = rowset.GetValue<InsertTable::Meta>();
 
+            std::optional<NOlap::TSnapshot> indexSnapshot;
+            if (rowset.HaveValue<InsertTable::IndexPlanStep>()) {
+                ui64 indexPlanStep = rowset.GetValue<InsertTable::IndexPlanStep>();
+                ui64 indexTxId = rowset.GetValue<InsertTable::IndexTxId>();
+                indexSnapshot = NOlap::TSnapshot(indexPlanStep, indexTxId);
+            }
+            
             TString error;
             NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
             Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
@@ -479,7 +497,7 @@ struct Schema : NIceDb::Schema {
                 writeTime = TInstant::Seconds(meta.GetDirtyWriteTimeSeconds());
             }
 
-            TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, metaStr, writeTime);
+            TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, metaStr, writeTime, indexSnapshot);
 
             switch (recType) {
                 case EInsertTableIds::Inserted:
@@ -505,8 +523,8 @@ struct Schema : NIceDb::Schema {
                                     const TGranuleRecord& row) {
         db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
             NIceDb::TUpdate<IndexGranules::Granule>(row.Granule),
-            NIceDb::TUpdate<IndexGranules::PlanStep>(row.CreatedAt.PlanStep),
-            NIceDb::TUpdate<IndexGranules::TxId>(row.CreatedAt.TxId)
+            NIceDb::TUpdate<IndexGranules::PlanStep>(row.GetCreatedAt().GetPlanStep()),
+            NIceDb::TUpdate<IndexGranules::TxId>(row.GetCreatedAt().GetTxId())
         );
     }
 
@@ -516,7 +534,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static bool IndexGranules_Load(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
-                                   std::function<void(TGranuleRecord&&)> callback) {
+                                   const std::function<void(const TGranuleRecord&)>& callback) {
         auto rowset = db.Table<IndexGranules>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
@@ -528,8 +546,7 @@ struct Schema : NIceDb::Schema {
             ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
             ui64 txId = rowset.GetValue<IndexGranules::TxId>();
 
-            TGranuleRecord row(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey));
-            callback(std::move(row));
+            callback(TGranuleRecord(pathId, granule, NOlap::TSnapshot(planStep, txId), engine.DeserializeMark(indexKey)));
 
             if (!rowset.Next())
                 return false;
@@ -555,7 +572,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
-                                  std::function<void(TColumnRecord&&)> callback) {
+                                  const std::function<void(const TColumnRecord&)>& callback) {
         auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
@@ -579,7 +596,7 @@ struct Schema : NIceDb::Schema {
             TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
             row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
 
-            callback(std::move(row));
+            callback(row);
 
             if (!rowset.Next())
                 return false;
@@ -595,7 +612,7 @@ struct Schema : NIceDb::Schema {
         );
     }
 
-    static bool IndexCounters_Load(NIceDb::TNiceDb& db, ui32 index, std::function<void(ui32 id, ui64 value)> callback) {
+    static bool IndexCounters_Load(NIceDb::TNiceDb& db, ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
         auto rowset = db.Table<IndexCounters>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;

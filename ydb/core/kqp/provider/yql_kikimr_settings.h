@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/core/protos/config.pb.h>
@@ -40,6 +41,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _ResultRowsLimit;
     NCommon::TConfSetting<bool, false> EnableSystemColumns;
     NCommon::TConfSetting<bool, false> UseLlvm;
+    NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableJoinRewrite;
@@ -73,6 +75,7 @@ struct TKikimrSettings {
     bool HasOptUseFinalizeByKey() const;
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
+    NDq::EHashJoinMode GetHashJoinMode() const;
 
     // WARNING: For testing purposes only, inplace update is not ready for production usage.
     bool HasOptEnableInplaceUpdate() const;
@@ -137,6 +140,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnablePredicateExtractForScanQuery = true;
     bool EnablePredicateExtractForDataQuery = false;
+    bool EnableKqpImmediateEffects = false;
+    bool EnableSequentialReads = false;
 };
 
 }

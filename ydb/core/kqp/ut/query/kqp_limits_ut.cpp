@@ -415,6 +415,61 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
+    Y_UNIT_TEST(CancelAfterWithWrite) {
+        return;
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        int maxTimeoutMs = 500;
+
+        auto createKey = [](int id) -> ui64 {
+            return (1u << 29) + id;
+        };
+
+        auto createExpectedRow = [](ui64 key) -> TString {
+            return Sprintf(R"([[100500];[%luu];["newrecords"]])", key);
+        };
+
+        TString expected;
+
+        for (int i = 1; i <= maxTimeoutMs; i++) {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$id")
+                    .Uint64(createKey(i))
+                    .Build()
+                .Build();
+            auto result = session.ExecuteDataQuery(R"(
+                DECLARE $id AS Uint64;
+                SELECT * FROM `/Root/EightShard` WHERE Text = "newrecords" ORDER BY Key;
+                UPSERT INTO `/Root/EightShard` (Key, Data, Text) VALUES ($id, 100500, "newrecords");
+            )",
+            TTxControl::BeginTx(
+                TTxSettings::SerializableRW()).CommitTx(),
+                params,
+                TExecDataQuerySettings().CancelAfter(TDuration::MilliSeconds(i))
+            ).GetValueSync();
+
+            if (result.IsSuccess()) {
+                auto yson = FormatResultSetYson(result.GetResultSet(0));
+                CompareYson(TString("[") + expected + "]", yson);
+                expected += createExpectedRow(createKey(i));
+                if (i != maxTimeoutMs)
+                    expected += ";";
+            } else {
+                switch (result.GetStatus()) {
+                    case EStatus::CANCELLED:
+                        break;
+                    default: {
+                        auto msg = TStringBuilder() << "unexpected status: " << result.GetStatus();
+                        UNIT_ASSERT_C(false, msg.data());
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(QueryExecTimeout) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000);

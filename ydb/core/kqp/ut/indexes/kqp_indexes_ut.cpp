@@ -2,6 +2,7 @@
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 
@@ -3189,7 +3190,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             )"));
 
             result = session.ExecuteDataQuery(query2, TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
 
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(yson, "[]");
@@ -3921,6 +3922,44 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         CompareYson(R"([[[5];[5];["Payload5"]]])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST(IndexOr) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$A")
+                .Int32(1)
+                .Build()
+            .AddParam("$B")
+                .Int32(5)
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $A AS Int32;
+            DECLARE $B AS Int32;
+
+            SELECT * FROM SecondaryKeys VIEW Index WHERE Fk = $A OR Fk = $B;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
+            .ExpectedReads = 2
+        });
+
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
+            .ExpectedReads = 2,
+        });
+
+        CompareYson(R"([[[1];[1];["Payload1"]];[[5];[5];["Payload5"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

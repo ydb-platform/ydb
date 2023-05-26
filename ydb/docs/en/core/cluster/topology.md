@@ -1,9 +1,9 @@
 # Topology
 
-{{ ydb-short-name }} cluster is built from nodes of two types - static and dynamic:
+A {{ ydb-short-name }} cluster consists of static and dynamic nodes.
 
-* static nodes store data, implementing one of the supported redundancy modes depending on the operating mode configured;
-* dynamic nodes execute queries, handle transaction coordination and perform other data management functions.
+* Static nodes enable data storage, implementing one of the supported redundancy schemes depending on the established operating mode.
+* Dynamic nodes enable query execution, transaction coordination, and other data control functionality.
 
 Cluster topology is determined by the fault tolerance requirements. The following operating modes are available:
 

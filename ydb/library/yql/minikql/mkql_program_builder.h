@@ -261,6 +261,10 @@ public:
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
+    TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
+    TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
+    TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
+        const TArrayRef<const TRuntimeNode>& args, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -681,6 +685,7 @@ public:
     TRuntimeNode PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod = {});
     TRuntimeNode FromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);
+    TRuntimeNode PgClone(TRuntimeNode input, const TArrayRef<const TRuntimeNode>& dependentNodes);
     TRuntimeNode WithContext(TRuntimeNode input, const std::string_view& contextType);
     TRuntimeNode PgInternal0(TType* returnType);
     TRuntimeNode PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType);

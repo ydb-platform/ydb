@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import importlib.util
 import threading
 import codecs
 from concurrent import futures
@@ -74,6 +75,15 @@ def wrap_async_call_exceptions(f):
             return wrap_exception_in_future(e)
 
     return decorator
+
+
+def check_module_exists(path: str) -> bool:
+    try:
+        if importlib.util.find_spec(path):
+            return True
+    except ModuleNotFoundError:
+        pass
+    return False
 
 
 def get_query_hash(yql_text):

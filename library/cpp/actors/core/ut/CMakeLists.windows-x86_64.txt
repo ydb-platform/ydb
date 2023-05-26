@@ -22,6 +22,7 @@ target_link_libraries(library-cpp-actors-core-ut PUBLIC
 )
 target_sources(library-cpp-actors-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_coroutine_ut.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/benchmark_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actorsystem_ut.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/performance_ut.cpp

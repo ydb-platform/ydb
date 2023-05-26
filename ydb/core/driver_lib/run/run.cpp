@@ -816,13 +816,19 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasDiscovery) {
-            server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasDiscovery.IsRlAllowed()));
+            auto discoveryService = new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters,grpcRequestProxies[0], hasDiscovery.IsRlAllowed());
+            if (!opts.SslData.Empty()) {
+                discoveryService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
+            }
+            server.AddService(discoveryService);
         }
 
         if (hasLocalDiscovery) {
-            server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters,
-                grpcRequestProxies[0]));
+            auto localDiscoveryService = new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxies[0]);
+            if (!opts.SslData.Empty()) {
+                localDiscoveryService->SetDynamicNodeAuthParams(GetDynamicNodeAuthorizationParams(appConfig.GetClientCertificateAuthorization()));
+            }
+            server.AddService(localDiscoveryService);
         }
 
         if (hasRateLimiter) {
@@ -1106,6 +1112,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasSharedCacheConfig()) {
         AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
+    }
+
+    if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
+        AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
     // setup resource profiles

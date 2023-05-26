@@ -98,6 +98,108 @@ bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& table
     return IsKeySelectorPkPrefix(node.KeySelectorLambda(), tableDesc, columns);
 }
 
+struct TReadMatch {
+    TMaybeNode<TKqlReadTableIndex> Read;
+    TMaybeNode<TKqlReadTableIndexRanges> ReadRanges;
+
+    static TReadMatch Match(TExprBase expr) {
+        if (auto read = expr.Maybe<TKqlReadTableIndex>()) {
+            return {read.Cast(), {}};
+        }
+        if (auto read = expr.Maybe<TKqlReadTableIndexRanges>()) {
+            return {{}, read.Cast()};
+        }
+        return {};
+    }
+
+    operator bool () const {
+        return Read.IsValid() || ReadRanges.IsValid();
+    }
+
+    TKqpTable Table() const {
+        if (Read) {
+            return Read.Cast().Table();
+        }
+        if (ReadRanges) {
+            return ReadRanges.Cast().Table();
+        }
+        YQL_ENSURE(false, "Invalid ReadTableIndex match");
+    }
+
+    TCoAtom Index() const {
+        if (Read) {
+            return Read.Cast().Index();
+        }
+        if (ReadRanges) {
+            return ReadRanges.Cast().Index();
+        }
+        YQL_ENSURE(false, "Invalid ReadTableIndex match");
+    }
+
+    TCoAtomList Columns() const {
+        if (Read) {
+            return Read.Cast().Columns();
+        }
+        if (ReadRanges) {
+            return ReadRanges.Cast().Columns();
+        }
+        YQL_ENSURE(false, "Invalid ReadTableIndex match");
+    }
+
+    NYql::TPositionHandle Pos() const {
+        if (Read) {
+            return Read.Cast().Pos();
+        }
+        if (ReadRanges) {
+            return ReadRanges.Cast().Pos();
+        }
+        YQL_ENSURE(false, "Invalid ReadTableIndex match");
+    }
+
+    TCoNameValueTupleList Settings() const {
+        if (Read) {
+            return Read.Cast().Settings();
+        }
+        if (ReadRanges) {
+            return ReadRanges.Cast().Settings();
+        }
+        YQL_ENSURE(false, "Invalid ReadTableIndex match");
+    }
+
+    bool FullScan() const {
+        if (Read) {
+            return Read.Cast().Range().From().ArgCount() == 0 && Read.Cast().Range().To().ArgCount() == 0;
+        }
+        if (ReadRanges) {
+            return TCoVoid::Match(ReadRanges.Cast().Ranges().Raw());
+        }
+        return false;
+    }
+
+    TExprBase BuildRead(TExprContext& ctx, TKqpTable tableMeta, TCoAtomList columns) const {
+        if (Read) {
+            return Build<TKqlReadTable>(ctx, Pos())
+                .Table(tableMeta)
+                .Range(Read.Range().Cast())
+                .Columns(columns)
+                .Settings(Settings())
+                .Done();
+        }
+
+        if (ReadRanges) {
+            return Build<TKqlReadTableRanges>(ctx, Pos())
+                .Table(tableMeta)
+                .Ranges(ReadRanges.Ranges().Cast())
+                .Columns(columns)
+                .Settings(Settings())
+                .ExplainPrompt(ReadRanges.ExplainPrompt().Cast())
+                .Done();
+        }
+
+        YQL_ENSURE(false);
+    }
+};
+
 template<typename TRead>
 bool CheckIndexCovering(const TRead& read, const TIntrusivePtr<TKikimrTableMetadata>& indexMeta) {
     for (const auto& col : read.Columns()) {
@@ -108,13 +210,13 @@ bool CheckIndexCovering(const TRead& read, const TIntrusivePtr<TKikimrTableMetad
     return false;
 }
 
-TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
+TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
     const TKikimrTableDescription& tableDesc, TIntrusivePtr<TKikimrTableMetadata> indexMeta, bool useStreamLookup,
     const TVector<TString>& extraColumns, const std::function<TExprBase(const TExprBase&)>& middleFilter = {})
 {
     const bool needDataRead = CheckIndexCovering(read, indexMeta);
 
-    if (read.Range().From().ArgCount() == 0 && read.Range().To().ArgCount() == 0) {
+    if (read.FullScan()) {
         TString indexName = read.Index().StringValue();
         auto issue = TIssue(ctx.GetPosition(read.Pos()), "Given predicate is not suitable for used index: " + indexName);
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
@@ -123,12 +225,7 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
 
     if (!needDataRead) {
         // We can read all data from index table.
-        auto ret = Build<TKqlReadTable>(ctx, read.Pos())
-            .Table(BuildTableMeta(*indexMeta, read.Pos(), ctx))
-            .Range(read.Range())
-            .Columns(read.Columns())
-            .Settings(read.Settings())
-            .Done();
+        auto ret = read.BuildRead(ctx, BuildTableMeta(*indexMeta, read.Pos(), ctx), read.Columns());
 
         if (middleFilter) {
             return middleFilter(ret);
@@ -139,12 +236,7 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
     auto keyColumnsList = BuildKeyColumnsList(tableDesc, read.Pos(), ctx);
     auto columns = MergeColumns(keyColumnsList, extraColumns, ctx);
 
-    TExprBase readIndexTable = Build<TKqlReadTable>(ctx, read.Pos())
-        .Table(BuildTableMeta(*indexMeta, read.Pos(), ctx))
-        .Range(read.Range())
-        .Columns(columns)
-        .Settings(read.Settings())
-        .Done();
+    TExprBase readIndexTable = read.BuildRead(ctx, BuildTableMeta(*indexMeta, read.Pos(), ctx), columns);
 
     if (middleFilter) {
         readIndexTable = middleFilter(readIndexTable);
@@ -199,8 +291,7 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
 } // namespace
 
 TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (auto maybeIndexRead = node.Maybe<TKqlReadTableIndex>()) {
-        auto indexRead = maybeIndexRead.Cast();
+    if (auto indexRead = TReadMatch::Match(node)) {
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, indexRead.Table().Path());
         const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(indexRead.Index().Value()));
@@ -298,8 +389,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
 
     const auto topBase = node.Maybe<TCoTopBase>().Cast();
 
-    if (auto maybeReadTableIndex = topBase.Input().Maybe<TKqlReadTableIndex>()) {
-        auto readTableIndex = maybeReadTableIndex.Cast();
+    if (auto readTableIndex = TReadMatch::Match(topBase.Input())) {
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
         const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));
@@ -344,8 +434,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
     auto take = node.Maybe<TCoTake>().Cast();
 
-    if (auto maybeReadTableIndex = take.Input().Maybe<TKqlReadTableIndex>()) {
-        auto readTableIndex = maybeReadTableIndex.Cast();
+    if (auto readTableIndex = TReadMatch::Match(take.Input())) {
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, readTableIndex.Table().Path());
         const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(readTableIndex.Index().Value()));

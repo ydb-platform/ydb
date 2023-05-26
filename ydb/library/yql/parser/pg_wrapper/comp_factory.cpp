@@ -1,4 +1,5 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
@@ -10,6 +11,8 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/public/udf/arrow/block_reader.h>
+#include <ydb/library/yql/public/udf/arrow/block_builder.cpp>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
@@ -58,6 +61,8 @@ extern "C" {
 #undef bind
 #undef locale_t
 }
+
+#include "arrow.h"
 
 namespace NYql {
 
@@ -1523,6 +1528,354 @@ private:
     bool MultiDims = false;
 };
 
+template <bool PassByValue, bool IsCString>
+class TPgClone : public TMutableComputationNode<TPgClone<PassByValue, IsCString>> {
+    typedef TMutableComputationNode<TPgClone<PassByValue, IsCString>> TBaseComputation;
+public:
+    TPgClone(TComputationMutables& mutables, IComputationNode* input, TComputationNodePtrVector&& dependentNodes)
+        : TBaseComputation(mutables)
+        , Input(input)
+        , DependentNodes(std::move(dependentNodes))
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        auto value = Input->GetValue(compCtx);
+        if constexpr (PassByValue) {
+            return value.Release();
+        }
+
+        auto datum = PointerDatumFromPod(value);
+        if constexpr (IsCString) {
+            return PointerDatumToPod((Datum)MakeCString(TStringBuf((const char*)datum)));
+        } else {
+            return PointerDatumToPod((Datum)MakeVar(GetVarBuf((const text*)datum)));
+        }
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(Input);
+        for (auto arg : DependentNodes) {
+            this->DependsOn(arg);
+        }
+    }
+
+    IComputationNode* const Input;
+    TComputationNodePtrVector DependentNodes;
+};
+
+struct TFromPgExec {
+    TFromPgExec(ui32 sourceId)
+        : SourceId(sourceId)
+    {}
+
+    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+        arrow::Datum inputDatum = batch.values[0];
+        Y_ENSURE(inputDatum.is_array());
+        const auto& array= *inputDatum.array();
+        size_t length = array.length;
+        switch (SourceId) {
+        case BOOLOID: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui8>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = DatumGetBool(inputPtr[i]) ? 1 : 0;
+            }
+            break;
+        }
+        case INT2OID: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<i16>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = DatumGetInt16(inputPtr[i]);
+            }
+            break;
+        }
+        case INT4OID: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<i32>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = DatumGetInt32(inputPtr[i]);
+            }
+            break;
+        }
+        case INT8OID: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<i64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = DatumGetInt64(inputPtr[i]);
+            }
+            break;
+        }
+        case FLOAT4OID: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<float>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = DatumGetFloat4(inputPtr[i]);
+            }
+            break;
+        }
+        case FLOAT8OID: {
+            auto inputPtr = array.GetValues<ui64>(1);
+            auto outputPtr = res->array()->GetMutableValues<double>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = DatumGetFloat8(inputPtr[i]);
+            }
+            break;
+        }
+        case TEXTOID:
+        case VARCHAROID:
+        case BYTEAOID:
+        case CSTRINGOID: {
+            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                ui32 len;
+                const char* ptr = item.AsStringRef().Data();
+                if (SourceId == CSTRINGOID) {
+                    len = strlen(item.AsStringRef().Data());
+                } else {
+                    len = GetCleanVarSize((const text*)item.AsStringRef().Data());
+                    Y_ENSURE(len + VARHDRSZ == item.AsStringRef().Size());
+                    ptr += VARHDRSZ;
+                }
+
+                builder.Add(NUdf::TBlockItem(NUdf::TStringRef(ptr, len)));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        default:
+            ythrow yexception() << "Unsupported type: " << NPg::LookupType(SourceId).Name;
+        }
+        return arrow::Status::OK();
+    }
+
+    const ui32 SourceId;
+};
+
+std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType, TType* resultType, ui32 sourceId) {
+    const TVector<TType*> argTypes = { inputType };
+
+    std::shared_ptr<arrow::DataType> returnArrowType;
+    MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
+    auto exec = std::make_shared<TFromPgExec>(sourceId);
+    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        return exec->Exec(ctx, batch, res);
+    });
+
+    switch (sourceId) {
+    case BOOLOID:
+    case INT2OID:
+    case INT4OID:
+    case INT8OID:
+    case FLOAT4OID:
+    case FLOAT8OID:
+        break;
+    case TEXTOID:
+    case VARCHAROID:
+    case BYTEAOID:
+    case CSTRINGOID:
+        kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        break;
+    default:
+        ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceId).Name;
+    }
+
+    return kernel;
+}
+
+struct TToPgExec {
+    TToPgExec(ui32 targetId)
+        : TargetId(targetId)
+    {}
+
+    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+        arrow::Datum inputDatum = batch.values[0];
+        Y_ENSURE(inputDatum.is_array());
+        const auto& array= *inputDatum.array();
+        size_t length = array.length;
+        switch (TargetId) {
+        case BOOLOID: {
+            auto inputPtr = array.GetValues<ui8>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = BoolGetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case INT2OID: {
+            auto inputPtr = array.GetValues<i16>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int16GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case INT4OID: {
+            auto inputPtr = array.GetValues<i32>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int32GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case INT8OID: {
+            auto inputPtr = array.GetValues<i64>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Int64GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case FLOAT4OID: {
+            auto inputPtr = array.GetValues<float>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Float4GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case FLOAT8OID: {
+            auto inputPtr = array.GetValues<double>(1);
+            auto outputPtr = res->array()->GetMutableValues<ui64>(1);
+            for (size_t i = 0; i < length; ++i) {
+                outputPtr[i] = Float8GetDatum(inputPtr[i]);
+            }
+            break;
+        }
+        case TEXTOID:
+        case VARCHAROID:
+        case BYTEAOID:
+        case CSTRINGOID: {
+            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+            std::vector<char> tmp;
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                ui32 len;
+                if (TargetId == CSTRINGOID) {
+                    len = 1 + item.AsStringRef().Size();
+                    if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
+                        ythrow yexception() << "Too long string";
+                    }
+
+                    if (tmp.capacity() < len) {
+                        tmp.reserve(Max<ui64>(len, tmp.capacity() * 2));
+                    }
+
+                    tmp.resize(len);
+                    memcpy(tmp.data(), item.AsStringRef().Data(), len - 1);
+                    tmp[len - 1] = 0;
+                } else {
+                    len = VARHDRSZ + item.AsStringRef().Size();
+                    if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
+                        ythrow yexception() << "Too long string";
+                    }
+
+                    if (tmp.capacity() < len) {
+                        tmp.reserve(Max<ui64>(len, tmp.capacity() * 2));
+                    }
+
+                    tmp.resize(len);
+                    memcpy(tmp.data() + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ);
+                    UpdateCleanVarSize((text*)tmp.data(), item.AsStringRef().Size());
+                }
+
+                builder.Add(NUdf::TBlockItem(NUdf::TStringRef(tmp.data(), len)));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        default:
+            ythrow yexception() << "Unsupported type: " << NPg::LookupType(TargetId).Name;
+        }
+        return arrow::Status::OK();
+    }
+
+    const ui32 TargetId;
+};
+
+std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, ui32 targetId) {
+    const TVector<TType*> argTypes = { inputType };
+
+    std::shared_ptr<arrow::DataType> returnArrowType;
+    MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
+    auto exec = std::make_shared<TToPgExec>(targetId);
+    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        return exec->Exec(ctx, batch, res);
+    });
+
+    switch (targetId) {
+    case BOOLOID:
+    case INT2OID:
+    case INT4OID:
+    case INT8OID:
+    case FLOAT4OID:
+    case FLOAT8OID:
+        break;
+    case TEXTOID:
+    case VARCHAROID:
+    case BYTEAOID:
+    case CSTRINGOID:
+        kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        break;
+    default:
+        ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetId).Name;
+    }
+
+    return kernel;
+}
+
+std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId) {
+    std::shared_ptr<arrow::DataType> returnArrowType;
+    MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
+    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [execFunc](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        return execFunc(ctx, batch, res);
+    });
+
+    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->init = [procId](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+        auto state = std::make_unique<TPgKernelState>();
+        Zero(state->flinfo);
+        fmgr_info(procId, &state->flinfo);
+        YQL_ENSURE(state->flinfo.fn_addr);
+        state->resultinfo = nullptr;
+        state->context = nullptr;
+        state->fncollation = DEFAULT_COLLATION_OID;
+        const auto& procDesc = NPg::LookupProc(procId);
+        const auto& retTypeDesc = NPg::LookupType(procDesc.ResultType);
+        state->Name = procDesc.Name;
+        state->IsFixedResult = retTypeDesc.PassByValue;
+        state->IsCStringResult = procDesc.ResultType == CSTRINGOID;
+        for (const auto& argTypeId : procDesc.ArgTypes) {
+            const auto& argTypeDesc = NPg::LookupType(argTypeId);
+            state->IsFixedArg.push_back(argTypeDesc.PassByValue);
+        }
+
+        return arrow::Result(std::move(state));
+    };
+
+    return kernel;
+}
+
 TComputationNodeFactory GetPgFactory() {
     return [] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             TStringBuf name = callable.GetType()->GetName();
@@ -1568,6 +1921,25 @@ TComputationNodeFactory GetPgFactory() {
                         return new TPgResolvedCall<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
                     }
                 }
+            }
+
+            if (name == "BlockPgResolvedCall") {
+                const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
+                const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(1));
+                auto name = nameData->AsValue().AsStringRef();
+                auto id = idData->AsValue().Get<ui32>();
+                TVector<IComputationNode*> argNodes;
+                TVector<TType*> argTypes;
+                for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
+                    argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
+                    argTypes.emplace_back(callable.GetInput(i).GetStaticType());
+                }
+
+                auto returnType = callable.GetType()->GetReturnType();
+                auto execFunc = FindExec(id);
+                YQL_ENSURE(execFunc);
+                auto kernel = MakePgKernel(argTypes, returnType, execFunc, id);
+                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argNodes), argTypes, *kernel, kernel);
             }
 
             if (name == "PgCast") {
@@ -1617,6 +1989,15 @@ TComputationNodeFactory GetPgFactory() {
                 }
             }
 
+            if (name == "BlockFromPg") {
+                auto arg = LocateNode(ctx.NodeLocator, callable, 0);
+                auto inputType = callable.GetInput(0).GetStaticType();
+                auto returnType = callable.GetType()->GetReturnType();
+                ui32 sourceId = AS_TYPE(TPgType, AS_TYPE(TBlockType, inputType)->GetItemType())->GetTypeId();
+                auto kernel = MakeFromPgKernel(inputType, returnType, sourceId);
+                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
+            }
+
             if (name == "ToPg") {
                 auto arg = LocateNode(ctx.NodeLocator, callable, 0);
                 auto returnType = callable.GetType()->GetReturnType();
@@ -1643,6 +2024,15 @@ TComputationNodeFactory GetPgFactory() {
                 }
             }
 
+            if (name == "BlockToPg") {
+                auto arg = LocateNode(ctx.NodeLocator, callable, 0);
+                auto inputType = callable.GetInput(0).GetStaticType();
+                auto returnType = callable.GetType()->GetReturnType();
+                auto targetId = AS_TYPE(TPgType, AS_TYPE(TBlockType, returnType)->GetItemType())->GetTypeId();
+                auto kernel = MakeToPgKernel(inputType, returnType, targetId);
+                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
+            }
+
             if (name == "PgArray") {
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
@@ -1654,6 +2044,25 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 auto arrayTypeId = AS_TYPE(TPgType, returnType)->GetTypeId();
                 return new TPgArray(ctx.Mutables, std::move(argNodes), std::move(argTypes), arrayTypeId);
+            }
+
+            if (name == "PgClone") {
+                auto input = LocateNode(ctx.NodeLocator, callable, 0);
+                TComputationNodePtrVector dependentNodes;
+                for (ui32 i = 1; i < callable.GetInputsCount(); ++i) {
+                    dependentNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
+                }
+
+                auto returnType = callable.GetType()->GetReturnType();
+                auto typeId = AS_TYPE(TPgType, returnType)->GetTypeId();
+                const auto& desc = NPg::LookupType(typeId);
+                if (desc.PassByValue) {
+                    return new TPgClone<true, false>(ctx.Mutables, input, std::move(dependentNodes));
+                } else if (desc.TypeLen == -1) {
+                    return new TPgClone<false, false>(ctx.Mutables, input, std::move(dependentNodes));
+                } else {
+                    return new TPgClone<false, true>(ctx.Mutables, input, std::move(dependentNodes));
+                }
             }
 
             return nullptr;
@@ -2256,6 +2665,26 @@ extern "C" void WriteSkiffPgValue(TPgType* type, const NUdf::TUnboxedValuePod& v
 }
 
 } // namespace NCommon
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    const auto& desc = NPg::LookupType(type->GetTypeId());
+    if (desc.PassByValue) {
+        return arrow::MakeScalar((uint64_t)ScalarDatumFromPod(value));
+    } else {
+        auto ptr = (const char*)PointerDatumFromPod(value);        
+        ui32 size;
+        if (desc.TypeLen == -1) {
+            auto ptr = (const text*)PointerDatumFromPod(value);
+            size = GetCleanVarSize((const text*)ptr) + VARHDRSZ;
+        } else {
+            size = strlen(ptr) + 1;
+        }
+
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(size, &pool)));
+        std::memcpy(buffer->mutable_data(), ptr, size);
+        return arrow::Datum(std::make_shared<arrow::BinaryScalar>(buffer));
+    }
+}
 
 TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
     switch (slot) {

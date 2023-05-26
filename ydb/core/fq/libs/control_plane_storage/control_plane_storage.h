@@ -8,6 +8,8 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
+#define CPS_LOG_N(s) \
+    LOG_YQ_CONTROL_PLANE_STORAGE_NOTICE(s)
 #define CPS_LOG_D(s) \
     LOG_YQ_CONTROL_PLANE_STORAGE_DEBUG(s)
 #define CPS_LOG_I(s) \
@@ -20,6 +22,8 @@
     LOG_YQ_CONTROL_PLANE_STORAGE_TRACE(s)
 
 
+#define CPS_LOG_AS_N(a, s) \
+    LOG_YQ_CONTROL_PLANE_STORAGE_AS_NOTICE(a, s)
 #define CPS_LOG_AS_D(a, s) \
     LOG_YQ_CONTROL_PLANE_STORAGE_AS_DEBUG(a, s)
 #define CPS_LOG_AS_I(a, s) \

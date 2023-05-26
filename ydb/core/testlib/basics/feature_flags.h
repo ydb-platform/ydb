@@ -38,7 +38,6 @@ public:
     FEATURE_FLAG_SETTER(EnableArrowFormatAtDatashard)
     FEATURE_FLAG_SETTER(EnableGrpcAudit)
     FEATURE_FLAG_SETTER(EnableChangefeedInitialScan)
-    FEATURE_FLAG_SETTER(EnableKqpImmediateEffects)
     FEATURE_FLAG_SETTER(EnableDataShardGenericReadSets)
     FEATURE_FLAG_SETTER(EnableAlterDatabaseCreateHiveFirst)
     FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
@@ -46,6 +45,9 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
     FEATURE_FLAG_SETTER(EnablePQConfigTransactionsAtSchemeShard)
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
+    FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
+    FEATURE_FLAG_SETTER(EnableTopicSplitMerge)
+    FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
 
     #undef FEATURE_FLAG_SETTER
 };

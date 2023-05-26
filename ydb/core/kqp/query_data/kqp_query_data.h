@@ -10,12 +10,12 @@
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/guid.h>
 #include <google/protobuf/arena.h>
 
-#include <unordered_map>
 #include <vector>
 
 namespace NKqpProto {
@@ -37,12 +37,32 @@ namespace NKikimr::NKqp {
 using TTypedUnboxedValue = std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue>;
 using TNamedUnboxedValue = std::pair<const TString, TTypedUnboxedValue>;
 
-using TUnboxedParamsMap = std::unordered_map<
+using TUnboxedParamsMap = absl::flat_hash_map<
     TString,
     TTypedUnboxedValue,
     std::hash<TString>,
     std::equal_to<TString>,
     NKikimr::NMiniKQL::TMKQLAllocator<TNamedUnboxedValue>
+>;
+
+struct TPartitionParam {
+    NKikimr::NMiniKQL::TType *ItemType;
+    NYql::NDqProto::TData Data;
+    NKikimr::NMiniKQL::TUnboxedValueVector Values;
+
+    TPartitionParam(NKikimr::NMiniKQL::TType *itemType,
+        NKikimr::NMiniKQL::TUnboxedValueVector&& values)
+      : ItemType(itemType)
+      , Values(std::move(values))
+    {}
+};
+
+using TPartitionedParamWithKey = std::pair<const std::pair<ui64, TString>, TPartitionParam>;
+
+using TPartitionedParamMap = absl::flat_hash_map<
+    std::pair<ui64, TString>,
+    TPartitionParam,
+    THash<std::pair<ui64, TString>>
 >;
 
 using TTypedUnboxedValueVector = std::vector<
@@ -158,16 +178,22 @@ private:
     using TTypedUnboxedValue = std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue>;
     using TNamedUnboxedValue = std::pair<const TString, TTypedUnboxedValue>;
 
-    using TParamMap = std::unordered_map<
+    using TParamMap = absl::flat_hash_map<
         TString,
         NKikimrMiniKQL::TParams
     >;
 
+    using TParamProvider = std::function<
+        bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+            const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
+    >;
+
     TParamMap Params;
     TUnboxedParamsMap UnboxedData;
-    TVector<TVector<TKqpExecuterTxResult>> TxResults;
+    THashMap<ui32, TVector<TKqpExecuterTxResult>> TxResults;
     TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
+    mutable TPartitionedParamMap PartitionedParams; 
 
 public:
     using TPtr = std::shared_ptr<TQueryData>;
@@ -188,11 +214,15 @@ public:
     bool AddTypedValueParam(const TString& name, const Ydb::TypedValue& p);
 
     bool MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding);
-    void AddTxResults(TVector<TKqpExecuterTxResult>&& results);
+    void AddTxResults(ui32 txIndex, TVector<TKqpExecuterTxResult>&& results);
     void AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders);
 
+    void AddShardParam(ui64 shardId, const TString& name, NKikimr::NMiniKQL::TType* type, NKikimr::NMiniKQL::TUnboxedValueVector&& value);
+    void ClearPrunedParams();
+    NYql::NDqProto::TData GetShardParam(ui64 shardId, const TString& name);
+
     bool HasResult(ui32 txIndex, ui32 resultIndex) {
-        if (txIndex >= TxResults.size())
+        if (!TxResults.contains(txIndex))
             return false;
 
         return resultIndex < TxResults[txIndex].size();
@@ -211,9 +241,30 @@ public:
 
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);
+    TTypedUnboxedValue* GetParameterUnboxedValuePtr(const TString& name);
     const NKikimrMiniKQL::TParams* GetParameterMiniKqlValue(const TString& name);
     NYql::NDqProto::TData SerializeParamValue(const TString& name);
     void Clear();
+
+    static TParamProvider GetParameterProvider(const std::shared_ptr<TQueryData>& queryData) {
+        return [queryData](std::string_view name, NMiniKQL::TType* type,
+            const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+            NUdf::TUnboxedValue& value)
+        {
+            Y_UNUSED(typeEnv);
+            Y_UNUSED(holderFactory);
+
+            if (TTypedUnboxedValue* param = queryData->GetParameterUnboxedValuePtr(TString(name))) {
+                std::tie(type, value) = *param;
+                return true;
+            }
+            
+
+            return false;
+        };
+    }
 };
+
+
 
 } // namespace NKikimr::NKqp

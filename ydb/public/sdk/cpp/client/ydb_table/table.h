@@ -217,6 +217,8 @@ public:
     TChangefeedDescription& AddAttribute(const TString& key, const TString& value);
     TChangefeedDescription& SetAttributes(const THashMap<TString, TString>& attrs);
     TChangefeedDescription& SetAttributes(THashMap<TString, TString>&& attrs);
+    // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
+    TChangefeedDescription& WithAwsRegion(const TString& value);
 
     const TString& GetName() const;
     EChangefeedMode GetMode() const;
@@ -225,6 +227,7 @@ public:
     bool GetVirtualTimestamps() const;
     bool GetInitialScan() const;
     const THashMap<TString, TString>& GetAttributes() const;
+    const TString& GetAwsRegion() const;
 
     void SerializeTo(Ydb::Table::Changefeed& proto) const;
     TString ToString() const;
@@ -246,6 +249,7 @@ private:
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
     THashMap<TString, TString> Attributes_;
+    TString AwsRegion_;
 };
 
 bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);
@@ -461,6 +465,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    TMaybe<TString> GetTiering() const;
 
     // Deprecated. Use GetEntry() of TDescribeTableResult instead
     const TString& GetOwner() const;

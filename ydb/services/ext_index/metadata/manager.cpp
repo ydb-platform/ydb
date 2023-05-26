@@ -45,14 +45,14 @@ void TManager::DoPrepareObjectsBeforeModification(std::vector<TObject>&& patched
 NModifications::TOperationParsingResult TManager::DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
     TInternalModificationContext& context) const {
     if (context.GetActivityType() == IOperationsManager::EActivityType::Alter) {
-        return "index modification currently unsupported";
+        return TConclusionStatus::Fail("index modification currently unsupported");
     } else {
         NInternal::TTableRecord result;
         TStringBuf sb(settings.GetObjectId().data(), settings.GetObjectId().size());
         TStringBuf l;
         TStringBuf r;
         if (!sb.TrySplit(':', l, r)) {
-            return "incorrect objectId format (path:index_id)";
+            return TConclusionStatus::Fail("incorrect objectId format (path:index_id)");
         }
         result.SetColumn(TObject::TDecoder::TablePath, NInternal::TYDBValue::Utf8(l));
         result.SetColumn(TObject::TDecoder::IndexId, NInternal::TYDBValue::Utf8(r));
@@ -61,25 +61,28 @@ NModifications::TOperationParsingResult TManager::DoBuildPatchFromSettings(const
             context.SetActivityType(IOperationsManager::EActivityType::Alter);
             result.SetColumn(TObject::TDecoder::Delete, NInternal::TYDBValue::Bool(true));
         } else if (context.GetActivityType() == IOperationsManager::EActivityType::Create) {
-            if (auto dValue = settings.GetFeature<bool>(TObject::TDecoder::Delete, false)) {
+            if (auto dValue = settings.GetFeaturesExtractor().Extract<bool>(TObject::TDecoder::Delete, false)) {
                 result.SetColumn(TObject::TDecoder::Delete, NInternal::TYDBValue::Bool(*dValue));
             } else {
-                return "'delete' flag is incorrect";
+                return TConclusionStatus::Fail("'delete' flag is incorrect");
             }
 
-            if (auto extractorStr = settings.GetFeature<TString>(TObject::TDecoder::Extractor)) {
+            if (auto extractorStr = settings.GetFeaturesExtractor().Extract(TObject::TDecoder::Extractor)) {
                 TInterfaceContainer<IIndexExtractor> object;
                 if (!object.DeserializeFromJson(*extractorStr)) {
-                    return "cannot parse extractor info";
+                    return TConclusionStatus::Fail("cannot parse extractor info");
                 }
                 result.SetColumn(TObject::TDecoder::Extractor, NInternal::TYDBValue::Utf8(object.SerializeToJson().GetStringRobust()));
             } else {
-                return "cannot found extractor info";
+                return TConclusionStatus::Fail("cannot found extractor info");
             }
-            if (auto aValue = settings.GetFeature<bool>(TObject::TDecoder::Active, false)) {
+            if (auto aValue = settings.GetFeaturesExtractor().Extract<bool>(TObject::TDecoder::Active, false)) {
                 result.SetColumn(TObject::TDecoder::Active, NInternal::TYDBValue::Bool(*aValue));
             } else {
-                return "'active' flag is incorrect";
+                return TConclusionStatus::Fail("'active' flag is incorrect");
+            }
+            if (!settings.GetFeaturesExtractor().IsFinished()) {
+                return TConclusionStatus::Fail("undefined parameters: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
             }
         }
 

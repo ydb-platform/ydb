@@ -142,6 +142,17 @@ public:
         }
     }
 
+    static uint32_t GetPgOidFromYdbType(NYdb::TType type) {
+        NYdb::TTypeParser parser(type);
+        switch (parser.GetKind()) {
+            case NYdb::TTypeParser::ETypeKind::Pg: {
+                return parser.GetPg().Oid;
+            default:
+                return {};
+            }
+        }
+    }
+
     TString ToPgSyntax(TStringBuf query) {
         auto itOptions = ConnectionParams.find("options");
         if (itOptions == ConnectionParams.end()) {
@@ -169,10 +180,15 @@ public:
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
         BLOG_D("TEvQuery " << ev->Sender);
-
-        TActorSystem* actorSystem = TActivationContext::ActorSystem();
+        auto query(ev->Get()->Message->GetQuery());
+        if (IsQueryEmpty(query)) {
+            auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
+            response->EmptyQuery = true;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
         Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(ev->Get()->Message->GetQuery()));
+        request.set_script(ToPgSyntax(query));
         TString database;
         if (ConnectionParams.count("database")) {
             database = ConnectionParams["database"];
@@ -182,9 +198,16 @@ public:
             token = ConnectionParams["ydb-serialized-token"];
         }
         using TRpcEv = NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
+        TActorSystem* actorSystem = TActivationContext::ActorSystem();
         auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, token, actorSystem);
         rpcFuture.Subscribe([actorSystem, ev](NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse> future) {
             auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
+            // HACK
+            if (ev->Get()->Message->GetQuery().starts_with("BEGIN")) {
+                response->Tag = "BEGIN";
+                response->TransactionStatus = 'T';
+            }
+            // HACK
             try {
                 Ydb::Scripting::ExecuteYqlResponse yqlResponse(future.ExtractValueSync());
                 if (yqlResponse.has_operation()) {
@@ -201,6 +224,7 @@ public:
                                             // TODO: fill data types and sizes
                                             response->DataFields.push_back({
                                                 .Name = column.Name,
+                                                .DataType = GetPgOidFromYdbType(column.Type),
                                             });
                                         }
                                     }
@@ -216,6 +240,10 @@ public:
                                             }
                                         }
                                     }
+
+                                    // HACK
+                                    response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
+                                    // HACK
                                 }
                             }
                         }
@@ -260,6 +288,16 @@ public:
         Send(ev->Sender, bindComplete.release());
     }
 
+    void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
+        auto closeData = ev->Get()->Message->GetCloseData();
+        ParsedStatements.erase(closeData.StatementName);
+        CurrentStatement.clear();
+        BLOG_D("TEvClose CurrentStatement changed to <empty>");
+
+        auto closeComplete = ev->Get()->Reply();
+        Send(ev->Sender, closeComplete.release());
+    }
+
     struct TConvertedQuery {
         TString Query;
         NYdb::TParams Params;
@@ -280,8 +318,7 @@ public:
             }
             switch (paramType) {
                 case INT2OID:
-                    paramsBuilder.AddParam(TStringBuilder() << "$_" << idxParam + 1).Int16(atoi(paramValue.data())).Build();
-                    injectedQuery << "DECLARE $_" << idxParam + 1 << " AS Int16;" << Endl;
+                    paramsBuilder.AddParam(TStringBuilder() << ":_" << idxParam + 1).Int16(atoi(paramValue.data())).Build();
                     break;
 
             }
@@ -290,6 +327,24 @@ public:
             .Query = injectedQuery + queryData.Query,
             .Params = paramsBuilder.Build(),
         };
+    }
+
+    inline static bool IsWhitespaceASCII(char c)
+    {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+    }
+
+    static bool IsWhitespace(TStringBuf query) {
+        for (char c : query) {
+            if (!IsWhitespaceASCII(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool IsQueryEmpty(TStringBuf query) {
+        return IsWhitespace(query);
     }
 
     void Handle(NPG::TEvPGEvents::TEvDescribe::TPtr& ev) {
@@ -344,6 +399,7 @@ public:
                                             // TODO: fill data types and sizes
                                             response->DataFields.push_back({
                                                 .Name = column.Name,
+                                                .DataType = GetPgOidFromYdbType(column.Type),
                                             });
                                         }
                                     }
@@ -388,6 +444,13 @@ public:
             errorResponse->ErrorFields.push_back({'E', "ERROR"});
             errorResponse->ErrorFields.push_back({'M', TStringBuilder() << "Parsed statement \"" << statementName << "\" not found"});
             Send(ev->Sender, errorResponse.release(), 0, ev->Cookie);
+            return;
+        }
+
+        if (IsQueryEmpty(it->second.QueryData.Query)) {
+            auto response = std::make_unique<NPG::TEvPGEvents::TEvExecuteResponse>();
+            response->EmptyQuery = true;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
             return;
         }
 
@@ -472,6 +535,7 @@ public:
             hFunc(NPG::TEvPGEvents::TEvBind, Handle);
             hFunc(NPG::TEvPGEvents::TEvDescribe, Handle);
             hFunc(NPG::TEvPGEvents::TEvExecute, Handle);
+            hFunc(NPG::TEvPGEvents::TEvClose, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

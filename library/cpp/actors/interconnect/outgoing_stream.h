@@ -36,6 +36,7 @@ namespace NInterconnect {
         std::deque<TSendChunk> SendQueue;
         size_t SendQueuePos = 0;
         size_t SendOffset = 0;
+        size_t UnsentBytes = 0;
 
     public:
         operator bool() const {
@@ -51,11 +52,14 @@ namespace NInterconnect {
         }
 
         size_t CalculateUnsentSize() const {
+#ifndef NDEBUG
             size_t res = 0;
             for (auto it = SendQueue.begin() + SendQueuePos; it != SendQueue.end(); ++it) {
                 res += it->Span.size();
             }
-            return res - SendOffset;
+            Y_VERIFY(UnsentBytes == res - SendOffset);
+#endif
+            return UnsentBytes;
         }
 
         size_t GetSendQueueSize() const {
@@ -72,6 +76,16 @@ namespace NInterconnect {
                 AppendOffset = 0;
             }
             return {AppendBuffer->Data + AppendOffset, Min(maxLen, BufferSize - AppendOffset)};
+        }
+
+        void Align() {
+            if (AppendOffset != BufferSize) {
+                AppendOffset += -(reinterpret_cast<uintptr_t>(AppendBuffer->Data) + AppendOffset) & 63;
+                if (AppendOffset > BufferSize) {
+                    AppendOffset = BufferSize;
+                    DropBufferReference(std::exchange(AppendBuffer, nullptr));
+                }
+            }
         }
 
         void Append(TContiguousSpan span) {
@@ -129,26 +143,34 @@ namespace NInterconnect {
         void Rewind() {
             SendQueuePos = 0;
             SendOffset = 0;
+            UnsentBytes = 0;
+            for (const auto& item : SendQueue) {
+                UnsentBytes += item.Span.size();
+            }
         }
 
         void RewindToEnd() {
             SendQueuePos = SendQueue.size();
             SendOffset = 0;
+            UnsentBytes = 0;
         }
 
         template<typename T>
-        void ProduceIoVec(T& container, size_t maxItems) {
+        void ProduceIoVec(T& container, size_t maxItems, size_t maxBytes) {
             size_t offset = SendOffset;
-            for (auto it = SendQueue.begin() + SendQueuePos; it != SendQueue.end() && std::size(container) < maxItems; ++it) {
-                const TContiguousSpan span = it->Span.SubSpan(offset, Max<size_t>());
+            for (auto it = SendQueue.begin() + SendQueuePos; it != SendQueue.end() && std::size(container) < maxItems && maxBytes; ++it) {
+                const TContiguousSpan span = it->Span.SubSpan(offset, maxBytes);
                 container.push_back(NActors::TConstIoVec{span.data(), span.size()});
                 offset = 0;
+                maxBytes -= span.size();
             }
         }
 
         void Advance(size_t numBytes) { // called when numBytes portion of data has been sent
             Y_VERIFY_DEBUG(numBytes == 0 || SendQueuePos != SendQueue.size());
+            Y_VERIFY_DEBUG(numBytes <= UnsentBytes);
             SendOffset += numBytes;
+            UnsentBytes -= numBytes;
             for (auto it = SendQueue.begin() + SendQueuePos; SendOffset && it->Span.size() <= SendOffset; ++SendQueuePos, ++it) {
                 SendOffset -= it->Span.size();
                 Y_VERIFY_DEBUG(SendOffset == 0 || SendQueuePos != SendQueue.size() - 1);
@@ -213,6 +235,7 @@ namespace NInterconnect {
         }
 
         void AppendSpanWithGlueing(TContiguousSpan span, TBuffer *buffer) {
+            UnsentBytes += span.size();
             if (!SendQueue.empty()) {
                 auto& back = SendQueue.back();
                 if (back.Span.data() + back.Span.size() == span.data()) { // check if it is possible just to extend the last span

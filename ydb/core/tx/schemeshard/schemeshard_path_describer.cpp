@@ -373,7 +373,7 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
     Y_UNUSED(pathEl);
 
     auto description = Result->Record.MutablePathDescription()->MutableColumnStoreDescription();
-    description->CopyFrom(storeInfo->Description);
+    description->CopyFrom(storeInfo->GetDescription());
 
     description->ClearColumnShards();
     description->MutableColumnShards()->Reserve(storeInfo->ColumnShards.size());
@@ -402,7 +402,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         Y_VERIFY(storeInfo, "OlapStore not found");
 
         auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());
-        auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.GetProtoIndex());
+        auto& presetProto = storeInfo->GetDescription().GetSchemaPresets(preset.GetProtoIndex());
         *description->MutableSchema() = presetProto.GetSchema();
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
@@ -443,28 +443,32 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
-                TTabletId TabletId = InvalidTabletId;
-                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
+            TTabletId TabletId;
+            const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
+            // it is sorted list of partitions by partition id
             TVector<TPartitionDesc> descriptions; // index is pqId
-            descriptions.resize(pqGroupInfo->TotalPartitionCount);
+            descriptions.resize(pqGroupInfo->Partitions.size());
 
             for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
                 auto it = Self->ShardInfos.find(shardIdx);
                 Y_VERIFY_S(it != Self->ShardInfos.end(), "No shard with shardIdx: " << shardIdx);
 
-                for (const auto& pq : pqShard->Partitions) {
-                    if (pq.AlterVersion <= pqGroupInfo->AlterVersion) {
-                        Y_VERIFY_S(pq.PqId < pqGroupInfo->NextPartitionId,
-                            "Wrong pqId: " << pq.PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
-                        descriptions[pq.PqId] = {it->second.TabletID, &pq};
+                for (const auto& partition : pqShard->Partitions) {
+                    if (partition->AlterVersion <= pqGroupInfo->AlterVersion) {
+                        Y_VERIFY_S(partition->PqId < pqGroupInfo->NextPartitionId,
+                                   "Wrong pqId: " << partition->PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
+                        descriptions[partition->PqId] = {it->second.TabletID, partition.Get()};
                     }
                 }
             }
 
-            for (ui32 pqId = 0; pqId < descriptions.size(); ++pqId) {
-                const auto& desc = descriptions.at(pqId);
+            for (const auto& desc : descriptions) {
+                if (desc.Info == nullptr || desc.Info->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
+                    continue;
+                }
+                const auto pqId = desc.Info->PqId;
                 auto& partition = *entry->AddPartitions();
 
                 Y_VERIFY_S(desc.TabletId, "Unassigned tabletId for partition: " << pqId);
@@ -474,6 +478,14 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 partition.SetTabletId(ui64(desc.TabletId));
                 if (desc.Info->KeyRange) {
                     desc.Info->KeyRange->SerializeToProto(*partition.MutableKeyRange());
+                }
+
+                partition.SetStatus(desc.Info->Status);
+                for (const auto parent : desc.Info->ParentPartitionIds) {
+                    partition.AddParentPartitionIds(parent);
+                }
+                for (const auto child : desc.Info->ChildPartitionIds) {
+                    partition.AddChildPartitionIds(child);
                 }
             }
 
@@ -499,13 +511,20 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
             const auto& shardInfo = Self->ShardInfos.at(shardIdx);
             for (const auto& pq : pqShard->Partitions) {
-                if (pq.AlterVersion <= pqGroupInfo->AlterVersion) {
+                if (pq->AlterVersion <= pqGroupInfo->AlterVersion) {
                     auto partition = allocate->MutablePartitions()->Add();
-                    partition->SetPartitionId(pq.PqId);
-                    partition->SetGroupId(pq.GroupId);
+                    partition->SetPartitionId(pq->PqId);
+                    partition->SetGroupId(pq->GroupId);
                     partition->SetTabletId(ui64(shardInfo.TabletID));
                     partition->SetOwnerId(shardIdx.GetOwnerId());
                     partition->SetShardId(ui64(shardIdx.GetLocalId()));
+                    partition->SetStatus(pq->Status);
+                    for (const auto parent : pq->ParentPartitionIds) {
+                        partition->AddParentPartitionIds(parent);
+                    }
+                    if (pq->KeyRange) {
+                        pq->KeyRange->SerializeToProto(*partition->MutableKeyRange());
+                    }
                 }
             }
         }
@@ -1162,6 +1181,7 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetMode(info->Mode);
     desc.SetFormat(info->Format);
     desc.SetVirtualTimestamps(info->VirtualTimestamps);
+    desc.SetAwsRegion(info->AwsRegion);
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);

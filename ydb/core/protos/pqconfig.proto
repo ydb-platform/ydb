@@ -274,6 +274,12 @@ message TMessageGroup {
     optional TPartitionKeyRange KeyRange = 2;
 }
 
+enum ETopicPartitionStatus {
+    Active = 1; // the partition can be written
+    Inactive = 2; // the partition can't be written but can be read 
+    Deleted = 3; // the partition can't be written and read 
+}
+
 message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
@@ -326,6 +332,10 @@ message TPQTabletConfig {
     message TPartition {
         optional uint32 PartitionId = 1;
         optional TPartitionKeyRange KeyRange = 2;
+        optional ETopicPartitionStatus Status = 3;
+        repeated uint32 ParentPartitionIds = 4;
+        repeated uint32 ChildPartitionIds = 5;
+        optional uint64 CreateVersion = 6;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
 
@@ -334,6 +344,16 @@ message TPQTabletConfig {
         METERING_MODE_REQUEST_UNITS = 1;
     }
     optional EMeteringMode MeteringMode = 34;
+
+    // Strategy for automatically changing the number of topic partitions depending on the load
+    message TPartitionStrategy {
+        // The minimum number of partitions that will be supported by the strategy
+        optional uint32 MinPartitionCount = 1 [default = 1];
+        // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
+        // amount is reached, even if the load exceeds the current capabilities of the topic.
+        required uint32 MaxPartitionCount = 2;
+    }
+    optional TPartitionStrategy PartitionStrategy = 35;
 }
 
 message TMessageGroupInfo {
@@ -379,6 +399,11 @@ message TUpdateBalancerConfig { //for schemeshard use only
         optional uint32 Partition = 1;
         optional uint64 TabletId = 2;
         optional uint32 Group = 3;
+        optional TPartitionKeyRange KeyRange = 4;
+        optional ETopicPartitionStatus Status = 5;
+        repeated uint32 ParentPartitionIds = 6;
+        repeated uint32 ChildPartitionIds = 7;
+        optional uint64 CreateVersion = 8;
     }
 
     repeated TPartition Partitions = 6;
@@ -820,16 +845,12 @@ message TDataTransaction {
 }
 
 message TConfigTransaction {
-    optional uint64 SchemeShardId = 1;
     optional TPQTabletConfig TabletConfig = 2;
     optional TBootstrapConfig BootstrapConfig = 3;
 }
 
 message TEvProposeTransaction {
-    oneof Source {
-        NActorsProto.TActorId Actor = 1;
-        uint64 Tablet = 5;
-    }
+    optional NActorsProto.TActorId SourceActor = 1;
     optional uint64 TxId = 2;
     oneof TxBody {
         TDataTransaction Data = 3;
@@ -856,6 +877,7 @@ message TEvProposeTransactionResult {
     optional uint64 MaxStep = 6;
     optional string StatusMessage = 7;
     optional uint64 Step = 8;
+    repeated fixed64 DomainCoordinators = 9;
 };
 
 message TEvCancelTransactionProposal {
@@ -919,15 +941,11 @@ message TTransaction {
     //
     optional TPQTabletConfig TabletConfig = 12;
     optional TBootstrapConfig BootstrapConfig = 13;
-    optional uint64 SchemeShardId = 16;
 
     //
     // получатель результата
     //
-    oneof Source {
-        NActorsProto.TActorId Actor = 14;
-        uint64 Tablet = 15;
-    }
+    optional NActorsProto.TActorId SourceActor = 14;
 };
 
 message TTabletTxInfo {

@@ -19,9 +19,9 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTableRanges readTable,
+TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTableRangesBase readTable,
     const TKqpMatchReadResult& readMatch, const TKikimrTableDescription& tableDesc, TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx)
+    const TKqpOptimizeContext& kqpCtx, TMaybeNode<TCoAtom> indexName)
 {
     Y_UNUSED(kqpCtx);
 
@@ -104,12 +104,26 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
             }
         }
 
-        TExprBase input = Build<TKqlReadTable>(ctx, readTable.Pos())
-            .Table(readTable.Table())
-            .Range(keyRangeExpr)
-            .Columns(readTable.Columns())
-            .Settings(settings.BuildNode(ctx, readTable.Pos()))
-            .Done();
+        auto buildReadTable = [&] () -> TExprBase {
+            return Build<TKqlReadTable>(ctx, readTable.Pos())
+                .Table(readTable.Table())
+                .Range(keyRangeExpr)
+                .Columns(readTable.Columns())
+                .Settings(settings.BuildNode(ctx, readTable.Pos()))
+                .Done();
+        };
+
+        auto buildReadIndex = [&] () -> TExprBase {
+            return Build<TKqlReadTableIndex>(ctx, readTable.Pos())
+                .Table(readTable.Table())
+                .Range(keyRangeExpr)
+                .Columns(readTable.Columns())
+                .Settings(settings.BuildNode(ctx, readTable.Pos()))
+                .Index(indexName.Cast())
+                .Done();
+        };
+
+        TExprBase input = indexName.IsValid() ? buildReadIndex() : buildReadTable();
 
         input = readMatch.BuildProcessNodes(input, ctx);
 
@@ -151,8 +165,17 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         return node;
     }
 
-    auto readMatch = MatchRead<TKqlReadTableRanges>(flatmap.Input());
+    auto readMatch = MatchRead<TKqlReadTableRangesBase>(flatmap.Input());
     if (!readMatch) {
+        return node;
+    }
+
+    static const std::set<TStringBuf> supportedReads {
+        TKqlReadTableRanges::CallableName(),
+        TKqlReadTableIndexRanges::CallableName(),
+    };
+
+    if (!supportedReads.contains(readMatch->Read.Cast<TKqlReadTableRangesBase>().CallableName())) {
         return node;
     }
 
@@ -160,7 +183,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         return node;
     }
 
-    auto read = readMatch->Read.Cast<TKqlReadTableRanges>();
+    auto read = readMatch->Read.Cast<TKqlReadTableRangesBase>();
 
     /*
      * ReadTableRanges supported predicate extraction, but it may be disabled via flag. For example to force
@@ -176,10 +199,16 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         return node;
     }
 
-    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    TMaybeNode<TCoAtom> indexName;
+    if (auto maybeIndexRead = read.Maybe<TKqlReadTableIndexRanges>()) {
+        indexName = maybeIndexRead.Cast().Index();
+    }
+
+    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc;
 
     // test for trivial cases (explicit literals or parameters)
-    if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx)) {
+    if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx, indexName)) {
         return expr.Cast();
     }
 
@@ -189,7 +218,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     auto extractor = MakePredicateRangeExtractor(settings);
     YQL_ENSURE(tableDesc.SchemeNode);
 
-    bool prepareSuccess = extractor->Prepare(flatmap.Lambda().Ptr(), *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx);
+    bool prepareSuccess = extractor->Prepare(flatmap.Lambda().Ptr(), *mainTableDesc.SchemeNode, possibleKeys, ctx, typesCtx);
     YQL_ENSURE(prepareSuccess);
 
     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx);
@@ -217,18 +246,30 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     YQL_CLOG(DEBUG, ProviderKqp) << "Ranges extracted: " << KqpExprToPrettyString(*ranges, ctx);
     YQL_CLOG(DEBUG, ProviderKqp) << "Residual lambda: " << KqpExprToPrettyString(*residualLambda, ctx);
 
-    TExprBase input = Build<TKqlReadTableRanges>(ctx, read.Pos())
-        .Table(read.Table())
-        .Ranges(ranges)
-        .Columns(read.Columns())
-        .Settings(read.Settings())
-        .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
-        .Done();
+    TMaybe<TExprBase> input;
+    if (indexName) {
+        input = Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
+            .Table(read.Table())
+            .Ranges(ranges)
+            .Columns(read.Columns())
+            .Settings(read.Settings())
+            .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
+            .Index(indexName.Cast())
+            .Done();
+    } else {
+        input = Build<TKqlReadTableRanges>(ctx, read.Pos())
+            .Table(read.Table())
+            .Ranges(ranges)
+            .Columns(read.Columns())
+            .Settings(read.Settings())
+            .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
+            .Done();
+    }
 
-    input = readMatch->BuildProcessNodes(input, ctx);
+    *input = readMatch->BuildProcessNodes(*input, ctx);
 
     return Build<TCoFlatMap>(ctx, node.Pos())
-        .Input(input)
+        .Input(*input)
         .Lambda(residualLambda)
         .Done();
 }

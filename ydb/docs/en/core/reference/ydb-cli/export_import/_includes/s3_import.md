@@ -1,6 +1,6 @@
-# Importing data from S3-compatible storage
+# Importing data from an S3 compatible storage
 
-Running the `import s3` command starts, on the server side, importing data and information about data schema objects from S3-compatible storage in the format described in the [File structure](../file_structure.md) article:
+The `import s3` command starts, on the server side, the process of importing data and schema object details from an S3-compatible storage, in the format described in the [File structure](../file_structure.md) section:
 
 ```bash
 {{ ydb-cli }} [connection options] import s3 [options]
@@ -8,9 +8,9 @@ Running the `import s3` command starts, on the server side, importing data and i
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-Unlike [`tools restore`](../tools_restore.md), the `import s3` command always creates entire objects, meaning that none of the objects being imported (neither directories nor tables) should exist for the command to run successfully.
+As opposed to the [`tools restore` command](../tools_restore.md), the `import s3` command always creates objects in entirety, so none of the imported objects (directories or tables) should already exist.
 
-If you need to import additional data from S3 to existing tables, you can copy the S3 contents to the file system (for example, using [S3cmd](https://s3tools.org/s3cmd)) and run the [`tools restore`](../tools_restore.md) command.
+If you need to import some more data to your existing S3 tables (for example, using [S3cmd](https://s3tools.org/s3cmd)), you can copy the S3 contents to the file system and use the [`tools restore`](../tools_restore.md) command.
 
 ## Command line parameters {#pars}
 
@@ -18,84 +18,83 @@ If you need to import additional data from S3 to existing tables, you can copy t
 
 ### S3 connection parameters {#s3-conn}
 
-To run the command to import data from S3, make sure to specify the [S3 connection parameters](../s3_conn.md). Since data import is performed asynchronously by the YDB server, the specified endpoint must be available to establish a server-side connection.
+To run the command to import data from an S3 storage, specify the [S3 connection parameters](../s3_conn.md). As data is imported by the YDB server asynchronously, the specified endpoint must be available so that a connection can be established from the server side.
 
 ### List of imported objects {#items}
 
-`--item STRING`: Description of the object to import. The `--item` parameter can be specified several times if you need to import multiple objects. The `STRING` format is `<property>=<value>,...`, with the following properties required:
-
-- `source`, `src`, or `s`: Path to S3 (key prefix) specifying the directory or table to import.
-- `destination`, `dst`, or`d`: Path to the DB that will store the imported directory or table. The final element of the path must not exist. All directories specified in the path will be created if they don't exist.
+`--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+- `source`, `src` or `s` is the path (key prefix) in S3 that hosts the imported directory or table
+- `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
 
 ### Additional parameters {#aux}
 
-`--description STRING`: Operation text description stored in the history of operations. `--retries NUM`: Number of import retries the server will make. Defaults to 10.
-`--format STRING`: Result output format.
-
+`--description STRING`: A text description of the operation saved in the operation history
+`--retries NUM`: The number of import retries to be made by the server. The default value is 10.
+`--format STRING`: The format of the results.
 - `pretty`: Human-readable format (default).
-- `proto-json-base64`: Protobuf that supports JSON values encoded as binary strings using base64 encoding.
+- `proto-json-base64`: Protobuf in JSON format, binary strings are Base64-encoded.
 
-## Importing data {#exec}
+## Importing {#exec}
 
-### Import result {#result}
+### Export result {#result}
 
-If successful , the `import s3` command outputs summary information about the enqueued operation for importing data from S3 in the format specified in the `--format` option. The actual import operation is performed by the server asynchronously. The summary displays the operation ID that can be used later to check the status and actions with the operation:
+If successful, the `import s3` command prints summary information about the enqueued operation to import data from S3 in the format specified in the `--format` option. The import itself is performed by the server asynchronously. The summary shows the operation ID that you can use later to check the operation status and perform actions on it:
 
-- In the `pretty` output mode used by default, the operation identifier is output in the id field with semigraphics formatting:
+- In the default `pretty` mode, the operation ID is displayed in the id field with semigraphics formatting:
 
-  ```
-  ┌───────────────────────────────────────────┬───────┬─────...
-  | id                                        | ready | stat...
-  ├───────────────────────────────────────────┼───────┼─────...
-  | ydb://import/8?id=281474976788395&kind=s3 | true  | SUCC...
-  ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
-  | Items:
-  ...                                                   
-  ```
+   ```
+   ┌───────────────────────────────────────────┬───────┬─────...
+   | id                                        | ready | stat...
+   ├───────────────────────────────────────────┼───────┼─────...
+   | ydb://import/8?id=281474976788395&kind=s3 | true  | SUCC...
+   ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
+   | Items:
+   ...                                                   
+   ```
 
-- In proto-json-base64 output mode, the ID is in the "id" attribute:
+- In the proto-json-base64 mode, the operation ID is in the "id" attribute:
 
-  ```
-  {"id":"ydb://export/8?id=281474976788395&kind=s3","ready":true, ... }
-  ```
+   ```
+   {"id":"ydb://export/8?id=281474976788395&kind=s3","ready":true, ... }
+   ```
 
 ### Import status {#status}
 
-Data is imported in the background. You can get information about the status and progress of the import operation by running the `operation get` command with the **quoted** operation ID passed as the command parameter. For example:
+Data is imported in the background. To get information on import status, use the `operation get` command with the operation ID **enclosed in quotation marks** and passed as a command parameter. For example:
 
 ```bash
-{{ ydb-cli }} -p db1 operation get "ydb://import/8?id=281474976788395&kind=s3"
+{{ ydb-cli }} -p quickstart operation get "ydb://import/8?id=281474976788395&kind=s3"
 ```
 
-The format of the `operation get` command output is also specified in the `--format` option.
+The `operation get` format is also set by the `--format` option.
 
-Although the operation ID format is URL, there is no guarantee that it's retained later. It should only be interpreted as a string.
+Although the operation ID is in URL format, there is no guarantee that it is maintained in the future. It should only be interpreted as a string.
 
-You can track the completion of the import operation by changes in the "progress" attribute:
+You can track the import by changes in the "progress" attribute:
 
-- In the `pretty` output mode used by default, a successful operation is indicated by the "Done" value in the `progress` field with semigraphics formatting:
+- In the default `pretty` mode, successfully completed export operations are displayed as "Done" in the `progress` field with semigraphics formatting:
 
-  ```
-  ┌───── ... ──┬───────┬─────────┬──────────┬─...
-  | id         | ready | status  | progress | ...
-  ├──────... ──┼───────┼─────────┼──────────┼─...
-  | ydb:/...   | true  | SUCCESS | Done     | ...
-  ├╴╴╴╴╴ ... ╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┴╴...
-  ...
-  ```
+   ```
+   ┌───── ... ──┬───────┬─────────┬──────────┬─...
+   | id         | ready | status  | progress | ...
+   ├──────... ──┼───────┼─────────┼──────────┼─...
+   | ydb:/...   | true  | SUCCESS | Done     | ...
+   ├╴╴╴╴╴ ... ╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┴╴...
+   ...
+   ```
 
-- In proto-json-base64 output mode, a completed operation is indicated by the `PROGRESS_DONE` value of the `progress` attribute:
+- In the proto-json-base64 mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
 
-  ```
-  {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
-  ```
+   ```
+   {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
+   ```
 
-### Ending the import operation {#forget}
+### Completing the import operation {#forget}
 
-Once the data is imported, use the `operation forget` command to make sure the import operation is removed from the list of operations:
+When the import is complete, use `operation forget` to delete the import from the operation list:
 
 ```bash
-{{ ydb-cli }} -p db1 operation forget "ydb://import/8?id=281474976788395&kind=s3"
+{{ ydb-cli }} -p quickstart operation forget "ydb://import/8?id=281474976788395&kind=s3"
 ```
 
 ### List of import operations {#list}
@@ -103,31 +102,31 @@ Once the data is imported, use the `operation forget` command to make sure the i
 To get a list of import operations, run the `operation list import/s3` command:
 
 ```bash
-{{ ydb-cli }} -p db1 operation list import/s3
+{{ ydb-cli }} -p quickstart operation list import/s3
 ```
 
-The format of the `operation list` command output is also specified in the `--format` option.
+The `operation list` format is also set by the `--format` option.
 
 ## Examples {#examples}
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-### Importing data to the DB root {#example-full-db}
+### Importing to the database root {#example-full-db}
 
-Importing the contents of the `export1` directory in the `mybucket` bucket to the root of the database, using S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
+Importing to the database root the contents of the `export1` directory in the `mybucket` bucket using the S3 authentication parameters taken from the environment variables or the `~/.aws/credentials` file:
 
 ```
-ydb -p db1 import s3 \
+ydb -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --item src=export1,dst=.
 ```
 
 ### Importing multiple directories {#example-specific-dirs}
 
-Importing objects from the dir1 and dir2 directories of the `mybucket` S3 bucket to the same-name DB directories using explicitly specified authentication parameters in S3:
+Importing items from the dir1 and dir2 directories in the `mybucket` S3 bucket to the same-name database directories using explicitly specified S3 authentication parameters:
 
 ```
-ydb -p db1 import s3 \
+ydb -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
@@ -135,13 +134,13 @@ ydb -p db1 import s3 \
 
 ### Getting operation IDs {#example-list-oneline}
 
-To get a list of import operation IDs in a format that is convenient for processing in bash scripts, use [jq](https://stedolan.github.io/jq/download/):
+To get a list of import operation IDs in a bash-friendly format, use the [jq](https://stedolan.github.io/jq/download/) utility:
 
 ```bash
-{{ ydb-cli }} -p db1 operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id"
+{{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id"
 ```
 
-You'll get an output where each new line contains the operation ID. For example:
+You'll get a result where each new line shows an operation's ID. For example:
 
 ```
 ydb://import/8?id=281474976789577&kind=s3
@@ -149,9 +148,9 @@ ydb://import/8?id=281474976789526&kind=s3
 ydb://import/8?id=281474976788779&kind=s3
 ```
 
-These IDs can be used, for example, to run a loop that will end all current operations:
+You can use these IDs, for example, to run a loop to end all the current operations:
 
 ```bash
-{{ ydb-cli }} -p db1 operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p db1 operation forget $line;done
+{{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
 

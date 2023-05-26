@@ -25,15 +25,46 @@ constexpr ui32 NUM_WRITES = PlainOrSoSlow(50, 1);
 
 void FillPQConfig(NKikimrPQ::TPQConfig& pqConfig, const TString& dbRoot, bool isFirstClass);
 
-class TInitialEventsFilter : TNonCopyable {
-    bool IsDone;
-public:
-    TInitialEventsFilter()
-        : IsDone(false)
-    {}
+enum EventKing {
+    TabletPipe,
+    NPDisk,
+    KeyValue,
+    PQ
+};
 
-    TTestActorRuntime::TEventFilter Prepare() {
-        IsDone = false;
+class TInitialEventsFilter : TNonCopyable {
+    std::unordered_set<TString> Events;
+public:
+    TInitialEventsFilter() = default;
+
+    TTestActorRuntime::TEventFilter Prepare(const std::unordered_set<EventKing>& eventKings = {TabletPipe, NPDisk, KeyValue, PQ}, 
+                         const std::unordered_set<TString>& eventTypeNames = {}) {
+        Events.clear();
+
+        if (eventKings.contains(TabletPipe)) {
+            Events.insert("NKikimr::TEvTabletPipe::TEvClientConnected");
+            Events.insert("NKikimr::TEvTabletPipe::TEvClientDestroyed");
+            Events.insert("NKikimr::TEvTabletPipe::TEvServerConnected");
+        }
+        if (eventKings.contains(NPDisk)) {
+            Events.insert("NKikimr::NPDisk::TEvLog");
+            Events.insert("NKikimr::NPDisk::TEvLogResult");
+        }
+        if (eventKings.contains(KeyValue)) {
+            Events.insert("NKikimr::TEvKeyValue::TEvCollect");
+            Events.insert("NKikimr::TEvKeyValue::TEvCompleteGC");
+            Events.insert("NKikimr::TEvKeyValue::TEvIntermediate");
+            Events.insert("NKikimr::TEvKeyValue::TEvPartialCompleteGC");
+        }
+        if (eventKings.contains(PQ)) {
+            Events.insert("NKikimr::TEvPQ::TEvPartitionLabeledCounters");
+            Events.insert("NKikimr::TEvPQ::TEvProxyResponse");
+        }
+
+        for(const auto& v : eventTypeNames) {
+            Events.insert(v);
+        }
+
         return [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
             return (*this)(runtime, event);
         };
@@ -41,10 +72,11 @@ public:
 
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
         Y_UNUSED(runtime);
-        Y_UNUSED(event);
-        return false;
+
+        return Events.contains(event->GetTypeName());
     }
 };
+
 
 struct TTestContext {
     const TTabletTypes::EType PQTabletType = TTabletTypes::PersQueue;
@@ -228,6 +260,7 @@ struct TTabletPreparationParameters {
     TString databaseId{"PQ"};
     TString databasePath{"/Root/PQ"};
     TString account{"federationAccount"};
+    ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,

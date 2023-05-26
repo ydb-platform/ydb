@@ -115,26 +115,10 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 {
 }
 
-NKikimr::NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
-    NOlap::TCompression out;
-    if (compression.HasCompressionCodec()) {
-        switch (compression.GetCompressionCodec()) {
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                out.Codec = arrow::Compression::UNCOMPRESSED;
-                break;
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                out.Codec = arrow::Compression::LZ4_FRAME;
-                break;
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                out.Codec = arrow::Compression::ZSTD;
-                break;
-        }
-    }
-
-    if (compression.HasCompressionLevel()) {
-        out.Level = compression.GetCompressionLevel();
-    }
-    return out;
+NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
+    auto out = NArrow::TCompression::BuildFromProto(compression);
+    Y_VERIFY(out, "%s", out.GetErrorMessage().data());
+    return *out;
 }
 }
 
@@ -225,11 +209,11 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
         if (tiering) {
             result.emplace(i.first, tiering->BuildOlapTiers());
             for (auto& [pathId, pathTiering] : result) {
-                for (auto& [name, tier] : pathTiering.TierByName) {
+                for (auto& [name, tier] : pathTiering.GetTierByName()) {
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
-                        tier->Compression = NTiers::ConvertCompression(it->second.GetCompression());
-                        tier->NeedExport = it->second.NeedExport();
+                        tier->SetCompression(NTiers::ConvertCompression(it->second.GetCompression()));
+                        tier->SetNeedExport(it->second.NeedExport());
                     }
                 }
             }

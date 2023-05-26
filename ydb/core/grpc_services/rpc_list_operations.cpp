@@ -6,9 +6,12 @@
 #include "rpc_operation_request_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -36,6 +39,8 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
             return "[ListImports]";
         case TOperationId::BUILD_INDEX:
             return "[ListIndexBuilds]";
+        case TOperationId::SCRIPT_EXECUTION:
+            return "[ListScriptExecutions]";
         default:
             return "[Untagged]";
         }
@@ -112,22 +117,43 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         Reply(response);
     }
 
+    void SendListScriptExecutions() {
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvListScriptExecutionOperations(DatabaseName, GetProtoRequest()->page_size(), GetProtoRequest()->page_token()));
+    }
+
+    void Handle(NKqp::TEvListScriptExecutionOperationsResponse::TPtr& ev) {
+        TResponse response;
+        response.set_status(ev->Get()->Status);
+        for (const NYql::TIssue& issue : ev->Get()->Issues) {
+            NYql::IssueToMessage(issue, response.add_issues());
+        }
+        for (auto& op : ev->Get()->Operations) {
+            response.add_operations()->Swap(&op);
+        }
+        response.set_next_page_token(ev->Get()->NextPageToken);
+        Reply(response);
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
     void Bootstrap() {
+        Become(&TListOperationsRPC::StateWait);
+
         switch (ParseKind(GetProtoRequest()->kind())) {
         case TOperationId::EXPORT:
         case TOperationId::IMPORT:
         case TOperationId::BUILD_INDEX:
             break;
+        case TOperationId::SCRIPT_EXECUTION:
+            SendListScriptExecutions();
+            return;
 
         default:
             return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Unknown operation kind");
         }
 
         ResolveDatabase();
-        Become(&TListOperationsRPC::StateWait);
     }
 
     STATEFN(StateWait) {
@@ -135,6 +161,7 @@ public:
             hFunc(TEvExport::TEvListExportsResponse, Handle);
             hFunc(TEvImport::TEvListImportsResponse, Handle);
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
+            hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
         default:
             return StateBase(ev);
         }

@@ -110,7 +110,11 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
             request.SetKeepSession(false);
-        } else if (Action == "explain" || Action == "explain-ast") {
+        } else if (Action == "execute-data") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            request.SetKeepSession(false);
+        } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         } else if (Action == "explain-scan") {
@@ -188,7 +192,7 @@ private:
             case NYdb::EPrimitiveType::DyNumber:
                 return valueParser.GetDyNumber();
             case NYdb::EPrimitiveType::Uuid:
-                return "<uuid not implemented>";
+                return valueParser.GetUuid().ToString();
         }
     }
 
@@ -214,6 +218,9 @@ private:
             case NYdb::TTypeParser::ETypeKind::Tagged:
                 valueParser.OpenTagged();
                 return ColumnValueToJsonValue(valueParser);
+
+            case NYdb::TTypeParser::ETypeKind::Pg:
+                return valueParser.GetPg().Content_;
 
             default:
                 return NJson::JSON_UNDEFINED;

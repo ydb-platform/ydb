@@ -23,6 +23,8 @@ struct TEvPGEvents {
         EvDescribeResponse,
         EvExecute,
         EvExecuteResponse,
+        EvClose,
+        EvCloseResponse,
         EvEnd
     };
 
@@ -99,6 +101,9 @@ struct TEvPGEvents {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
+        TString Tag;
+        bool EmptyQuery = false;
+        char TransactionStatus = 0;
     };
 
         /*
@@ -180,6 +185,7 @@ struct TEvPGEvents {
 
     struct TEvDescribeResponse : NActors::TEventLocal<TEvDescribeResponse, EvDescribeResponse> {
         std::vector<TRowDescriptionField> DataFields;
+        std::vector<uint32_t> ParameterTypes;
         std::vector<std::pair<char, TString>> ErrorFields;
     };
 
@@ -194,6 +200,28 @@ struct TEvPGEvents {
     struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
+        TString Tag;
+        bool EmptyQuery = false;
+    };
+
+    struct TEvCloseResponse : NActors::TEventLocal<TEvCloseResponse, EvCloseResponse> {
+        std::unique_ptr<TPGClose> OriginalMessage;
+
+        TEvCloseResponse(std::unique_ptr<TPGClose> originalMessage)
+            : OriginalMessage(std::move(originalMessage))
+        {}
+    };
+
+    struct TEvClose : NActors::TEventLocal<TEvClose, EvClose> {
+        std::unique_ptr<TPGClose> Message;
+
+        TEvClose(std::unique_ptr<TPGClose> message)
+            : Message(std::move(message))
+        {}
+
+        std::unique_ptr<TEvCloseResponse> Reply() {
+            return std::make_unique<TEvCloseResponse>(std::move(Message));
+        }
     };
 };
 

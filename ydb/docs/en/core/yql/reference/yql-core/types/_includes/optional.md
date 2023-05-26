@@ -32,7 +32,7 @@ Result:
 
 ```text
 # column0
-0 null
+null
 ```
 
 ## Logical and arithmetic operations with NULL {#null_expr}

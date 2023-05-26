@@ -40,31 +40,27 @@ public:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
-        }
-
-        ev->Record.MutableRequest()->SetCancelAfterMs(GetCancelAfter().MilliSeconds());
-        ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds());
-        ev->Record.MutableRequest()->MutableYdbParameters()->insert(req->parameters().begin(), req->parameters().end());
-
-        auto& script = req->script();
+        auto script = req->script();
 
         NYql::TIssues issues;
         if (!CheckQuery(script, issues)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
         }
 
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
-        ev->Record.MutableRequest()->SetQuery(script);
-        ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats()));
-        ev->Record.MutableRequest()->SetCollectStats(req->collect_stats());
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            NKikimrKqp::QUERY_ACTION_EXECUTE,
+            NKikimrKqp::QUERY_TYPE_SQL_SCRIPT,
+            SelfId(),
+            Request_,
+            TString(), //sessionId
+            std::move(script),
+            TString(), //queryId
+            nullptr, //tx_control
+            &req->parameters(),
+            req->collect_stats(),
+            nullptr, // query_cache_policy
+            req->has_operation_params() ? &req->operation_params() : nullptr
+        );
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }

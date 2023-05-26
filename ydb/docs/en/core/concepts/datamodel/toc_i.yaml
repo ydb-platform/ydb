@@ -2,4 +2,5 @@ items:
 - { name: Overview,                                  href: index.md }
 - { name: Directory,                                 href: dir.md }
 - { name: Table,                                     href: table.md }
+- { name: Сolumn-oriented table,                     href: ../column-table.md }
 - { name: Topic,                                     href: ../topic.md }

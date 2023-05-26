@@ -12,10 +12,12 @@ TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)
-        .SetCredentialsProviderFactory(config.CredentialsGetter(config));
-    if (config.EnableSsl) {
+        .SetCredentialsProviderFactory(config.CredentialsGetter(config))        ;
+    
+    if (config.EnableSsl) 
         driverConfig.UseSecureConnection(config.CaCerts);
-    }
+    if (config.IsNetworkIntensive)
+        driverConfig.SetNetworkThreadsNum(16);
 
     return driverConfig;
 }

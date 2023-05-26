@@ -30,6 +30,7 @@ void TTransQueue::RemoveTxInFly(ui64 txId) {
         TxsInFly.erase(it);
         ProposeDelayers.erase(txId);
         Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
+        Self->GetConflictsCache().UnregisterDistributedWrites(txId);
     }
 }
 

@@ -131,12 +131,19 @@ struct TMockKqpComputeActorFactory : public IKqpNodeComputeActorFactory {
         mock.Task.Swap(&task);
         mock.Settings = settings;
         mock.MemoryLimits = memoryLimits;
+        UNIT_ASSERT(mock.MemoryLimits.MemoryQuotaManager->AllocateQuota(mock.MemoryLimits.MkqlLightProgramMemoryLimit));
+        static_cast<NYql::NDq::TGuaranteeQuotaManager*>(mock.MemoryLimits.MemoryQuotaManager.get())->Step = 1;
         return Runtime.FindActor(actorId);
     }
 };
 
 class KqpNode : public TTestBase {
 public:
+
+    ~KqpNode() override {
+        CompFactory.Reset();
+    }
+
     void SetUp() override {
         Runtime.Reset(new TTenantTestRuntime(MakeTenantTestConfig()));
 
@@ -371,8 +378,7 @@ void KqpNode::CommonCase() {
     {
         NKikimr::TActorSystemStub stub;
 
-        auto& task4ExtraAlloc = CompFactory->Task2Actor[4].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task4ExtraAlloc(/* txId */ (ui64)2, /* taskId */ 4, /* memory */ 100);
+        bool allocated = CompFactory->Task2Actor[4].MemoryLimits.MemoryQuotaManager->AllocateQuota(100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmComputeActors->Val(), 4);
@@ -398,6 +404,12 @@ void KqpNode::CommonCase() {
     }
 
     AssertResourceBrokerSensors(0, 0, 0, 5, 0);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 void KqpNode::ExtraAllocation() {
@@ -414,13 +426,11 @@ void KqpNode::ExtraAllocation() {
     SendStartTasksRequest(sender1, /* txId */ 1, /* taskIds */ {1, 2});
     Runtime->GrabEdgeEvent<TEvKqpNode::TEvStartKqpTasksResponse>(sender1);
 
-    auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-
     // memory granted
     {
         NKikimr::TActorSystemStub stub;
 
-        bool allocated = task1ExtraAlloc(/* txId */ (ui64)1, /* taskId */ 1, /* memory */ 100);
+        bool allocated = CompFactory->Task2Actor[1].MemoryLimits.MemoryQuotaManager->AllocateQuota(100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
 
@@ -433,7 +443,7 @@ void KqpNode::ExtraAllocation() {
     {
         NKikimr::TActorSystemStub stub;
 
-        bool allocated = task1ExtraAlloc(/* txId */ (ui64)1, /* taskId */ 1, /* memory */ 50'000);
+        bool allocated = CompFactory->Task2Actor[1].MemoryLimits.MemoryQuotaManager->AllocateQuota(50'000);
         UNIT_ASSERT(!allocated);
         DispatchKqpNodePostponedEvents(sender1);
 
@@ -442,6 +452,12 @@ void KqpNode::ExtraAllocation() {
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughMemory->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughComputeActors->Val(), 0);
         AssertResourceBrokerSensors(0, taskSize2 + 100, 0, 1, 2);
+    }
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
     }
 }
 
@@ -504,8 +520,7 @@ void KqpNode::NotEnoughMemory_Extra() {
     {
         NKikimr::TActorSystemStub stub;
 
-        auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 1'000'000);
+        bool allocated = CompFactory->Task2Actor[1].MemoryLimits.MemoryQuotaManager->AllocateQuota(1'000'000);
         UNIT_ASSERT(!allocated);
     }
 
@@ -517,6 +532,12 @@ void KqpNode::NotEnoughMemory_Extra() {
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughComputeActors->Val(), 0);
 
     AssertResourceBrokerSensors(0, taskSize2, 0, 0, 2);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 void KqpNode::NotEnoughComputeActors() {
@@ -539,6 +560,12 @@ void KqpNode::NotEnoughComputeActors() {
     }
 
     AssertResourceBrokerSensors(0, 0, 0, 4, 0);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 void KqpNode::ResourceBrokerNotEnoughResources() {
@@ -570,6 +597,12 @@ void KqpNode::ResourceBrokerNotEnoughResources() {
     }
 
     AssertResourceBrokerSensors(0, 2 * (6000 * 2 + 1000 / 2), 0, 1, 2);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 void KqpNode::ResourceBrokerNotEnoughResources_Extra() {
@@ -590,12 +623,17 @@ void KqpNode::ResourceBrokerNotEnoughResources_Extra() {
     {
         NKikimr::TActorSystemStub stub;
 
-        auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 2 * (6000 * 2 + 1000 / 2));
+        bool allocated = CompFactory->Task2Actor[1].MemoryLimits.MemoryQuotaManager->AllocateQuota(2 * (6000 * 2 + 1000 / 2));
         UNIT_ASSERT(!allocated);
     }
 
     AssertResourceBrokerSensors(0, 2 * (6000 * 2 + 1000 / 2), 0, 0, 2);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 void KqpNode::ExecuterLost() {
@@ -609,8 +647,7 @@ void KqpNode::ExecuterLost() {
     {
         NKikimr::TActorSystemStub stub;
 
-        auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 100);
+        bool allocated = CompFactory->Task2Actor[1].MemoryLimits.MemoryQuotaManager->AllocateQuota(100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
     }
@@ -632,6 +669,12 @@ void KqpNode::ExecuterLost() {
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughComputeActors->Val(), 0);
 
     AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 void KqpNode::TerminateTx() {
@@ -649,8 +692,7 @@ void KqpNode::TerminateTx() {
     {
         NKikimr::TActorSystemStub stub;
 
-        auto& task1ExtraAlloc = CompFactory->Task2Actor[1].MemoryLimits.AllocateMemoryFn;
-        bool allocated = task1ExtraAlloc((ui64)1, 1, 100);
+        bool allocated = CompFactory->Task2Actor[1].MemoryLimits.MemoryQuotaManager->AllocateQuota(100);
         UNIT_ASSERT(allocated);
         DispatchKqpNodePostponedEvents(sender1);
     }
@@ -683,6 +725,12 @@ void KqpNode::TerminateTx() {
     UNIT_ASSERT_VALUES_EQUAL(KqpCounters->RmNotEnoughComputeActors->Val(), 0);
 
     AssertResourceBrokerSensors(0, 0, 0, 4, 0);
+
+    {
+        NKikimr::TActorSystemStub stub;
+
+        CompFactory->Task2Actor.clear();
+    }
 }
 
 } // namespace NKqp

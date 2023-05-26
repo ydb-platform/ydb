@@ -127,9 +127,10 @@ public:
     public:
         NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         bool IsReady = false;
+        bool OnlyPhantomsRemain = false;
 
     public:
-        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant) {
+        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain) {
             if (status != Status) {
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
@@ -153,6 +154,9 @@ public:
                     DropFromVSlotReadyTimestampQ();
                 }
                 const_cast<TGroupInfo&>(*Group).CalculateGroupStatus();
+            }
+            if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                OnlyPhantomsRemain = onlyPhantomsRemain;
             }
         }
 
@@ -287,7 +291,12 @@ public:
         }
 
         TString GetStatusString() const {
-            return NKikimrBlobStorage::EVDiskStatus_Name(Status);
+            TStringStream s;
+            s << NKikimrBlobStorage::EVDiskStatus_Name(Status);
+            if (Status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
+                s << "/p";
+            }
+            return s.Str();
         }
 
         bool IsOperational() const {
@@ -444,7 +453,6 @@ public:
 
         bool BadInTermsOfSelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
@@ -527,6 +535,7 @@ public:
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
         TMaybe<Table::HiveId::Type> HiveId;
+        TMaybe<Table::Database::Type> Database;
         TMaybe<Table::BlobDepotConfig::Type> BlobDepotConfig;
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
@@ -597,6 +606,7 @@ public:
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
                     Table::HiveId,
+                    Table::Database,
                     Table::BlobDepotConfig,
                     Table::BlobDepotId,
                     Table::ErrorReason,
@@ -618,6 +628,7 @@ public:
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::HiveId,
+                    &TGroupInfo::Database,
                     &TGroupInfo::BlobDepotConfig,
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
@@ -1413,7 +1424,6 @@ public:
 
 private:
     TString InstanceId;
-    TActorId SelfHealId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
     TVSlots VSlots; // ordering is important
@@ -1547,6 +1557,7 @@ private:
 
     TVSlotInfo* FindVSlot(TVDiskID id) { // GroupGeneration may be zero
         if (TGroupInfo *group = FindGroup(id.GroupID); group && !group->VDisksInGroup.empty()) {
+            Y_VERIFY(group->Topology->IsValidId(id));
             const ui32 index = group->Topology->GetOrderNumber(id);
             const TVSlotInfo *slot = group->VDisksInGroup[index];
             Y_VERIFY(slot->GetShortVDiskId() == TVDiskIdShort(id)); // sanity check
@@ -1716,6 +1727,7 @@ public:
     // It interacts with BS_CONTROLLER and group observer (which provides information about group state on a per-vdisk
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
+    TActorId SelfHealId;
 
     bool IsGroupLayoutSanitizerEnabled() const {
         return GroupLayoutSanitizerEnabled;
@@ -1726,6 +1738,8 @@ public:
         TEvInterconnect::TEvNodesInfo nodes;
         HostRecords = std::make_shared<THostRecordMapImpl>(&nodes);
     }
+
+    ui64 NextConfigTxSeqNo = 1;
 
 private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2088,8 +2102,13 @@ public:
 
         const TMonotonic now = TActivationContext::Monotonic();
         THashSet<TGroupInfo*> groups;
+
+        auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
+            Y_VERIFY_DEBUG(!it->second->IsReady);
+            
+            sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
             it->second->IsReady = true;
             it->second->ResetVSlotReadyTimestampIter();
             if (const TGroupInfo *group = it->second->Group) {
@@ -2106,6 +2125,9 @@ public:
         ScheduleVSlotReadyUpdate();
         if (!timingQ.empty()) {
             Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
+        }
+        if (sh->VDiskIsReadyUpdate) {
+            Send(SelfHealId, sh.release());
         }
     }
 

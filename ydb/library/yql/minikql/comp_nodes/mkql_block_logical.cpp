@@ -493,6 +493,49 @@ private:
 };
 
 class TBlockNotWrapper : public TMutableComputationNode<TBlockNotWrapper> {
+friend class TArrowNode;
+public:
+    class TArrowNode : public IArrowKernelComputationNode {
+    public:
+        TArrowNode(const TBlockNotWrapper* parent)
+            : Parent_(parent)
+            , ArgsValuesDescr_({arrow::uint8()})
+            , Kernel_({arrow::uint8()}, arrow::uint8(), [parent](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                *res = parent->CalculateImpl(MakeDatumProvider(batch.values[0]), *ctx->memory_pool());
+                return arrow::Status::OK();
+            })
+        {
+            Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+            Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
+        }
+
+        TStringBuf GetKernelName() const final {
+            return "Not";
+        }
+
+        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+            return Kernel_;
+        }
+
+        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+            return ArgsValuesDescr_;
+        }
+
+        const IComputationNode* GetArgument(ui32 index) const {
+            switch (index) {
+            case 0:
+                return Parent_->Value;
+            default:
+                throw yexception() << "Bad argument index";
+            }
+        }
+
+    private:
+        const TBlockNotWrapper* Parent_;
+        const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
+        arrow::compute::ScalarKernel Kernel_;
+    };
+
 public:
     TBlockNotWrapper(TComputationMutables& mutables, IComputationNode* value)
         : TMutableComputationNode(mutables)
@@ -500,25 +543,32 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto value = Value->GetValue(ctx);
-        const auto& datum = TArrowBlock::From(value).GetDatum();
+    std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final {
+        Y_UNUSED(ctx);
+        return std::make_unique<TArrowNode>(this);
+    }
 
+    arrow::Datum CalculateImpl(const TDatumProvider& valueProv, arrow::MemoryPool& memoryPool) const {
+        auto datum = valueProv();
         if (datum.null_count() == datum.length()) {
-            return value.Release();
+            return datum;
         }
 
         if (datum.is_scalar()) {
             Y_VERIFY(datum.scalar()->is_valid);
             ui8 negated = (~datum.scalar_as<arrow::UInt8Scalar>().value) & 1u;
-            return ctx.HolderFactory.CreateArrowBlock(arrow::Datum(negated));
+            return arrow::Datum(negated);
         }
 
         auto arr = datum.array();
-        std::shared_ptr<arrow::Buffer> bitmap = CopyBitmap(&ctx.ArrowMemoryPool, arr->buffers[0], arr->offset, arr->length);
-        std::shared_ptr<arrow::Buffer> data = arrow::AllocateBuffer(arr->length, &ctx.ArrowMemoryPool).ValueOrDie();
+        std::shared_ptr<arrow::Buffer> bitmap = CopyBitmap(&memoryPool, arr->buffers[0], arr->offset, arr->length);
+        std::shared_ptr<arrow::Buffer> data = arrow::AllocateBuffer(arr->length, &memoryPool).ValueOrDie();
         NegateSparseBitmap(data->mutable_data(), arr->GetValues<ui8>(1), arr->length);
-        return ctx.HolderFactory.CreateArrowBlock(arrow::ArrayData::Make(arr->type, arr->length, { bitmap, data }));
+        return arrow::ArrayData::Make(arr->type, arr->length, { bitmap, data });
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(MakeDatumProvider(Value, ctx), ctx.ArrowMemoryPool));
     }
 
 private:

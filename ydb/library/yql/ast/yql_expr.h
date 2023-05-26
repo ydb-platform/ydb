@@ -2173,10 +2173,10 @@ using TModulesTable = THashMap<TString, TExportTable>;
 class IModuleResolver {
 public:
     typedef std::shared_ptr<IModuleResolver> TPtr;
-    virtual bool AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
-    virtual bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, const TStringBuf& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
-    virtual bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) = 0;
-    virtual bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) = 0;
+    virtual bool AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
+    virtual bool AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
+    virtual bool AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos = {}) = 0;
+    virtual bool AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) = 0;
     virtual bool Link(TExprContext& ctx) = 0;
     virtual void UpdateNextUniqueId(TExprContext& ctx) const = 0;
     virtual ui64 GetNextUniqueId() const = 0;

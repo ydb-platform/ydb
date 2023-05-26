@@ -4,7 +4,10 @@
 #include "schemeshard.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-
+#include <ydb/core/formats/arrow/compression/object.h>
+#include <ydb/core/formats/arrow/compression/diff.h>
+#include <ydb/core/formats/arrow/dictionary/object.h>
+#include <ydb/core/formats/arrow/dictionary/diff.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -30,33 +33,80 @@ namespace NKikimr::NSchemeShard {
         }
     };
 
-    class TOlapColumnSchema {
-        YDB_ACCESSOR(ui32, Id, Max<ui32>());
-        YDB_ACCESSOR(ui32, KeyOrder, Max<ui32>());
+    class TOlapColumnDiff;
 
+    class TOlapColumnAdd {
+    private:
+        YDB_READONLY_DEF(std::optional<ui32>, KeyOrder);
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY_DEF(TString, TypeName);
         YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
         YDB_FLAG_ACCESSOR(NotNull, false);
-
+        YDB_READONLY_DEF(std::optional<NArrow::TCompression>, Compression);
+        YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     public:
-        bool IsKeyColumn() const {
-            return KeyOrder != Max<ui32>();
-        }
+        TOlapColumnAdd(const std::optional<ui32>& keyOrder)
+            : KeyOrder(keyOrder)
+        {
 
+        }
+        bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
+        void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
+        void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
+        bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
+        bool IsKeyColumn() const {
+            return !!KeyOrder;
+        }
+    };
+
+    class TOlapColumnSchema: public TOlapColumnAdd {
+    private:
+        using TBase = TOlapColumnAdd;
+        YDB_READONLY(ui32, Id, Max<ui32>());
+    public:
+        TOlapColumnSchema(const TOlapColumnAdd& base, const ui32 id)
+            : TBase(base)
+            , Id(id) {
+
+        }
+        TOlapColumnSchema(const std::optional<ui32>& keyOrder)
+            : TBase(keyOrder) {
+
+        }
         void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
         void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
-        bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
+    };
+
+    class TOlapColumnDiff {
+        YDB_READONLY_DEF(TString, Name);
+        YDB_READONLY_DEF(NArrow::TCompressionDiff, Compression);
+        YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
+    public:
+        bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
+            Name = columnSchema.GetName();
+            if (!Name) {
+                errors.AddError("empty field name");
+                return false;
+            }
+            if (!Compression.DeserializeFromProto(columnSchema.GetCompression())) {
+                errors.AddError("cannot parse compression diff from proto");
+                return false;
+            }
+            if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
+                errors.AddError("cannot parse dictionary encoding diff from proto");
+                return false;
+            }
+            return true;
+        }
     };
 
     class TOlapSchemaUpdate {
         YDB_READONLY_OPT(NKikimrSchemeOp::EColumnTableEngine, Engine);
-        YDB_READONLY_DEF(TVector<TOlapColumnSchema>, Columns);
-        YDB_READONLY_DEF(TVector<TString>, KeyColumnNames);
-
+        YDB_READONLY_DEF(TVector<TOlapColumnAdd>, AddColumns);
+        YDB_READONLY_DEF(TVector<TOlapColumnDiff>, AlterColumns);
     public:
         bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
-        bool Parse(const NKikimrSchemeOp::TAlterColumnTable& alterRequest, IErrorCollector& errors);
+        bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };
 
     class TOlapSchema {
@@ -72,7 +122,7 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TVector<ui32>, KeyColumnIds);
 
         YDB_READONLY(ui32, NextColumnId, 1);
-        YDB_READONLY(ui32, Version, 1);
+        YDB_READONLY(ui32, Version, 0);
 
     public:
         const TOlapColumnSchema* GetColumnByName(const TString& name) const noexcept {
@@ -98,7 +148,6 @@ namespace NKikimr::NSchemeShard {
         bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
         bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, IErrorCollector& errors) const;
 
-        static bool UpdateProto(NKikimrSchemeOp::TColumnTableSchema& proto, TString& errStr);
         static bool IsAllowedType(ui32 typeId);
         static bool IsAllowedFirstPkType(ui32 typeId);
     };

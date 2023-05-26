@@ -108,4 +108,5 @@ target_sources(ydb-core-testlib PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tablet_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tenant_runtime.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/test_client.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/tx_helpers.cpp
 )

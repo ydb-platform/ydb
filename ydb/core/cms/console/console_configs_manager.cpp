@@ -362,7 +362,9 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
     if (!yamlConfigRowset.EndOfSet()) {
         YamlVersion = yamlConfigRowset.template GetValue<Schema::YamlConfig::Version>();
         YamlConfig = yamlConfigRowset.template GetValue<Schema::YamlConfig::Config>();
-        YamlDropped = yamlConfigRowset.template GetValue<Schema::YamlConfig::Dropped>();
+        // ignore this as deprecated
+        // now used only for disabling new config layout for older console
+        YamlDropped = false;
     }
 
     while (!configItemRowset.EndOfSet()) {
@@ -634,18 +636,12 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
     auto &rec = ev->Get()->Record.GetRequest();
     try {
         auto config = rec.config();
-        auto parser = NFyaml::TParser::Create(config);
-        parser.NextDocument();
-        auto tree = parser.NextDocument();
-
-        if (!tree) {
-            ythrow yexception() << "Empty YAML config";
-        }
+        auto tree = NFyaml::TDocument::Parse(config);
 
         for (auto &volatileConfig : rec.volatile_configs()) {
             auto str = volatileConfig.config();
             auto d = NFyaml::TDocument::Parse(str);
-            NYamlConfig::AppendVolatileConfigs(tree.value(), d);
+            NYamlConfig::AppendVolatileConfigs(tree, d);
         }
 
         TSet<NYamlConfig::TNamedLabel> namedLabels;
@@ -653,7 +649,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, cons
             namedLabels.insert(NYamlConfig::TNamedLabel{label.label(), label.value()});
         }
 
-        auto resolved = NYamlConfig::Resolve(tree.value(), namedLabels);
+        auto resolved = NYamlConfig::Resolve(tree, namedLabels);
 
         auto Response = MakeHolder<TEvConsole::TEvResolveConfigResponse>();
         auto *op = Response->Record.MutableResponse()->mutable_operation();
@@ -683,21 +679,15 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
     auto &rec = ev->Get()->Record.GetRequest();
     try {
         auto config = rec.config();
-        auto parser = NFyaml::TParser::Create(config);
-        parser.NextDocument();
-        auto tree = parser.NextDocument();
-
-        if (!tree) {
-            ythrow yexception() << "Empty YAML config";
-        }
+        auto tree = NFyaml::TDocument::Parse(config);
 
         for (auto &volatileConfig : rec.volatile_configs()) {
             auto str = volatileConfig.config();
             auto d = NFyaml::TDocument::Parse(str);
-            NYamlConfig::AppendVolatileConfigs(tree.value(), d);
+            NYamlConfig::AppendVolatileConfigs(tree, d);
         }
 
-        auto resolved = NYamlConfig::ResolveAll(tree.value());
+        auto resolved = NYamlConfig::ResolveAll(tree);
 
         auto Response = MakeHolder<TEvConsole::TEvResolveAllConfigResponse>();
         auto *op = Response->Record.MutableResponse()->mutable_operation();
@@ -757,22 +747,16 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
             NYamlConfig::ValidateVolatileConfig(doc);
 
             auto config = YamlConfig;
-            auto parser = NFyaml::TParser::Create(config);
-            parser.NextDocument();
-            auto tree = parser.NextDocument();
-
-            if (!tree) {
-                ythrow yexception() << "Empty YAML config";
-            }
+            auto tree = NFyaml::TDocument::Parse(config);
 
             for (auto &[_, config] : VolatileYamlConfigs) {
                 auto d = NFyaml::TDocument::Parse(config);
-                NYamlConfig::AppendVolatileConfigs(tree.value(), d);
+                NYamlConfig::AppendVolatileConfigs(tree, d);
             }
 
-            NYamlConfig::AppendVolatileConfigs(tree.value(), doc);
+            NYamlConfig::AppendVolatileConfigs(tree, doc);
 
-            auto resolved = NYamlConfig::ResolveAll(tree.value());
+            auto resolved = NYamlConfig::ResolveAll(tree);
 
             for (auto &[_, config] : resolved.Configs) {
                 auto cfg = NYamlConfig::YamlToProto(config.second);

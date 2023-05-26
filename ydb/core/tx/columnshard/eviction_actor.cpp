@@ -1,19 +1,24 @@
 #include "columnshard_impl.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
+namespace {
 
 using NOlap::TBlobRange;
 
 class TEvictionActor : public TActorBootstrapped<TEvictionActor> {
+private:
+    const TIndexationCounters Counters;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_EVICTION_ACTOR;
     }
 
-    TEvictionActor(ui64 tabletId, const TActorId& parent)
-        : TabletId(tabletId)
+    TEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
         , Parent(parent)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     {}
@@ -34,6 +39,7 @@ public:
 
             for (const auto& blobRange : ranges) {
                 Y_VERIFY(blobId == blobRange.BlobId);
+                Counters.ReadBytes->Add(blobRange.Size);
                 Blobs[blobRange] = {};
             }
             SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
@@ -126,8 +132,9 @@ private:
             TCpuGuard guard(TxEvent->ResourceUsage);
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
+            NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
+            TxEvent->Blobs = evictionLogic.Apply(TxEvent->IndexChanges);
 
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::EvictBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK;
             }
@@ -140,8 +147,10 @@ private:
     }
 };
 
-IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent) {
-    return new TEvictionActor(tabletId, parent);
+} // namespace
+
+IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters) {
+    return new TEvictionActor(tabletId, parent, counters);
 }
 
 }

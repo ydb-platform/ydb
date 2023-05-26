@@ -24,6 +24,8 @@ target_link_options(ydb-library-yql-sql-pg-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-yql-sql-pg-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql_ut.cpp

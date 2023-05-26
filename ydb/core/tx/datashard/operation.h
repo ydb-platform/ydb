@@ -702,6 +702,10 @@ public:
      */
     bool HasRuntimeConflicts() const noexcept;
 
+    virtual bool HasKeysInfo() const
+    {
+        return false;
+    }
     virtual const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const
     {
         return EmptyKeysInfo;
@@ -870,6 +874,10 @@ private:
 
 public:
     std::optional<TRowVersion> MvccReadWriteVersion;
+
+public:
+    // Orbit used for tracking operation progress
+    NLWTrace::TOrbit Orbit;
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

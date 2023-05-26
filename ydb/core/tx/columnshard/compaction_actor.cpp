@@ -1,29 +1,36 @@
 #include "columnshard_impl.h"
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include "blob_cache.h"
 
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
+
+using NKikimr::NOlap::TBlobRange;
+
 namespace NKikimr::NColumnShard {
+namespace {
 
-using NOlap::TBlobRange;
-
-class TCompactionActor : public TActorBootstrapped<TCompactionActor> {
+class TCompactionActor: public TActorBootstrapped<TCompactionActor> {
+private:
+    const TIndexationCounters Counters;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
     }
 
-    TCompactionActor(ui64 tabletId, const TActorId& parent)
-        : TabletId(tabletId)
+    TCompactionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
         , Parent(parent)
-        , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
-    {}
+        , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId()) {
+    }
 
     void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
+        Y_VERIFY(!TxEvent);
+        Y_VERIFY(Blobs.empty() && !NumRead);
+
         LastActivationTime = TAppData::TimeProvider->Now();
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
-        Y_VERIFY(TxEvent);
-        Y_VERIFY(Blobs.empty() && !NumRead);
 
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
@@ -37,14 +44,15 @@ public:
             for (const auto& blobRange : ranges) {
                 Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
+                Counters.ReadBytes->Add(blobRange.Size);
             }
             SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
         }
     }
 
     void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_S_TRACE("TEvReadBlobRangeResult (got " << NumRead << " of " << Blobs.size()
-            << ") at tablet " << TabletId << " (compaction)");
+        LOG_S_TRACE("TEvReadBlobRangeResult (got " << NumRead << " of " << Blobs.size() << ") at tablet " << TabletId
+                                                   << " (compaction)");
 
         auto& event = *ev->Get();
         const TBlobRange& blobId = event.BlobRange;
@@ -60,9 +68,9 @@ public:
             Y_VERIFY(blobData.size() == blobId.Size, "%u vs %u", (ui32)blobData.size(), blobId.Size);
             Blobs[blobId] = blobData;
         } else {
-            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId.ToString()
-                << " status " << NKikimrProto::EReplyStatus_Name(event.Status)
-                << " at tablet " << TabletId << " (compaction)");
+            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob "
+                        << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
+                        << TabletId << " (compaction)");
             TxEvent->PutStatus = event.Status;
             if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
                 TxEvent->PutStatus = NKikimrProto::ERROR;
@@ -100,6 +108,7 @@ private:
     TInstant LastActivationTime;
 
     void Clear() {
+        TxEvent.reset();
         Blobs.clear();
         NumRead = 0;
     }
@@ -107,13 +116,8 @@ private:
     void SendReadRequest(std::vector<NBlobCache::TBlobRange>&& ranges, bool isExternal) {
         Y_VERIFY(!ranges.empty());
 
-        NBlobCache::TReadBlobRangeOptions readOpts {
-            .CacheAfterRead = false,
-            .ForceFallback = isExternal,
-            .IsBackgroud = true
-        };
-        Send(BlobCacheActorId,
-             new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
+        NBlobCache::TReadBlobRangeOptions readOpts{.CacheAfterRead = false, .ForceFallback = isExternal, .IsBackgroud = true};
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
     }
 
     void CompactGranules(const TActorContext& ctx) {
@@ -130,7 +134,8 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
 
-            TxEvent->Blobs = NOlap::TColumnEngineForLogs::CompactBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
+            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
+            TxEvent->Blobs = compactionLogic.Apply(TxEvent->IndexChanges);
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
             }
@@ -140,12 +145,88 @@ private:
         ctx.Send(Parent, TxEvent.release());
 
         LOG_S_DEBUG("Granules compaction finished (" << blobsSize << " new blobs) at tablet " << TabletId);
-        //Die(ctx); // It's alive till tablet's death
+        // Die(ctx); // It's alive till tablet's death
     }
 };
 
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent) {
-    return new TCompactionActor(tabletId, parent);
+class TCompactionGroupActor: public TActorBootstrapped<TCompactionGroupActor> {
+private:
+    const TIndexationCounters Counters;
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
+    }
+
+    TCompactionGroupActor(ui64 tabletId, const TActorId& parent, const ui64 size, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
+        , Parent(parent)
+        , Idle(size == 0 ? 1 : size)
+    {
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        Become(&TThis::StateWait);
+
+        for (auto& worker : Idle) {
+            worker = ctx.Register(new TCompactionActor(TabletId, ctx.SelfID, Counters));
+        }
+    }
+
+    STFUNC(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvents::TEvPoisonPill, Handle);
+            HFunc(TEvPrivate::TEvWriteIndex, Handle);
+            HFunc(TEvPrivate::TEvCompaction, Handle);
+            default:
+                break;
+        }
+    }
+
+private:
+    void Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+        for (const auto& worker : Active) {
+            ctx.Send(worker, new TEvents::TEvPoisonPill);
+        }
+        for (const auto& worker : Idle) {
+            ctx.Send(worker, new TEvents::TEvPoisonPill);
+        }
+
+        Die(ctx);
+    }
+
+    void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
+        if (auto ai = Active.find(ev->Sender); ai != Active.end()) {
+            ctx.Send(ev->Forward(Parent));
+            Idle.push_back(*ai);
+            Active.erase(ai);
+        } else {
+            Y_VERIFY(false);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& ctx) {
+        Y_VERIFY(!Idle.empty());
+
+        ctx.Send(ev->Forward(Idle.back()));
+
+        Active.insert(Idle.back());
+        Idle.pop_back();
+    }
+
+private:
+    const ui64 TabletId;
+    const TActorId Parent;
+    /// Set of workers perform compactions.
+    std::unordered_set<TActorId> Active;
+    /// List of idle workers.
+    std::vector<TActorId> Idle;
+};
+
+} // namespace
+
+IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers, const TIndexationCounters& counters) {
+    return new TCompactionGroupActor(tabletId, parent, workers, counters);
 }
 
-}
+} // namespace NKikimr::NColumnShard

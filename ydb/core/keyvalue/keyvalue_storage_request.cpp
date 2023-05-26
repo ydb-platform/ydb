@@ -635,11 +635,15 @@ public:
                 if (request.Status != NKikimrProto::SCHEDULED) {
                     Y_VERIFY(request.Status == NKikimrProto::UNKNOWN);
 
+                    const TRcBuf& data = request.Data;
+                    const TContiguousSpan whole = data.GetContiguousSpan();
+
                     ui64 offset = 0;
                     for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
+                        const TContiguousSpan chunk = whole.SubSpan(offset, logoBlobId.BlobSize());
                         THolder<TEvBlobStorage::TEvPut> put(
                             new TEvBlobStorage::TEvPut(
-                                logoBlobId, request.Data.substr(offset, logoBlobId.BlobSize()),
+                                logoBlobId, TRcBuf(TRcBuf::Piece, chunk.data(), chunk.size(), data),
                                 IntermediateResults->Deadline, request.HandleClass,
                                 request.Tactic));
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());

@@ -560,12 +560,15 @@ namespace NKikimr {
         ui32 PDiskId;
         ui32 VSlotId;
         NKikimrBlobStorage::EVDiskStatus Status;
+        bool OnlyPhantomsRemain;
 
-        TEvStatusUpdate(ui32 nodeId, ui32 pdiskId, ui32 vslotId, NKikimrBlobStorage::EVDiskStatus status)
+        TEvStatusUpdate(ui32 nodeId, ui32 pdiskId, ui32 vslotId, NKikimrBlobStorage::EVDiskStatus status,
+                bool onlyPhantomsRemain)
             : NodeId(nodeId)
             , PDiskId(pdiskId)
             , VSlotId(vslotId)
             , Status(status)
+            , OnlyPhantomsRemain(onlyPhantomsRemain)
         {}
     };
 

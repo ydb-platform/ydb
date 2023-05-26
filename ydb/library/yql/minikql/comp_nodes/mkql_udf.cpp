@@ -40,7 +40,7 @@ public:
         const auto builder = ctx.GetBuilder();
 
         const auto funType = FunctionType::get(Type::getVoidTy(context), {boxed->getType(), result->getType(), builder->getType(), args->getType()}, false);
-        const auto runFunc = ctx.Codegen->GetModule().getOrInsertFunction(llvm::StringRef(FunctionName.data(), FunctionName.size()), funType).getCallee();
+        const auto runFunc = ctx.Codegen->GetModule().getOrInsertFunction(llvm::StringRef(FunctionName.data(), FunctionName.size()), funType);
         CallInst::Create(runFunc, {boxed, result, builder, args}, "", block);
     }
 #endif
@@ -79,8 +79,10 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
+
         GetNodeValue(pointer, RunConfigNode, ctx, block);
-        const auto conf = new LoadInst(pointer, "conf", block);
+        const auto conf = new LoadInst(Type::getInt128Ty(context), pointer, "conf", block);
 
         const auto func = GetNodeValue(FunctionImpl, ctx, block);
 
@@ -88,14 +90,12 @@ public:
 
         ValueUnRef(RunConfigNode->GetRepresentation(), conf, ctx, block);
 
-        auto& context = ctx.Codegen->GetContext();
-
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto wrap = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUdfWrapper::Wrap));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), pointer->getType()}, false);
         const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, wrap, PointerType::getUnqual(funType), "function", block);
-        CallInst::Create(doFuncPtr, {self, pointer}, "", block);
+        CallInst::Create(funType, doFuncPtr, {self, pointer}, "", block);
     }
 #endif
 private:

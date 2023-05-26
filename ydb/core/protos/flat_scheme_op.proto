@@ -380,9 +380,19 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 }
 
+message TDictionaryEncodingSettings {
+   optional bool Enabled = 1;
+}
+
 message TCompressionOptions {
     optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
     optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
+}
+
+message TOlapColumnDiff {
+    optional string Name = 1;
+    optional TCompressionOptions Compression = 2;
+    optional TDictionaryEncodingSettings DictionaryEncoding = 4;
 }
 
 message TOlapColumnDescription {
@@ -396,6 +406,9 @@ message TOlapColumnDescription {
     optional uint32 TypeId = 4; // TypeId cannot be set explicitly, use Type
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
     optional bool NotNull = 7;
+
+    optional TCompressionOptions Compression = 8;
+    optional TDictionaryEncodingSettings DictionaryEncoding = 9;
 }
 
 enum EColumnTableEngine {
@@ -431,12 +444,15 @@ message TColumnTableSchema {
     //optional EColumnCodec DefaultCompressionCodec = 6; // deprecated, not used before replace
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
+
+    optional bool CompositeMarks = 9;
 }
 
 message TAlterColumnTableSchema {
-    repeated TOlapColumnDescription Columns = 1;
-    repeated TOlapColumnDescription DropColumns = 6;
+    repeated TOlapColumnDescription AddColumns = 1;
     //optional TCompressionOptions DefaultCompression = 5;
+    repeated TOlapColumnDescription DropColumns = 6;
+    repeated TOlapColumnDiff AlterColumns = 7;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -715,6 +731,7 @@ enum ECdcStreamFormat {
     ECdcStreamFormatInvalid = 0;
     ECdcStreamFormatProto = 1;
     ECdcStreamFormatJson = 2;
+    ECdcStreamFormatDynamoDBStreamsJson = 3;
 }
 
 message TCdcStreamDescription {
@@ -726,6 +743,8 @@ message TCdcStreamDescription {
     optional ECdcStreamState State = 4;
     optional uint64 SchemaVersion = 5;
     repeated TUserAttribute UserAttributes = 8;
+    // AwsRegion used to mark records in DynamoDB-compatible mode (FormatDynamoDBStreamsJson)
+    optional string AwsRegion = 9;
 }
 
 message TCreateCdcStream {
@@ -964,6 +983,10 @@ message TPersQueueGroupAllocate {
 
         optional uint64 OwnerId = 4;
         optional uint64 ShardId = 5;
+
+        optional NKikimrPQ.ETopicPartitionStatus Status = 6;
+        repeated uint32 ParentPartitionIds = 7;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
     }
 
     optional string Name = 1;
@@ -986,10 +1009,14 @@ message TPersQueueGroupDeallocate {
 }
 
 message TPersQueueGroupDescription {
+
     message TPartition {
         optional uint32 PartitionId = 1;
         optional uint64 TabletId = 2;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 3;
+        optional NKikimrPQ.ETopicPartitionStatus Status = 4;
+        repeated uint32 ParentPartitionIds = 5;
+        repeated uint32 ChildPartitionIds = 6;
     }
 
     optional string Name = 1; // mandatory
@@ -1017,6 +1044,18 @@ message TPersQueueGroupDescription {
     optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
 
     optional TPersQueueGroupAllocate Allocate = 14;
+
+    message TPartitionSplit {
+        required uint32 Partition = 1;
+        required bytes SplitBoundary = 2;
+    }
+    repeated TPartitionSplit Split = 15;
+
+    message TPartitionMerge {
+        required uint32 Partition = 1;
+        required uint32 AdjacentPartition = 2;
+    }
+    repeated TPartitionMerge Merge = 16;
 }
 
 message TRtmrVolumeDescription {

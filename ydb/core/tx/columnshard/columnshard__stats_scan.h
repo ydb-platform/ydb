@@ -6,7 +6,7 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/formats/custom_registry.h>
+#include <ydb/core/formats/arrow/custom_registry.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -66,9 +66,6 @@ private:
     std::shared_ptr<arrow::Schema> ResultSchema;
 
     TMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
-
-    static constexpr const ui64 NUM_KINDS = 5;
-    static_assert(NUM_KINDS == NOlap::TPortionMeta::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
 
     std::shared_ptr<arrow::RecordBatch> FillStatsBatch();
 

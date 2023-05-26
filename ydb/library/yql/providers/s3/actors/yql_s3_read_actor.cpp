@@ -38,6 +38,7 @@
 
 #include <ydb/core/protos/services.pb.h>
 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -159,7 +160,6 @@ struct TEvPrivate {
         EvNextRecordBatch,
         EvFileFinished,
         EvContinue,
-        EvFutureResolved,
         EvObjectPathBatch,
         EvObjectPathReadError,
         EvReadResult2,
@@ -190,10 +190,6 @@ struct TEvPrivate {
     struct TEvDataPart : public TEventLocal<TEvDataPart, EvDataPart> {
         TEvDataPart(IHTTPGateway::TCountedContent&& data) : Result(std::move(data)) {}
         IHTTPGateway::TCountedContent Result;
-    };
-
-    struct TEvFutureResolved : public TEventLocal<TEvFutureResolved, EvFutureResolved> {
-        TEvFutureResolved() {}
     };
 
     struct TEvReadStarted : public TEventLocal<TEvReadStarted, EvReadStarted> {
@@ -999,7 +995,6 @@ struct TReadSpec {
     using TPtr = std::shared_ptr<TReadSpec>;
 
     bool Arrow = false;
-    bool ThreadPool = false;
     ui64 ParallelRowGroupCount = 0;
     bool RowGroupReordering = true;
     ui64 ParallelDownloadCount = 0;
@@ -1513,73 +1508,6 @@ public:
         }
     }
 
-    void RunThreadPoolBlockArrowParser() {
-
-        LOG_CORO_D("RunThreadPoolBlockArrowParser");
-
-        TArrowFileDesc fileDesc(Url + Path, RetryStuff->Gateway, RetryStuff->Headers, RetryStuff->RetryPolicy, RetryStuff->SizeLimit, ReadSpec->Format);
-
-        auto actorSystem = GetActorSystem();
-        auto selfId = SelfActorId;
-
-        auto future = ArrowReader->GetSchema(fileDesc);
-        future.Subscribe([actorSystem, selfId](const NThreading::TFuture<IArrowReader::TSchemaResponse>&) {
-            actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvFutureResolved()));
-        });
-
-        CpuTime += GetCpuTimeDelta();
-
-        WaitForSpecificEvent<TEvPrivate::TEvFutureResolved>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
-        auto result = future.GetValue();
-
-        StartCycleCount = GetCycleCountFast();
-
-        fileDesc.Cookie = result.Cookie;
-
-        std::shared_ptr<arrow::Schema> schema = result.Schema;
-        std::vector<int> columnIndices;
-        std::vector<TColumnConverter> columnConverters;
-
-        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters);
-
-        for (int group = 0; group < result.NumRowGroups; group++) {
-
-            auto future = ArrowReader->ReadRowGroup(fileDesc, group, columnIndices);
-            future.Subscribe([actorSystem, selfId](const NThreading::TFuture<std::shared_ptr<arrow::Table>>&){
-                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvFutureResolved()));
-            });
-
-            CpuTime += GetCpuTimeDelta();
-
-            WaitForSpecificEvent<TEvPrivate::TEvFutureResolved>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
-            auto table = future.GetValue();
-
-            StartCycleCount = GetCycleCountFast();
-
-            auto reader = std::make_unique<arrow::TableBatchReader>(*table);
-
-            std::shared_ptr<arrow::RecordBatch> batch;
-            ::arrow::Status status;
-            while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
-                Paused = QueueBufferCounter->Add(NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch), SelfActorId);
-                Send(ParentActorId, new TEvPrivate::TEvNextRecordBatch(
-                    convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
-                ));
-                if (Paused) {
-                    CpuTime += GetCpuTimeDelta();
-                    auto ev = WaitForSpecificEvent<TEvPrivate::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
-                    HandleEvent(*ev);
-                    StartCycleCount = GetCycleCountFast();
-                }
-            }
-            if (!status.ok()) {
-                throw yexception() << status.ToString();
-            }
-        }
-        LOG_CORO_D("RunThreadPoolBlockArrowParser FINISHED");
-    }
-
     struct TReadCache {
         ui64 Cookie = 0;
         TString Data;
@@ -2089,7 +2017,7 @@ private:
 public:
     TS3ReadCoroImpl(ui64 inputIndex, const TTxId& txId, const NActors::TActorId& computeActorId,
         const TRetryStuff::TPtr& retryStuff, const TReadSpec::TPtr& readSpec, size_t pathIndex,
-        const TString& path, const TString& url, IArrowReader::TPtr arrowReader,
+        const TString& path, const TString& url,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         TReadBufferCounter::TPtr queueBufferCounter,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& deferredQueueSize,
@@ -2098,7 +2026,7 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize)
         : TActorCoroImpl(256_KB), ReadActorFactoryCfg(readActorFactoryCfg), InputIndex(inputIndex),
         TxId(txId), RetryStuff(retryStuff), ReadSpec(readSpec), ComputeActorId(computeActorId),
-        PathIndex(pathIndex), Path(path), Url(url), ArrowReader(arrowReader),
+        PathIndex(pathIndex), Path(path), Url(url),
         QueueBufferCounter(queueBufferCounter),
         DeferredQueueSize(deferredQueueSize), HttpInflightSize(httpInflightSize),
         HttpDataRps(httpDataRps), RawInflightSize(rawInflightSize) {
@@ -2148,14 +2076,10 @@ private:
                     fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                 } else {
                     try {
-                        if (ReadSpec->ThreadPool) {
-                            RunThreadPoolBlockArrowParser();
+                        if (Url.StartsWith("file://")) {
+                            RunCoroBlockArrowParserOverFile();
                         } else {
-                            if (Url.StartsWith("file://")) {
-                                RunCoroBlockArrowParserOverFile();
-                            } else {
-                                RunCoroBlockArrowParserOverHttp();
-                            }
+                            RunCoroBlockArrowParserOverHttp();
                         }
                     } catch (const parquet::ParquetException& ex) {
                         Issues.AddIssue(TIssue(ex.what()));
@@ -2258,7 +2182,6 @@ private:
 
     std::size_t LastOffset = 0;
     TString LastData;
-    IArrowReader::TPtr ArrowReader;
     ui64 IngressBytes = 0;
     TDuration CpuTime;
     ui64 StartCycleCount = 0;
@@ -2300,7 +2223,6 @@ public:
         const TReadSpec::TPtr& readSpec,
         const NActors::TActorId& computeActorId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
-        IArrowReader::TPtr arrowReader,
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
@@ -2320,7 +2242,6 @@ public:
         , AddPathIndex(addPathIndex)
         , StartPathIndex(startPathIndex)
         , ReadSpec(readSpec)
-        , ArrowReader(std::move(arrowReader))
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
         , FileSizeLimit(fileSizeLimit) {
@@ -2372,6 +2293,7 @@ public:
             ES3PatternType::Wildcard});
         SendPathRequest();
         Become(&TS3StreamReadActor::StateFunc);
+        Bootstrapped = true;
     }
 
     bool TryRegisterCoro() {
@@ -2438,7 +2360,6 @@ public:
             pathIndex,
             objectPath.Path,
             Url,
-            ArrowReader,
             ReadActorFactoryCfg,
             QueueBufferCounter,
             DeferredQueueSize,
@@ -2583,28 +2504,33 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        LOG_D("TS3StreamReadActor", "PassAway");
-        if (Counters) {
-            QueueBlockCount->Sub(Blocks.size());
-            QueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
-            DownloadCount->Sub(QueueBufferCounter->CoroCount);
-        }
-        if (TaskCounters) {
-            TaskQueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
-            HttpInflightLimit->Sub(Gateway->GetBuffersSizePerStream() * CoroActors.size());
-            TaskDownloadCount->Sub(QueueBufferCounter->CoroCount);
-            TaskChunkDownloadCount->Sub(QueueBufferCounter->ChunkCount);
-        }
-        QueueBufferCounter.reset();
 
-        for (const auto actorId : CoroActors) {
-            Send(actorId, new NActors::TEvents::TEvPoison());
-        }
-        Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+        if (Bootstrapped) {
+            LOG_D("TS3StreamReadActor", "PassAway");
+            if (Counters) {
+                QueueBlockCount->Sub(Blocks.size());
+                QueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
+                DownloadCount->Sub(QueueBufferCounter->CoroCount);
+            }
+            if (TaskCounters) {
+                TaskQueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
+                HttpInflightLimit->Sub(Gateway->GetBuffersSizePerStream() * CoroActors.size());
+                TaskDownloadCount->Sub(QueueBufferCounter->CoroCount);
+                TaskChunkDownloadCount->Sub(QueueBufferCounter->ChunkCount);
+            }
+            QueueBufferCounter.reset();
 
-        ContainerCache.Clear();
-        ArrowTupleContainerCache.Clear();
-        ArrowRowContainerCache.Clear();
+            for (const auto actorId : CoroActors) {
+                Send(actorId, new NActors::TEvents::TEvPoison());
+            }
+            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+
+            ContainerCache.Clear();
+            ArrowTupleContainerCache.Clear();
+            ArrowRowContainerCache.Clear();
+        } else {
+            LOG_W("TS3StreamReadActor", "PassAway w/o Bootstrap");
+        }
 
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
@@ -2743,7 +2669,6 @@ private:
     size_t CompletedFiles = 0;
     const TReadSpec::TPtr ReadSpec;
     std::deque<TReadyBlock> Blocks;
-    IArrowReader::TPtr ArrowReader;
     ui64 IngressBytes = 0;
     TDuration CpuTime;
     mutable TInstant LastMemoryReport = TInstant::Now();
@@ -2770,6 +2695,7 @@ private:
     std::set<NActors::TActorId> CoroActors;
     NActors::TActorId FileQueueActor;
     const ui64 FileSizeLimit;
+    bool Bootstrapped = false;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -2918,7 +2844,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
-    IArrowReader::TPtr arrowReader,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters)
 {
@@ -2980,20 +2905,18 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         const auto readSpec = std::make_shared<TReadSpec>();
         readSpec->Arrow = params.GetArrow();
-        readSpec->ThreadPool = params.GetThreadPool();
         readSpec->ParallelRowGroupCount = params.GetParallelRowGroupCount();
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         readSpec->ParallelDownloadCount = params.GetParallelDownloadCount();
         if (readSpec->Arrow) {
             fileSizeLimit = cfg.BlockFileSizeLimit;
             arrow::SchemaBuilder builder;
-            const TStringBuf blockLengthColumn("_yql_block_length"sv);
-            auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, blockLengthColumn,
+            auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, BlockLengthColumnName,
                 pb->NewBlockType(pb->NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar)));
 
             for (ui32 i = 0U; i < extraStructType->GetMembersCount(); ++i) {
                 TStringBuf memberName = extraStructType->GetMemberName(i);
-                if (memberName == blockLengthColumn) {
+                if (memberName == BlockLengthColumnName) {
                     readSpec->BlockLengthPosition = i;
                     continue;
                 }
@@ -3069,7 +2992,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SUPPORTED_FLAGS
         const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  arrowReader, cfg, counters, taskCounters, fileSizeLimit);
+                                                  cfg, counters, taskCounters, fileSizeLimit);
 
         return {actor, actor};
     } else {

@@ -1315,7 +1315,7 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
-    auto procIdPtr = catalog.ProcByName.FindPtr(name);
+    auto procIdPtr = catalog.ProcByName.FindPtr(to_lower(name));
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
     }
@@ -1351,9 +1351,9 @@ void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
     }
 }
 
-bool HasReturnSetProc(const TStringBuf& name) {
+bool HasReturnSetProc(const TString& name) {
     const auto& catalog = TCatalog::Instance();
-    auto procIdPtr = catalog.ProcByName.FindPtr(name);
+    auto procIdPtr = catalog.ProcByName.FindPtr(to_lower(name));
     if (!procIdPtr) {
         return false;
     }
@@ -1369,14 +1369,14 @@ bool HasReturnSetProc(const TStringBuf& name) {
     return false;
 }
 
-bool HasType(const TStringBuf& name) {
+bool HasType(const TString& name) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.TypeByName.contains(name);
+    return catalog.TypeByName.contains(to_lower(name));
 }
 
 const TTypeDesc& LookupType(const TString& name) {
     const auto& catalog = TCatalog::Instance();
-    const auto typeIdPtr = catalog.TypeByName.FindPtr(name);
+    const auto typeIdPtr = catalog.TypeByName.FindPtr(to_lower(name));
     if (!typeIdPtr) {
         throw yexception() << "No such type: " << name;
     }
@@ -1422,7 +1422,7 @@ const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId) {
 
 const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
-    auto operIdPtr = catalog.OperatorsByName.FindPtr(name);
+    auto operIdPtr = catalog.OperatorsByName.FindPtr(to_lower(name));
     if (!operIdPtr) {
         throw yexception() << "No such operator: " << name;
     }
@@ -1466,18 +1466,32 @@ const TOperDesc& LookupOper(ui32 operId) {
     return *operPtr;
 }
 
-bool HasAggregation(const TStringBuf& name) {
+bool HasAggregation(const TString& name) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.AggregationsByName.contains(name);
+    return catalog.AggregationsByName.contains(to_lower(name));
 }
 
 bool ValidateAggregateArgs(const TAggregateDesc& d, const TVector<ui32>& argTypeIds) {
     return ValidateArgs(d.ArgTypes, argTypeIds);
 }
 
-const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui32>& argTypeIds) {
+bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultType) {
+    auto expectedStateType = LookupProc(d.SerializeFuncId ? d.SerializeFuncId : d.TransFuncId).ResultType;
+    if (stateType != expectedStateType) {
+        return false;
+    }
+
+    auto expectedResultType = LookupProc(d.FinalFuncId ? d.FinalFuncId : d.TransFuncId).ResultType;
+    if (resultType != expectedResultType) {
+        return false;
+    }
+
+    return true;
+}
+
+const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
-    auto aggIdPtr = catalog.AggregationsByName.FindPtr(name);
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
     if (!aggIdPtr) {
         throw yexception() << "No such aggregate: " << name;
     }
@@ -1494,6 +1508,28 @@ const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui
 
     throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
         << ArgTypesList(argTypeIds);
+}
+
+const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
+    const auto& catalog = TCatalog::Instance();
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(to_lower(name));
+    if (!aggIdPtr) {
+        throw yexception() << "No such aggregate: " << name;
+    }
+
+    for (const auto& id : *aggIdPtr) {
+        const auto& d = catalog.Aggregations.FindPtr(id);
+        Y_ENSURE(d);
+        if (!ValidateAggregateArgs(*d, stateType, resultType)) {
+            continue;
+        }
+
+        return *d;
+    }
+
+    throw yexception() << "Unable to find an overload for aggregate " << name << " with given state type: " <<
+        NPg::LookupType(stateType).Name << " and result type: " <<
+        NPg::LookupType(resultType).Name;
 }
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId) {

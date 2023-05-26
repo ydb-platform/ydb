@@ -20,13 +20,6 @@ using namespace NYql::NDq;
 
 namespace {
 
-TString ReformatYson(const TString& yson) {
-    TStringStream ysonInput(yson);
-    TStringStream output;
-    NYson::ReformatYsonStream(&ysonInput, &output, NYson::EYsonFormat::Text);
-    return output.Str();
-}
-
 ui32 CalcDrops(const NDqProto::TDqExecutionStats& profile) {
     ui32 count = 0;
     for (auto& stage : profile.GetStages()) {

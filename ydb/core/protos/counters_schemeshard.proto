@@ -185,6 +185,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterExternalDataSource = 150          [(CounterOpts) = {Name: "InFlightOps/AlterExternalDataSource"}];
 
     COUNTER_PQ_STATS_QUEUE_SIZE = 151                         [(CounterOpts) = {Name: "PQStatsQueueSize"}];
+    COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES = 152               [(CounterOpts) = {Name: "DiskSpaceTopicsTotalBytes"}];
 }
 
 enum ECumulativeCounters {
@@ -520,5 +521,5 @@ enum ETxTypes {
     TXTYPE_CDC_STREAM_SCAN_PROGRESS = 82                  [(TxTypeOpts) = {Name: "TxCdcStreamScanProgress"}];
 
     TXTYPE_PERSQUEUE_PROPOSE_RESULT = 83                  [(TxTypeOpts) = {Name: "TxPersQueueProposeResult"}];
-    TXTYPE_READSETDATA = 84                               [(TxTypeOpts) = {Name: "TxReadSetData"}];
+    TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT = 84           [(TxTypeOpts) = {Name: "TxProposeTransactionAttachResult"}];
 }

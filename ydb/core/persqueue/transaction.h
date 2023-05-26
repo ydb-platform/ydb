@@ -20,8 +20,10 @@ struct TDistributedTransaction {
     explicit TDistributedTransaction(const NKikimrPQ::TTransaction& tx);
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
-                              ui64 minStep);
-    void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody);
+                              ui64 minStep,
+                              ui64 extractTabletId);
+    void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody,
+                              ui64 extractTabletId);
     void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
@@ -49,7 +51,6 @@ struct TDistributedTransaction {
     EDecision SelfDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     NActors::TActorId SourceActor; // отправитель TEvProposeTransaction
-    ui64 SourceTablet = Max<ui64>();
     THashSet<ui32> Partitions;     // список участвующих партиций
 
     size_t PartitionRepliesCount = 0;

@@ -6,11 +6,11 @@ This article describes the main groups of configurable parameters in this file.
 
 ## host_configs: Typical host configurations {#host-configs}
 
-A YDB cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and the assigned IDs.
+A YDB cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
 
 **Syntax**
 
-``` yaml
+```yaml
 host_configs:
 - host_config_id: 1
   drive:
@@ -28,9 +28,9 @@ The `host_config_id` attribute specifies a numeric configuration ID. The `drive`
 
 **Examples**
 
-One configuration with ID 1, one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
+One configuration with ID 1 and one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
 
-``` yaml
+```yaml
 host_configs:
 - host_config_id: 1
   drive:
@@ -40,7 +40,7 @@ host_configs:
 
 Two configurations with IDs 1 (two SSD disks) and 2 (three SSD disks):
 
-``` yaml
+```yaml
 host_configs:
 - host_config_id: 1
   drive:
@@ -60,9 +60,9 @@ host_configs:
 
 ### Kubernetes features {#host-configs-k8s}
 
-YDB Kubernetes operator mounts NBS disks for Storage nodes on the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
+The YDB Kubernetes operator mounts NBS disks for Storage nodes at the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
 
-``` yaml
+```yaml
 host_configs:
 - host_config_id: 1
   drive:
@@ -70,7 +70,7 @@ host_configs:
     type: SSD
 ```
 
-The configuration example files supplied as part of YDB Kubernetes operator contain such a section, and it does not need to be changed.
+The example configuration files provided with the YDB Kubernetes operator contain this section, and it does not need to be changed.
 
 ## hosts: Static cluster nodes {#hosts}
 
@@ -78,16 +78,16 @@ This group lists the static cluster nodes on which the Storage processes run and
 
 - Numeric node ID
 - DNS host name and port that can be used to connect to a node on the IP network
-- ID of the [typical host configuration](#host-configs)
+- ID of the [standard host configuration](#host-configs)
 - Placement in a specific availability zone, rack
-- Server serial number (optional)
+- Server inventory number (optional)
 
 **Syntax**
 
-``` yaml
+```yaml
 hosts:
 - host: <DNS host name>
-  host_config_id: <numeric ID of the typical host configuration>
+  host_config_id: <numeric ID of the standard host configuration>
   port: <port> # 19001 by default
   location:
     unit: <string with the server serial number>
@@ -99,7 +99,7 @@ hosts:
 
 **Examples**
 
-``` yaml
+```yaml
 hosts:
 - host: hostname1
   host_config_id: 1
@@ -129,7 +129,7 @@ This section contains the configuration of the YDB cluster root domain, includin
 
 **Syntax**
 
-``` yaml
+```yaml
 domains_config:
   domain:
   - name: <root domain name>
@@ -151,19 +151,19 @@ The following [fault tolerance modes](../../cluster/topology.md) are available:
 
 | Mode | Description |
 --- | ---
-| `none` | There is no redundancy. Applied for testing. |
-| `block-4-2` | Redundancy with a factor of 1.5, applies to single data center clusters. |
-| `mirror-3-dc` | Redundancy with a factor of 3, applies to multi data center clusters. |
-| `mirror-3dc-3-nodes` | Redundancy with a factor of 3. Applied for testing. |
+| `none` | There is no redundancy. Applies for testing. |
+| `block-4-2` | Redundancy factor of 1.5, applies to single data center clusters. |
+| `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters. |
+| `mirror-3dc-3-nodes` | Redundancy factor of 3. Applies for testing. |
 
 **Syntax**
 
-``` yaml
+```yaml
   storage_pool_types:
   - kind: <storage pool name>
     pool_config:
       box_id: 1
-      encryption: <optional, specify 1 to encrypt data on the disc>
+      encryption: <optional, specify 1 to encrypt data on the disk>
       erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
       kind: <storage pool name - specify the same value as above>
       pdisk_filter:
@@ -178,11 +178,11 @@ Each database in the cluster is assigned at least one of the available storage p
 
 ### State Storage configuration {#domains-state}
 
-State Storage is an independent in-memory storage for modifiable data that supports internal YDB processes. It stores data replicas on multiple assigned nodes.
+State Storage is an independent in-memory storage for variable data that supports internal YDB processes. It stores data replicas on multiple assigned nodes.
 
 State Storage usually does not need scaling for better performance, so the number of nodes in it must be kept as small as possible taking into account the required level of fault tolerance.
 
-State Storage availability is key for a YDB cluster because it affects all databases, regardless of which storage pools they use. To ensure fault tolerance of State Storage, its nodes must be selected in such a way as to guarantee a working majority in case of expected failures.
+State Storage availability is key for a YDB cluster because it affects all databases, regardless of which storage pools they use. To ensure fault tolerance of State Storage, its nodes must be selected to guarantee a working majority in case of expected failures.
 
 The following guidelines can be used to select State Storage nodes:
 
@@ -195,7 +195,7 @@ The following guidelines can be used to select State Storage nodes:
 When deploying State Storage on clusters that use multiple storage pools with a possible combination of fault tolerance modes, consider increasing the number of nodes and spreading them across different storage pools because unavailability of State Storage results in unavailability of the entire cluster.
 
 **Syntax**
-``` yaml
+```yaml
 state_storage:
 - ring:
     node: <StateStorage node array>
@@ -205,7 +205,7 @@ state_storage:
 
 Each State Storage client (for example, DataShard tablet) uses `nto_select` nodes to write copies of its data to State Storage. If State Storage consists of more than `nto_select` nodes, different nodes can be used for different clients, so you must ensure that any subset of `nto_select` nodes within State Storage meets the fault tolerance criteria.
 
-Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison with the nearest smaller odd number.
+Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison to the nearest smaller odd number.
 
 ### Authentication configuration {#auth}
 
@@ -213,7 +213,7 @@ The [authentication mode](../../concepts/auth.md) in the {{ ydb-short-name }} cl
 
 **Syntax**
 
-``` yaml
+```yaml
 domains_config:
   ...
   security_config:
@@ -221,9 +221,9 @@ domains_config:
   ...
 ```
 
-Key | Description 
+| Key | Description |
 --- | ---
- `enforce_user_token_requirement` | Require a user token.</br>Acceptable values:</br><ul><li>`false`: Anonymous authentication mode, no token needed (default value, applied when the parameter is not specified).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> 
+| `enforce_user_token_requirement` | Require a user token.</br>Acceptable values:</br><ul><li>`false`: Anonymous authentication mode, no token needed (used by default if the parameter is omitted).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> |
 
 ### Examples {#domains-examples}
 
@@ -231,7 +231,7 @@ Key | Description
 
 - Block-4-2
 
-   ``` yaml
+   ```yaml
    domains_config:
      domain:
      - name: Root
@@ -251,33 +251,35 @@ Key | Description
          nto_select: 5
        ssid: 1
 
+
 - Block-4-2 + Auth
 
-  ``` yaml
-  domains_config:
-    domain:
-    - name: Root
-      storage_pool_types:
-      - kind: ssd
-        pool_config:
-          box_id: 1
-          erasure_species: block-4-2
-          kind: ssd
-          pdisk_filter:
-          - property:
-            - type: SSD
-          vdisk_kind: Default
-    state_storage:
-    - ring:
-        node: [1, 2, 3, 4, 5, 6, 7, 8]
-        nto_select: 5
-      ssid: 1
-    security_config:
-      enforce_user_token_requirement: true
+   ```yaml
+   domains_config:
+     domain:
+     - name: Root
+       storage_pool_types:
+       - kind: ssd
+         pool_config:
+           box_id: 1
+           erasure_species: block-4-2
+           kind: ssd
+           pdisk_filter:
+           - property:
+             - type: SSD
+           vdisk_kind: Default
+     state_storage:
+     - ring:
+         node: [1, 2, 3, 4, 5, 6, 7, 8]
+         nto_select: 5
+       ssid: 1
+     security_config:
+       enforce_user_token_requirement: true
+
 
 - Mirror-3-dc
 
-   ``` yaml
+   ```yaml
    domains_config:
      domain:
      - name: global
@@ -298,9 +300,9 @@ Key | Description
        ssid: 1
    ```
 
-- No fault tolerance
+- Without fault tolerance
 
-   ``` yaml
+   ```yaml
    domains_config:
      domain:
      - name: Root
@@ -324,7 +326,7 @@ Key | Description
 
 - Multiple pools
 
-   ``` yaml
+   ```yaml
    domains_config:
      domain:
      - name: Root
@@ -378,9 +380,37 @@ Key | Description
 
 ## Actor system {#actor-system}
 
-The `actor_system_config` section specifies the number of node CPU cores to be allocated to different {{ ydb-full-name }} cluster subsystems.
-
 The CPU resources are mainly used by the actor system. Depending on the type, all actors run in one of the pools (the `name` parameter). Configuring is allocating a node's CPU cores across the actor system pools. When allocating them, please keep in mind that PDisks and the gRPC API run outside the actor system and require separate resources.
+
+You can set up your actor system either [automatically](#autoconfig) or [manually](#tuneconfig). In the `actor_system_config` section, specify:
+
+* Node type and the number of CPU cores allocated to the ydbd process by automatic configuring.
+* Number of CPU cores for each {{ ydb-full-name }} cluster subsystem in the case of manual configuring.
+
+Automatic configuring adapts to the current system workload. It is recommended in most cases.
+
+You might opt for manual configuring when a certain pool in your actor system is overwhelmed and undermines the overall database performance. You can track the workload on your pools on the [Embedded UI monitoring page](../../maintenance/embedded_monitoring/ydb_monitoring.md#node_list_page).
+
+### Automatic configuring {#autoconfig}
+
+Example of the `actor_system_config` section for automatic configuring of the actor system:
+
+```yaml
+actor_system_config:
+  use_auto_config: true
+  node_type: STORAGE
+  cpu_count: 10
+```
+
+| Parameter | Description |
+--- | ---
+| `use_auto_config` | Enabling automatic configuring of the actor system. |
+| `node_type` | Node type. Determines the expected workload and vCPU ratio between the pools. Possible values:<ul><li>`STORAGE`: The node interacts with network block store volumes and is responsible for managing the Distributed Storage.</li><li>`COMPUTE`: The node processes the workload generated by users.</li><li>`HYBRID`: The node is used for hybrid load or the usage of `System`, `User`, and `IC` for the node under load is about the same. |
+| `cpu_count` | Number of vCPUs allocated to the node. |
+
+### Manual configuring {#tuneconfig}
+
+Example of the `actor_system_config` section for manual configuring of the actor system:
 
 ```yaml
 actor_system_config:
@@ -418,6 +448,8 @@ actor_system_config:
 | `name` | Pool name that indicates its purpose. Possible values:<ul><li>`System`: A pool that is designed for running quick internal operations in {{ ydb-full-name }} (it serves system tablets, state storage, distributed storage I/O, and erasure coding).</li><li>`User`: A pool that serves the user load (user tablets, queries run in the Query Processor).</li><li>`Batch`: A pool that serves tasks with no strict limit on the execution time, background operations like garbage collection and heavy queries run in the Query Processor.</li><li>`IO`: A pool responsible for performing any tasks with blocking operations (such as authentication or writing logs to a file).</li><li>`IC`: Interconnect, it serves the load related to internode communication (system calls to wait for sending and send data across the network, data serialization, as well as message splits and merges).</li></ul> |
 | `spin_threshold` | The number of CPU cycles before going to sleep if there are no messages. In sleep mode, there is less power consumption, but it may increase request latency under low loads. |
 | `threads` | The number of CPU cores allocated per pool.<br>Make sure the total number of cores assigned to the System, User, Batch, and IC pools does not exceed the number of available system cores. |
+| `max_threads` | Maximum vCPU that can be allocated to the pool from idle cores of other pools. When you set this parameter, the system enables the mechanism of expanding the pool at full utilization, provided that idle vCPUs are available.<br>The system checks the current utilization and reallocates vCPUs once per second.  |
+| `max_avg_ping_deviation` | Additional condition to expand the pool's vCPU. When more than 90% of vCPUs allocated to the pool are utilized, you need to worsen SelfPing by more than `max_avg_ping_deviation` microseconds from 10 milliseconds expected. |
 | `time_per_mailbox_micro_secs` | The number of messages per actor to be handled before switching to a different actor. |
 | `type` | Pool type. Possible values:<ul><li>`IO` should be set for IO pools.</li><li>`BASIC` should be set for any other pool.</li></ul> |
 | `scheduler` | Scheduler configuration. The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors.<br>We do not recommend changing the default scheduler parameters. |

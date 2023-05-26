@@ -122,6 +122,7 @@ message TConfigItem {
         YamlConfigEnabledItem = 64;
         ConveyorConfigItem = 65;
         ColumnShardConfigItem = 66;
+        AwsCompatibilityConfigItem = 70;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
@@ -362,6 +363,7 @@ message TGetNodeConfigRequest {
     // Filter items by specified kinds (return full config by default).
     repeated uint32 ItemKinds = 2;
     optional bool ServeYaml = 3;
+    optional uint32 YamlApiVersion = 4;
 }
 
 message TGetNodeConfigResponse {
@@ -398,6 +400,7 @@ message TConfigSubscriptionRequest {
     optional bool ServeYaml = 5;
     optional uint64 YamlVersion = 6;
     repeated TVolatileYamlConfigVersion VolatileYamlVersion = 7;
+    optional uint32 YamlApiVersion = 8;
 }
 
 message TConfigSubscriptionResponse {

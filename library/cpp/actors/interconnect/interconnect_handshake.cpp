@@ -93,37 +93,7 @@ namespace NActors {
             {}
 
             void Connect(TString *peerAddr) {
-                // issue request to a nameservice to resolve peer node address
-                const auto mono = TActivationContext::Monotonic();
-                Actor->Send(Actor->Common->NameserviceId, new TEvInterconnect::TEvResolveNode(Actor->PeerNodeId,
-                    TActivationContext::Now() + (Actor->Deadline - mono)));
-
-                // wait for the result
-                auto ev = Actor->WaitForSpecificEvent<TEvResolveError, TEvLocalNodeInfo, TEvInterconnect::TEvNodeAddress>(
-                    "ResolveNode", mono + ResolveTimeout);
-
-                // extract address from the result
-                std::vector<NInterconnect::TAddress> addresses;
-                if (!ev) {
-                    Actor->Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve timed out", true);
-                } else if (auto *p = ev->CastAsLocal<TEvLocalNodeInfo>()) {
-                    addresses = std::move(p->Addresses);
-                    if (addresses.empty()) {
-                        Actor->Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
-                    }
-                } else if (auto *p = ev->CastAsLocal<TEvInterconnect::TEvNodeAddress>()) {
-                    const auto& r = p->Record;
-                    if (!r.HasAddress() || !r.HasPort()) {
-                        Actor->Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
-                    }
-                    addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
-                } else {
-                    Y_VERIFY(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
-                    Actor->Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
-                        + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
-                }
-
-                for (const NInterconnect::TAddress& address : addresses) {
+                for (const NInterconnect::TAddress& address : Actor->ResolvePeer()) {
                     // create the socket with matching address family
                     int err = 0;
                     Socket = NInterconnect::TStreamSocket::Make(address.GetFamily(), &err);
@@ -781,6 +751,7 @@ namespace NActors {
                 request.SetRequestAuthOnly(Common->Settings.TlsAuthOnly);
                 request.SetRequestExtendedTraceFmt(true);
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
+                request.SetRequestXxhash(true);
                 request.SetHandshakeId(*HandshakeId);
 
                 SendExBlock(MainChannel, request, "ExRequest");
@@ -818,6 +789,7 @@ namespace NActors {
                 Params.Encryption = success.GetStartEncryption();
                 Params.AuthOnly = Params.Encryption && success.GetAuthOnly();
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
+                Params.UseXxhash = success.GetUseXxhash();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -833,6 +805,64 @@ namespace NActors {
             } else {
                 ProgramInfo.ConstructInPlace(); // successful handshake
             }
+        }
+
+        std::vector<NInterconnect::TAddress> ResolvePeer() {
+            // issue request to a nameservice to resolve peer node address
+            const auto mono = TActivationContext::Monotonic();
+            Send(Common->NameserviceId, new TEvInterconnect::TEvResolveNode(PeerNodeId, TActivationContext::Now() + (Deadline - mono)));
+
+            // wait for the result
+            auto ev = WaitForSpecificEvent<TEvResolveError, TEvLocalNodeInfo, TEvInterconnect::TEvNodeAddress>(
+                "ValidateIncomingPeerViaDirectLookup", mono + ResolveTimeout);
+
+            // extract address from the result
+            std::vector<NInterconnect::TAddress> addresses;
+            if (!ev) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve timed out", true);
+            } else if (auto *p = ev->CastAsLocal<TEvLocalNodeInfo>()) {
+                addresses = std::move(p->Addresses);
+                if (addresses.empty()) {
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
+                }
+            } else if (auto *p = ev->CastAsLocal<TEvInterconnect::TEvNodeAddress>()) {
+                const auto& r = p->Record;
+                if (!r.HasAddress() || !r.HasPort()) {
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
+                }
+                addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
+            } else {
+                Y_VERIFY(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
+                    + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
+            }
+
+            return addresses;
+        }
+
+        void ValidateIncomingPeerViaDirectLookup() {
+            auto addresses = ResolvePeer();
+
+            for (const auto& address : addresses) {
+                if (address.GetAddress() == PeerAddr) {
+                    return;
+                }
+            }
+
+            auto makeList = [&] {
+                TStringStream s;
+                s << '[';
+                for (auto it = addresses.begin(); it != addresses.end(); ++it) {
+                    if (it != addresses.begin()) {
+                        s << ' ';
+                    }
+                    s << it->GetAddress();
+                }
+                s << ']';
+                return s.Str();
+            };
+            Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, TStringBuilder() << "Connecting node does not resolve to peer address"
+                << " PeerAddr# " << PeerAddr << " AddressList# " << makeList(), true);
         }
 
         void PerformIncomingHandshake() {
@@ -861,6 +891,11 @@ namespace NActors {
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "SelfVirtualId.NodeId is empty in initial packet");
             }
             UpdatePrefix();
+
+            // validate incoming peer if needed
+            if (Common->Settings.ValidateIncomingPeerViaDirectLookup) {
+                ValidateIncomingPeerViaDirectLookup();
+            }
 
             // extract next packet
             NextPacketFromPeer = request.Header.NextPacket;
@@ -1005,6 +1040,7 @@ namespace NActors {
 
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
+                Params.UseXxhash = request.GetRequestXxhash();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1043,6 +1079,7 @@ namespace NActors {
                     success.SetAuthOnly(Params.AuthOnly);
                     success.SetUseExtendedTraceFmt(true);
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
+                    success.SetUseXxhash(Params.UseXxhash);
                     SendExBlock(MainChannel, record, "ExReply");
 
                     // extract sender actor id (self virtual id)

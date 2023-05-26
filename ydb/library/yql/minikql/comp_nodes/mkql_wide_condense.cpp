@@ -115,7 +115,8 @@ public:
         const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto valueType = Type::getInt128Ty(context);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto resultType = Type::getInt32Ty(context);
         const auto result = PHINode::Create(resultType, 4U, "result", exit);
         result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::Finish)), block);
@@ -134,7 +135,7 @@ public:
             const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
             const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
             const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
-            CallInst::Create(cleanupPtr, {}, "", block);
+            CallInst::Create(cleanupType, cleanupPtr, {}, "", block);
         }
 
         new StoreInst(GetFalse(context), statePtr, block);

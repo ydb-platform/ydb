@@ -96,6 +96,26 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
 TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
 {
     auto name = node->Head().Content();
+    if (name.StartsWith("pg_")) {
+        auto func = name.SubStr(3);
+        auto itemType = node->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        TVector<ui32> argTypes;
+        bool needRetype = false;
+        auto status = ExtractPgTypesFromMultiLambda(node->ChildRef(2), argTypes, needRetype, Ctx);
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
+        const NPg::TAggregateDesc* aggDescPtr;
+        if (node->Content().EndsWith("State")) {
+            auto stateType = node->Child(2)->GetTypeAnn()->Cast<TPgExprType>()->GetId();
+            auto resultType = node->GetTypeAnn()->Cast<TPgExprType>()->GetId();
+            aggDescPtr = &NPg::LookupAggregation(TString(func), stateType, resultType);
+        } else {
+            aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
+        }
+
+        return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, false, node->ChildPtr(2), argTypes, itemType, Ctx);
+    }
+
     auto exportsPtr = TypesCtx.Modules->GetModule("/lib/yql/aggregate.yql");
     YQL_ENSURE(exportsPtr);
     const auto& exports = exportsPtr->Symbols();
@@ -550,20 +570,22 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
         TVector<const TTypeAnnotationNode*> allTypes;
 
-        if (!overState && trait->Child(0)->Content() == "count_all") {
-            // 0 columns
-            aggs.push_back(Ctx.Builder(Node->Pos())
-                .List()
-                    .Callable(0, "AggBlockApply")
-                        .Atom(0, trait->Child(0)->Content())
-                    .Seal()
-                .Seal()
-                .Build());
+        const TTypeAnnotationNode* originalType = nullptr;
+        if (overState && !trait->Child(3)->IsCallable("Void")) {
+            auto originalExtractorType = trait->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            originalType = GetOriginalResultType(trait->Pos(), many, originalExtractorType, Ctx);
+            YQL_ENSURE(originalType);
         }
-        else {
-            // 1 column
-            auto root = trait->Child(2)->TailPtr();
-            auto rowArg = &trait->Child(2)->Head().Head();
+
+        ui32 argsCount = trait->Child(2)->ChildrenSize() - 1;
+        if (!overState && trait->Child(0)->Content() == "count_all") {
+            argsCount = 0;
+        }
+
+        auto rowArg = &trait->Child(2)->Head().Head();
+        TVector<TExprNode::TPtr> roots;
+        for (ui32 i = 1; i < argsCount + 1; ++i) {
+            auto root = trait->Child(2)->ChildPtr(i);
             allTypes.push_back(root->GetTypeAnn());            
 
             auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -578,17 +600,46 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
             }, Ctx, TOptimizeExprSettings(&TypesCtx));
 
             YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
+            roots.push_back(root);
+        }
 
-            aggs.push_back(Ctx.Builder(Node->Pos())
-                .List()
-                    .Callable(0, TString("AggBlockApply") + (overState ? "State" : ""))
-                        .Atom(0, trait->Child(0)->Content())
-                        .Add(1, ExpandType(Node->Pos(), *trait->Child(2)->GetTypeAnn(), Ctx))
-                    .Seal()
-                    .Atom(1, ToString(extractorRoots.size()))
+        aggs.push_back(Ctx.Builder(Node->Pos())
+            .List()
+                .Callable(0, TString("AggBlockApply") + (overState ? "State" : ""))
+                    .Atom(0, trait->Child(0)->Content())
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if (overState) {
+                            if (originalType) {
+                                parent.Add(1, ExpandType(Node->Pos(), *originalType, Ctx));
+                            } else {
+                                parent
+                                    .Callable(1, "Null")
+                                    .Seal();
+                            }
+                        }
+
+                        return parent;
+                    })
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 1; i < argsCount + 1; ++i) {
+                            parent.Add(i + (overState ? 1 : 0), ExpandType(Node->Pos(), *trait->Child(2)->Child(i)->GetTypeAnn(), Ctx));
+                            return parent;
+                        }
+
+                        return parent;
+                    })
                 .Seal()
-                .Build());
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 1; i < argsCount + 1; ++i) {
+                        parent.Atom(i, ToString(extractorRoots.size() + i - 1));
+                    }
 
+                    return parent;
+                })
+            .Seal()
+            .Build());
+
+        for (auto root : roots) {
             if (many) {
                 if (root->IsCallable("Unwrap")) {
                     root = root->HeadPtr();

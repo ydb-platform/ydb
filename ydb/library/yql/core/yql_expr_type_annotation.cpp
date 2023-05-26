@@ -1225,6 +1225,9 @@ const TTupleExprType* DryType(const TTupleExprType* type, bool& hasOptional, TEx
 
 template<bool Strict = true>
 const TStructExprType* DryType(const TStructExprType* type, bool& hasOptional, TExprContext& ctx) {
+    if (!type->GetSize())
+        return type;
+
     auto items = type->GetItems();
     auto it = items.begin();
     for (const auto& item : items) {
@@ -5566,6 +5569,22 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
         }
 
         return stateType;
+    } else if (name.StartsWith("pg_")) {
+        auto func = name.SubStr(3);
+        TVector<ui32> argTypes;
+        if (input->Content().StartsWith("AggBlock")) {
+            for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+                argTypes.push_back(input->Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId());
+            }
+        } else {
+            bool needRetype = false;
+            auto status = ExtractPgTypesFromMultiLambda(input->ChildRef(2), argTypes, needRetype, ctx);
+            YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+        }
+
+        const NPg::TAggregateDesc& aggDesc = NPg::LookupAggregation(TString(func), argTypes);
+        const auto& procDesc = NPg::LookupProc(aggDesc.SerializeFuncId ? aggDesc.SerializeFuncId : aggDesc.TransFuncId);
+        return ctx.MakeType<TPgExprType>(procDesc.ResultType);
     } else {
         YQL_ENSURE(false, "Unknown AggApply: " << name);
     }
@@ -5695,5 +5714,372 @@ bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& 
     retType = &inputType;
     return true;
 }
+
+IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
+    bool& needRetype, TExprContext& ctx) {
+    for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
+        auto type = lambda->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            needRetype = true;
+        }
+
+        argTypes.push_back(argType);
+    }
+
+    if (needRetype) {
+        auto newLambda = ctx.DeepCopyLambda(*lambda);
+        for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
+            auto type = lambda->Child(i)->GetTypeAnn();
+            ui32 argType;
+            bool convertToPg;
+            if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (convertToPg) {
+                newLambda->ChildRef(i) = ctx.NewCallable(newLambda->Child(i)->Pos(), "ToPg", { newLambda->ChildPtr(i) });
+            }
+        }
+
+        lambda = newLambda;
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
+    const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx) {
+    auto idLambda = ctx.Builder(pos)
+        .Lambda()
+            .Param("state")
+            .Arg("state")
+        .Seal()
+        .Build();
+
+    auto saveLambda = idLambda;
+    auto loadLambda = idLambda;
+    auto finishLambda = idLambda;
+    if (aggDesc.FinalFuncId) {
+        finishLambda = ctx.Builder(pos)
+            .Lambda()
+            .Param("state")
+            .Callable("PgResolvedCallCtx")
+                .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
+                .Atom(1, ToString(aggDesc.FinalFuncId))
+                .List(2)
+                .Seal()
+                .Arg(3, "state")
+            .Seal()
+            .Seal()
+            .Build();
+    }
+
+    auto nullValue = ctx.NewCallable(pos, "Null", {});
+    auto initValue = nullValue;
+    if (aggDesc.InitValue) {
+        initValue = ctx.Builder(pos)
+            .Callable("PgCast")
+                .Callable(0, "PgConst")
+                    .Atom(0, aggDesc.InitValue)
+                    .Callable(1, "PgType")
+                        .Atom(0, "text")
+                    .Seal()
+                .Seal()
+                .Callable(1, "PgType")
+                    .Atom(0, NPg::LookupType(aggDesc.TransTypeId).Name)
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    const auto& transFuncDesc = NPg::LookupProc(aggDesc.TransFuncId);
+    // use first non-null value as state if transFunc is strict
+    bool searchNonNullForState = false;
+    if (transFuncDesc.IsStrict && !aggDesc.InitValue) {
+        Y_ENSURE(argTypes.size() == 1);
+        searchNonNullForState = true;
+    }
+
+    TExprNode::TPtr initLambda, updateLambda;
+    if (!searchNonNullForState) {
+        initLambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("row")
+                .Param("parent")
+                .Callable("PgResolvedCallCtx")
+                    .Atom(0, transFuncDesc.Name)
+                    .Atom(1, ToString(aggDesc.TransFuncId))
+                    .List(2)
+                    .Seal()
+                    .Callable(3, "PgClone")
+                        .Add(0, initValue)
+                        .Callable(1, "DependsOn")
+                            .Arg(0, "parent")
+                        .Seal()
+                    .Seal()
+                    .Apply(4, lambda)
+                        .With(0, "row")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        updateLambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("row")
+                .Param("state")
+                .Param("parent")
+                .Callable("Coalesce")
+                    .Callable(0, "PgResolvedCallCtx")
+                        .Atom(0, transFuncDesc.Name)
+                        .Atom(1, ToString(aggDesc.TransFuncId))
+                        .List(2)
+                        .Seal()
+                        .Callable(3, "Coalesce")
+                            .Arg(0, "state")
+                            .Callable(1, "PgClone")
+                                .Add(0, initValue)
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Apply(4, lambda)
+                            .With(0, "row")
+                        .Seal()
+                    .Seal()
+                    .Arg(1, "state")
+                .Seal()
+            .Seal()
+            .Build();
+    } else {
+        initLambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("row")
+                .Apply(lambda)
+                    .With(0, "row")
+                .Seal()
+            .Seal()
+            .Build();
+
+        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+            initLambda = ctx.Builder(pos)
+                .Lambda()
+                    .Param("row")
+                    .Callable("PgCast")
+                        .Apply(0, initLambda)
+                            .With(0, "row")
+                        .Seal()
+                        .Callable(1, "PgType")
+                            .Atom(0, NPg::LookupType(aggDesc.TransTypeId).Name)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        updateLambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("row")
+                .Param("state")
+                .Callable("If")
+                    .Callable(0, "Exists")
+                        .Arg(0, "state")
+                    .Seal()
+                    .Callable(1, "Coalesce")
+                        .Callable(0, "PgResolvedCallCtx")
+                            .Atom(0, transFuncDesc.Name)
+                            .Atom(1, ToString(aggDesc.TransFuncId))
+                            .List(2)
+                            .Seal()
+                            .Arg(3, "state")
+                            .Apply(4, lambda)
+                                .With(0, "row")
+                            .Seal()
+                        .Seal()
+                        .Arg(1, "state")
+                    .Seal()
+                    .Apply(2, lambda)
+                        .With(0, "row")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    auto mergeLambda = ctx.Builder(pos)
+        .Lambda()
+            .Param("state1")
+            .Param("state2")
+            .Callable("Void")
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto zero = ctx.Builder(pos)
+            .Callable("PgConst")
+                .Atom(0, "0")
+                .Callable(1, "PgType")
+                    .Atom(0, "int8")
+                .Seal()
+            .Seal()
+            .Build();
+
+    auto defaultValue = (aggDesc.Name != "count") ? nullValue : zero;
+
+    if (aggDesc.SerializeFuncId) {
+        const auto& serializeFuncDesc = NPg::LookupProc(aggDesc.SerializeFuncId);
+        saveLambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("state")
+                .Callable("PgResolvedCallCtx")
+                    .Atom(0, serializeFuncDesc.Name)
+                    .Atom(1, ToString(aggDesc.SerializeFuncId))
+                    .List(2)
+                    .Seal()
+                    .Arg(3, "state")
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    if (aggDesc.DeserializeFuncId) {
+        const auto& deserializeFuncDesc = NPg::LookupProc(aggDesc.DeserializeFuncId);
+        loadLambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("state")
+                .Callable("PgResolvedCallCtx")
+                    .Atom(0, deserializeFuncDesc.Name)
+                    .Atom(1, ToString(aggDesc.DeserializeFuncId))
+                    .List(2)
+                    .Seal()
+                    .Arg(3, "state")
+                    .Callable(4, "PgInternal0")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    if (aggDesc.CombineFuncId) {
+        const auto& combineFuncDesc = NPg::LookupProc(aggDesc.CombineFuncId);
+        if (combineFuncDesc.IsStrict) {
+            mergeLambda = ctx.Builder(pos)
+                .Lambda()
+                    .Param("state1")
+                    .Param("state2")
+                    .Callable("If")
+                        .Callable(0, "Exists")
+                            .Arg(0, "state1")
+                        .Seal()
+                        .Callable(1, "Coalesce")
+                            .Callable(0, "PgResolvedCallCtx")
+                                .Atom(0, combineFuncDesc.Name)
+                                .Atom(1, ToString(aggDesc.CombineFuncId))
+                                .List(2)
+                                .Seal()
+                                .Arg(3, "state1")
+                                .Arg(4, "state2")
+                            .Seal()
+                            .Arg(1, "state1")
+                        .Seal()
+                        .Arg(2, "state2")
+                    .Seal()
+                .Seal()
+                .Build();
+        } else {
+            mergeLambda = ctx.Builder(pos)
+                .Lambda()
+                    .Param("state1")
+                    .Param("state2")
+                    .Callable("PgResolvedCallCtx")
+                        .Atom(0, combineFuncDesc.Name)
+                        .Atom(1, ToString(aggDesc.CombineFuncId))
+                        .List(2)
+                        .Seal()
+                        .Arg(3, "state1")
+                        .Arg(4, "state2")
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    }
+
+    auto typeNode = ExpandType(pos, *itemType, ctx);
+    if (onWindow) {
+        return ctx.Builder(pos)
+            .Callable("WindowTraits")
+                .Add(0, typeNode)
+                .Add(1, initLambda)
+                .Add(2, updateLambda)
+                .Lambda(3)
+                    .Param("value")
+                    .Param("state")
+                    .Callable("Void")
+                    .Seal()
+                .Seal()
+                .Add(4, finishLambda)
+                .Add(5, defaultValue)
+            .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(pos)
+            .Callable("AggregationTraits")
+                .Add(0, typeNode)
+                .Add(1, initLambda)
+                .Add(2, updateLambda)
+                .Add(3, saveLambda)
+                .Add(4, loadLambda)
+                .Add(5, mergeLambda)
+                .Add(6, finishLambda)
+                .Add(7, defaultValue)
+            .Seal()
+            .Build();
+    }
+}
+
+const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+    if (!EnsureStructType(pos, *originalExtractorType, ctx)) {
+        return nullptr;
+    }
+
+    auto structType = originalExtractorType->Cast<TStructExprType>();
+    if (structType->GetSize() != 1) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Expected struct with one member"));
+        return nullptr;
+    }
+
+    auto type = structType->GetItems()[0]->GetItemType();
+    if (isMany) {
+        if (type->GetKind() != ETypeAnnotationKind::Optional) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Expected optional state"));
+            return nullptr;
+        }
+
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    return type;
+}
+
+bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
+    auto type = GetOriginalResultType(input->Pos(), isMany, originalExtractorType, ctx);
+    if (!type) {
+        return false;
+    }
+
+    input->SetTypeAnn(type);
+    return true;
+}
+
 
 } // NYql

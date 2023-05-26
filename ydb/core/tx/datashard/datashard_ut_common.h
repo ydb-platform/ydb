@@ -5,6 +5,7 @@
 
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -20,6 +21,9 @@ class TBalanceCoverageBuilder;
 class TEngineHolder;
 class TFakeMiniKQLProxy;
 class TFakeProxyTx;
+
+using NKqp::GetTableShards;
+using NKqp::InitRoot;
 
 constexpr ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
 constexpr ui64 FAKE_TX_ALLOCATOR_TABLET_ID = 4201;
@@ -361,9 +365,6 @@ public:
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml = true);
 
-void InitRoot(Tests::TServer::TPtr server,
-              TActorId sender);
-
 class TLambdaActor : public IActorCallback {
 public:
     using TCallback = std::function<void(TAutoPtr<IEventHandle>&, const TActorContext&)>;
@@ -435,7 +436,10 @@ struct TShardedTableOptions {
         EFormat Format;
         TMaybe<EState> InitialState;
         bool VirtualTimestamps = false;
+        TMaybe<TString> AwsRegion;
     };
+
+    using TAttributes = THashMap<TString, TString>;
 
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \
     TSelf& name(type value) {\
@@ -458,6 +462,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
     TABLE_OPTION(bool, Replicated, false);
     TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
+    TABLE_OPTION(TAttributes, Attributes, {});
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL
@@ -497,10 +502,6 @@ ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
                           const TString &root,
                           const TString &name,
                           const TString &from);
-
-TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
-                             TActorId sender,
-                             const TString &path);
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);

@@ -6,6 +6,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/enumbitset/enumbitset.h>
 
@@ -317,4 +318,14 @@ bool GetAvgResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
 bool GetAvgResultTypeOverState(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);
 bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);
 
+IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
+    bool& needRetype, TExprContext& ctx);
+
+TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow, 
+    const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx);
+
+const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
+bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
+
+const TStringBuf BlockLengthColumnName = "_yql_block_length";
 }

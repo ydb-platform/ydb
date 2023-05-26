@@ -4,6 +4,7 @@
 #include <util/string/printf.h>
 #include <arrow/api.h>
 #include <arrow/ipc/reader.h>
+#include <ydb/core/util/yverify_stream.h>
 
 namespace NKikimr {
 
@@ -20,7 +21,7 @@ using TTypeInfo = NScheme::TTypeInfo;
 
 template <typename TKey = ui64>
 bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
-             bool requireUniq = false) {
+             bool requireUniq = false, const std::string& columnName = "timestamp") {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
     THashMap<TKey, ui32> keys;
@@ -33,11 +34,14 @@ bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::p
     }
 
     auto schema = NArrow::DeserializeSchema(srtSchema);
+    //Cerr << "Got schema: " << schema->ToString() << "\n";
+
     for (auto& blob : blobs) {
         auto batch = NArrow::DeserializeBatch(blob, schema);
         UNIT_ASSERT(batch);
+        //Cerr << "Got batch: " << batch->ToString() << "\n";
 
-        std::shared_ptr<arrow::Array> array = batch->GetColumnByName("timestamp");
+        std::shared_ptr<arrow::Array> array = batch->GetColumnByName(columnName);
         UNIT_ASSERT(array);
 
         for (int i = 0; i < array->length(); ++i) {
@@ -302,35 +306,26 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
 }
 
 struct TestTableDescription {
-    TVector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
-    TVector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
+    std::vector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
+    std::vector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
     bool InStore = true;
+    bool CompositeMarks = false;
 };
 
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec = "none") {
-    NOlap::TSnapshot snap = {10, 10};
+                 const TestTableDescription& table = {}, TString codec = "none") {
+    NOlap::TSnapshot snap(10, 10);
     TString txBody;
+    auto specials = TTestSchema::TTableSpecials().WithCodec(codec).WithCompositeMarks(table.CompositeMarks);
     if (table.InStore) {
-        txBody = TTestSchema::CreateTableTxBody(
-            pathId, table.Schema, table.Pk, TTestSchema::TTableSpecials().WithCodec(codec));
-
+        txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
     } else {
-        txBody = TTestSchema::CreateStandaloneTableTxBody(
-            pathId, table.Schema, table.Pk, TTestSchema::TTableSpecials().WithCodec(codec));
+        txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
     }
     bool ok = ProposeSchemaTx(runtime, sender, txBody, snap);
     UNIT_ASSERT(ok);
 
     PlanSchemaTx(runtime, sender, snap);
-}
-
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TVector<std::pair<TString, TTypeInfo>>& schema = TTestSchema::YdbSchema(),
-                 const TVector<std::pair<TString, TTypeInfo>>& pk = TTestSchema::YdbPkSchema(),
-                 TString codec = "none") {
-    TestTableDescription table{schema, pk, true};
-    SetupSchema(runtime, sender, pathId, table, codec);
 }
 
 std::vector<TString> ReadManyResults(TTestBasicRuntime& runtime, TString& schema,
@@ -384,12 +379,12 @@ void TestWrite(const TestTableDescription& table) {
 
     SetupSchema(runtime, sender, tableId, table);
 
-    const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+    const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
 
     bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
     UNIT_ASSERT(ok);
 
-    TVector<std::pair<TString, TTypeInfo>> schema = ydbSchema;
+    std::vector<std::pair<TString, TTypeInfo>> schema = ydbSchema;
 
     // no data
 
@@ -398,7 +393,9 @@ void TestWrite(const TestTableDescription& table) {
 
     // null column in PK
 
-    ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema, {"timestamp"}));
+    TTestBlobOptions optsNulls;
+    optsNulls.NullColumns.emplace("timestamp");
+    ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema, optsNulls));
     UNIT_ASSERT(!ok);
 
     // missing columns
@@ -485,7 +482,7 @@ void TestWriteReadDup() {
     ui64 tableId = 1;
 
     auto ydbSchema = TTestSchema::YdbSchema();
-    SetupSchema(runtime, sender, tableId, ydbSchema);
+    SetupSchema(runtime, sender, tableId);
 
     constexpr ui32 numRows = 10;
     std::pair<ui64, ui64> portion = {10, 10 + numRows};
@@ -531,7 +528,7 @@ void TestWriteReadLongTxDup() {
 
     ui64 tableId = 1;
     auto ydbSchema = TTestSchema::YdbSchema();
-    SetupSchema(runtime, sender, tableId, ydbSchema);
+    SetupSchema(runtime, sender, tableId);
 
     constexpr ui32 numRows = 10;
     std::pair<ui64, ui64> portion = {10, 10 + numRows};
@@ -580,8 +577,8 @@ void TestWriteReadLongTxDup() {
         auto data = resRead.GetData();
         auto meta = resRead.GetMeta();
         UNIT_ASSERT(CheckColumns(data, meta, TTestSchema::ExtractNames(ydbSchema), numRows));
-        UNIT_ASSERT(DataHas(TVector<TString>{data}, meta.GetSchema(), portion, true));
-        UNIT_ASSERT(DataHasOnly(TVector<TString>{data}, meta.GetSchema(), portion));
+        UNIT_ASSERT(DataHas(std::vector<TString>{data}, meta.GetSchema(), portion, true));
+        UNIT_ASSERT(DataHasOnly(std::vector<TString>{data}, meta.GetSchema(), portion));
     }
 }
 
@@ -608,7 +605,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     };
 
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId,
-                             const TVector<ui64>& writeIds) {
+                             const std::vector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, metaShard, txId, writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -630,14 +627,14 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     SetupSchema(runtime, sender, tableId, table, codec);
 
-    const TVector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
-    const TVector<std::pair<TString, TTypeInfo>>& testYdbPk = table.Pk;
+    const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+    const std::vector<std::pair<TString, TTypeInfo>>& testYdbPk = table.Pk;
 
     // ----xx
     // -----xx..
     // xx----
     // -xxxxx
-    TVector<std::pair<ui64, ui64>> portion = {
+    std::vector<std::pair<ui64, ui64>> portion = {
         {200, 300},
         {250, 250 + 80 * 1000}, // committed -> index
         {0, 100},
@@ -703,7 +700,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(resRead3.GetData().size() > 0);
     UNIT_ASSERT(CheckColumns(resRead3.GetData(), resRead3.GetMeta(), TTestSchema::ExtractNames(ydbSchema)));
     {
-        TVector<TString> readData;
+        std::vector<TString> readData;
         readData.push_back(resRead3.GetData());
         auto& schema = resRead3.GetMeta().GetSchema();
         UNIT_ASSERT(DataHas(readData, schema, portion[0]));
@@ -803,7 +800,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(resRead7.GetData().size() > 0);
 
     {
-        TVector<TString> readData;
+        std::vector<TString> readData;
         readData.push_back(resRead7.GetData());
         auto& schema = resRead7.GetMeta().GetSchema();
         UNIT_ASSERT(DataHas(readData, schema, portion[0])); // checks no checks REPLACE (indexed vs indexed)
@@ -828,7 +825,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(resRead8.GetData().size() > 0);
 
     {
-        TVector<TString> readData;
+        std::vector<TString> readData;
         readData.push_back(resRead8.GetData());
         auto& schema = resRead8.GetMeta().GetSchema();
         UNIT_ASSERT(DataHas(readData, schema, portion[0], true)); // checks REPLACE (indexed vs indexed)
@@ -940,8 +937,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         }
         greater->SetRow(NArrow::SerializeBatchNoCompression(prGreater.Batch));
         less->SetRow(NArrow::SerializeBatchNoCompression(prLess.Batch));
-        greater->SetInclusive(prGreater.Inclusive);
-        less->SetInclusive(prLess.Inclusive);
+        greater->SetInclusive(prGreater.IsInclusive());
+        less->SetInclusive(prLess.IsInclusive());
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evRead.release());
     }
@@ -985,8 +982,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
         greater->SetRow(NArrow::SerializeBatchNoCompression(prGreater.Batch));
         less->SetRow(NArrow::SerializeBatchNoCompression(prLess.Batch));
-        greater->SetInclusive(prGreater.Inclusive);
-        less->SetInclusive(prLess.Inclusive);
+        greater->SetInclusive(prGreater.IsInclusive());
+        less->SetInclusive(prLess.IsInclusive());
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evRead.release());
     }
@@ -1014,8 +1011,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 }
 
 void TestCompactionInGranuleImpl(bool reboots,
-                                 const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                                 const TVector<std::pair<TString, TTypeInfo>>& ydbPk) {
+                                 const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
+                                 const std::vector<std::pair<TString, TTypeInfo>>& ydbPk) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -1036,7 +1033,7 @@ void TestCompactionInGranuleImpl(bool reboots,
     };
 
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId,
-                             const TVector<ui64>& writeIds) {
+                             const std::vector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, metaShard, txId, writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -1058,7 +1055,8 @@ void TestCompactionInGranuleImpl(bool reboots,
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, tableId, ydbSchema, ydbPk);
+    TestTableDescription table{.Schema = ydbSchema, .Pk = ydbPk};
+    SetupSchema(runtime, sender, tableId, table);
     TAutoPtr<IEventHandle> handle;
 
     // Write same keys: merge on compaction
@@ -1076,7 +1074,7 @@ void TestCompactionInGranuleImpl(bool reboots,
     // inserts triggered by count
     ui32 pos = triggerPortionSize;
     for (ui32 i = 0; i < 1; ++i, ++planStep, ++txId) {
-        TVector<ui64> ids;
+        std::vector<ui64> ids;
         ids.reserve(numWrites);
         for (ui32 w = 0; w < numWrites; ++w, ++writeId, pos += portionSize) {
             std::pair<ui64, ui64> portion = {pos, pos + portionSize};
@@ -1334,7 +1332,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, tableId, table.Schema);
+    SetupSchema(runtime, sender, tableId, table);
 
     { // write some data
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, table.Schema));
@@ -1424,7 +1422,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
 
-            TVector<TString> readData;
+            std::vector<TString> readData;
             readData.push_back(resRead.GetData());
 
             switch (i) {
@@ -1461,7 +1459,7 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, tableId, table.Schema);
+    SetupSchema(runtime, sender, tableId, table);
 
     { // write some data
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, table.Schema));
@@ -1617,7 +1615,7 @@ struct TReadAggregateResult {
     std::vector<int64_t> Counts = {100};
 };
 
-void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, const TString& testDataBlob,
+void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, const TString& testDataBlob,
                        bool addProjection, const std::vector<ui32>& aggKeys = {},
                        const TReadAggregateResult& expectedResult = {},
                        const TReadAggregateResult& expectedFiltered = {1, {1}, {1}, {1}}) {
@@ -1639,7 +1637,8 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema, 
 
     auto pk = ydbSchema;
     pk.resize(4);
-    SetupSchema(runtime, sender, tableId, ydbSchema, pk);
+    TestTableDescription table{.Schema = ydbSchema, .Pk = pk};
+    SetupSchema(runtime, sender, tableId, table);
 
     { // write some data
         bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, testDataBlob);
@@ -1937,7 +1936,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ReadAggregate) {
         auto schema = TTestSchema::YdbAllTypesSchema();
-        auto testBlob = MakeTestBlob({0, 100}, schema);
+        auto testBlob = MakeTestBlob({ 0, 100 }, schema);
 
         TestReadAggregate(schema, testBlob, false);
         TestReadAggregate(schema, testBlob, true);
@@ -1945,7 +1944,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ReadGroupBy) {
         auto schema = TTestSchema::YdbAllTypesSchema();
-        auto testBlob = MakeTestBlob({0, 100}, schema);
+        auto testBlob = MakeTestBlob({ 0, 100 }, schema);
 
         std::vector<int64_t> counts;
         counts.reserve(100);
@@ -1958,27 +1957,27 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         };
 
         // TODO: query needs normalization to compare with expected
-        TReadAggregateResult resDefault = {100, {}, {}, counts};
-        TReadAggregateResult resFiltered = {1, {}, {}, {1}};
-        TReadAggregateResult resGrouped = {1, {}, {}, {100}};
+        TReadAggregateResult resDefault = { 100, {}, {}, counts };
+        TReadAggregateResult resFiltered = { 1, {}, {}, {1} };
+        TReadAggregateResult resGrouped = { 1, {}, {}, {100} };
 
         for (ui32 key = 0; key < schema.size(); ++key) {
             Cerr << "-- group by key: " << key << "\n";
 
             // the type has the same values in test batch so result would be grouped in one row
             if (sameValTypes.contains(schema[key].second.GetTypeId())) {
-                TestReadAggregate(schema, testBlob, (key % 2), {key}, resGrouped, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), { key }, resGrouped, resFiltered);
             } else {
-                TestReadAggregate(schema, testBlob, (key % 2), {key}, resDefault, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), { key }, resDefault, resFiltered);
             }
         }
         for (ui32 key = 0; key < schema.size() - 1; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << "\n";
             if (sameValTypes.contains(schema[key].second.GetTypeId()) &&
                 sameValTypes.contains(schema[key + 1].second.GetTypeId())) {
-                TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1}, resGrouped, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resGrouped, resFiltered);
             } else {
-                TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1}, resDefault, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resDefault, resFiltered);
             }
         }
         for (ui32 key = 0; key < schema.size() - 2; ++key) {
@@ -1986,15 +1985,207 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             if (sameValTypes.contains(schema[key].second.GetTypeId()) &&
                 sameValTypes.contains(schema[key + 1].second.GetTypeId()) &&
                 sameValTypes.contains(schema[key + 1].second.GetTypeId())) {
-                TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1, key + 2}, resGrouped, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resGrouped, resFiltered);
             } else {
-                TestReadAggregate(schema, testBlob, (key % 2), {key, key + 1, key + 2}, resDefault, resFiltered);
+                TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resDefault, resFiltered);
             }
         }
     }
 
-    void TestCompactionSplitGranule(const TVector<std::pair<TString, TTypeInfo>>& ydbSchema,
-                                    const TVector<std::pair<TString, TTypeInfo>>& ydbPk) {
+    class TTabletReadPredicateTest {
+    private:
+        TTestBasicRuntime& Runtime;
+        const ui64 PlanStep;
+        const ui64 TxId;
+        const std::vector<std::pair<TString, TTypeInfo>> YdbPk;
+
+    public:
+        TTabletReadPredicateTest(TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const std::vector<std::pair<TString, TTypeInfo>>& ydbPk)
+            : Runtime(runtime)
+            , PlanStep(planStep)
+            , TxId(txId)
+            , YdbPk(ydbPk)
+        {}
+
+        class TBorder {
+        private:
+            std::vector<ui32> Border;
+            bool Include;
+
+        public:
+            TBorder(const std::vector<ui32>& values, const bool include = false)
+                : Border(values)
+                , Include(include)
+            {}
+
+            bool GetInclude() const noexcept { return Include; }
+
+            std::vector<TCell> GetCellVec(const std::vector<std::pair<TString, TTypeInfo>>& pk,
+                                        std::vector<TString>& mem, bool trailingNulls = false) const
+            {
+                UNIT_ASSERT(Border.size() <= pk.size());
+                std::vector<TCell> cells;
+                size_t i = 0;
+                for (; i < Border.size(); ++i) {
+                    cells.push_back(MakeTestCell(pk[i].second, Border[i], mem));
+                }
+                for (; trailingNulls && i < pk.size(); ++i) {
+                    cells.push_back(TCell());
+                }
+                return cells;
+            }
+        };
+
+        struct TTestCaseOptions {
+            std::optional<TBorder> From;
+            std::optional<TBorder> To;
+            std::optional<ui32> ExpectedCount;
+            bool DataReadOnEmpty = false;
+
+            TTestCaseOptions()
+                : DataReadOnEmpty(false)
+            {}
+
+            TTestCaseOptions& SetFrom(const TBorder& border) { From = border; return *this; }
+            TTestCaseOptions& SetTo(const TBorder& border) { To = border; return *this; }
+            TTestCaseOptions& SetExpectedCount(ui32 count) { ExpectedCount = count; return *this; }
+            TTestCaseOptions& SetDataReadOnEmpty(bool flag) { DataReadOnEmpty = flag; return *this; }
+
+            TSerializedTableRange MakeRange(const std::vector<std::pair<TString, TTypeInfo>>& pk) const {
+                std::vector<TString> mem;
+                auto cellsFrom = From ? From->GetCellVec(pk, mem, true) : std::vector<TCell>();
+                auto cellsTo = To ? To->GetCellVec(pk, mem) : std::vector<TCell>();
+                return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), (From ? From->GetInclude() : false),
+                                             TConstArrayRef<TCell>(cellsTo), (To ? To->GetInclude(): false));
+            }
+        };
+
+        class TTestCase: public TTestCaseOptions, TNonCopyable {
+        private:
+            const TTabletReadPredicateTest& Owner;
+            const TString TestCaseName;
+
+            void Execute() {
+                const ui64 metaShard = TTestTxConfig::TxTablet1;
+                const ui64 tableId = 1;
+                const TActorId sender = Owner.Runtime.AllocateEdgeActor();
+                { // read with predicate (FROM)
+                    auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, Owner.PlanStep, Owner.TxId, tableId);
+                    Proto(read.get()).AddColumnNames("timestamp");
+                    Proto(read.get()).AddColumnNames("message");
+
+                    const TSerializedTableRange range = MakeRange(Owner.YdbPk);
+
+                    NOlap::TPredicate prGreater, prLess;
+                    std::tie(prGreater, prLess) = RangePredicates(range, Owner.YdbPk);
+                    if (From) {
+                        auto* greater = Proto(read.get()).MutableGreaterPredicate();
+                        for (auto& name : prGreater.ColumnNames()) {
+                            greater->AddColumnNames(name);
+                        }
+                        greater->SetRow(NArrow::SerializeBatchNoCompression(prGreater.Batch));
+                        greater->SetInclusive(From->GetInclude());
+                    };
+                    if (To) {
+                        auto* less = Proto(read.get()).MutableLessPredicate();
+                        for (auto& name : prLess.ColumnNames()) {
+                            less->AddColumnNames(name);
+                        }
+                        less->SetRow(NArrow::SerializeBatchNoCompression(prLess.Batch));
+                        less->SetInclusive(To->GetInclude());
+                    }
+
+                    ForwardToTablet(Owner.Runtime, TTestTxConfig::TxTablet0, sender, read.release());
+                }
+
+                ui32 numRows = 0;
+                std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+                ui32 expected = 100;
+                for (ui32 i = 0; i < expected; ++i) {
+                    TAutoPtr<IEventHandle> handle;
+                    auto event = Owner.Runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+                    UNIT_ASSERT(event);
+
+                    auto& resRead = Proto(event);
+                    Cerr << "[" << __LINE__ << "] " << Owner.YdbPk[0].second.GetTypeId() << " "
+                        << resRead.GetBatch() << " " << resRead.GetData().size() << "\n";
+
+                    UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+                    UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+                    UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+                    if (ExpectedCount && !*ExpectedCount && !DataReadOnEmpty) {
+                        UNIT_ASSERT(!resRead.GetBatch());
+                        UNIT_ASSERT(resRead.GetFinished());
+                        UNIT_ASSERT(!resRead.GetData().size());
+                    } else {
+                        UNIT_ASSERT(resRead.GetData().size());
+                        UNIT_ASSERT(resRead.HasMeta());
+
+                        auto& meta = resRead.GetMeta();
+                        auto schema = NArrow::DeserializeSchema(meta.GetSchema());
+                        UNIT_ASSERT(schema);
+                        auto batch = NArrow::DeserializeBatch(resRead.GetData(), schema);
+                        UNIT_ASSERT(batch);
+
+                        numRows += batch->num_rows();
+                        batches.emplace_back(batch);
+
+                        if (resRead.GetFinished()) {
+                            UNIT_ASSERT(meta.HasReadStats());
+                            auto& readStats = meta.GetReadStats();
+
+                            UNIT_ASSERT(readStats.GetBeginTimestamp());
+                            UNIT_ASSERT(readStats.GetDurationUsec());
+                            UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
+                            UNIT_ASSERT(readStats.GetIndexBatches());
+                            //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
+                            UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                            //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
+                            //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
+                        }
+                    }
+                    if (resRead.GetFinished()) {
+                        expected = resRead.GetBatch();
+                    }
+                }
+                UNIT_ASSERT(expected < 100);
+
+                if (ExpectedCount) {
+                    if (numRows != *ExpectedCount) {
+                        for (auto& batch : batches) {
+                            Cerr << batch->ToString() << "\n";
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(numRows, *ExpectedCount);
+                }
+            }
+
+        public:
+            TTestCase(TTabletReadPredicateTest& owner, const TString& testCaseName, const TTestCaseOptions& opts = {})
+                : TTestCaseOptions(opts)
+                , Owner(owner)
+                , TestCaseName(testCaseName)
+            {
+                Cerr << "TEST CASE " << TestCaseName << " START..." << Endl;
+            }
+
+            ~TTestCase() {
+                try {
+                    Execute();
+                    Cerr << "TEST CASE " << TestCaseName << " FINISHED" << Endl;
+                } catch (...) {
+                    Cerr << "TEST CASE " << TestCaseName << " FAILED" << Endl;
+                    throw;
+                }
+            }
+        };
+
+        TTestCase Test(const TString& testCaseName, const TTestCaseOptions& options = {}) {
+            return TTestCase(*this, testCaseName, options);
+        }
+    };
+
+    void TestCompactionSplitGranule(const TestTableDescription& table, const TTestBlobOptions& testBlobOptions = {}) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
@@ -2005,34 +2196,36 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
-        ui64 metaShard = TTestTxConfig::TxTablet1;
-        ui64 writeId = 0;
-        ui64 tableId = 1;
+        const ui64 metaShard = TTestTxConfig::TxTablet1;
+        const ui64 tableId = 1;
         ui64 planStep = 100;
         ui64 txId = 100;
 
-        SetupSchema(runtime, sender, tableId, ydbSchema, ydbPk, "lz4");
+        SetupSchema(runtime, sender, tableId, table, "lz4");
         TAutoPtr<IEventHandle> handle;
 
-        bool isStrPk0 = ydbPk[0].second == TTypeInfo(NTypeIds::String) || ydbPk[0].second == TTypeInfo(NTypeIds::Utf8);
+        bool isStrPk0 = table.Pk[0].second == TTypeInfo(NTypeIds::String) || table.Pk[0].second == TTypeInfo(NTypeIds::Utf8);
 
-        // Write different keys: grow on compatcion
+        // Write different keys: grow on compaction
 
         static const ui32 triggerPortionSize = 85 * 1000;
         static const ui32 overlapSize = 5 * 1000;
 
-        ui32 numWrites = 23;
-        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
-            ui64 start = i * (triggerPortionSize - overlapSize);
-            std::pair<ui64, ui64> triggerPortion = {start, start + triggerPortionSize};
-            TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
-            UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-            UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
+        const ui32 numWrites = 23;
+        {
+            ui64 writeId = 0;
+            for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
+                ui64 start = i * (triggerPortionSize - overlapSize);
+                std::pair<ui64, ui64> triggerPortion = { start, start + triggerPortionSize };
+                TString triggerData = MakeTestBlob(triggerPortion, table.Schema, testBlobOptions);
+                UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+                UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
-            UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+                UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
 
-            ProposeCommit(runtime, sender, metaShard, txId, {writeId});
-            PlanCommit(runtime, sender, planStep, txId);
+                ProposeCommit(runtime, sender, metaShard, txId, { writeId });
+                PlanCommit(runtime, sender, planStep, txId);
+            }
         }
 
         // TODO: Move tablet's time to the future with mediator timecast instead
@@ -2040,7 +2233,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         --txId;
 
         ui32 numRows = numWrites * (triggerPortionSize - overlapSize) + overlapSize;
-        TString schema;
 
         for (ui32 i = 0; i < 2; ++i) {
             {
@@ -2051,154 +2243,95 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
             }
 
-            TString schema;
-            NKikimrTxColumnShard::TMetadata meta;
-            std::vector<TString> readData = ReadManyResults(runtime, schema, meta, 20000);
             {
-                schema = meta.GetSchema();
+                TString schema;
+                NKikimrTxColumnShard::TMetadata meta;
+                std::vector<TString> readData = ReadManyResults(runtime, schema, meta, 20000);
+                {
+                    schema = meta.GetSchema();
 
-                UNIT_ASSERT(meta.HasReadStats());
-                auto& readStats = meta.GetReadStats();
+                    UNIT_ASSERT(meta.HasReadStats());
+                    auto& readStats = meta.GetReadStats();
 
-                UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
-                UNIT_ASSERT(readStats.GetDurationUsec() > 0);
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
-                UNIT_ASSERT(readStats.GetIndexBatches() > 0);
-                //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
-                //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
+                    UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
+                    UNIT_ASSERT(readStats.GetDurationUsec() > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
+                    UNIT_ASSERT(readStats.GetIndexBatches() > 0);
+                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
+                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
+                }
+
+                if (isStrPk0) {
+                    if (testBlobOptions.SameValueColumns.contains("timestamp")) {
+                        UNIT_ASSERT(!testBlobOptions.SameValueColumns.contains("message"));
+                        UNIT_ASSERT(DataHas<std::string>(readData, schema, { 0, numRows }, true, "message"));
+                    } else {
+                        UNIT_ASSERT(DataHas<std::string>(readData, schema, { 0, numRows }, true, "timestamp"));
+                    }
+                } else {
+                    UNIT_ASSERT(DataHas(readData, schema, { 0, numRows }, true));
+                }
             }
+
+            std::vector<ui32> val0 = { 0 };
+            std::vector<ui32> val1 = { 1 };
+            std::vector<ui32> val9990 = { 99990 };
+            std::vector<ui32> val9999 = { 99999 };
+            std::vector<ui32> val1M = { 1000000000 };
+            std::vector<ui32> val1M_1 = { 1000000001 };
+
+            const bool composite = !testBlobOptions.SameValueColumns.empty();
+            if (composite) {
+                UNIT_ASSERT(table.Pk.size() >= 2);
+
+                ui32 sameValue = testBlobOptions.SameValue;
+                val0 = { sameValue, 0 };
+                val1 = { sameValue, 1 };
+                val9990 = { sameValue, 99990 };
+                val9999 = { sameValue, 99999 };
+                val1M = { sameValue, 1000000000 };
+                val1M_1 = { sameValue, 1000000001 };
+            }
+
+            using TBorder = TTabletReadPredicateTest::TBorder;
+
+            TTabletReadPredicateTest testAgent(runtime, planStep, txId, table.Pk);
+            testAgent.Test(":1)").SetTo(TBorder(val1, false)).SetExpectedCount(1);
+            testAgent.Test(":1]").SetTo(TBorder(val1, true)).SetExpectedCount(2);
+            testAgent.Test(":0)").SetTo(TBorder(val0, false)).SetExpectedCount(0).SetDataReadOnEmpty(composite);
+            testAgent.Test(":0]").SetTo(TBorder(val0, true)).SetExpectedCount(1);
+
+            testAgent.Test("[0:0]").SetFrom(TBorder(val0, true)).SetTo(TBorder(val0, true)).SetExpectedCount(1);
+            testAgent.Test("[0:1)").SetFrom(TBorder(val0, true)).SetTo(TBorder(val1, false)).SetExpectedCount(1);
+            testAgent.Test("(0:1)").SetFrom(TBorder(val0, false)).SetTo(TBorder(val1, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
+            testAgent.Test("outscope1").SetFrom(TBorder(val1M, true)).SetTo(TBorder(val1M_1, true))
+                .SetExpectedCount(0).SetDataReadOnEmpty(isStrPk0);
+//            VERIFIED AS INCORRECT INTERVAL (its good)
+//            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
 
             if (isStrPk0) {
-                UNIT_ASSERT(DataHas<std::string>(readData, schema, {0, numRows}, true));
+                if (composite) {
+                    // TODO
+                } else {
+                    testAgent.Test("(99990:").SetFrom(TBorder(val9990, false)).SetExpectedCount(109);
+                    testAgent.Test("(99990:99999)").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, false)).SetExpectedCount(98);
+                    testAgent.Test("(99990:99999]").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, true)).SetExpectedCount(99);
+                    testAgent.Test("[99990:99999]").SetFrom(TBorder(val9990, true)).SetTo(TBorder(val9999, true)).SetExpectedCount(100);
+                }
             } else {
-                UNIT_ASSERT(DataHas(readData, schema, {0, numRows}, true));
-            }
-
-            readData.clear();
-
-            { // read with predicate (TO)
-                auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
-                Proto(read.get()).AddColumnNames("timestamp");
-                Proto(read.get()).AddColumnNames("message");
-
-                TSerializedTableRange range = MakeTestRange({0, 1}, false, false, ydbPk);
-                NOlap::TPredicate prGreater, prLess;
-                std::tie(prGreater, prLess) = RangePredicates(range, ydbPk);
-
-                auto* less = Proto(read.get()).MutableLessPredicate();
-                for (auto& name : prLess.ColumnNames()) {
-                    less->AddColumnNames(name);
-                }
-
-                less->SetRow(NArrow::SerializeBatchNoCompression(prLess.Batch));
-                //less->SetInclusive(prLess.Inclusive); TODO
-
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
-            }
-
-            { // one result expected
-                auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-                UNIT_ASSERT(event);
-
-                auto& resRead = Proto(event);
-                Cerr << "[" << __LINE__ << "] " << ydbPk[0].second.GetTypeId() << " "
-                    << resRead.GetBatch() << " " << resRead.GetData().size() << "\n";
-
-                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-                UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-                UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-                UNIT_ASSERT(resRead.GetData().size() > 0);
-                UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-                UNIT_ASSERT(resRead.GetFinished());
-
-                {
-                    UNIT_ASSERT(resRead.HasMeta());
-                    auto& meta = resRead.GetMeta();
-                    //auto& schema = meta.GetSchema();
-
-                    UNIT_ASSERT(meta.HasReadStats());
-                    auto& readStats = meta.GetReadStats();
-
-                    UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
-                    UNIT_ASSERT(readStats.GetDurationUsec() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
-                    UNIT_ASSERT(readStats.GetIndexBatches() > 0);
-                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
-                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 1); // TODO: min-max index optimization?
-                }
-
-                // TODO: check data
-            }
-
-            { // read with predicate (FROM)
-                auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
-                Proto(read.get()).AddColumnNames("timestamp");
-                Proto(read.get()).AddColumnNames("message");
-
-                TSerializedTableRange range = MakeTestRange({numRows, numRows + 1000}, false, false, ydbPk);
-                if (isStrPk0) {
-                    range = MakeTestRange({99990, 99999}, false, false, ydbPk);
-                }
-
-                NOlap::TPredicate prGreater, prLess;
-                std::tie(prGreater, prLess) = RangePredicates(range, ydbPk);
-
-                auto* greater = Proto(read.get()).MutableGreaterPredicate();
-                for (auto& name : prGreater.ColumnNames()) {
-                    greater->AddColumnNames(name);
-                }
-
-                greater->SetRow(NArrow::SerializeBatchNoCompression(prGreater.Batch));
-                //greater->SetInclusive(prGreater.Inclusive); TODO
-
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
-            }
-
-            { // one result expected
-                auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-                UNIT_ASSERT(event);
-
-                auto& resRead = Proto(event);
-                Cerr << "[" << __LINE__ << "] " << ydbPk[0].second.GetTypeId() << " "
-                    << resRead.GetBatch() << " " << resRead.GetData().size() << "\n";
-
-                UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-                UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-                UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-                UNIT_ASSERT(resRead.GetData().size() > 0);
-                UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-                UNIT_ASSERT(resRead.GetFinished());
-
-                {
-                    UNIT_ASSERT(resRead.HasMeta());
-                    auto& meta = resRead.GetMeta();
-                    //auto& schema = meta.GetSchema();
-
-                    UNIT_ASSERT(meta.HasReadStats());
-                    auto& readStats = meta.GetReadStats();
-
-                    UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
-                    UNIT_ASSERT(readStats.GetDurationUsec() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
-                    UNIT_ASSERT(readStats.GetIndexBatches() > 0);
-                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
-                    //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
-                }
-
-                // TODO: check data
+                testAgent.Test("(numRows:").SetFrom(TBorder({numRows}, false)).SetExpectedCount(0);
+                testAgent.Test("(numRows-1:").SetFrom(TBorder({numRows - 1}, false)).SetExpectedCount(0);
+                testAgent.Test("(numRows-2:").SetFrom(TBorder({numRows - 2}, false)).SetExpectedCount(1);
+                testAgent.Test("[numRows-1:").SetFrom(TBorder({numRows - 1}, true)).SetExpectedCount(1);
             }
 
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
         { // Get index stats
-            ScanIndexStats(runtime, sender, {tableId, 42}, {planStep, txId}, 0);
+            ScanIndexStats(runtime, sender, {tableId, 42}, NOlap::TSnapshot(planStep, txId), 0);
             auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
             auto& msg = scanInited->Record;
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
@@ -2224,7 +2357,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
                 ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
 
-                Cerr << "[" << __LINE__ << "] " << ydbPk[0].second.GetTypeId() << " "
+                Cerr << "[" << __LINE__ << "] " << table.Pk[0].second.GetTypeId() << " "
                     << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                 if (pathId == tableId) {
@@ -2264,7 +2397,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         for (auto& type : types) {
             schema[0].second = TTypeInfo(type);
             pk[0].second = TTypeInfo(type);
-            TestCompactionSplitGranule(schema, pk);
+            TestTableDescription table{.Schema = schema, .Pk = pk};
+            TestCompactionSplitGranule(table);
         }
     }
 
@@ -2280,7 +2414,27 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         for (auto& type : types) {
             schema[0].second = TTypeInfo(type);
             pk[0].second = TTypeInfo(type);
-            TestCompactionSplitGranule(schema, pk);
+            TestTableDescription table{.Schema = schema, .Pk = pk};
+            TestCompactionSplitGranule(table);
+        }
+    }
+
+    Y_UNIT_TEST(CompactionSplitGranuleSameStrKey) {
+        std::vector<TTypeId> types = {
+            NTypeIds::String,
+            NTypeIds::Utf8
+        };
+
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+        TTestBlobOptions opts;
+        opts.SameValueColumns.emplace(pk[0].first);
+
+        for (auto& type : types) {
+            schema[0].second = TTypeInfo(type);
+            pk[0].second = TTypeInfo(type);
+            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = true};
+            TestCompactionSplitGranule(table, opts);
         }
     }
 
@@ -2302,7 +2456,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 txId = 100;
 
         auto ydbSchema = TTestSchema::YdbSchema();
-        SetupSchema(runtime, sender, tableId, ydbSchema);
+        SetupSchema(runtime, sender, tableId);
         TAutoPtr<IEventHandle> handle;
 
         // Write some test data to adavnce the time
@@ -2358,7 +2512,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             // Cerr << response << Endl;
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1);
-            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "Snapshot 640000:18446744073709551615 too old");
+            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "Snapshot too old: {640000:max}");
         }
     }
 
@@ -2380,7 +2534,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 tableId = 1;
 
         auto ydbSchema = TTestSchema::YdbSchema();
-        SetupSchema(runtime, sender, tableId, ydbSchema);
+        SetupSchema(runtime, sender, tableId);
         TAutoPtr<IEventHandle> handle;
 
         bool blockReadFinished = true;
@@ -2414,12 +2568,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
                 if (msg->IndexChanges->CompactionInfo) {
                     ++compactionsHappened;
-                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->ApplySnapshot
+                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : msg->IndexChanges->SwitchedPortions) {
                         ui64 granule = portionInfo.Granule();
-                        Y_VERIFY(!srcGranule || srcGranule == granule);
+                        UNIT_ASSERT(!srcGranule || srcGranule == granule);
                         srcGranule = granule;
                         ui64 portionId = portionInfo.Portion();
                         Cerr << " " << portionId;
@@ -2493,6 +2647,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unusedPrev);
         }
 
+        {
+            TAtomic unusedPrev;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.MaxPortionsInGranule", 10, unusedPrev);
+        }
+
         // Write different keys: grow on compaction
 
         static const ui32 triggerPortionSize = 75 * 1000;
@@ -2529,7 +2688,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         --planStep;
         --txId;
 
-        UNIT_ASSERT_VALUES_EQUAL(compactionsHappened, 2); // we catch it twice per action
+        UNIT_ASSERT_VALUES_EQUAL(compactionsHappened, 3); // we catch it three times per action
 
         ui64 previousCompactionsHappened = compactionsHappened;
         ui64 previousCleanupsHappened = cleanupsHappened;

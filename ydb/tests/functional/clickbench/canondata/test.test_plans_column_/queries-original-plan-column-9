@@ -109,7 +109,7 @@
                                                                                                     }
                                                                                                 }
                                                                                             ],
-                                                                                            "Version": 2
+                                                                                            "Version": 3
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
@@ -196,7 +196,7 @@
                                                                                                                     }
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Version": 2
+                                                                                                            "Version": 3
                                                                                                         },
                                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                                     }

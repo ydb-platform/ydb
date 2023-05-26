@@ -160,6 +160,41 @@ class TestTransactionIsolation(object):
         )
         t2.commit()
 
+    def test_prevents_circular_information_flow_g1c(self):
+        table_name, session = self._prepare("test_prevents_circular_information_flow_g1c")
+
+        t1 = session.transaction()
+        t2 = session.transaction()
+
+        t1.execute('update {} set value = 11 where id = 1;'.format(table_name))
+        t2.execute('update {} set value = 22 where id = 2;'.format(table_name))
+
+        result_rows = t1.execute('select * from {} where id = 2;'.format(table_name))
+        assert_that(
+            result_rows[0].rows,
+            equal_to(
+                [
+                    {'id': 2, 'value': 20},
+                ]
+            )
+        )
+
+        result_rows = t2.execute('select * from {} where id = 1;'.format(table_name))
+        assert_that(
+            result_rows[0].rows,
+            equal_to(
+                [
+                    {'id': 1, 'value': 10},
+                ]
+            )
+        )
+
+        t1.commit()
+        try:
+            t2.commit()
+        except ydb.Aborted as e:
+            assert_that(str(e), contains_string("Transaction locks invalidated"))
+
     def test_isolation_mailing_list_example(self):
         table_name, session = self._prepare("test_isolation_mailing_list_example")
 
@@ -277,6 +312,22 @@ class TestTransactionIsolation(object):
             assert_that(str(e), contains_string("Transaction locks invalidated"))
         else:
             assert_that(result_rows[0].rows, equal_to([]))
+
+    def test_does_not_prevent_predicate_many_preceders_pmp_for_write_predicates(self):
+        table_name, session = self._prepare("test_does_not_prevent_predicate_many_preceders_pmp_for_write_predicates")
+
+        t1 = session.transaction()
+        t2 = session.transaction()
+
+        t1.execute('update {} set value = value + 10;'.format(table_name))
+        t2.execute('delete from {} where value = 20;'.format(table_name))
+
+        t1.commit()
+
+        try:
+            t2.commit()
+        except ydb.Aborted as e:
+            assert_that(str(e), contains_string("Transaction locks invalidated"))
 
     def test_lost_update_p4(self):
         table_name, session = self._prepare("test_lost_update_p4")

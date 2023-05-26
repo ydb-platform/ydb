@@ -5,36 +5,16 @@
 namespace NKikimr::NSchemeShard {
 
     void TOlapColumnSchema::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const {
+        TBase::Serialize(columnSchema);
         columnSchema.SetId(Id);
-        columnSchema.SetName(Name);
-        columnSchema.SetType(TypeName);
-        columnSchema.SetNotNull(NotNullFlag);
-
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
-        columnSchema.SetTypeId(columnType.TypeId);
-        if (columnType.TypeInfo) {
-            *columnSchema.MutableTypeInfo() = *columnType.TypeInfo;
-        }
     }
 
     void TOlapColumnSchema::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema) {
+        TBase::ParseFromLocalDB(columnSchema);
         Id = columnSchema.GetId();
-        Name = columnSchema.GetName();
-        TypeName = columnSchema.GetType();
-
-        if (columnSchema.HasTypeInfo()) {
-            Type = NScheme::TypeInfoModFromProtoColumnType(
-                       columnSchema.GetTypeId(), &columnSchema.GetTypeInfo())
-                       .TypeInfo;
-        } else {
-            Type = NScheme::TypeInfoModFromProtoColumnType(
-                       columnSchema.GetTypeId(), nullptr)
-                       .TypeInfo;
-        }
-        NotNullFlag = columnSchema.GetNotNull();
     }
 
-    bool TOlapColumnSchema::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
+    bool TOlapColumnAdd::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
         if (!columnSchema.GetName()) {
             errors.AddError("Columns cannot have an empty name");
             return false;
@@ -42,6 +22,22 @@ namespace NKikimr::NSchemeShard {
         Name = columnSchema.GetName();
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
+        if (columnSchema.HasCompression()) {
+            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
+            if (!compression) {
+                errors.AddError("Cannot parse compression info: " + compression.GetErrorMessage());
+                return false;
+            }
+            Compression = *compression;
+        }
+        if (columnSchema.HasDictionaryEncoding()) {
+            auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
+            if (!settings) {
+                errors.AddError("Cannot parse dictionary compression info: " + settings.GetErrorMessage());
+                return false;
+            }
+            DictionaryEncoding = *settings;
+        }
 
         if (columnSchema.HasTypeId()) {
             errors.AddError(TStringBuilder() << "Cannot set TypeId for column '" << Name << ", use Type");
@@ -73,27 +69,103 @@ namespace NKikimr::NSchemeShard {
         return true;
     }
 
+    void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema) {
+        Name = columnSchema.GetName();
+        TypeName = columnSchema.GetType();
+
+        if (columnSchema.HasTypeInfo()) {
+            Type = NScheme::TypeInfoModFromProtoColumnType(
+                columnSchema.GetTypeId(), &columnSchema.GetTypeInfo())
+                .TypeInfo;
+        } else {
+            Type = NScheme::TypeInfoModFromProtoColumnType(
+                columnSchema.GetTypeId(), nullptr)
+                .TypeInfo;
+        }
+        if (columnSchema.HasCompression()) {
+            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
+            Y_VERIFY(compression.IsSuccess(), "%s", compression.GetErrorMessage().data());
+            Compression = *compression;
+        }
+        if (columnSchema.HasDictionaryEncoding()) {
+            auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
+            Y_VERIFY(settings.IsSuccess());
+            DictionaryEncoding = *settings;
+        }
+        NotNullFlag = columnSchema.GetNotNull();
+    }
+
+    void TOlapColumnAdd::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const {
+        columnSchema.SetName(Name);
+        columnSchema.SetType(TypeName);
+        columnSchema.SetNotNull(NotNullFlag);
+        if (Compression) {
+            *columnSchema.MutableCompression() = Compression->SerializeToProto();
+        }
+        if (DictionaryEncoding) {
+            *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
+        }
+
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
+        columnSchema.SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *columnSchema.MutableTypeInfo() = *columnType.TypeInfo;
+        }
+    }
+
+    bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
+        Y_VERIFY(GetName() == diffColumn.GetName());
+        {
+            auto result = diffColumn.GetCompression().Apply(Compression);
+            if (!result) {
+                errors.AddError("Cannot merge compression info: " + result.GetErrorMessage());
+                return false;
+            }
+        }
+        {
+            auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);
+            if (!result) {
+                errors.AddError("Cannot merge dictionary encoding info: " + result.GetErrorMessage());
+                return false;
+            }
+        }
+        return true;
+    }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
         if (tableSchema.HasEngine()) {
             Engine = tableSchema.GetEngine();
         }
 
-        TSet<TString> keyColumnNames;
+        TMap<TString, ui32> keyColumnNames;
         for (auto&& pkKey : tableSchema.GetKeyColumnNames()) {
-            if (keyColumnNames.contains(pkKey)) {
+            if (!keyColumnNames.emplace(pkKey, keyColumnNames.size()).second) {
                 errors.AddError(Sprintf("Duplicate key column '%s'", pkKey.c_str()));
                 return false;
             }
-            keyColumnNames.emplace(pkKey);
-            KeyColumnNames.emplace_back(pkKey);
         }
 
         TSet<TString> columnNames;
         for (auto& columnSchema : tableSchema.GetColumns()) {
-            TOlapColumnSchema column;
+            std::optional<ui32> keyOrder;
+            {
+                auto it = keyColumnNames.find(columnSchema.GetName());
+                if (it != keyColumnNames.end()) {
+                    keyOrder = it->second;
+                }
+            }
+
+            TOlapColumnAdd column(keyOrder);
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
+            }
+            if (column.GetKeyOrder() && *column.GetKeyOrder() == 0) {
+                if (!TOlapSchema::IsAllowedFirstPkType(column.GetType().GetTypeId())) {
+                    errors.AddError(TStringBuilder()
+                        << "Type '" << column.GetType().GetTypeId() << "' specified for column '" << column.GetName()
+                        << "' is not supported in first PK position");
+                    return false;
+                }
             }
             if (columnNames.contains(column.GetName())) {
                 errors.AddError(Sprintf("Duplicate column '%s'", column.GetName().c_str()));
@@ -106,53 +178,55 @@ namespace NKikimr::NSchemeShard {
                 }
             }
             columnNames.emplace(column.GetName());
-            Columns.emplace_back(std::move(column));
+            AddColumns.emplace_back(std::move(column));
         }
         return true;
     }
 
-    bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTable& alterRequest, IErrorCollector& errors) {
-        TSet<TString> columnNames;
-        for (auto& columnSchema : alterRequest.GetAlterSchema().GetColumns()) {
-            TOlapColumnSchema column;
+    bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+        TSet<TString> addColumnNames;
+        if (alterRequest.DropColumnsSize()) {
+            errors.AddError("Drop columns method not supported for tablestore and table");
+            return false;
+        }
+
+        for (auto& columnSchema : alterRequest.GetAddColumns()) {
+            TOlapColumnAdd column({});
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
             }
-            if (columnNames.contains(column.GetName())) {
-                errors.AddError(Sprintf("Duplicate column '%s'", column.GetName().c_str()));
+            if (addColumnNames.contains(column.GetName())) {
+                errors.AddError(Sprintf("column '%s' duplication for add", column.GetName().c_str()));
                 return false;
             }
-            if (column.IsNotNull()) {
-                errors.AddError("Not null updates not supported");
+            addColumnNames.emplace(column.GetName());
+            AddColumns.emplace_back(std::move(column));
+        }
+
+        TSet<TString> alterColumnNames;
+        for (auto& columnSchemaDiff: alterRequest.GetAlterColumns()) {
+            TOlapColumnDiff columnDiff;
+            if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors)) {
                 return false;
             }
-            columnNames.emplace(column.GetName());
-            Columns.emplace_back(std::move(column));
+            if (addColumnNames.contains(columnDiff.GetName())) {
+                errors.AddError(Sprintf("column '%s' have to be either add or update", columnDiff.GetName().c_str()));
+                return false;
+            }
+            if (alterColumnNames.contains(columnDiff.GetName())) {
+                errors.AddError(Sprintf("column '%s' duplication for update", columnDiff.GetName().c_str()));
+                return false;
+            }
+            alterColumnNames.emplace(columnDiff.GetName());
+            AlterColumns.emplace_back(std::move(columnDiff));
         }
         return true;
     }
 
     bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-        if (Columns.empty() && schemaUpdate.GetColumns().empty()) {
-            errors.AddError("No columns specified");
+        if (Columns.empty() && schemaUpdate.GetAddColumns().empty()) {
+            errors.AddError("No add columns specified");
             return false;
-        }
-
-        if (KeyColumnIds.empty()) {
-            if (schemaUpdate.GetKeyColumnNames().empty()) {
-                errors.AddError("No primary key specified");
-                return false;
-            }
-        } else {
-            if (!schemaUpdate.GetKeyColumnNames().empty()) {
-                errors.AddError("No primary key updates supported");
-                return false;
-            }
-        }
-
-        TMap<TString, ui32> keyIndexes;
-        for (ui32 i = 0; i < schemaUpdate.GetKeyColumnNames().size(); ++i) {
-            keyIndexes[schemaUpdate.GetKeyColumnNames()[i]] = i;
         }
 
         if (!HasEngine()) {
@@ -164,44 +238,58 @@ namespace NKikimr::NSchemeShard {
             }
         }
 
-        for (auto&& column : schemaUpdate.GetColumns()) {
+        const bool hasColumnsBefore = KeyColumnIds.size();
+        std::map<ui32, ui32> orderedKeyColumnIds;
+        for (auto&& column : schemaUpdate.GetAddColumns()) {
             if (ColumnsByName.contains(column.GetName())) {
-                errors.AddError("No special column updates supported");
+                errors.AddError(Sprintf("column '%s' already exists", column.GetName().data()));
                 return false;
             }
-            TOlapColumnSchema newColumn = column;
-            newColumn.SetId(NextColumnId);
-            ++NextColumnId;
-
-            if (keyIndexes.contains(newColumn.GetName())) {
-                auto keyOrder = keyIndexes.at(newColumn.GetName());
-                if (keyOrder == 0) {
-                    if (!IsAllowedFirstPkType(newColumn.GetType().GetTypeId())) {
-                        errors.AddError(TStringBuilder()
-                                        << "Type '" << newColumn.GetType().GetTypeId() << "' specified for column '" << newColumn.GetName()
-                                        << "' is not supported in first PK position");
-                        return false;
-                    }
-                }
-                newColumn.SetKeyOrder(keyOrder);
-            }
-            ColumnsByName[newColumn.GetName()] = newColumn.GetId();
-            Columns[newColumn.GetId()] = std::move(newColumn);
-        }
-
-        if (KeyColumnIds.empty()) {
-            TVector<ui32> keyColumnIds;
-            keyColumnIds.reserve(schemaUpdate.GetKeyColumnNames().size());
-            for (auto&& columnName : schemaUpdate.GetKeyColumnNames()) {
-                auto it = ColumnsByName.find(columnName);
-                if (it == ColumnsByName.end()) {
-                    errors.AddError("Invalid key column " + columnName);
+            if (hasColumnsBefore) {
+                if (column.IsNotNull()) {
+                    errors.AddError("Cannot add new not null column currently (not supported yet)");
                     return false;
                 }
-                keyColumnIds.push_back(it->second);
+                if (column.GetKeyOrder()) {
+                    errors.AddError(Sprintf("column '%s' is pk column. its impossible to modify pk", column.GetName().data()));
+                    return false;
+                }
             }
-            KeyColumnIds.swap(keyColumnIds);
+            TOlapColumnSchema newColumn(column, NextColumnId++);
+            if (newColumn.GetKeyOrder()) {
+                Y_VERIFY(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
+            }
+
+            Y_VERIFY(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
+            Y_VERIFY(Columns.emplace(newColumn.GetId(), std::move(newColumn)).second);
         }
+
+        for (auto&& columnDiff : schemaUpdate.GetAlterColumns()) {
+            auto it = ColumnsByName.find(columnDiff.GetName());
+            if (it == ColumnsByName.end()) {
+                errors.AddError(Sprintf("column '%s' not exists for altering", columnDiff.GetName().data()));
+                return false;
+            } else {
+                auto itColumn = Columns.find(it->second);
+                Y_VERIFY(itColumn != Columns.end());
+                TOlapColumnSchema& newColumn = itColumn->second;
+                if (!newColumn.ApplyDiff(columnDiff, errors)) {
+                    return false;
+                }
+            }
+        }
+        if (KeyColumnIds.empty()) {
+            auto it = orderedKeyColumnIds.begin();
+            for (ui32 i = 0; i < orderedKeyColumnIds.size(); ++i, ++it) {
+                KeyColumnIds.emplace_back(it->second);
+                Y_VERIFY(i == it->first);
+            }
+            if (KeyColumnIds.empty()) {
+                errors.AddError("No primary key specified");
+                return false;
+            }
+        }
+        ++Version;
         return true;
     }
 
@@ -220,17 +308,20 @@ namespace NKikimr::NSchemeShard {
         TVector<ui32> keyIds;
         keyIds.resize(tableSchema.GetKeyColumnNames().size(), 0);
         for (const auto& columnSchema : tableSchema.GetColumns()) {
-            TOlapColumnSchema column;
-            column.ParseFromLocalDB(columnSchema);
-
-            if (keyIndexes.contains(column.GetName())) {
-                auto keyOrder = keyIndexes.at(column.GetName());
-                column.SetKeyOrder(keyOrder);
-                Y_VERIFY(keyOrder < keyIds.size());
-                keyIds[keyOrder] = column.GetId();
+            std::optional<ui32> keyOrder;
+            if (keyIndexes.contains(columnSchema.GetName())) {
+                keyOrder = keyIndexes.at(columnSchema.GetName());
             }
-            ColumnsByName[column.GetName()] = column.GetId();
-            Columns[column.GetId()] = std::move(column);
+
+            TOlapColumnSchema column(keyOrder);
+            column.ParseFromLocalDB(columnSchema);
+            if (keyOrder) {
+                Y_VERIFY(*keyOrder < keyIds.size());
+                keyIds[*keyOrder] = column.GetId();
+            }
+
+            Y_VERIFY(ColumnsByName.emplace(column.GetName(), column.GetId()).second);
+            Y_VERIFY(Columns.emplace(column.GetId(), std::move(column)).second);
         }
         KeyColumnIds.swap(keyIds);
     }
@@ -397,6 +488,10 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapStoreSchemaPreset::ParseFromRequest(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, IErrorCollector& errors) {
+        if (presetProto.HasId()) {
+            errors.AddError("Schema preset id cannot be specified explicitly");
+            return false;
+        }
         if (!presetProto.GetName()) {
             errors.AddError("Schema preset name cannot be empty");
             return false;

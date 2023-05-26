@@ -270,7 +270,8 @@ private:
     static void OnPartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, size_t size, size_t index, const TString& requestId, IHTTPGateway::TResult&& response) {
         if (!response.Issues) {
             const auto& str = response.Content.Headers;
-            if (const NHttp::THeaders headers(str.substr(str.rfind("HTTP/"))); headers.Has("Etag"))
+            const auto headerStr = str.substr(str.rfind("HTTP/"));
+            if (const NHttp::THeaders headers(headerStr); headers.Has("Etag"))
                 actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
             else {
                 TS3Result s3Result(std::move(response.Content.Extract()));
@@ -280,7 +281,7 @@ private:
                     constexpr size_t BODY_MAX_SIZE = 1_KB;
                     actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Unexpected response"
-                            << ". Headers: " << str
+                            << ". Headers: " << headerStr
                             << ". Body: \"" << TStringBuf(s3Result.Body).Trunc(BODY_MAX_SIZE)
                             << (s3Result.Body.size() > BODY_MAX_SIZE ? "\"..." : "\"")
                             << ". Request id: [" << requestId << "]")));

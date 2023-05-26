@@ -328,16 +328,17 @@ public:
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto outputPtrType = PointerType::getUnqual(ArrayType::get(valueType, Representations.size()));
+        const auto outputType = ArrayType::get(valueType, Representations.size());
+        const auto outputPtrType = PointerType::getUnqual(outputType);
         const auto outs = new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back());
 
         ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
 
         for (auto i = 0U; i < getters.size(); ++i) {
-            getters[Indexes[i]] = [i, outs, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
-                const auto values = new LoadInst(outs, "values", block);
-                const auto pointer = GetElementPtrInst::CreateInBounds(values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-                return new LoadInst(pointer, (TString("load_") += ToString(i)).c_str(), block);
+            getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto values = new LoadInst(outputPtrType, outs, "values", block);
+                const auto pointer = GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
+                return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
             };
         }
 
@@ -356,11 +357,12 @@ public:
             trunc = ConstantInt::get(Type::getInt64Ty(context), 0U);
         }
 
-        const auto dirs = new AllocaInst(ArrayType::get(Type::getInt1Ty(context), Directions.size()), 0U, "dirs", block);
+        const auto arrayType = ArrayType::get(Type::getInt1Ty(context), Directions.size());
+        const auto dirs = new AllocaInst(arrayType, 0U, "dirs", block);
         for (auto i = 0U; i < Directions.size(); ++i) {
             const auto dir = GetNodeValue(Directions[i], ctx, block);
             const auto cut = GetterFor<bool>(dir, context, block);
-            const auto ptr = GetElementPtrInst::CreateInBounds(dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block);
+            const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block);
             new StoreInst(cut, ptr, block);
         }
 
@@ -369,12 +371,12 @@ public:
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideTopWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), trunc->getType(), dirs->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
         BranchInst::Create(more, block);
@@ -386,8 +388,8 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(statusType, 3U, "result", over);
 
-        const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block);
-        const auto last = new LoadInst(statusPtr, "last", block);
+        const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStatus()}, "last", block);
+        const auto last = new LoadInst(statusType, statusPtr, "last", block);
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, last, ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
 
         BranchInst::Create(full, loop, finish, block);
@@ -412,18 +414,18 @@ public:
             const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::template Seal<Sort>));
             const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto sealPtr = CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block);
-            CallInst::Create(sealPtr, {stateArg}, "", block);
+            CallInst::Create(sealType, sealPtr, {stateArg}, "", block);
 
             BranchInst::Create(full, block);
 
             block = good;
 
-            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
-            const auto tongue = new LoadInst(tonguePtr, "tongue", block);
+            const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block);
+            const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
 
             std::vector<Value*> placeholders(Representations.size());
             for (auto i = 0U; i < placeholders.size(); ++i) {
-                placeholders[i] = GetElementPtrInst::CreateInBounds(tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
+                placeholders[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(indexType, i)}, (TString("placeholder_") += ToString(i)).c_str(), block);
             }
 
             if constexpr (!HasCount) {
@@ -444,7 +446,7 @@ public:
             const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::Push));
             const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
-            const auto accepted = CallInst::Create(pushPtr, {stateArg}, "accepted", block);
+            const auto accepted = CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block);
             if constexpr (HasCount) {
                 const auto push = BasicBlock::Create(context, "push", ctx.Func);
                 const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
@@ -462,7 +464,7 @@ public:
                     ValueAddRef(Representations[i], item, ctx, block);
                     new StoreInst(item, placeholders[i], block);
                 }
-            
+
 
                 BranchInst::Create(loop, block);
 
@@ -485,7 +487,7 @@ public:
             const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::Extract));
             const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
             const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
-            const auto out = CallInst::Create(extractPtr, {stateArg}, "out", block);
+            const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
             const auto has = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
@@ -531,7 +533,7 @@ private:
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
     bool HasComplexType = false;
-    
+
 #ifndef MKQL_DISABLE_CODEGEN
     TComparePtr Compare = nullptr;
 
@@ -577,11 +579,11 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     const auto inputWideComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     std::vector<ui32> indexes(inputWideComponents.size());
 
-    std::unordered_set<ui32> keyIndexes; 
+    std::unordered_set<ui32> keyIndexes;
     std::vector<TKeyInfo> keys(keyWidth);
     for (auto i = 0U; i < keyWidth; ++i) {
-        const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();        
-        indexes[i] = keyIndex;        
+        const auto keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(((i + 1U) << 1U) - offset))->AsValue().Get<ui32>();
+        indexes[i] = keyIndex;
         keyIndexes.emplace(keyIndex);
 
         bool isTuple;
@@ -618,7 +620,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     std::generate(directions.begin(), directions.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keys), 
+        return new TWideTopWrapper<Sort, HasCount>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
             std::move(indexes), std::move(representations));
     }
 

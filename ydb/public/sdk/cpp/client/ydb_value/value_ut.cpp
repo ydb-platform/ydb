@@ -1,5 +1,4 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -9,6 +8,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <google/protobuf/messagext.h>
+#include <google/protobuf/text_format.h>
 
 namespace NYdb {
 
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             "}\n";
 
         TString protoValueStr;
-        NProtoBuf::TextFormat::PrintToString(TProtoAccessor::GetProto(value), &protoValueStr);
+        NProtoBuf::TextFormat::PrintToString(value.GetProto(), &protoValueStr);
         UNIT_ASSERT_NO_DIFF(protoValueStr, expectedProtoValueStr);
     }
 
@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             "}\n";
 
         TString protoValueStr;
-        NProtoBuf::TextFormat::PrintToString(TProtoAccessor::GetProto(value), &protoValueStr);
+        NProtoBuf::TextFormat::PrintToString(value.GetProto(), &protoValueStr);
         UNIT_ASSERT_NO_DIFF(protoValueStr, expectedProtoValueStr);
     }
 

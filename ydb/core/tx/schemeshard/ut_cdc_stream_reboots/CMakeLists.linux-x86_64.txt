@@ -42,7 +42,7 @@ set_property(
   ydb-core-tx-schemeshard-ut_cdc_stream_reboots
   PROPERTY
   SPLIT_FACTOR
-  2
+  10
 )
 add_yunittest(
   NAME

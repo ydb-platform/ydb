@@ -1370,6 +1370,11 @@ public:
         Y_UNUSED(many);
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
+        if (ctx.EmitAggApply && allowAggApply && AggMode != EAggregateMode::OverWindow) {
+            return Y("AggApply",
+                Q("pg_" + to_lower(PgFunc)), Y("ListItemType", type), Lambda);
+        }
+
         return Y(AggMode == EAggregateMode::OverWindow ? "PgWindowTraits" : "PgAggregationTraits",
             Q(PgFunc), Y("ListItemType", type), Lambda);
     }

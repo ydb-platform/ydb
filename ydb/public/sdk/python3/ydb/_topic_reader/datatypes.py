@@ -39,9 +39,7 @@ class PublicMessage(ICommittable, ISessionAlive):
     offset: int
     written_at: datetime.datetime
     producer_id: str
-    data: Union[
-        bytes, Any
-    ]  # set as original decompressed bytes or deserialized object if deserializer set in reader
+    data: Union[bytes, Any]  # set as original decompressed bytes or deserialized object if deserializer set in reader
     _partition_session: PartitionSession
     _commit_start_offset: int
     _commit_end_offset: int
@@ -70,16 +68,10 @@ class PartitionSession:
     _next_message_start_commit_offset: int = field(init=False)
 
     # todo: check if deque is optimal
-    _ack_waiters: Deque["PartitionSession.CommitAckWaiter"] = field(
-        init=False, default_factory=lambda: deque()
-    )
+    _ack_waiters: Deque["PartitionSession.CommitAckWaiter"] = field(init=False, default_factory=lambda: deque())
 
-    _state_changed: asyncio.Event = field(
-        init=False, default_factory=lambda: asyncio.Event(), compare=False
-    )
-    _loop: Optional[asyncio.AbstractEventLoop] = field(
-        init=False
-    )  # may be None in tests
+    _state_changed: asyncio.Event = field(init=False, default_factory=lambda: asyncio.Event(), compare=False)
+    _loop: Optional[asyncio.AbstractEventLoop] = field(init=False)  # may be None in tests
 
     def __post_init__(self):
         self._next_message_start_commit_offset = self.committed_offset

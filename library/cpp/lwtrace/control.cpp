@@ -73,11 +73,18 @@ TTraceDeserializeStatus TManager::HandleTraceResponse(
                 LWTRACK(DeserializationError, orbit, probe->Event.Name, probe->Event.GetProvider());
                 result.AddFailedEventName(v.GetName());
             } else {
+                // in case of fork join probes would be like "start 0 fork 1 ....... join 10 forked 5 forked 6"
                 ui64 timestamp = EpochNanosecondsToCycles(v.GetTimestampNanosec());
+                if (timestamp > prev) {
+                    timestamp = prev + (timestamp-prev)*timeScale + timeOffset;
+                } else {
+                    timestamp += timeOffset;
+                }
+
                 orbit.AddProbe(
                     probe,
                     params,
-                    prev + (timestamp-prev)*timeScale + timeOffset);
+                    timestamp);
                 probe->Event.Signature.DestroyParams(params);
                 prev = timestamp;
             }

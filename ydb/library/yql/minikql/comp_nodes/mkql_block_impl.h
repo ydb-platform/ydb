@@ -15,19 +15,33 @@ namespace NKikimr::NMiniKQL {
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool);
 
 arrow::ValueDescr ToValueDescr(TType* type);
+std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow::compute::OutputType ConvertToOutputType(TType* output);
 
 class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
+friend class TArrowNode;
 public:
-    TBlockFuncNode(TComputationMutables& mutables, TVector<IComputationNode*>&& argsNodes,
+    TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TVector<IComputationNode*>&& argsNodes,
         const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
         std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
         const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const;
 private:
+    class TArrowNode : public IArrowKernelComputationNode {
+    public:
+        TArrowNode(const TBlockFuncNode* parent);
+        TStringBuf GetKernelName() const final;
+        const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+        const std::vector<arrow::ValueDescr>& GetArgsDesc() const final;
+        const IComputationNode* GetArgument(ui32 index) const final;
+
+    private:
+        const TBlockFuncNode* Parent_;
+    };
+
     struct TState : public TComputationValue<TState> {
         using TComputationValue::TComputationValue;
 
@@ -51,6 +65,9 @@ private:
 
     void RegisterDependencies() const final;
     TState& GetState(TComputationContext& ctx) const;
+
+    std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
+
 private:
     const ui32 StateIndex;
     const TVector<IComputationNode*> ArgsNodes;
@@ -59,6 +76,7 @@ private:
     const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder;
     const arrow::compute::FunctionOptions* const Options;
     const bool ScalarOutput;
+    const TString Name;
 };
 
 template <typename TDerived>

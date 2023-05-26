@@ -209,6 +209,10 @@ public:
             }
         }
 
+        if (Settings.PathPrefix) {
+            TablePathPrefix = Settings.PathPrefix + "/";
+        }
+
         for (const auto& [cluster, provider] : Settings.ClusterMapping) {
             Provider = provider;
             break;
@@ -276,6 +280,8 @@ public:
             return ParseVariableSetStmt(CAST_NODE(VariableSetStmt, node)) != nullptr;
         case T_DeleteStmt:
             return ParseDeleteStmt(CAST_NODE(DeleteStmt, node)) != nullptr;
+        case T_TransactionStmt:
+            return true;
         default:
             NodeNotImplemented(value, node);
             return false;

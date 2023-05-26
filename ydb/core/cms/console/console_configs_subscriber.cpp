@@ -45,6 +45,7 @@ public:
             const TVector<ui32> &kinds,
             const NKikimrConfig::TAppConfig &currentConfig,
             bool processYaml,
+            ui64 version,
             const TString &yamlConfig,
             const TMap<ui64, TString> &volatileYamlConfigs)
         : OwnerId(ownerId)
@@ -55,6 +56,7 @@ public:
         , LastOrder(0)
         , CurrentConfig(currentConfig)
         , ServeYaml(processYaml)
+        , Version(version)
         , YamlConfig(yamlConfig)
         , VolatileYamlConfigs(volatileYamlConfigs)
     {
@@ -337,6 +339,7 @@ private:
         request->Record.MutableOptions()->SetNodeType(NodeType);
         request->Record.MutableOptions()->SetHost(FQDNHostName());
         request->Record.SetServeYaml(ServeYaml);
+        request->Record.SetYamlApiVersion(Version);
 
         for (auto &kind : Kinds)
             request->Record.AddConfigItemKinds(kind);
@@ -386,6 +389,7 @@ private:
     NKikimrConfig::TAppConfig CurrentConfig;
 
     bool ServeYaml = false;
+    ui64 Version;
     TString YamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     ui64 YamlConfigVersion = 0;
@@ -406,10 +410,11 @@ IActor *CreateConfigsSubscriber(
     const NKikimrConfig::TAppConfig &currentConfig,
     ui64 cookie,
     bool processYaml,
+    ui64 version,
     const TString &yamlConfig,
     const TMap<ui64, TString> &volatileYamlConfigs)
 {
-    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, yamlConfig, volatileYamlConfigs);
+    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, version, yamlConfig, volatileYamlConfigs);
 }
 
 } // namespace NKikimr::NConsole

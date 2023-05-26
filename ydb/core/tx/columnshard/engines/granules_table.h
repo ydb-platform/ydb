@@ -1,22 +1,28 @@
 #pragma once
 #include "db_wrapper.h"
-#include <ydb/core/formats/replace_key.h>
+#include <ydb/core/formats/arrow/replace_key.h>
 
 namespace NKikimr::NOlap {
 
 struct TGranuleRecord {
+private:
+    TSnapshot CreatedAt;
+public:
     ui64 PathId;
     ui64 Granule;
-    TSnapshot CreatedAt;
     NArrow::TReplaceKey Mark;
 
     TGranuleRecord(ui64 pathId, ui64 granule, const TSnapshot& createdAt, const NArrow::TReplaceKey& mark)
-        : PathId(pathId)
+        : CreatedAt(createdAt)
+        , PathId(pathId)
         , Granule(granule)
-        , CreatedAt(createdAt)
         , Mark(mark)
     {
         Y_VERIFY(Mark.Size());
+    }
+
+    const TSnapshot& GetCreatedAt() const {
+        return CreatedAt;
     }
 
     bool operator == (const TGranuleRecord& rec) const {
@@ -27,7 +33,7 @@ struct TGranuleRecord {
         out << '{';
         auto& snap = rec.CreatedAt;
         out << rec.PathId << '#' << rec.Granule << ' '
-            << snap.PlanStep << ':' << (snap.TxId == Max<ui64>() ? "max" : ToString(snap.TxId));
+            << snap;
         out << '}';
         return out;
     }
@@ -48,7 +54,7 @@ public:
         db.EraseGranule(IndexId, Engine, row);
     }
 
-    bool Load(IDbWrapper& db, std::function<void(TGranuleRecord&&)> callback) {
+    bool Load(IDbWrapper& db, const std::function<void(const TGranuleRecord&)>& callback) {
         return db.LoadGranules(IndexId, Engine, callback);
     }
 

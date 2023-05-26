@@ -67,6 +67,7 @@ namespace NKikimr {
                     PARAM(Duration, End - Start);
                     PARAM_V(KeyPos);
                     PARAM_V(Eof);
+                    PARAM_V(UnrecoveredNonphantomBlobs);
                     PARAM_V(DonorVDiskId);
                     PARAM_V(DropDonor);
                     GROUP("Plan Generation Stats") {
@@ -169,6 +170,7 @@ namespace NKikimr {
         std::set<TVDiskID> ConnectedPeerDisks, ConnectedDonorDisks;
         TEvResumeForce *ResumeForceToken = nullptr;
         TInstant ReplicationEndTime;
+        bool UnrecoveredNonphantomBlobs = false;
 
         friend class TActorBootstrapped<TReplScheduler>;
 
@@ -256,6 +258,7 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
+            UnrecoveredNonphantomBlobs = false;
 
             Become(&TThis::StateRepl);
 
@@ -339,6 +342,8 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_REPL, BSVR16, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM COMPLETED"), (Info, *info));
             LastReplQuantumEnd = now;
 
+            UnrecoveredNonphantomBlobs |= info->UnrecoveredNonphantomBlobs;
+
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
@@ -367,31 +372,6 @@ namespace NKikimr {
 
             History.Push(info);
 
-#ifndef NDEBUG
-            // validate history -- work units must decrease consistently with work units processed
-            TEvReplFinished::TInfoPtr prev = nullptr;
-            for (auto it = History.Begin(); it != History.End(); ++it) {
-                TEvReplFinished::TInfoPtr cur = *it;
-                if (prev) {
-                    Y_VERIFY_DEBUG_S(
-                        cur->WorkUnitsTotal <= prev->WorkUnitsTotal - prev->WorkUnitsPerformed &&
-                        cur->ItemsTotal <= prev->ItemsTotal - prev->ItemsRecovered - prev->ItemsPhantom,
-                        "cur.WorkUnits# " << cur->WorkUnits()
-                        << " prev.WorkUnits# " << prev->WorkUnits()
-                        << " cur.Items# " << cur->Items()
-                        << " prev.Items# " << prev->Items());
-                }
-                Y_VERIFY_DEBUG_S(
-                    cur->WorkUnitsPlanned <= cur->WorkUnitsTotal &&
-                    cur->WorkUnitsPerformed <= cur->WorkUnitsPlanned &&
-                    cur->ItemsPlanned <= cur->ItemsTotal &&
-                    cur->ItemsPlanned == cur->ItemsRecovered + cur->ItemsNotRecovered + cur->ItemsException +
-                        cur->ItemsPartiallyRecovered + cur->ItemsPhantom + cur->ItemsNonPhantom,
-                    "WorkUnits# " << cur->WorkUnits() << " Items# " << cur->Items());
-                prev = cur;
-            }
-#endif
-
             TDuration timeRemaining;
 
             if (finished) {
@@ -409,6 +389,11 @@ namespace NKikimr {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
                     Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
+                    if (!UnrecoveredNonphantomBlobs) {
+                        // semi-finished replication -- we have only phantom-like unreplicated blobs
+                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                            SelfId(), nullptr, 1));
+                    }
                 } else {
                     // no more blobs to replicate; replication will not resume
                     State = Finished;

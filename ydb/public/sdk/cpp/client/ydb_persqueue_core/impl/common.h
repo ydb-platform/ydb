@@ -407,6 +407,10 @@ public:
         }
     }
 
+    bool IsClosed() {
+        return Closed;
+    }
+
 protected:
     const TSettings& Settings;
     TWaiter Waiter;

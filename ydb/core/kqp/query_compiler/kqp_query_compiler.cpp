@@ -847,6 +847,10 @@ private:
             readProto.SetSorted(readSettings.Sorted);
             YQL_ENSURE(readSettings.SkipNullKeys.empty());
 
+            if (readSettings.SequentialInFlight) {
+                readProto.SetSequentialInFlightShards(*readSettings.SequentialInFlight);
+            }
+
             auto ranges = settings.RangesExpr().template Maybe<TCoParameter>();
             if (ranges.IsValid()) {
                 auto& rangesParam = *readProto.MutableRanges();

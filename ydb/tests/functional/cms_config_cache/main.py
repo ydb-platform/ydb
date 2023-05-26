@@ -46,6 +46,11 @@ LogConfig {
 }
 """
 
+    log_entry = """Entry {
+    Component: "FLAT_TX_SCHEMESHARD"
+    Level: 7
+  }"""
+
     @classmethod
     def setup_class(cls):
         configurator = KikimrConfigGenerator()
@@ -69,7 +74,7 @@ LogConfig {
 
     def test_cache_log_settings(self):
         with open(self._cms_config_cache_file_path(), 'r') as file:
-            assert 'LogConfig' not in file.read(), "initial node config should not contain LogConfig items"
+            assert self.log_entry not in file.read(), "initial node config should not contain LogConfig items"
         self.cluster.client.add_config_item(self.sample_log_config)
         timeout = 60
         step = 1
@@ -79,7 +84,7 @@ LogConfig {
             time.sleep(step)
             cur += step
             with open(self._cms_config_cache_file_path(), 'r') as file:
-                config_updated = 'LogConfig' in file.read()
+                config_updated = self.log_entry in file.read()
         assert config_updated, "log config wasn't updated"
 
     def test_cms_config_cache(self):

@@ -869,13 +869,20 @@ S2N_API extern int s2n_config_set_verify_after_sign(struct s2n_config *config, s
 S2N_API extern int s2n_config_set_send_buffer_size(struct s2n_config *config, uint32_t size);
 
 /**
- * Enable or disable recieving of multiple TLS records in a single s2n_recv call
+ * Enable or disable receiving of multiple TLS records in a single s2n_recv call
  *
- * Legacy behavior is to return after reading a single TLS record which may not be the most
- * efficient way to invoke this function, especially if larger receive buffers are used.
+ * By default, s2n-tls returns from s2n_recv() after reading a single TLS record.
+ * Enabling receiving of multiple records will instead cause s2n_recv() to attempt
+ * to read until the application-provided output buffer is full. This may be more
+ * efficient, especially if larger receive buffers are used.
+ *
+ * @note If this option is enabled with blocking IO, the call to s2n_recv() will
+ * not return until either the application-provided output buffer is full or the
+ * peer closes the connection. This may lead to unintentionally long waits if the
+ * peer does not send enough data.
  *
  * @param config The configuration object being updated
- * @param enabled Set to `true` if multiple record recieve is to be enabled; `false` to disable.
+ * @param enabled Set to `true` if multiple record receive is to be enabled; `false` to disable.
  * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
  */
 S2N_API extern int s2n_config_set_recv_multi_record(struct s2n_config *config, bool enabled);
@@ -1711,10 +1718,16 @@ S2N_API extern int s2n_connection_set_protocol_preferences(struct s2n_connection
 /**
  * Sets the server name for the connection.
  *
- * It may be desirable for clients
+ * The provided server name will be sent by the client to the server in the
+ * server_name ClientHello extension. It may be desirable for clients
  * to provide this information to facilitate secure connections to
  * servers that host multiple 'virtual' servers at a single underlying
  * network address.
+ *
+ * s2n-tls does not place any restrictions on the provided server name. However,
+ * other TLS implementations might. Specifically, the TLS specification for the
+ * server_name extension requires that it be an ASCII-encoded DNS name without a
+ * trailing dot, and explicitly forbids literal IPv4 or IPv6 addresses.
  *
  * @param conn The connection object being queried
  * @param server_name A pointer to a string containing the desired server name
@@ -1951,7 +1964,7 @@ S2N_API extern int s2n_connection_free(struct s2n_connection *conn);
  *
  * Once `s2n_shutdown` is complete:
  * * The s2n_connection handle cannot be used for reading for writing.
- * * The underlying transport can be closed. Most likely via `close()`.
+ * * The underlying transport can be closed. Most likely via `shutdown()` or `close()`.
  * * The s2n_connection handle can be freed via s2n_connection_free() or reused via s2n_connection_wipe()
  *
  * @param conn A pointer to the s2n_connection object
@@ -1959,6 +1972,34 @@ S2N_API extern int s2n_connection_free(struct s2n_connection *conn);
  * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
  */
 S2N_API extern int s2n_shutdown(struct s2n_connection *conn, s2n_blocked_status *blocked);
+
+/**
+ * Attempts to close the write side of the TLS connection.
+ *
+ * TLS1.3 supports closing the write side of a TLS connection while leaving the read
+ * side unaffected. This feature is usually referred to as "half-close". We send
+ * a close_notify alert, but do not wait for the peer to respond.
+ *
+ * Like `s2n_shutdown()`, this method does not affect the underlying transport.
+ *
+ * `s2n_shutdown_send()` may still be called for earlier TLS versions, but most
+ * TLS implementations will react by immediately discarding any pending writes and
+ * closing the connection.
+ *
+ * Once `s2n_shutdown_send()` is complete:
+ * * The s2n_connection handle CANNOT be used for writing.
+ * * The s2n_connection handle CAN be used for reading.
+ * * The write side of the underlying transport can be closed. Most likely via `shutdown()`.
+ *
+ * The application should still call `s2n_shutdown()` or wait for `s2n_recv()` to
+ * return 0 to indicate end-of-data before cleaning up the connection or closing
+ * the read side of the underlying transport.
+ *
+ * @param conn A pointer to the s2n_connection object
+ * @param blocked A pointer which will be set to the blocked status, as in s2n_negotiate()
+ * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
+ */
+S2N_API extern int s2n_shutdown_send(struct s2n_connection *conn, s2n_blocked_status *blocked);
 
 /**
  * Used to declare what type of client certificate authentication to use.

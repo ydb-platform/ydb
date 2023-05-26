@@ -8,7 +8,10 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/core/formats/ssa_runtime_version.h>
+#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/core/formats/arrow/simple_builder/array.h>
+#include <ydb/core/formats/arrow/simple_builder/batch.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
@@ -23,6 +26,7 @@
 #include <util/system/sanitizers.h>
 
 #include <fmt/format.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -43,7 +47,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
         // runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
         // runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        // runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
@@ -59,39 +63,319 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         EnableDebugLogging(kikimr.GetTestServer().GetRuntime());
     }
 
+    void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
+        NYdb::TValueParser value(v);
+
+        while (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            if (value.IsNull()) {
+                out << "<NULL>";
+                return;
+            } else {
+                value.OpenOptional();
+            }
+        }
+
+        switch (value.GetPrimitiveType()) {
+            case NYdb::EPrimitiveType::Uint32:
+            {
+                out << value.GetUint32();
+                break;
+            }
+            case NYdb::EPrimitiveType::Uint64:
+            {
+                out << value.GetUint64();
+                break;
+            }
+            case NYdb::EPrimitiveType::Int64:
+            {
+                out << value.GetInt64();
+                break;
+            }
+            case NYdb::EPrimitiveType::Utf8:
+            {
+                out << value.GetUtf8();
+                break;
+            }
+            case NYdb::EPrimitiveType::Timestamp:
+            {
+                out << value.GetTimestamp();
+                break;
+            }
+            default:
+            {
+                UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
+            }
+        }
+    }
+
+    void PrintRow(IOutputStream& out, const THashMap<TString, NYdb::TValue>& fields) {
+        for (const auto& f : fields) {
+            out << f.first << ": ";
+            PrintValue(out, f.second);
+            out << " ";
+        }
+    }
+
+    void PrintRows(IOutputStream& out, const TVector<THashMap<TString, NYdb::TValue>>& rows) {
+        for (const auto& r : rows) {
+            PrintRow(out, r);
+            out << "\n";
+        }
+    }
+
+    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr) {
+        TVector<THashMap<TString, NYdb::TValue>> rows;
+        if (statInfo) {
+            *statInfo = NJson::JSON_NULL;
+        }
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(),
+                "Unexpected empty scan query response.");
+
+            if (streamPart.HasQueryStats()) {
+                auto plan = streamPart.GetQueryStats().GetPlan();
+                if (plan && statInfo) {
+                    UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
+                }
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+                NYdb::TResultSetParser rsParser(resultSet);
+                while (rsParser.TryNextRow()) {
+                    THashMap<TString, NYdb::TValue> row;
+                    for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
+                        row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
+                    }
+                    rows.emplace_back(std::move(row));
+                }
+            }
+        }
+        return rows;
+    }
+
+    TVector<THashMap<TString, NYdb::TValue>> ExecuteScanQuery(NYdb::NTable::TTableClient& tableClient, const TString& query) {
+        Cerr << "====================================\n"
+            << "QUERY:\n" << query
+            << "\n\nRESULT:\n";
+
+        TStreamExecScanQuerySettings scanSettings;
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        auto rows = CollectRows(it);
+
+        PrintRows(Cerr, rows);
+        Cerr << "\n";
+
+        return rows;
+    }
+
+    ui64 GetUint32(const NYdb::TValue& v) {
+        NYdb::TValueParser value(v);
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            return *value.GetOptionalUint32();
+        } else {
+            return value.GetUint32();
+        }
+    }
+
+    ui64 GetUint64(const NYdb::TValue& v) {
+        NYdb::TValueParser value(v);
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            return *value.GetOptionalUint64();
+        } else {
+            return value.GetUint64();
+        }
+    }
+
+    TInstant GetTimestamp(const NYdb::TValue& v) {
+        NYdb::TValueParser value(v);
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            return *value.GetOptionalTimestamp();
+        } else {
+            return value.GetTimestamp();
+        }
+    }
+
+    class TTypedLocalHelper: public Tests::NCS::THelper {
+    private:
+        using TBase = Tests::NCS::THelper;
+        const TString TypeName;
+        TKikimrRunner& KikimrRunner;
+        const TString TablePath;
+        const TString TableName;
+        const TString StoreName;
+    protected:
+        virtual TString GetTestTableSchema() const override {
+            TString result;
+            if (TypeName) {
+                result = R"(Columns { Name: "field" Type: ")" + TypeName + "\"}";
+            }
+            result += R"(
+                Columns { Name: "pk_int" Type: "Int64" }
+                KeyColumnNames: "pk_int"
+                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+            )";
+            return result;
+        }
+        virtual std::vector<TString> GetShardingColumns() const override {
+            return { "pk_int" };
+        }
+    public:
+        TTypedLocalHelper(const TString& typeName, TKikimrRunner& kikimrRunner, const TString& tableName = "olapTable", const TString& storeName = "olapStore")
+            : TBase(kikimrRunner.GetTestServer())
+            , TypeName(typeName)
+            , KikimrRunner(kikimrRunner)
+            , TablePath("/Root/" + storeName + "/" + tableName)
+            , TableName(tableName)
+            , StoreName(storeName)
+        {
+            SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        }
+
+        void PrintCount() {
+            const TString selectQuery = "SELECT COUNT(*), MAX(pk_int), MIN(pk_int) FROM `" + TablePath + "`";
+
+            auto tableClient = KikimrRunner.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            for (auto&& r : rows) {
+                for (auto&& c : r) {
+                    Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
+                }
+            }
+        }
+
+        class TDistribution {
+        private:
+            YDB_READONLY(ui32, Count, 0);
+            YDB_READONLY(ui32, MinCount, 0);
+            YDB_READONLY(ui32, MaxCount, 0);
+            YDB_READONLY(ui32, GroupsCount, 0);
+        public:
+            TDistribution(const ui32 count, const ui32 minCount, const ui32 maxCount, const ui32 groupsCount)
+                : Count(count)
+                , MinCount(minCount)
+                , MaxCount(maxCount)
+                , GroupsCount(groupsCount)
+            {
+
+            }
+
+            TString DebugString() const {
+                return TStringBuilder()
+                    << "count=" << Count << ";"
+                    << "min_count=" << MinCount << ";"
+                    << "max_count=" << MaxCount << ";"
+                    << "groups_count=" << GroupsCount << ";";
+            }
+        };
+
+        TDistribution GetDistribution() {
+            const TString selectQuery = "SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
+
+            auto tableClient = KikimrRunner.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            ui32 count = 0;
+            std::optional<ui32> minCount;
+            std::optional<ui32> maxCount;
+            std::set<TString> groups;
+            for (auto&& r : rows) {
+                for (auto&& c : r) {
+                    if (c.first == "c") {
+                        const ui64 v = GetUint64(c.second);
+                        count += v;
+                        if (!minCount || *minCount > v) {
+                            minCount = v;
+                        }
+                        if (!maxCount || *maxCount < v) {
+                            maxCount = v;
+                        }
+                    } else if (c.first == "field") {
+                        Y_VERIFY(groups.emplace(c.second.GetProto().DebugString()).second);
+                    }
+                    Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
+                }
+            }
+            Y_VERIFY(maxCount);
+            Y_VERIFY(minCount);
+            return TDistribution(count, *minCount, *maxCount, groups.size());
+        }
+
+        void GetVolumes(ui64& rawBytes, ui64& bytes, const bool verbose = false) {
+            const TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats`";
+
+            auto tableClient = KikimrRunner.GetTableClient();
+
+            std::optional<ui64> rawBytesPred;
+            std::optional<ui64> bytesPred;
+            while (true) {
+                auto rows = ExecuteScanQuery(tableClient, selectQuery);
+                rawBytes = 0;
+                bytes = 0;
+                for (auto&& r : rows) {
+                    if (verbose) {
+                        Cerr << "-------" << Endl;
+                    }
+                    for (auto&& c : r) {
+                        if (c.first == "RawBytes") {
+                            rawBytes += GetUint64(c.second);
+                        }
+                        if (c.first == "Bytes") {
+                            bytes += GetUint64(c.second);
+                        }
+                        if (verbose) {
+                            Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
+                        }
+                    }
+                }
+                if (rawBytesPred && *rawBytesPred == rawBytes && bytesPred && *bytesPred == bytes) {
+                    break;
+                } else {
+                    rawBytesPred = rawBytes;
+                    bytesPred = bytes;
+                    Cerr << "Wait changes: " << bytes << "/" << rawBytes << Endl;
+                    Sleep(TDuration::Seconds(5));
+                }
+            }
+            Cerr << bytes << "/" << rawBytes << Endl;
+        }
+
+        template <class TFiller>
+        void FillTable(const TFiller& fillPolicy, const ui32 pkKff = 0, const ui32 numRows = 800000) const {
+            std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
+            NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+            std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+            TBase::SendDataViaActorSystem(TablePath, batch);
+        }
+
+        void FillPKOnly(const ui32 pkKff = 0, const ui32 numRows = 800000) const {
+            std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>>("pk_int", numRows * pkKff));
+            NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+            std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+            TBase::SendDataViaActorSystem(TablePath, batch);
+        }
+
+        void CreateTestOlapTable(ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
+            CreateOlapTableWithStore(TableName, StoreName, storeShardsCount, tableShardsCount);
+        }
+    };
+
     class TLocalHelper: public Tests::NCS::THelper {
     private:
         using TBase = Tests::NCS::THelper;
     public:
+
         void CreateTestOlapTable(TString tableName = "olapTable", TString storeName = "olapStore",
-            ui32 storeShardsCount = 4, ui32 tableShardsCount = 3,
-            TString shardingFunction = "HASH_FUNCTION_CLOUD_LOGS") {
-            TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-            CreateTestOlapStore(sender, Sprintf(R"(
-                Name: "%s"
-                ColumnShardCount: %d
-                SchemaPresets {
-                    Name: "default"
-                    Schema {
-                        %s
-                    }
-                }
-            )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
-
-            TString shardingColumns = "[\"timestamp\", \"uid\"]";
-            if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {
-                shardingColumns = "[\"uid\"]";
-            }
-
-            TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
-            Name: "%s"
-            ColumnShardCount: %d
-            Sharding {
-                HashSharding {
-                    Function: %s
-                    Columns: %s
-                }
-            })", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
+            ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
+            CreateOlapTableWithStore(tableName, storeName, storeShardsCount, tableShardsCount);
         }
         using TBase::TBase;
 
@@ -272,135 +556,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
-    }
-
-    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr) {
-        TVector<THashMap<TString, NYdb::TValue>> rows;
-        if (statInfo) {
-            *statInfo = NJson::JSON_NULL;
-        }
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
-            }
-
-            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(),
-                "Unexpected empty scan query response.");
-
-            if (streamPart.HasQueryStats()) {
-                auto plan = streamPart.GetQueryStats().GetPlan();
-                if (plan && statInfo) {
-                    UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
-                }
-            }
-
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-                NYdb::TResultSetParser rsParser(resultSet);
-                while (rsParser.TryNextRow()) {
-                    THashMap<TString, NYdb::TValue> row;
-                    for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
-                        row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
-                    }
-                    rows.emplace_back(std::move(row));
-                }
-            }
-        }
-        return rows;
-    }
-
-    void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-
-        while (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            if (value.IsNull()) {
-                out << "<NULL>";
-                return;
-            } else {
-                value.OpenOptional();
-            }
-        }
-
-        switch (value.GetPrimitiveType()) {
-            case NYdb::EPrimitiveType::Uint32: {
-                out << value.GetUint32();
-                break;
-            }
-            case NYdb::EPrimitiveType::Uint64: {
-                out << value.GetUint64();
-                break;
-            }
-            case NYdb::EPrimitiveType::Utf8: {
-                out << value.GetUtf8();
-                break;
-            }
-            case NYdb::EPrimitiveType::Timestamp: {
-                out << value.GetTimestamp();
-                break;
-            }
-            default: {
-                UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
-            }
-        }
-    }
-
-    void PrintRow(IOutputStream& out, const THashMap<TString, NYdb::TValue>& fields) {
-        for (const auto& f : fields) {
-            out << f.first << ": ";
-            PrintValue(out, f.second);
-            out << " ";
-        }
-    }
-
-    void PrintRows(IOutputStream& out, const TVector<THashMap<TString, NYdb::TValue>>& rows) {
-        for (const auto& r : rows) {
-            PrintRow(out, r);
-            out << "\n";
-        }
-    }
-
-    TVector<THashMap<TString, NYdb::TValue>> ExecuteScanQuery(NYdb::NTable::TTableClient& tableClient, const TString& query) {
-        Cerr << "====================================\n"
-            << "QUERY:\n" << query
-            << "\n\nRESULT:\n";
-
-        TStreamExecScanQuerySettings scanSettings;
-        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
-        auto rows = CollectRows(it);
-
-        PrintRows(Cerr, rows);
-        Cerr << "\n";
-
-        return rows;
-    }
-
-    ui64 GetUint32(const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            return *value.GetOptionalUint32();
-        } else {
-            return value.GetUint32();
-        }
-    }
-
-    ui64 GetUint64(const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            return *value.GetOptionalUint64();
-        } else {
-            return value.GetUint64();
-        }
-    }
-
-    TInstant GetTimestamp(const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            return *value.GetOptionalTimestamp();
-        } else {
-            return value.GetTimestamp();
-        }
     }
 
     void CreateTableOfAllTypes(TKikimrRunner& kikimr) {
@@ -1218,7 +1373,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
-        // EnableDebugLogging(kikimr);
+        //EnableDebugLogging(kikimr);
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -1538,6 +1693,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
         auto query = R"(SELECT id, binary_str FROM `/Root/tableWithNulls` WHERE binary_str LIKE "5%")";
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
+                        TStringBuilder() << "Predicate pushed down. Query: " << query);
+    }
+
+    Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        EnableDebugLogging(kikimr);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto query = R"(
+            PRAGMA DisableAnsiLike;
+            SELECT id, resource_id FROM `/Root/tableWithNulls` WHERE resource_id LIKE "%5%"
+        )";
         auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -1902,7 +2083,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
 
-        EnableDebugLogging(kikimr);
+        //EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2286,7 +2467,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Aggregation_ResultCountExpr) {
-        NColumnShard::TLimits::SetMaxBlobSize(10000);
+        auto g = NColumnShard::TLimits::MaxBlobSizeGuard(10000);
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                     SELECT
@@ -3113,6 +3294,92 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
+    }
+
+    Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
+        ui64 rawBytesPK1;
+        ui64 bytesPK1;
+        {
+            auto settings = TKikimrSettings()
+                .SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
+            EnableDebugLogging(kikimr);
+            TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
+            helper.CreateTestOlapTable();
+            helper.FillPKOnly(0, 800000);
+            helper.GetVolumes(rawBytesPK1, bytesPK1, false);
+        }
+
+        ui64 rawBytesUnpack1PK = 0;
+        ui64 bytesUnpack1PK = 0;
+        ui64 rawBytesPackAndUnpack2PK;
+        ui64 bytesPackAndUnpack2PK;
+        const ui32 rowsCount = 800000;
+        const ui32 groupsCount = 512;
+        {
+            auto settings = TKikimrSettings()
+                .SetWithSampleTables(false);
+            TKikimrRunner kikimr(settings);
+            EnableDebugLogging(kikimr);
+            TTypedLocalHelper helper("Utf8", kikimr);
+            helper.CreateTestOlapTable();
+            NArrow::NConstruction::TStringPoolFiller sPool(groupsCount, 52);
+            helper.FillTable(sPool, 0, rowsCount);
+            helper.PrintCount();
+            {
+                auto d = helper.GetDistribution();
+                Y_VERIFY(d.GetCount() == rowsCount);
+                Y_VERIFY(d.GetGroupsCount() == groupsCount);
+                Y_VERIFY(d.GetMaxCount() - d.GetMinCount() <= 1);
+            }
+            helper.GetVolumes(rawBytesUnpack1PK, bytesUnpack1PK, false);
+            Sleep(TDuration::Seconds(5));
+            auto tableClient = kikimr.GetTableClient();
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED`=`true`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field1, `ENCODING.DICTIONARY.ENABLED`=`true`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `ENCODING.DICTIONARY.ENABLED1`=`true`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
+            }
+            Sleep(TDuration::Seconds(5));
+            helper.FillTable(sPool, 1, 800000);
+            Sleep(TDuration::Seconds(5));
+            {
+                helper.GetVolumes(rawBytesPackAndUnpack2PK, bytesPackAndUnpack2PK, false);
+                helper.PrintCount();
+                {
+                    auto d = helper.GetDistribution();
+                    Cerr << d.DebugString() << Endl;
+                    Y_VERIFY(d.GetCount() == 2 * rowsCount);
+                    Y_VERIFY(d.GetGroupsCount() == groupsCount);
+                    Y_VERIFY(d.GetMaxCount() - d.GetMinCount() <= 2);
+                }
+            }
+        }
+        const ui64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;
+        const ui64 bytesUnpack = bytesUnpack1PK - bytesPK1;
+        const ui64 rawBytesPack = rawBytesPackAndUnpack2PK - rawBytesUnpack1PK - rawBytesPK1;
+        const ui64 bytesPack = bytesPackAndUnpack2PK - bytesUnpack1PK - bytesPK1;
+        TStringBuilder result;
+        result << "unpacked data: " << rawBytesUnpack << " / " << bytesUnpack << Endl;
+        result << "packed data: " << rawBytesPack << " / " << bytesPack << Endl;
+        result << "frq_diff: " << 1.0 * bytesPack / bytesUnpack << Endl;
+        result << "frq_compression: " << 1.0 * bytesPack / rawBytesPack << Endl;
+        result << "pk_size : " << rawBytesPK1 << " / " << bytesPK1 << Endl;
+        Cerr << result << Endl;
+        Y_VERIFY(bytesPack / bytesUnpack < 0.1);
     }
 
     Y_UNIT_TEST(SelectLimit1ManyShards) {
@@ -4408,6 +4675,99 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 FROM `/Root/tableWithNulls`;
             )")
             .SetExpectedReply("[[10u]]");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_GetValue) {
+        // Should be fixed after Arrow kernel implementation for JSON_VALUE
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND id = 1;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[1;["val1"];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_GetValue_ToString) {
+        // Should be fixed after Arrow kernel implementation for JSON_VALUE
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonValue")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[6;#;["val1"]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Exists) {
+        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    JSON_EXISTS(jsonval, "$.col1") AND level = 1;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[1;[%true];#]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Exists_JsonDocument) {
+        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
+        // https://st.yandex-team.ru/KIKIMR-17903
+        return;
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
+                WHERE
+                    JSON_EXISTS(jsondoc, "$.col1") AND id = 6;
+            )")
+#if SSA_RUNTIME_VERSION >= 3U
+            .AddExpectedPlanOptions("KqpOlapJsonExists")
+#else
+            .AddExpectedPlanOptions("Udf")
+#endif
+            .SetExpectedReply(R"([[6;#;[%true]]])");
+
+        TestTableWithNulls({ testCase });
+    }
+
+    Y_UNIT_TEST(Json_Query) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT id, JSON_QUERY(jsonval, "$.col1" WITH UNCONDITIONAL WRAPPER),
+                    JSON_QUERY(jsondoc, "$.col1" WITH UNCONDITIONAL WRAPPER)
+                FROM `/Root/tableWithNulls`
+                WHERE
+                    level = 1;
+            )")
+            .AddExpectedPlanOptions("Udf")
+            .SetExpectedReply(R"([[1;["[\"val1\"]"];#]])");
 
         TestTableWithNulls({ testCase });
     }

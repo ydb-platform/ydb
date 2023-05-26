@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(OutgoingStream) {
 
                 const size_t maxBuffers = 128;
                 std::vector<NActors::TConstIoVec> iov;
-                stream.ProduceIoVec(iov, maxBuffers);
+                stream.ProduceIoVec(iov, maxBuffers, Max<size_t>());
                 size_t offset = base + sendOffset;
                 for (const auto& [ptr, len] : iov) {
                     UNIT_ASSERT(memcmp(buffer.data() + offset, ptr, len) == 0);

@@ -318,6 +318,98 @@ TString TNodeRef::Scalar() const {
     return TString(text, size);
 }
 
+TMark TNodeRef::BeginMark() const {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
+        fy_document_iterator_create(),
+        &fy_document_iterator_destroy);
+    fy_document_iterator_node_start(it.get(), Node_);
+    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> ev(
+        fy_document_iterator_body_next(it.get()),
+        deleter);
+    auto* mark = fy_event_start_mark(ev.get());
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
+bool IsComplexType(ENodeType type) {
+    return type == ENodeType::Mapping || type == ENodeType::Sequence;
+}
+
+fy_event_type GetOpenEventType(ENodeType type) {
+    switch(type) {
+    case ENodeType::Mapping:
+        return FYET_MAPPING_START;
+    case ENodeType::Sequence:
+        return FYET_SEQUENCE_START;
+    default:
+        Y_FAIL("Not a brackets type");
+    }
+}
+
+fy_event_type GetCloseEventType(ENodeType type) {
+    switch(type) {
+    case ENodeType::Mapping:
+        return FYET_MAPPING_END;
+    case ENodeType::Sequence:
+        return FYET_SEQUENCE_END;
+    default:
+        Y_FAIL("Not a brackets type");
+    }
+}
+
+TMark TNodeRef::EndMark() const {
+    ENSURE_NODE_NOT_EMPTY(Node_);
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
+        fy_document_iterator_create(),
+        &fy_document_iterator_destroy);
+    fy_document_iterator_node_start(it.get(), Node_);
+
+    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> ev(
+        fy_document_iterator_body_next(it.get()),
+        deleter);
+
+    if (IsComplexType(Type())) {
+        int openBrackets = 0;
+        if (ev->type == GetOpenEventType(Type())) {
+            ++openBrackets;
+        }
+        if (ev->type == GetCloseEventType(Type())) {
+            --openBrackets;
+        }
+        while (ev->type != GetCloseEventType(Type()) || openBrackets != 0) {
+            std::unique_ptr<fy_event, decltype(deleter)> cur(
+                fy_document_iterator_body_next(it.get()),
+                deleter);
+            if (cur == nullptr) {
+                break;
+            }
+            if (cur->type == GetOpenEventType(Type())) {
+                ++openBrackets;
+            }
+            if (cur->type == GetCloseEventType(Type())) {
+                --openBrackets;
+            }
+            if (fy_event_get_node_style(cur.get()) != FYNS_BLOCK) {
+                ev.reset(cur.release());
+            }
+        }
+    }
+
+    const auto* mark = fy_event_end_mark(ev.get());
+
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
 TMapping TNodeRef::Map() const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     Y_ENSURE_EX(fy_node_is_mapping(Node_), TFyamlEx() << "Node is not Mapping: " << Path());
@@ -425,6 +517,12 @@ TNode::TNode(fy_node* node)
 TNodeRef TNodePairRef::Key() const {
     ENSURE_NODE_NOT_EMPTY(Pair_);
     return TNodeRef(fy_node_pair_key(Pair_));
+}
+
+int TNodePairRef::Index(const TNodeRef& node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    ENSURE_NODE_NOT_EMPTY(Pair_);
+    return fy_node_mapping_get_pair_index(node.Node_, Pair_);
 }
 
 void TNodePairRef::SetKey(const TNodeRef& node) {

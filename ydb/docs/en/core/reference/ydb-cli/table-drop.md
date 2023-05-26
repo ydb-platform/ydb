@@ -31,5 +31,5 @@ To view a description of the table delete command:
 To delete the table `series`:
 
 ```bash
-{{ ydb-cli }} -p db1 table drop series
+{{ ydb-cli }} -p quickstart table drop series
 ```

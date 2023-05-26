@@ -701,7 +701,8 @@ public:
                                            const TString &nodeType,
                                            const TString& domain = "",
                                            const TString& token = "",
-                                           bool serveYaml = false) const;
+                                           bool serveYaml = false,
+                                           ui64 version = 0) const;
 
 private:
     TNodeConfigurator(TKikimr& kikimr);
@@ -807,7 +808,8 @@ protected:
                                                const TString &nodeType,
                                                const TString& domain,
                                                const TString& token = TString(),
-                                               bool serveYaml = false);
+                                               bool serveYaml = false,
+                                               ui64 version = 0);
 
     template <typename T> static void DumpRequest(const T& pb) {
         if (DUMP_REQUESTS) {

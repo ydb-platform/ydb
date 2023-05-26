@@ -37,6 +37,10 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
         return node; // already set?
     }
 
+    if (kqpCtx.Config.Get()->EnableSequentialReads) {
+        settings.SequentialInFlight = 1;
+    }
+
     TMaybeNode<TExprBase> limitValue;
     auto maybeTakeCount = take.Count().Maybe<TCoUint64>();
     auto maybeSkipCount = maybeSkip.Count().Maybe<TCoUint64>();

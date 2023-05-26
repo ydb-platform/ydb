@@ -1,6 +1,5 @@
 #include "proxy.h"
 #include "clusters_from_connections.h"
-#include "system_clusters.h"
 #include "table_bindings_from_bindings.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -1649,7 +1648,9 @@ private:
         FinalQueryStatus = status;
 
         QueryStateUpdateRequest.set_status(FinalQueryStatus); // Can be changed later.
-        QueryStateUpdateRequest.set_status_code(NYql::NDqProto::StatusIds::SUCCESS);
+        if (FinalQueryStatus == FederatedQuery::QueryMeta::COMPLETED && QueryStateUpdateRequest.status_code() == NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            QueryStateUpdateRequest.set_status_code(NYql::NDqProto::StatusIds::SUCCESS);
+        }
         *QueryStateUpdateRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
         Become(&TRunActor::StateFuncWrapper<&TRunActor::FinishStateFunc>);
 
@@ -1779,17 +1780,12 @@ private:
         *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
-        auto* attr = gatewaysConfig.MutableS3()->MutableDefaultSettings()->Add();
-        attr->SetName("ArrowThreadPool");
-        attr->SetValue("false");
-
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
         AddClustersFromConnections(YqConnections,
             Params.Config.GetCommon().GetUseBearerForYdb(),
             Params.Config.GetCommon().GetObjectStorageEndpoint(),
@@ -1922,10 +1918,7 @@ private:
             }
             PrepareGraphs(); // will compress and seal graphs
         } else {
-            Issues.AddIssues(issues);
-            if (message) {
-                Issues.AddIssue(TIssue(message));
-            }
+            AddIssueWithSubIssues(message ? message : TStringBuilder() << "Run query failed: " << ToString(status), issues);
             ResignQuery(
                 QueryEvalStatusCode != NYql::NDqProto::StatusIds::UNSPECIFIED ? QueryEvalStatusCode : NYql::NDqProto::StatusIds::ABORTED
             );

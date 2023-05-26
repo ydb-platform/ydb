@@ -19,6 +19,7 @@ import ydb.apps.dstool.lib.dstool_cmd_group_show_usage_by_tablets as group_show_
 import ydb.apps.dstool.lib.dstool_cmd_group_state as group_state
 import ydb.apps.dstool.lib.dstool_cmd_group_take_snapshot as group_take_snapshot
 import ydb.apps.dstool.lib.dstool_cmd_group_virtual_create as group_virtual_create
+import ydb.apps.dstool.lib.dstool_cmd_group_virtual_cancel as group_virtual_cancel
 
 import ydb.apps.dstool.lib.dstool_cmd_pool_create_virtual as pool_create_virtual
 import ydb.apps.dstool.lib.dstool_cmd_pool_list as pool_list
@@ -36,14 +37,14 @@ import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_run as cluster_workload_r
 import sys
 import ydb.apps.dstool.lib.common as common
 
-MODULE_PREFIX = 'ydb.apps.dstool.lib.dstool_cmd_'
+MODULE_PREFIX = 'dstool_cmd_'
 
 modules = [
     cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
     pool_list, pool_create_virtual,
-    group_check, group_decommit, group_show_blob_info, group_show_usage_by_tablets, group_state, group_take_snapshot, group_add, group_list, group_virtual_create,
+    group_check, group_decommit, group_show_blob_info, group_show_usage_by_tablets, group_state, group_take_snapshot, group_add, group_list, group_virtual_create, group_virtual_cancel,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list,
     vdisk_remove_donor, vdisk_evict, vdisk_list, vdisk_wipe,
     device_list,
@@ -53,7 +54,7 @@ default_structure = [
     ('device', ['list']),
     ('pdisk', ['add-by-serial', 'remove-by-serial', 'set', 'list']),
     ('vdisk', ['evict', 'remove-donor', 'wipe', 'list']),
-    ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'usage-by-tablets']), 'state', 'take-snapshot', 'list', ('virtual', ['create'])]),
+    ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'usage-by-tablets']), 'state', 'take-snapshot', 'list', ('virtual', ['create', 'cancel'])]),
     ('pool', ['list', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
@@ -64,7 +65,8 @@ default_structure = [
 def make_command_map_by_structure(subparsers, modules=modules, structure=default_structure):
     module_map = {}
     for module in modules:
-        module_map[module.__name__[len(MODULE_PREFIX):].replace('_', '-')] = module
+        last_name = module.__name__.split('.')[-1]
+        module_map[last_name[len(MODULE_PREFIX):].replace('_', '-')] = module
 
     command_map = {}
 

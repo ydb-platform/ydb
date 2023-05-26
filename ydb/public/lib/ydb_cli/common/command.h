@@ -90,6 +90,7 @@ public:
         TString Database;
         TString CaCerts;
         bool EnableSsl = false;
+        bool IsNetworkIntensive = false;
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
 

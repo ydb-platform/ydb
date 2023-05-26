@@ -66,7 +66,7 @@ void ExecutePgInsert(
         auto keyIn = (spec.IsKey) ? spec.TextIn(i) : ToString(i);
         TString req = Sprintf("\
         --!syntax_pg\n\
-        INSERT INTO \"%s\" (key, value) VALUES (\n\
+        INSERT INTO %s (key, value) VALUES (\n\
             '%s'::%s, '%s'::%s\n\
         )", tableName.Data(), keyIn.Data(), keyType.Data(), spec.TextIn(i).Data(), valType.Data());
         Cerr << req << Endl;
@@ -99,7 +99,7 @@ void ExecutePgArrayInsert(
         );
         TString req = Sprintf("\
         --!syntax_pg\n\
-        INSERT INTO \"%s\" (key, value) VALUES (\n\
+        INSERT INTO %s (key, value) VALUES (\n\
             %s, %s\n\
         );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
         Cerr << req << Endl;
@@ -124,7 +124,7 @@ bool ExecutePgInsertForCoercion(
 
     TString req = Sprintf("\
     --!syntax_pg\n\
-    INSERT INTO \"%s\" (key, value) VALUES (\n\
+    INSERT INTO %s (key, value) VALUES (\n\
         '0'::int2, '%s'::%s\n\
     )", tableName.Data(), spec.TextIn().Data(), valType.Data());
     Cerr << req << Endl;
@@ -160,7 +160,7 @@ void ValidateTypeCoercionResult(
     const TString& tableName,
     const TPgTypeCoercionTestSpec& spec)
 {
-    auto it = session.ReadTable(tableName).GetValueSync();
+    auto it = session.ReadTable("/Root/" + tableName).GetValueSync();
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
     bool eos = false;
@@ -730,10 +730,12 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         builder.AddNullableColumn(colNames[1], TPgType(typeName));
         builder.SetPrimaryKeyColumn(colNames[0]);
 
-        auto tableName = (setTableName.empty()) ?
-            Sprintf("/Root/Pg%u_%s", typeId, isText ? "t" : "b") : setTableName;
 
-        auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        auto tableName = (setTableName.empty()) ?
+            Sprintf("Pg%u_%s", typeId, isText ? "t" : "b") : setTableName;
+
+        auto fullTableName = "/Root/" + tableName;
+        auto result = session.CreateTable(fullTableName, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         NYdb::TValueBuilder rows;
@@ -758,14 +760,14 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
         rows.EndList();
 
-        result = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        result = db.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto readSettings = TReadTableSettings()
             .AppendColumns(colNames[0])
             .AppendColumns(colNames[1]);
 
-        auto it = session.ReadTable(tableName, readSettings).GetValueSync();
+        auto it = session.ReadTable(fullTableName, readSettings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), result.GetIssues().ToString());
         return tableName;
     };
@@ -783,18 +785,18 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         auto paramsHash = THash<TString>()(typeMod);
         auto textHash = THash<TString>()(textIn());
-        auto tableName = Sprintf("/Root/Coerce_%s_%" PRIu64 "_%" PRIu64,
+        auto tableName = Sprintf("Coerce_%s_%" PRIu64 "_%" PRIu64,
             typeName.c_str(), paramsHash, textHash);
-
+        auto fullTableName = "/Root/" + tableName;
         TTableBuilder builder;
         builder.AddNullableColumn("key", TPgType("pgint2"));
         builder.AddNullableColumn("value", TPgType(typeName, typeMod));
         builder.SetPrimaryKeyColumn("key");
 
-        auto createResult = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        auto createResult = session.CreateTable(fullTableName, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 
-        auto describeResult = session.DescribeTable(tableName).GetValueSync();
+        auto describeResult = session.DescribeTable(fullTableName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         auto tableColumns = describeResult.GetTableDescription().GetTableColumns();
         for (const auto& column : tableColumns) {
@@ -821,7 +823,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
         rows.EndList();
 
-        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        auto upsertResult = db.BulkUpsert(fullTableName, rows.Build()).GetValueSync();
         if (!upsertResult.IsSuccess()) {
             Cerr << upsertResult.GetIssues().ToString() << Endl;
             return std::make_pair(tableName, false);
@@ -843,7 +845,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 .AppendColumns("key")
                 .AppendColumns("value");
 
-            auto it = session.ReadTable(tableName, readSettings).GetValueSync();
+            auto it = session.ReadTable("/Root/" + tableName, readSettings).GetValueSync();
             Y_ENSURE(it.IsSuccess());
 
             bool eos = false;
@@ -1175,7 +1177,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn, "", 10, {"key1", "value1"});
-            TString emptyTableName = "/Root/PgEmpty" + ToString(spec.TypeId);
+            TString emptyTableName = "PgEmpty" + ToString(spec.TypeId);
             createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn, emptyTableName, 0);
             session.Close().GetValueSync();
 
@@ -1183,7 +1185,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = client.ExecuteYqlScript(
                 TStringBuilder() << R"(
                 --!syntax_pg
-                INSERT INTO ")" << emptyTableName << "\" (key, value) SELECT * FROM \"" << tableName << "\";"
+                INSERT INTO )" << emptyTableName << " (key, value) SELECT * FROM \"" << tableName << "\";"
             ).GetValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
         };
@@ -1200,7 +1202,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
 
-            auto tableName = "/Root/Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
+            auto tableName = "Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
             auto typeName = ((isArray) ? "_pg" : "pg") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key pgint2";
             auto valueEntry = "value " + typeName;
@@ -1262,13 +1264,13 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
             NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
 
-            auto tableName = "/Root/Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
+            auto tableName = "Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
             auto typeName = ((isArray) ? "_" : "") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key int2";
             auto valueEntry = "value " + typeName;
             auto req = Sprintf("\
             --!syntax_pg\n\
-            CREATE TABLE \"%s\" (\n\
+            CREATE TABLE %s (\n\
                 %s PRIMARY KEY,\n\
                 %s\n\
             );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
@@ -1326,7 +1328,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
         auto req = TStringBuilder() << R"(
         --!syntax_pg
-        CREATE TABLE "/Root/Pg" (
+        CREATE TABLE Pg (
         key int2 PRIMARY KEY,
         value int2 NOT NULL
         );)";
@@ -1340,7 +1342,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         TString reqV1 = TStringBuilder() << R"(
         --!syntax_v1
-        CREATE TABLE `/Root/Pg` (
+        CREATE TABLE `Pg` (
         key pg_int2,
         value pg_int2 NOT NULL,
         PRIMARY KEY (key)

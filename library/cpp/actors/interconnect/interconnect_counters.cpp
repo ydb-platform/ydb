@@ -215,20 +215,22 @@ namespace {
         }
 
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
-            if (GetOutputChannel(channel).OutgoingTraffic) {
-                *(GetOutputChannel(channel).OutgoingTraffic) += value;
+            auto& ch = GetOutputChannel(channel);
+            if (ch.OutgoingTraffic) {
+                *ch.OutgoingTraffic += value;
             }
-            if (GetOutputChannel(channel).Traffic) {
-                *(GetOutputChannel(channel).Traffic) += value;
+            if (ch.Traffic) {
+                *ch.Traffic += value;
             }
         }
 
         void UpdateOutputChannelEvents(ui16 channel) override {
-            if (GetOutputChannel(channel).OutgoingEvents) {
-                ++*(GetOutputChannel(channel).OutgoingEvents);
+            auto& ch = GetOutputChannel(channel);
+            if (ch.OutgoingEvents) {
+                ++*ch.OutgoingEvents;
             }
-            if (GetOutputChannel(channel).Events) {
-                ++*(GetOutputChannel(channel).Events);
+            if (ch.Events) {
+                ++*ch.Events;
             }
         }
 
@@ -309,7 +311,7 @@ namespace {
             Initialized = true;
         }
 
-        TOutputChannel GetOutputChannel(ui16 index) const {
+        const TOutputChannel& GetOutputChannel(ui16 index) const {
             Y_VERIFY(Initialized);
             const auto it = OutputChannels.find(index);
             return it != OutputChannels.end() ? it->second : OtherOutputChannel;
@@ -532,20 +534,22 @@ namespace {
         }
 
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
-            if (GetOutputChannel(channel).OutgoingTraffic) {
-                GetOutputChannel(channel).OutgoingTraffic->Add(value);
+            auto& ch = GetOutputChannel(channel);
+            if (ch.OutgoingTraffic) {
+                ch.OutgoingTraffic->Add(value);
             }
-            if (GetOutputChannel(channel).Traffic) {
-                GetOutputChannel(channel).Traffic->Add(value);
+            if (ch.Traffic) {
+                ch.Traffic->Add(value);
             }
         }
 
         void UpdateOutputChannelEvents(ui16 channel) override {
-            if (GetOutputChannel(channel).OutgoingEvents) {
-                GetOutputChannel(channel).OutgoingEvents->Inc();
+            auto& ch = GetOutputChannel(channel);
+            if (ch.OutgoingEvents) {
+                ch.OutgoingEvents->Inc();
             }
-            if (GetOutputChannel(channel).Events) {
-                GetOutputChannel(channel).Events->Inc();
+            if (ch.Events) {
+                ch.Events->Inc();
             }
         }
 
@@ -637,7 +641,7 @@ namespace {
             Initialized_ = true;
         }
 
-        TOutputChannel GetOutputChannel(ui16 index) const {
+        const TOutputChannel& GetOutputChannel(ui16 index) const {
             Y_VERIFY(Initialized_);
             const auto it = OutputChannels_.find(index);
             return it != OutputChannels_.end() ? it->second : OtherOutputChannel_;
@@ -676,7 +680,7 @@ namespace {
 
         NMonitoring::IHistogram* PingTimeHistogram_;
 
-        std::unordered_map<ui16, TOutputChannel> OutputChannels_;
+        THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;
         TInputChannels InputChannels_;
 

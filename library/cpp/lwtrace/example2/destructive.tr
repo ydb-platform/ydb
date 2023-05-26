@@ -1,0 +1,36 @@
+Blocks {
+    ProbeDesc { Name: "IterationProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+    Action {
+        SleepAction {
+            NanoSeconds: 100000000
+        }
+    }
+}
+
+Blocks {
+    ProbeDesc { Name: "AfterInputProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+    Action {
+        StatementAction {
+            Type: ST_MOD
+            Argument { Variable: "nMod2" }
+            Argument { Param: "n" }
+            Argument { Value: "2" }
+        }
+    }
+}
+Blocks {
+    ProbeDesc { Name: "AfterInputProbe" Provider: "LWTRACE_EXAMPLE_PROVIDER" }
+    Predicate {
+        Operators {
+            Type: OT_EQ
+            Argument { Variable: "nMod2" }
+            Argument { Value: "0" }
+        }
+    }
+    Action {
+        PrintToStderrAction { }
+    }
+    Action {
+        KillAction { }
+    }
+}

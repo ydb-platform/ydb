@@ -1,6 +1,6 @@
 # Importing data from a file to an existing table
 
-With the `import file` subcommand, you can import data from [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %} or [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} files to an existing table.
+With the `import file` command, you can import data from [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %} or [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} files to an existing table.
 
 The command implements the `BulkUpsert` method, which ensures high efficiency of multi-row bulk upserts with no atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. When completed successfully, it guarantees that all data is upserted.
 
@@ -27,17 +27,17 @@ General format of the command:
 
 * `--skip-rows NUM`: A number of rows from the beginning of the file that will be skipped at import. The default value is `0`.
 * `--header`: Use this option if the first row (excluding the rows skipped by `--skip-rows`) includes names of data columns to be mapped to table columns. If the header row is missing, the data is mapped according to the order in the table schema.
-* `--delimiter STRING`: The data column delimiter character. You cannot use the tabulation character as a delimiter in this option. For tab-delimited import, use the `import file tsv` subcommand. Default value: `,`.
+* `--delimiter STRING`: The data column delimiter character. You can't use the tabulation character as a delimiter in this option. For tab-delimited import, use the `import file tsv` subcommand. Default value: `,`.
 * `--null-value STRING`: The value to be imported as `NULL`. Default value: `""`.
 * `--batch-bytes VAL`: Split the imported file into batches of specified sizes. If a row fails to fit into a batch completely, it's discarded and added to the next batch. Whatever the batch size is, the batch must include at least one row. Default value: `1 MiB`.
 * `--max-in-flight VAL`: The number of data batches imported in parallel. You can increase the value of this parameter to accelerate importation of large files. The default value is `100`.
-* `--newline-delimited` — a flag which guarantees that there are no newline characters inside records. If the flag is set, and import is performed from a file, then different import threads work with the different parts of a source file. This allows to provide maximized performance when loading sorted datasets into partitioned tables, as load is distributed across all partitions.
+* `--newline-delimited`: This flag guarantees that there will be no line breaks in records. If this flag is set, and the data is loaded from a file, then different upload streams will process different parts of the source file. This way, you can ensure maximum performance when uploading sorted datasets to partitioned tables, by distributing the workload across all partitions.
 
 ## Examples {#examples}
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-Before performing the examples, [create a table](../../../../getting_started/yql.md#create-table) named `series`.
+Before performing the examples, [create a table]({{ quickstart-path }}) named `series`.
 
 ### Import file {#simple}
 

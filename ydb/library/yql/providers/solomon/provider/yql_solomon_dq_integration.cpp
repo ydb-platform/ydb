@@ -74,9 +74,14 @@ public:
     {
     }
 
-    TMaybe<ui64> CanRead(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode&, TExprContext&, bool) override {
+    bool CanRead(const TExprNode&, TExprContext&, bool) override {
         YQL_ENSURE(false, "Unimplemented");
     }
+
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode&, TExprContext&) override {
+        YQL_ENSURE(false, "Unimplemented");
+    }
+
 
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr&, TExprContext&) override {
         YQL_ENSURE(false, "Unimplemented");

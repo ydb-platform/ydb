@@ -1,19 +1,25 @@
 #!/bin/bash
 set -e
 
-ydbd_service_tenant_config="$YDBD_SERVICE_TENANT_DIR/config.json"
+ydbd_service_tenants_config="$YDBD_SERVICE_TENANTS_DIR/config.json"
 ydbd_service_syslog_tag="ydbd_$YDBD_SERVICE_TENANT"
 
-if [ ! -f "$ydbd_service_tenant_config" ]; then
-  logger -p daemon.err -t "$ydbd_service_syslog_tag" "No YDB tenant ($YDBD_SERVICE_TENANT) configuration file at: $ydbd_service_tenant_config"
+if [ ! -f "$ydbd_service_tenants_config" ]; then
+  logger -p daemon.err -t "$ydbd_service_syslog_tag" "No YDB tenant ($YDBD_SERVICE_TENANT) configuration file at: $ydbd_service_tenants_config"
   exit 1
 fi
 
 read_config_value() {
   field=$1
-  value=$(jq -r ".$field | select(.!=null)" "$ydbd_service_tenant_config")
+  value=$(
+    jq \
+      --arg tenant $YDBD_SERVICE_TENANT \
+      --arg field $field \
+      -r \
+      '.[$tenant][$field]' "$ydbd_service_tenants_config"
+  )
 
-  if [ -z "$value" ]; then
+  if [ "$value" == "null" ]; then
     logger -p daemon.err -t "$ydbd_service_syslog_tag" "Required field $field not exists in config"
     return 2
   fi
@@ -32,7 +38,14 @@ ydbd_service_ic_port=$(read_config_value ic_port) || exit 2
 ydbd_service_mon_port=$(read_config_value mon_port) || exit 2
 ydbd_service_database=$(read_config_value database) || exit 2
 
-exec "$YDBD_SERVICE_MAIN_DIR/bin/ydbd" server \
+taskset=""
+ydbd_service_taskset=$(read_config_value taskset) || exit 2
+
+if [ -n "$ydbd_service_taskset" ]; then
+  taskset="taskset -c $ydbd_service_taskset"
+fi
+
+exec $taskset "$YDBD_SERVICE_MAIN_DIR/bin/ydbd" server \
   --yaml-config "$YDBD_SERVICE_MAIN_DIR/cfg/config-mt.yaml" \
   --log-level 3 \
   --syslog \

@@ -37,7 +37,7 @@ struct TFind {
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto funType = FunctionType::get(string->getType(), {string->getType(), sub->getType(), pos->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-            const auto result = CallInst::Create(funcPtr, {string, sub, pos}, "find", block);
+            const auto result = CallInst::Create(funType, funcPtr, {string, sub, pos}, "find", block);
             return result;
         } else {
             const auto ptrArg = new AllocaInst(string->getType(), 0U, "arg", block);
@@ -47,8 +47,8 @@ struct TFind {
             new StoreInst(sub, ptrSub, block);
             const auto funType = FunctionType::get(Type::getVoidTy(context), {ptrResult->getType(), ptrArg->getType(), ptrSub->getType(), pos->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
-            CallInst::Create(funcPtr, {ptrResult, ptrArg, ptrSub, pos}, "", block);
-            const auto result = new LoadInst(ptrResult, "find", block);
+            CallInst::Create(funType, funcPtr, {ptrResult, ptrArg, ptrSub, pos}, "", block);
+            const auto result = new LoadInst(string->getType(), ptrResult, "find", block);
             return result;
         }
     }

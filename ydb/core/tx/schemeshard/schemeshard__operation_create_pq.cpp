@@ -2,10 +2,14 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <library/cpp/int128/int128.h>
+
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 namespace {
 
@@ -43,6 +47,14 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
+    }
+
+    if (op.HasPQTabletConfig() && op.GetPQTabletConfig().HasPartitionStrategy()) {
+        const auto strategy = op.GetPQTabletConfig().GetPartitionStrategy();
+        if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
+            return nullptr;
+        }
     }
 
     if (!op.HasPQTabletConfig()) {
@@ -91,12 +103,14 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
+    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
+
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
         using TKeyRange = TTopicTabletInfo::TKeyRange;
         TMaybe<TKeyRange> keyRange;
 
-        if (op.PartitionBoundariesSize()) {
+        if (op.PartitionBoundariesSize() || (splitMergeEnabled && 1 < partitionCount)) {
             keyRange.ConstructInPlace();
 
             if (i) {
@@ -104,16 +118,23 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
 
             if (i != (partitionCount - 1)) {
-                TVector<TCell> cells;
-                TString error;
-                if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, false, cells, error)) {
-                    status = NKikimrScheme::StatusSchemeError;
-                    errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
-                    return nullptr;
+                if (op.PartitionBoundariesSize()) {
+                    TVector<TCell> cells;
+                    TString error;
+                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, false,
+                                                  cells, error)) {
+                        status = NKikimrScheme::StatusSchemeError;
+                        errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
+                        return nullptr;
+                    }
+
+                    cells.resize(pqGroupInfo->KeySchema.size()); // Extend with NULLs
+                    keyRange->ToBound = TSerializedCellVec::Serialize(cells);
+                } else { // splitMergeEnabled
+                    auto range = NDataStreams::V1::RangeFromShardNumber(i, partitionCount);
+                    keyRange->ToBound = NPQ::AsKeyBound(range.End);
                 }
 
-                cells.resize(pqGroupInfo->KeySchema.size()); // Extend with NULLs
-                keyRange->ToBound = TSerializedCellVec::Serialize(cells);
                 prevBound = *keyRange->ToBound;
             }
         }
@@ -208,15 +229,17 @@ void ApplySharding(TTxId txId,
     auto it = pqGroup->PartitionsToAdd.begin();
     for (ui32 pqId = 0; pqId < pqGroup->TotalGroupCount; ++pqId, ++it) {
         auto idx = ss->NextShardIdx(startShardIdx, pqId / pqGroup->MaxPartsPerTablet);
-        TTopicTabletInfo::TPtr pqShard = pqGroup->Shards[idx];
+        auto partition = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+        partition->PqId = it->PartitionId;
+        partition->GroupId = it->GroupId;
+        partition->KeyRange = it->KeyRange;
+        partition->AlterVersion = 1;
+        partition->CreateVersion = 1;
+        partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
 
-        TTopicTabletInfo::TTopicPartitionInfo pqInfo;
-        pqInfo.PqId = it->PartitionId;
-        pqInfo.GroupId = it->GroupId;
-        pqInfo.KeyRange = it->KeyRange;
-        pqInfo.AlterVersion = 1;
-        pqShard->Partitions.push_back(pqInfo);
+        pqGroup->AddPartition(idx, partition.Release());
     }
+    pqGroup->InitSplitMergeGraph();
 }
 
 
@@ -448,7 +471,7 @@ public:
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
             for (const auto& pqInfo : shard.second->Partitions) {
-                context.SS->PersistPersQueue(db, pathId, shardIdx, pqInfo);
+                context.SS->PersistPersQueue(db, pathId, shardIdx, *pqInfo);
             }
         }
 

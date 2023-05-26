@@ -21,27 +21,29 @@ namespace NYdb {
 
             size_t ByteRate;
             ui32 ProducerThreadCount;
-            TString MessageGroupId;
+            ui32 WriterIdx;
+            TString ProducerId;
+            ui32 PartitionId;
+
             size_t MessageSize;
             ui32 Codec = 0;
         };
 
         class TTopicWorkloadWriterWorker {
         public:
+            static void WriterLoop(TTopicWorkloadWriterParams&& params);
+        private:
             TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);
             ~TTopicWorkloadWriterWorker();
 
             void Close();
 
-            TDuration Process();
+            void Process();
 
             void CreateWorker();
 
             void CreateTopicWorker();
 
-            static void WriterLoop(TTopicWorkloadWriterParams&& params);
-
-        private:
             bool ProcessAckEvent(const NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
 
             bool ProcessReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event);
@@ -49,23 +51,23 @@ namespace NYdb {
 
             bool ProcessEvent(NYdb::NTopic::TWriteSessionEvent::TEvent& event);
 
+            bool WaitForInitSeqNo();
+
             TString GetGeneratedMessage() const;
             void GenerateMessages();
 
-
+            TInstant GetCreateTimestamp() const;
 
             TTopicWorkloadWriterParams Params;
             ui64 MessageId = 0;
             ui64 AckedMessageId = 0;
             ui64 BytesWritten = 0;
-            TString MessageGroupId;
             std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
             TInstant StartTimestamp;
 
             std::vector<TString> GeneratedMessages;
 
-            NThreading::TFuture<ui64> InitSeqNo;
-            bool InitSeqNoProcessed = true;
+
             TMaybe<NTopic::TContinuationToken> ContinuationToken;
 
             std::shared_ptr<std::atomic<bool>> Closed;

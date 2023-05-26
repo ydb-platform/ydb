@@ -50,6 +50,81 @@ TString TasksIdsStr(const TTasksCollection& tasks) {
 }
 
 constexpr ui64 BucketsCount = 64;
+using TBucketArray = std::array<NKqpNode::TState, BucketsCount>;
+
+NKqpNode::TState& GetStateBucketByTx(std::shared_ptr<TBucketArray> buckets, ui64 txId) {
+    return (*buckets)[txId % buckets->size()];
+}
+
+void FinishKqpTask(ui64 txId, ui64 taskId, bool success, NKqpNode::TState& bucket, std::shared_ptr<NRm::IKqpResourceManager> ResourceManager) {
+    auto ctx = bucket.RemoveTask(txId, taskId, success);
+    if (ctx) {
+        if (ctx->ComputeActorsNumber == 0) {
+            ResourceManager->FreeResources(txId);
+        } else {
+            ResourceManager->FreeResources(txId, taskId);
+        }
+    }
+}
+
+struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+
+    TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
+        , NRm::EKqpMemoryPool memoryPool
+        , std::shared_ptr<TBucketArray> buckets
+        , ui64 txId
+        , ui64 taskId
+        , ui64 limit
+        , bool instantAlloc) 
+    : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
+    , ResourceManager(std::move(resourceManager))
+    , MemoryPool(memoryPool)
+    , Buckets(std::move(buckets))
+    , TxId(txId)
+    , TaskId(taskId)
+    , InstantAlloc(instantAlloc) {
+    }
+
+    ~TMemoryQuotaManager() override {
+        FinishKqpTask(TxId, TaskId, Success, GetStateBucketByTx(Buckets, TxId), ResourceManager);
+    }
+
+    bool AllocateExtraQuota(ui64 extraSize) override {
+
+        if (!InstantAlloc) {
+            LOG_W("Memory allocation prohibited. TxId: " << TxId << ", taskId: " << TaskId << ", memory: +" << extraSize);
+            return false;
+        }
+
+        if (!ResourceManager->AllocateResources(TxId, TaskId, 
+                NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize})) {
+            LOG_W("Can not allocate memory. TxId: " << TxId << ", taskId: " << TaskId << ", memory: +" << extraSize);
+            return false;
+        }
+
+        return true;
+    }
+
+    void FreeExtraQuota(ui64 extraSize) override {
+        ResourceManager->FreeResources(TxId, TaskId, 
+            NRm::TKqpResourcesRequest{.MemoryPool = MemoryPool, .Memory = extraSize}
+        );
+    }
+
+    void TerminateHandler(bool success, const NYql::TIssues& issues) {
+        LOG_D("TxId: " << TxId << ", finish compute task: " << TaskId << ", success: " << success
+            << ", message: " << issues.ToOneLineString());
+        Success = success;
+    }
+
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
+    NRm::EKqpMemoryPool MemoryPool;
+    std::shared_ptr<TBucketArray> Buckets;
+    ui64 TxId;
+    ui64 TaskId;
+    bool InstantAlloc;
+    bool Success = true;
+};
 
 class TKqpNodeService : public TActorBootstrapped<TKqpNodeService> {
     using TBase = TActorBootstrapped<TKqpNodeService>;
@@ -59,41 +134,15 @@ public:
         return NKikimrServices::TActivity::KQP_NODE_SERVICE;
     }
 
-    static void FinishKqpTask(ui64 txId, ui64 taskId, bool success, const NYql::TIssues& issues,
-        NKqpNode::TState& bucket) {
-        LOG_D("TxId: " << txId << ", finish compute task: " << taskId << ", success: " << success
-                << ", message: " << issues.ToOneLineString());
-
-        auto ctx = bucket.RemoveTask(txId, taskId, success);
-
-        if (!ctx) {
-            LOG_E("TxId: " << txId << ", task: " << taskId << " unknown task");
-            return;
-        }
-
-        if (ctx->ComputeActorsNumber == 0) {
-            LOG_D("TxId: " << txId << ", requester: " << ctx->Requester << " completed");
-            GetKqpResourceManager()->FreeResources(txId);
-        } else {
-            LOG_D("TxId: " << txId << ", finish compute task: " << taskId
-                    << (success ? "" : " (cancelled)")
-                    << ", remains " << ctx->ComputeActorsNumber << " compute actors and "
-                    << ctx->TotalMemory << " bytes in the current request");
-            GetKqpResourceManager()->FreeResources(txId, taskId);
-        }
-
-        if (ctx->FinixTx) {
-            LOG_D("TxId: " << txId << ", requester: " << ctx->Requester << " completed");
-        }
-    }
-
     TKqpNodeService(const NKikimrConfig::TTableServiceConfig& config, const TIntrusivePtr<TKqpCounters>& counters,
         IKqpNodeComputeActorFactory* caFactory, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
         : Config(config.GetResourceManager())
         , Counters(counters)
         , CaFactory(caFactory)
         , AsyncIoFactory(std::move(asyncIoFactory))
-    {}
+    {
+        Buckets = std::make_shared<TBucketArray>();
+    }
 
     void Bootstrap() {
         LOG_I("Starting KQP Node service");
@@ -229,7 +278,7 @@ private:
         NKqpNode::TTasksRequest request;
         request.Executer = ActorIdFromProto(msg.GetExecuterActorId());
 
-        auto& bucket = GetStateBucketByTx(txId);
+        auto& bucket = GetStateBucketByTx(Buckets, txId);
 
         if (bucket.Exists(txId, requester)) {
             LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
@@ -334,20 +383,6 @@ private:
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = Config.GetMkqlLightProgramMemoryLimit();
         memoryLimits.MkqlHeavyProgramMemoryLimit = Config.GetMkqlHeavyProgramMemoryLimit();
-        if (Config.GetEnableInstantMkqlMemoryAlloc()) {
-            memoryLimits.AllocateMemoryFn = [rm = ResourceManager(), memoryPool](const auto& txId, ui64 taskId, ui64 memory) {
-                NRm::TKqpResourcesRequest resources;
-                resources.MemoryPool = memoryPool;
-                resources.Memory = memory;
-
-                if (rm->AllocateResources(std::get<ui64>(txId), taskId, resources)) {
-                    return true;
-                }
-
-                LOG_W("Can not allocate memory. TxId: " << txId << ", taskId: " << taskId << ", memory: +" << memory);
-                return false;
-            };
-        }
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
         auto& msgRtSettings = msg.GetRuntimeSettings();
@@ -384,10 +419,28 @@ private:
             Y_VERIFY_DEBUG(memoryLimits.ChannelBufferSize >= Config.GetMinChannelBufferSize(),
                 "actual size: %ld, min: %ld", memoryLimits.ChannelBufferSize, Config.GetMinChannelBufferSize());
 
+            auto& taskOpts = dqTask.GetProgram().GetSettings();
+            auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
+                ? memoryLimits.MkqlHeavyProgramMemoryLimit
+                : memoryLimits.MkqlLightProgramMemoryLimit;
+
+            memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
+                ResourceManager(),
+                memoryPool,
+                Buckets,
+                txId,
+                dqTask.GetId(),
+                limit,
+                Config.GetEnableInstantMkqlMemoryAlloc());
+
             auto runtimeSettings = runtimeSettingsBase;
-            runtimeSettings.TerminateHandler = [txId, taskId = dqTask.GetId(), &bucket]
+            NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
+            runtimeSettings.TerminateHandler = [memoryQuotaManager]
                 (bool success, const NYql::TIssues& issues) {
-                    FinishKqpTask(txId, taskId, success, issues, bucket);
+                    auto manager = memoryQuotaManager.lock();
+                    if (manager) {
+                        static_cast<TMemoryQuotaManager*>(manager.get())->TerminateHandler(success, issues);
+                    }
                 };
 
             NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
@@ -449,7 +502,7 @@ private:
     // used only for unit tests
     void HandleWork(TEvKqpNode::TEvFinishKqpTask::TPtr& ev) {
         auto& msg = *ev->Get();
-        FinishKqpTask(msg.TxId, msg.TaskId, msg.Success, msg.Issues, GetStateBucketByTx(msg.TxId));
+        FinishKqpTask(msg.TxId, msg.TaskId, msg.Success, GetStateBucketByTx(Buckets, msg.TxId), GetKqpResourceManager());
     }
 
     void HandleWork(TEvKqpNode::TEvCancelKqpTasksRequest::TPtr& ev) {
@@ -461,7 +514,7 @@ private:
     }
 
     void TerminateTx(ui64 txId, const TString& reason) {
-        auto& bucket = GetStateBucketByTx(txId);
+        auto& bucket = GetStateBucketByTx(Buckets, txId);
         auto tasksToAbort = bucket.RemoveTx(txId);
 
         if (!tasksToAbort.empty()) {
@@ -481,7 +534,7 @@ private:
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {
         Schedule(TDuration::Seconds(1), ev->Release().Release());
         std::vector<ui64> txIdsToFree;
-        for (auto& bucket : Buckets) {
+        for (auto& bucket : *Buckets) {
             auto expiredRequests = bucket.ClearExpiredRequests();
             for (auto& cxt : expiredRequests) {
                     LOG_D("txId: " << cxt.RequestId.TxId << ", requester: " << cxt.RequestId.Requester
@@ -566,7 +619,7 @@ private:
                 str << Endl;
 
                 str << Endl << "Transactions:" << Endl;
-                for (auto& bucket : Buckets) {
+                for (auto& bucket : *Buckets) {
                     bucket.GetInfo(str);
                 }
             }
@@ -590,7 +643,7 @@ private:
         Send(executer, ev.Release());
     }
 
-    NRm::IKqpResourceManager* ResourceManager() {
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager() {
         if (Y_LIKELY(ResourceManager_)) {
             return ResourceManager_;
         }
@@ -598,19 +651,15 @@ private:
         return ResourceManager_;
     }
 
-    NKqpNode::TState& GetStateBucketByTx(ui64 txId) {
-        return Buckets[txId % Buckets.size()];
-    }
-
 private:
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
     TIntrusivePtr<TKqpCounters> Counters;
     IKqpNodeComputeActorFactory* CaFactory;
-    NRm::IKqpResourceManager* ResourceManager_ = nullptr;
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     //state sharded by TxId
-    std::array<NKqpNode::TState, BucketsCount> Buckets;
+    std::shared_ptr<TBucketArray> Buckets;
 };
 
 

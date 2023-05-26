@@ -173,6 +173,7 @@ namespace Tests {
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
+        app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
 
@@ -364,7 +365,11 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxies[0], true));
-        GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxies[0], true));
+        auto discoveryService = new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxies[0], true);
+        if (!options.SslData.Empty()) {
+            discoveryService->SetDynamicNodeAuthParams(NKikimr::GetDynamicNodeAuthorizationParams(Settings->AppConfig.GetClientCertificateAuthorization()));
+        }
+        GRpcServer->AddService(discoveryService);
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxies[0], true));
@@ -713,7 +718,12 @@ namespace Tests {
                                         TMailboxType::Revolving, 0);
         Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
         if (Settings->EnableConfigsDispatcher) {
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig, {});
+            // We overwrite icb settings here to save behavior when configs dispatcher are enabled
+            NKikimrConfig::TAppConfig initial = Settings->AppConfig;
+            if (!initial.HasImmediateControlsConfig()) {
+                initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
+            }
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(initial, {});
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

@@ -48,19 +48,13 @@ class ExplainYqlScriptSettings(settings.BaseRequestSettings):
 
 
 def _execute_yql_query_request_factory(script, tp=None, settings=None):
-    params = (
-        None
-        if tp is None
-        else convert.parameters_to_pb(tp.parameters_types, tp.parameters_values)
-    )
+    params = None if tp is None else convert.parameters_to_pb(tp.parameters_types, tp.parameters_values)
     return ydb_scripting_pb2.ExecuteYqlRequest(script=script, parameters=params)
 
 
 class YqlQueryResult(object):
     def __init__(self, result, scripting_client_settings=None):
-        self.result_sets = convert.ResultSets(
-            result.result_sets, scripting_client_settings
-        )
+        self.result_sets = convert.ResultSets(result.result_sets, scripting_client_settings)
 
 
 class YqlExplainResult(object):
@@ -86,9 +80,7 @@ class ScriptingClient(object):
     def __init__(self, driver, scripting_client_settings=None):
         self.driver = driver
         self.scripting_client_settings = (
-            scripting_client_settings
-            if scripting_client_settings is not None
-            else ScriptingClientSettings()
+            scripting_client_settings if scripting_client_settings is not None else ScriptingClientSettings()
         )
 
     def execute_yql(self, script, typed_parameters=None, settings=None):

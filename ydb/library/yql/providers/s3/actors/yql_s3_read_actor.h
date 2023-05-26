@@ -5,7 +5,6 @@
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/providers/common/arrow/interface/arrow_reader.h>
 #include <library/cpp/actors/core/actor.h>
 
 namespace NYql::NDq {
@@ -25,7 +24,6 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
-    IArrowReader::TPtr arrowReader,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters);
 

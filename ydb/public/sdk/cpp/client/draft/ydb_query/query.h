@@ -10,7 +10,32 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <variant>
+
 namespace NYdb::NQuery {
+
+enum class ESyntax {
+    Unspecified = 0,
+    YqlV1 = 1, // YQL
+    Pg = 2, // PostgresQL
+};
+
+enum class EExecMode {
+    Unspecified = 0,
+    Parse = 10,
+    Validate = 20,
+    Explain = 30,
+    Execute = 50,
+};
+
+enum class EExecStatus {
+    Unspecified = 0,
+    Starting = 10,
+    Aborted = 20,
+    Canceled = 30,
+    Completed = 40,
+    Failed = 50,
+};
 
 class TExecuteQueryPart : public TStreamPartStatus {
 public:
@@ -84,14 +109,57 @@ using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
 };
 
-class TExecuteScriptResult : public TOperation {
+class TVersionedScriptId {
+public:
+    TVersionedScriptId(const TString& id, TMaybe<i64> revision = Nothing())
+        : Id_(id)
+        , Revision_(revision)
+    {}
+
+    const TString& Id() const {
+        return Id_;
+    }
+
+    TMaybe<i64> Revision() const {
+        return Revision_;
+    }
+
+    void SetRevision(i64 revision) {
+        Revision_ = revision;
+    }
+
+private:
+    TString Id_;
+    TMaybe<i64> Revision_;
+};
+
+class TQueryContent {
+public:
+    TQueryContent() = default;
+
+    TQueryContent(const TString& text, ESyntax syntax)
+        : Text(text)
+        , Syntax(syntax)
+    {}
+
+    TString Text;
+    ESyntax Syntax = ESyntax::Unspecified;
+};
+
+class TScriptExecutionOperation : public TOperation {
 public:
     struct TMetadata {
         TString ExecutionId;
+        EExecStatus ExecStatus = EExecStatus::Unspecified;
+        EExecMode ExecMode = EExecMode::Unspecified;
+
+        // Not greater than one of SavedScriptId or QueryContent is set.
+        std::optional<TVersionedScriptId> ScriptId;
+        TQueryContent ScriptContent;
     };
 
     using TOperation::TOperation;
-    TExecuteScriptResult(TStatus&& status, Ydb::Operations::Operation&& operation);
+    TScriptExecutionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const {
         return Metadata_;
@@ -100,8 +168,6 @@ public:
 private:
     TMetadata Metadata_;
 };
-
-using TAsyncExecuteScriptResult = NThreading::TFuture<TExecuteScriptResult>;
 
 struct TFetchScriptResultsSettings : public TRequestSettings<TFetchScriptResultsSettings> {
     FLUENT_SETTING(TString, FetchToken);

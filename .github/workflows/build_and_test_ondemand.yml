@@ -1,4 +1,4 @@
-name: Build-and-Test On-demand VM
+name: Build-and-Test-On-demand
 
 on:
   workflow_call:
@@ -12,7 +12,13 @@ on:
       image:
         type: string
         required: false
-        default: fd8snjpoq85qqv0mk9gi
+        default: fd8earpjmhevh8h6ug5o
+      run_unit_tests:
+        type: boolean
+        default: true
+      run_functional_tests:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs: 
       sanitizer:
@@ -24,7 +30,13 @@ on:
       image:
         type: string
         required: false
-        default: fd8snjpoq85qqv0mk9gi
+        default: fd8earpjmhevh8h6ug5o
+      run_unit_tests:
+        type: boolean
+        default: true
+      run_functional_tests:
+        type: boolean
+        default: false
     
 jobs:
 
@@ -78,19 +90,33 @@ jobs:
       uses: actions/checkout@v3
       if: github.event.pull_request.head.sha == ''
     - name: Build
+      id: build
       uses: ./.github/actions/build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Test
+    - name: Run unit tests
+      if: inputs.run_unit_tests
       uses: ./.github/actions/test
-      with: 
+      with:
         log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{vars.AWS_BUCKET}}
+        aws_endpoint: ${{vars.AWS_ENDPOINT}}
         testman_token: ${{secrets.TESTMO_TOKEN}}
         testman_url: ${{vars.TESTMO_URL}}
         testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
+    - name: Run functional tests
+      if: inputs.run_functional_tests && (success() || failure()) && steps.build.conclusion != 'failure'
+      uses: ./.github/actions/test_python
+      with:
+        log_suffix: ${{format('{0}-{1}', 'X64', inputs.sanitizer)}}
+        test_label_regexp: ${{ inputs.test_label_regexp }}
+        aws_key_id: ${{secrets.AWS_KEY_ID}}
+        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
+        aws_bucket: ${{vars.AWS_BUCKET}}
+        aws_endpoint: ${{vars.AWS_ENDPOINT}}
 
   release-runner:
     name: Release self-hosted YC runner if provided on-demand

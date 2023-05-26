@@ -703,9 +703,7 @@ public:
         RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(name),
                                                         SelfId(),
                                                         domainInfo->DefaultStateStorageGroup,
-                                                        EBoardLookupMode::Second,
-                                                        false,
-                                                        false));
+                                                        EBoardLookupMode::Second));
         tag = modifiedRequest.GetTag();
         uuid = modifiedRequest.GetUuid();
     }

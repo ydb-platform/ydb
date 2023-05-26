@@ -127,13 +127,9 @@ class Connection:
     ):
         global _stubs_list
         self.endpoint = endpoint
-        self.endpoint_key = EndpointKey(
-            self.endpoint, getattr(endpoint_options, "node_id", None)
-        )
+        self.endpoint_key = EndpointKey(self.endpoint, getattr(endpoint_options, "node_id", None))
         self.node_id = getattr(endpoint_options, "node_id", None)
-        self._channel = channel_factory(
-            self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options
-        )
+        self._channel = channel_factory(self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options)
         self._driver_config = driver_config
 
         self._stub_instances = {}
@@ -152,14 +148,10 @@ class Connection:
         self, stub: Any, rpc_name: str, request: Any, settings: BaseRequestSettings
     ) -> Tuple[_RpcState, float, Any]:
 
-        timeout, metadata = _get_request_timeout(settings), await _construct_metadata(
-            self._driver_config, settings
-        )
+        timeout, metadata = _get_request_timeout(settings), await _construct_metadata(self._driver_config, settings)
         _set_server_timeouts(request, settings, timeout)
         self._prepare_stub_instance(stub)
-        rpc_state = _RpcState(
-            self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key
-        )
+        rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key)
         logger.debug("%s: creating call state", rpc_state)
 
         if self.closing:
@@ -191,24 +183,16 @@ class Connection:
         :param wrap_args: And arguments to be passed into wrap_result callable
         :return: A result of computation
         """
-        rpc_state, timeout, metadata = await self._prepare_call(
-            stub, rpc_name, request, settings
-        )
+        rpc_state, timeout, metadata = await self._prepare_call(stub, rpc_name, request, settings)
         try:
-            feature = asyncio.ensure_future(
-                rpc_state(request, timeout=timeout, metadata=metadata)
-            )
+            feature = asyncio.ensure_future(rpc_state(request, timeout=timeout, metadata=metadata))
 
             # Add feature to dict to wait until it finished when close called
             self.calls[rpc_state.request_id] = feature
 
             response = await feature
             _log_response(rpc_state, response)
-            return (
-                response
-                if wrap_result is None
-                else wrap_result(rpc_state, response, *wrap_args)
-            )
+            return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
         except grpc.RpcError as rpc_error:
             if on_disconnected:
                 coro = on_disconnected()

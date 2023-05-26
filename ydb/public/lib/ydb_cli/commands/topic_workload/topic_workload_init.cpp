@@ -1,7 +1,7 @@
 #include "topic_workload_init.h"
 
 #include "topic_workload_defines.h"
-#include "topic_workload_params.h"
+#include "topic_workload_describe.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -43,9 +43,10 @@ int TCommandWorkloadTopicInit::Run(TConfig& config) {
     }
 
     NYdb::NTopic::TCreateTopicSettings settings;
+    settings.PartitioningSettings(PartitionCount, PartitionCount);
+
     for (ui32 consumerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
-        settings.PartitioningSettings(PartitionCount, PartitionCount)
-            .BeginAddConsumer(TCommandWorkloadTopicParams::GenerateConsumerName(consumerIdx))
+        settings.BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(consumerIdx))
             .EndAddConsumer();
     }
 

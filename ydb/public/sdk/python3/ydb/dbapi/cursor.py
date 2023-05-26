@@ -32,9 +32,7 @@ def render_date(value):
 
 def render_datetime(value):
     # TODO: is there a better solution for this?
-    return "DateTime::MakeDatetime(DateTime::ParseIso8601({}))".format(
-        render_str(value.isoformat())
-    )
+    return "DateTime::MakeDatetime(DateTime::ParseIso8601({}))".format(render_str(value.isoformat()))
 
 
 def render(value):
@@ -59,9 +57,7 @@ def render_sql(sql, parameters):
     quoted_params += [""]
     sql_pieces = sql.split("?")
     assert len(sql_pieces) == len(quoted_params)
-    return "".join(
-        piece for pair in zip(sql_pieces, quoted_params) for piece in pair if piece
-    )
+    return "".join(piece for pair in zip(sql_pieces, quoted_params) for piece in pair if piece)
 
 
 def named_result_for(column_names):

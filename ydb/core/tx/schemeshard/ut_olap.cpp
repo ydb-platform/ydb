@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/formats/arrow_helpers.h>
-#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -566,10 +566,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
             AlterSchemaPresets {
                 Name: "default"
                 AlterSchema {
-                    Columns { Name: "comment" Type: "Utf8" }
+                    AddColumns { Name: "comment" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {NKikimrScheme::StatusAccepted});
     }
 
     Y_UNIT_TEST(AlterTtl) {

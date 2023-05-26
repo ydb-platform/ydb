@@ -371,19 +371,24 @@ private:
         bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
         bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
 
+        bool enableSequentialReads = Config.GetEnableSequentialReads();
+        bool defaultSyntaxVersion = Config.GetSqlVersion();
+
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
-        if (Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
+        if (Config.GetSqlVersion() != defaultSyntaxVersion ||
+            Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
             Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
             Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
             Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
-            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract) {
+            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
+            Config.GetEnableSequentialReads() != enableSequentialReads) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<

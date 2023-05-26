@@ -156,7 +156,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
     }
 
-    if (config.FeatureFlags.GetEnableKqpImmediateEffects() && txCtx.HasUncommittedChangesRead) {
+    if (txCtx.HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
+        YQL_ENSURE(txCtx.EnableImmediateEffects);
         return true;
     }
 

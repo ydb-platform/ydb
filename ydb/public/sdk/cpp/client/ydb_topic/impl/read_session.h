@@ -107,6 +107,7 @@ private:
     void Abort(EStatus statusCode, NYql::TIssues&& issues);
     void Abort(EStatus statusCode, const TString& message);
 
+    void AbortImpl(NPersQueue::TDeferredActions<false>& deferred);
     void AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDeferredActions<false>& deferred);
     void AbortImpl(EStatus statusCode, NYql::TIssues&& issues, NPersQueue::TDeferredActions<false>& deferred);
     void AbortImpl(EStatus statusCode, const TString& message, NPersQueue::TDeferredActions<false>& deferred);
@@ -118,7 +119,6 @@ private:
     TLog Log;
     std::shared_ptr<TTopicClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    NPersQueue::IErrorHandler<false>::TPtr ErrorHandler;
     TDbDriverStatePtr DbDriverState;
     TAdaptiveLock Lock;
     std::shared_ptr<NPersQueue::TImplTracker> Tracker;

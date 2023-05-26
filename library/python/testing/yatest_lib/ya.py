@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import json
+import six
 
 from .tools import to_str
 from .external import ExternalDataInfo
@@ -107,6 +108,17 @@ class Ya(object):
                 if k not in self._context or v is not None:
                     self._context[k] = v
 
+        if self._env_file and os.path.exists(self._env_file):
+            yatest_logger.debug("Reading variables from env_file at %s", self._env_file)
+            var_list = []
+            with open(self._env_file) as file:
+                for ljson in file.readlines():
+                    variable = json.loads(ljson)
+                    for key, value in six.iteritems(variable):
+                        os.environ[key] = str(value)
+                        var_list.append(key)
+            yatest_logger.debug("Variables loaded: %s", var_list)
+
     @property
     def source_root(self):
         return self._source_root
@@ -168,7 +180,23 @@ class Ya(object):
         if self._mode == RunMode.Run:
             raise TestMisconfigurationException(error_message)
 
+    def _build_root_rel(self, path):
+        real_build_root = os.path.realpath(self.build_root)
+        real_path = os.path.abspath(path)
+        if path.startswith(real_build_root):
+            return os.path.relpath(real_path, real_build_root)
+        return path
+
     def file(self, path, diff_tool=None, local=False, diff_file_name=None, diff_tool_timeout=None):
+        if diff_tool:
+            if isinstance(diff_tool, tuple):
+                diff_tool = list(diff_tool)
+            # Normalize path to diff_tool - abs path in run_test node won't be accessible in canonize node
+            if isinstance(diff_tool, list):
+                diff_tool[0] = self._build_root_rel(diff_tool[0])
+            else:
+                diff_tool = self._build_root_rel(diff_tool)
+
         return ExternalDataInfo.serialize_file(path, diff_tool=diff_tool, local=local, diff_file_name=diff_file_name, diff_tool_timeout=diff_tool_timeout)
 
     def get_param(self, key, default=None):

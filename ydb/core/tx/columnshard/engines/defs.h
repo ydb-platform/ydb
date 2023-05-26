@@ -10,11 +10,29 @@ using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
 enum class TWriteId : ui64 {};
 
-inline TWriteId operator ++(TWriteId& w) noexcept { w = TWriteId{ui64(w) + 1}; return w; }
+inline TWriteId operator++(TWriteId& w) noexcept {
+    w = TWriteId{ui64(w) + 1};
+    return w;
+}
 
-struct TSnapshot {
-    ui64 PlanStep{0};
-    ui64 TxId{0};
+class TSnapshot {
+private:
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
+
+public:
+    constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
+        : PlanStep(planStep)
+        , TxId(txId) {
+    }
+
+    constexpr ui64 GetPlanStep() const noexcept {
+        return PlanStep;
+    }
+
+    constexpr ui64 GetTxId() const noexcept {
+        return TxId;
+    }
 
     constexpr bool IsZero() const noexcept {
         return PlanStep == 0 && TxId == 0;
@@ -24,36 +42,34 @@ struct TSnapshot {
         return PlanStep && TxId;
     }
 
-    constexpr auto operator <=> (const TSnapshot&) const noexcept = default;
+    static constexpr TSnapshot Zero() noexcept {
+        return TSnapshot(0, 0);
+    }
 
     static constexpr TSnapshot Max() noexcept {
-        return TSnapshot{(ui64)-1ll, (ui64)-1ll};
+        return TSnapshot(-1ll, -1ll);
     }
 
-    friend IOutputStream& operator << (IOutputStream& out, const TSnapshot& s) {
-        return out << "{" << s.PlanStep << "," << s.TxId << "}";
+    constexpr bool operator==(const TSnapshot&) const noexcept = default;
+
+    constexpr auto operator<=>(const TSnapshot&) const noexcept = default;
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TSnapshot& s) {
+        return out << "{" << s.PlanStep << ':' << (s.TxId == std::numeric_limits<ui64>::max() ? "max" : ToString(s.TxId)) << "}";
     }
 };
-
-inline constexpr bool SnapLess(ui64 planStep1, ui64 txId1, ui64 planStep2, ui64 txId2) noexcept {
-    return std::less<TSnapshot>()(TSnapshot{planStep1, txId1}, TSnapshot{planStep2, txId2});
-}
-
-inline constexpr bool SnapLessOrEqual(ui64 planStep1, ui64 txId1, ui64 planStep2, ui64 txId2) noexcept {
-    return std::less_equal<TSnapshot>()(TSnapshot{planStep1, txId1}, TSnapshot{planStep2, txId2});
-}
-
 
 class IBlobGroupSelector {
 protected:
     virtual ~IBlobGroupSelector() = default;
+
 public:
     virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
 };
 
 } // namespace NKikimr::NOlap
 
-template<>
+template <>
 struct THash<NKikimr::NOlap::TWriteId> {
     inline size_t operator()(const NKikimr::NOlap::TWriteId x) const noexcept {
         return THash<ui64>()(ui64(x));

@@ -51,8 +51,6 @@ public:
     }
 };
 
-using TTableSchema = NKikimrSchemeOp::TColumnTableSchema;
-
 class TSchemaPreset : public TVersionedSchema<NKikimrTxColumnShard::TSchemaPresetVersionInfo> {
 public:
     using TSchemaPresetVersionInfo = NKikimrTxColumnShard::TSchemaPresetVersionInfo;
@@ -62,7 +60,7 @@ public:
     bool IsStandaloneTable() const {
         return Id == 0;
     }
-    
+
     const TString& GetName() const {
         return Name;
     }
@@ -173,7 +171,7 @@ public:
         return *PrimaryIndex;
     }
 
-    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version = {}) const {
+    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version = NOlap::TSnapshot::Zero()) const {
         Y_UNUSED(version);
         Y_VERIFY(!!PrimaryIndex);
         return PrimaryIndex->GetIndexInfo();
@@ -182,17 +180,17 @@ public:
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {
         return PrimaryIndex;
     }
-    
+
     const NOlap::IColumnEngine& GetPrimaryIndexSafe() const {
         Y_VERIFY(!!PrimaryIndex);
         return *PrimaryIndex;
     }
-    
+
     bool InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId);
     bool LoadIndex(NOlap::TDbWrapper& db, THashSet<NOlap::TUnifiedBlobId>& lostEvictions);
 
     void Clear();
-    
+
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;
 
@@ -206,16 +204,16 @@ public:
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
-    void AddPresetVersion(const ui32 presetId, const TRowVersion& version, const TTableSchema& schema, NIceDb::TNiceDb& db);
+    void AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db);
     void AddTableVersion(const ui64 pathId, const TRowVersion& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db);
-    
+
     void OnTtlUpdate();
 
-    std::shared_ptr<NOlap::TColumnEngineChanges>  StartIndexCleanup(const NOlap::TSnapshot& snapshot, ui32 maxRecords);
+    std::shared_ptr<NOlap::TColumnEngineChanges> StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords);
 
 private:
-    void IndexSchemaVersion(const TRowVersion& version, const TTableSchema& schema);
-    static NOlap::TIndexInfo ConvertSchema(const TTableSchema& schema);
+    void IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema);
+    static NOlap::TIndexInfo DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 };
 
 }

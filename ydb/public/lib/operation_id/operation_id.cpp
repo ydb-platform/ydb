@@ -59,8 +59,8 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::BUILD_INDEX:
             res << "ydb://buildindex";
             break;
-        case Ydb::TOperationId::SCRIPT:
-            res << "ydb://script";
+        case Ydb::TOperationId::SCRIPT_EXECUTION:
+            res << "ydb://scriptexec";
             break;
         default:
             Y_VERIFY(false, "unexpected kind");
@@ -188,8 +188,8 @@ Ydb::TOperationId::EKind ParseKind(const TStringBuf value) {
         return Ydb::TOperationId::BUILD_INDEX;
     }
 
-    if (value.StartsWith("script")) {
-        return Ydb::TOperationId::SCRIPT;
+    if (value.StartsWith("scriptexec")) {
+        return Ydb::TOperationId::SCRIPT_EXECUTION;
     }
 
     return Ydb::TOperationId::UNUSED;

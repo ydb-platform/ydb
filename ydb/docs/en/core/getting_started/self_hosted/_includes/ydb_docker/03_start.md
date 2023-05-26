@@ -4,14 +4,38 @@ The YDB Docker container uses the host system resources (CPU, RAM) within the li
 
 The YDB Docker container stores data in its file system whose sections are reflected in the host system directory. The start container command given below will create files in the current directory, so first create a working directory and then start the container from it:
 
-```bash
-docker run -d --rm --name ydb-local -h localhost \
-  -p 2135:2135 -p 8765:8765 -p 2136:2136 \
-  -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
-  -e YDB_DEFAULT_LOG_LEVEL=NOTICE \
-  -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-  {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
-```
+{% list tabs %}
+
+- Disk storage
+
+    ```bash
+    docker run -d --rm --name ydb-local -h localhost \
+      -p 2135:2135 -p 8765:8765 -p 2136:2136 \
+      -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
+      -e YDB_DEFAULT_LOG_LEVEL=NOTICE \
+      -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+      {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    ```
+
+    {% note warning %}
+
+    Currently, disk storage is not supported on Apple Silicon (M1 or M2). Use the command from "In-memory storage" tab if you want to try {{ ydb-short-name }} on this CPU.
+
+    {% endnote %}
+
+- In-memory storage
+
+    ```bash
+    docker run -d --rm --name ydb-local -h localhost \
+      -p 2135:2135 -p 8765:8765 -p 2136:2136 \
+      -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
+      -e YDB_DEFAULT_LOG_LEVEL=NOTICE \
+      -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+      -e YDB_USE_IN_MEMORY_PDISKS=true \
+      {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+    ```
+
+{% endlist %}
 
 If started successfully, you'll see the ID of the created container.
 
@@ -35,7 +59,7 @@ If started successfully, you'll see the ID of the created container.
 - `GRPC_TLS_PORT`: The port for TLS connections. Defaults to 2135.
 - `MON_PORT`: The port for the built-in web UI with [monitoring and introspection](../../../../maintenance/embedded_monitoring/ydb_monitoring.md) tools. Defaults to 8765.
 - `YDB_PDISK_SIZE`: The size of the data storage disk in `<NUM>GB` format (for example, `YDB_PDISK_SIZE=128GB`). Acceptable values: `80GB` and higher. Defaults to 80GB.
-- `YDB_USE_IN_MEMORY_PDISKS`: Using disks in memory. Acceptable values are `true` and `false`, defaults to `false`. If enabled, the container's file system is not used for working with data, all data is only stored in the memory of a process and is lost when it's stopped. Currently, you can start the container on Apple M1 in this mode only.
+- `YDB_USE_IN_MEMORY_PDISKS`: Using disks in memory. Acceptable values are `true` and `false`, defaults to `false`. If enabled, the container's file system is not used for working with data, all data is only stored in the memory of a process and is lost when it's stopped. Currently, you can start the container on Apple Silicon (M1 or M2) in this mode only.
 
 {% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}
 

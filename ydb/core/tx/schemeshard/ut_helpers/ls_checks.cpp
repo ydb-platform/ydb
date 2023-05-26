@@ -801,6 +801,12 @@ TCheckFunc StreamVirtualTimestamps(bool value) {
     };
 }
 
+TCheckFunc StreamAwsRegion(const TString& value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetAwsRegion(), value);
+    };
+}
+
 TCheckFunc RetentionPeriod(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value.Seconds(), record.GetPathDescription().GetPersQueueGroup()

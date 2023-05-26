@@ -452,10 +452,9 @@ void TPDisk::ProcessLogReadQueue() {
                 }
             }
             ui64 firstLsnToKeep = 0;
-            ui64 firstNonceToKeep = 0;
+            ui64 firstNonceToKeep = SysLogFirstNoncesToKeep.FirstNonceToKeep[logRead.Owner];
             if (ownerData.VDiskId != TVDiskID::InvalidId) {
                 firstLsnToKeep = ownerData.CurrentFirstLsnToKeep;
-                firstNonceToKeep = SysLogFirstNoncesToKeep.FirstNonceToKeep[logRead.Owner];
                 LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " PrepareToRead ownerId# %" PRIu32
                         " FirstLsnToKeep: %" PRIu64 " FirstNonceToKeep: %" PRIu64,
                         (ui32)PDiskId, (ui32)logRead.Owner, (ui64)firstLsnToKeep, (ui64)firstNonceToKeep);
@@ -1136,6 +1135,12 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
 
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     TGuard<TMutex> guard(StateMutex);
+
+    for (const auto& chunkIdx : req.ChunksToRelease) {
+        BlockDevice->EraseCacheRange(
+            Format.Offset(chunkIdx, 0), 
+            Format.Offset(chunkIdx + 1, 0));
+    }
 
     if (req.IsChunksFromLogSplice) {
         auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease));

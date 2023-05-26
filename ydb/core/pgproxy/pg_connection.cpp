@@ -12,19 +12,6 @@ using namespace NActors;
 
 class TPGConnection : public TActorBootstrapped<TPGConnection>, public TNetworkConfig {
 public:
-    // incoming messages only
-    enum class EMessageCode : char {
-        Initial = 'i',
-        Query = 'Q',
-        Terminate = 'X',
-        PasswordMessage = 'p',
-        Parse = 'P',
-        ParameterStatus = 'S',
-        Bind = 'B',
-        Describe = 'D',
-        Execute = 'E',
-    };
-
     using TBase = TActorBootstrapped<TPGConnection>;
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
@@ -44,12 +31,15 @@ public:
         {"DateStyle", "ISO"},
         {"IntervalStyle", "postgres"},
         {"integer_datetimes", "on"},
+        {"server_version", "14.5 (ydb stable-23-3)"},
     };
     TSocketBuffer BufferOutput;
     TActorId DatabaseProxy;
     std::shared_ptr<TPGInitial> InitialMessage;
     ui64 IncomingSequenceNumber = 1;
     ui64 OutgoingSequenceNumber = 1;
+    ui64 SyncSequenceNumber = 1;
+    char TransactionStatus = 'I'; // could be 'I' (idle), 'T' (transaction), 'E' (failed transaction)
     std::deque<TAutoPtr<IEventHandle>> PostponedEvents;
 
     TPGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const TActorId& databaseProxy)
@@ -130,84 +120,102 @@ protected:
         Outgoing,
     };
 
-    TStringBuf GetMessageName(EDirection direction, const TPGMessage& message) const {
-        static const std::unordered_map<char, TStringBuf> messageName = {
-            {'i', "Initial"},
-            {'R', "Auth"},
-            {'Z', "ReadyForQuery"},
-            {'Q', "Query"},
-            {'C', "CommandComplete"},
-            {'X', "Terminate"},
-            {'T', "RowDescription"},
-            {'S', "ParameterStatus"},
-            {'I', "EmptyQueryResponse"},
-            {'p', "PasswordMessage"},
-            {'P', "Parse"},
-            {'1', "ParseComplete"},
-            {'B', "Bind"},
-            {'2', "BindComplete"},
-        };
-        auto itMessageName = messageName.find(message.Message);
-        if (itMessageName != messageName.end()) {
-            return itMessageName->second;
+    static constexpr TStringBuf GetClassName(TStringBuf name) {
+        auto pos = name.find("TPG");
+        if (pos == std::string_view::npos) {
+            return name;
         }
+        return name.substr(pos + 3, name.size() - pos - 4);
+    }
+
+    template<typename TPGMsg>
+    static constexpr std::pair<char, TStringBuf> GetMessageCode() {
+        return {TPGMsg::CODE, GetClassName(typeid(TPGMsg).name())};
+    }
+
+    TStringBuf GetMessageName(EDirection direction, const TPGMessage& message) const {
         static const std::unordered_map<char, TStringBuf> incomingMessageName = {
-            {'E', "Execute"},
-            {'D', "Describe"},
+            GetMessageCode<TPGInitial>(),
+            GetMessageCode<TPGPasswordMessage>(),
+            GetMessageCode<TPGParse>(),
+            GetMessageCode<TPGBind>(),
+            GetMessageCode<TPGExecute>(),
+            GetMessageCode<TPGDescribe>(),
+            GetMessageCode<TPGSync>(),
+            GetMessageCode<TPGClose>(),
+            GetMessageCode<TPGQuery>(),
+            GetMessageCode<TPGTerminate>(),
+            GetMessageCode<TPGFlush>(),
         };
         static const std::unordered_map<char, TStringBuf> outgoingMessageName = {
-            {'E', "ErrorResponse"},
-            {'D', "DataRow"},
+            GetMessageCode<TPGAuth>(),
+            GetMessageCode<TPGErrorResponse>(),
+            GetMessageCode<TPGDataRow>(),
+            GetMessageCode<TPGParameterStatus>(),
+            GetMessageCode<TPGCommandComplete>(),
+            GetMessageCode<TPGParseComplete>(),
+            GetMessageCode<TPGBindComplete>(),
+            GetMessageCode<TPGCloseComplete>(),
+            GetMessageCode<TPGParameterDescription>(),
+            GetMessageCode<TPGNoData>(),
+            GetMessageCode<TPGRowDescription>(),
+            GetMessageCode<TPGEmptyQueryResponse>(),
+            GetMessageCode<TPGReadyForQuery>(),
         };
+        std::unordered_map<char, TStringBuf>::const_iterator itMessageName;
         switch (direction) {
             case EDirection::Incoming:
                 itMessageName = incomingMessageName.find(message.Message);
+                if (itMessageName != incomingMessageName.end()) {
+                    return itMessageName->second;
+                }
                 break;
             case EDirection::Outgoing:
                 itMessageName = outgoingMessageName.find(message.Message);
+                if (itMessageName != outgoingMessageName.end()) {
+                    return itMessageName->second;
+                }
                 break;
         }
-        if (itMessageName != messageName.end()) {
-            return itMessageName->second;
-        }
-        return {};
+        return "?";
     }
 
     TString GetMessageDump(EDirection direction, const TPGMessage& message) const {
-        switch (message.Message) {
-            case 'i':
-                return ((const TPGInitial&)message).Dump();
-            case 'Q':
-                return ((const TPGQuery&)message).Dump();
-            case 'S':
-                return ((const TPGParameterStatus&)message).Dump();
-            case 'Z':
-                return ((const TPGReadyForQuery&)message).Dump();
-            case 'C':
-                return ((const TPGCommandComplete&)message).Dump();
-            case 'R':
-                return ((const TPGAuth&)message).Dump();
-            case 'D': {
-                switch (direction) {
-                    case EDirection::Incoming:
-                        return ((const TPGDescribe&)message).Dump();
-                    case EDirection::Outgoing:
-                        return ((const TPGDataRow&)message).Dump();
-                }
-            }
-            case 'E': {
-                switch (direction) {
-                    case EDirection::Incoming:
-                        return ((const TPGExecute&)message).Dump();
-                    case EDirection::Outgoing:
-                        return ((const TPGErrorResponse&)message).Dump();
-                }
-            }
-            case 'B':
-                return ((const TPGBind&)message).Dump();
-            case 'P':
-                return ((const TPGParse&)message).Dump();
+        if (direction == EDirection::Incoming) {
+            switch (message.Message) {
+                case TPGInitial::CODE:
+                    return ((const TPGInitial&)message).Dump();
+                case TPGQuery::CODE:
+                    return ((const TPGQuery&)message).Dump();
+                case TPGSync::CODE:
+                    return ((const TPGSync&)message).Dump();
+                case TPGClose::CODE:
+                    return ((const TPGClose&)message).Dump();
+                case TPGDescribe::CODE:
+                    return ((const TPGDescribe&)message).Dump();
+                case TPGExecute::CODE:
+                    return ((const TPGExecute&)message).Dump();
+                case TPGBind::CODE:
+                    return ((const TPGBind&)message).Dump();
+                case TPGParse::CODE:
+                    return ((const TPGParse&)message).Dump();
 
+            }
+        } else {
+            switch (message.Message) {
+                case TPGParameterStatus::CODE:
+                    return ((const TPGParameterStatus&)message).Dump();
+                case TPGReadyForQuery::CODE:
+                    return ((const TPGReadyForQuery&)message).Dump();
+                case TPGCommandComplete::CODE:
+                    return ((const TPGCommandComplete&)message).Dump();
+                case TPGAuth::CODE:
+                    return ((const TPGAuth&)message).Dump();
+                case TPGDataRow::CODE:
+                    return ((const TPGDataRow&)message).Dump();
+                case TPGErrorResponse::CODE:
+                    return ((const TPGErrorResponse&)message).Dump();
+            }
         }
         return {};
     }
@@ -282,7 +290,7 @@ protected:
 
     void SendReadyForQuery() {
         TPGStreamOutput<TPGReadyForQuery> readyForQuery;
-        readyForQuery << 'I';
+        readyForQuery << TransactionStatus;
         SendStream(readyForQuery);
     }
 
@@ -296,6 +304,15 @@ protected:
             << 'R' << "auth_failed" << '\0'
             << '\0';
         SendStream(errorResponse);
+    }
+
+    void BecomeReadyForQuery() {
+        if (OutgoingSequenceNumber == SyncSequenceNumber) {
+            SendReadyForQuery();
+            OutgoingSequenceNumber++;
+        }
+        ReplayPostponedEvents();
+        FlushAndPoll();
     }
 
     void FinishHandshake() {
@@ -357,59 +374,25 @@ protected:
     }
 
     void HandleMessage(const TPGQuery* message) {
-        if (message->GetQuery().empty()) {
-            SendMessage(TPGEmptyQueryResponse());
-        } else {
-            Send(DatabaseProxy, new TEvPGEvents::TEvQuery(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
-        }
+        SyncSequenceNumber = IncomingSequenceNumber;
+        Send(DatabaseProxy, new TEvPGEvents::TEvQuery(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
     }
 
     void HandleMessage(const TPGParse* message) {
-        if (message->GetQueryData().Query.empty()) {
-            SendMessage(TPGEmptyQueryResponse());
-        } else {
-            Send(DatabaseProxy, new TEvPGEvents::TEvParse(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
-        }
+        Send(DatabaseProxy, new TEvPGEvents::TEvParse(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
     }
 
-    void HandleMessage(const TPGParameterStatus* message) {
-        Y_UNUSED(message);
+    void HandleMessage(const TPGSync*) {
+        SyncSequenceNumber = IncomingSequenceNumber++;
+        if (OutgoingSequenceNumber == SyncSequenceNumber) {
+            SendReadyForQuery();
+            OutgoingSequenceNumber++;
+        }
     }
 
     void HandleMessage(const TPGBind* message) {
         Send(DatabaseProxy, new TEvPGEvents::TEvBind(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
     }
-
-    // void HandleMessage(const TPGDescribe* message) {
-    //     Y_UNUSED(message);
-    //     // describe current statement
-    //     auto ev = std::make_unique<TEvPGEvents::TEvRowDescription>();
-    //     ev->Fields.push_back({
-    //         .Name = "column1",
-    //     });
-    //     Send(SelfId(), ev.release());
-    // }
-
-    // void HandleMessage(const TPGExecute* message) {
-    //     Y_UNUSED(message);
-    //     // execute current statement
-    //     auto ev = std::make_unique<NPG::TEvPGEvents::TEvDataRows>();
-    //     {
-    //         ev->Rows.emplace_back();
-    //         auto& row = ev->Rows.back();
-    //         row.resize(1);
-    //         row[0] = "345";
-    //     }
-    //     {
-    //         ev->Rows.emplace_back();
-    //         auto& row = ev->Rows.back();
-    //         row.resize(1);
-    //         row[0] = "456";
-    //     }
-    //     Send(SelfId(), ev.release());
-    //     //
-    //     Send(SelfId(), new NPG::TEvPGEvents::TEvCommandComplete("OK"));
-    // }
 
     void HandleMessage(const TPGDescribe* message) {
         Send(DatabaseProxy, new TEvPGEvents::TEvDescribe(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
@@ -419,8 +402,15 @@ protected:
         Send(DatabaseProxy, new TEvPGEvents::TEvExecute(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
     }
 
+    void HandleMessage(const TPGClose* message) {
+        Send(DatabaseProxy, new TEvPGEvents::TEvClose(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
+    }
+
     void HandleMessage(const TPGTerminate*) {
         CloseConnection = true;
+    }
+
+    void HandleMessage(const TPGFlush*) {
     }
 
     bool FlushAndPoll() {
@@ -481,38 +471,45 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvQueryResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
+            if (ev->Get()->TransactionStatus) {
+                TransactionStatus = ev->Get()->TransactionStatus;
+            }
             if (ev->Get()->ErrorFields.empty()) {
-                TString tag = "OK";
-                { // rowDescription
-                    TPGStreamOutput<TPGRowDescription> rowDescription;
-                    rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
-                    for (const auto& field : ev->Get()->DataFields) {
-                        rowDescription
-                            << TStringBuf(field.Name) << '\0'
-                            << uint32_t(field.TableId)
-                            << uint16_t(field.ColumnId)
-                            << uint32_t(field.DataType)
-                            << uint16_t(field.DataTypeSize)
-                            << uint32_t(0xffffffff) // type modifier
-                            << uint16_t(0)          // format text
-                            ;
-                    }
-                    SendStream(rowDescription);
-                }
-                { // dataFields
-                    for (const auto& row : ev->Get()->DataRows) {
-                        TPGStreamOutput<TPGDataRow> dataRow;
-                        dataRow << uint16_t(row.size()); // number of fields
-                        for (const auto& item : row) {
-                            dataRow << uint32_t(item.size()) << item;
+                if (ev->Get()->EmptyQuery) {
+                    SendMessage(TPGEmptyQueryResponse());
+                } else {
+                    TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
+                    if (!ev->Get()->DataFields.empty()) { // rowDescription
+                        TPGStreamOutput<TPGRowDescription> rowDescription;
+                        rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
+                        for (const auto& field : ev->Get()->DataFields) {
+                            rowDescription
+                                << TStringBuf(field.Name) << '\0'
+                                << uint32_t(field.TableId)
+                                << uint16_t(field.ColumnId)
+                                << uint32_t(field.DataType)
+                                << uint16_t(field.DataTypeSize)
+                                << uint32_t(0xffffffff) // type modifier
+                                << uint16_t(0)          // format text
+                                ;
                         }
-                        SendStream(dataRow);
+                        SendStream(rowDescription);
                     }
-                }
-                { // commandComplete
-                    TPGStreamOutput<TPGCommandComplete> commandComplete;
-                    commandComplete << tag << '\0';
-                    SendStream(commandComplete);
+                    { // dataFields
+                        for (const auto& row : ev->Get()->DataRows) {
+                            TPGStreamOutput<TPGDataRow> dataRow;
+                            dataRow << uint16_t(row.size()); // number of fields
+                            for (const auto& item : row) {
+                                dataRow << uint32_t(item.size()) << item;
+                            }
+                            SendStream(dataRow);
+                        }
+                    }
+                    { // commandComplete
+                        TPGStreamOutput<TPGCommandComplete> commandComplete;
+                        commandComplete << tag << '\0';
+                        SendStream(commandComplete);
+                    }
                 }
             } else {
                 // error response
@@ -523,10 +520,7 @@ protected:
                 errorResponse << '\0';
                 SendStream(errorResponse);
             }
-            SendReadyForQuery();
-            ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -534,8 +528,16 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvDescribeResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
-            TString tag = "OK";
-            { // rowDescription
+            { // parameterDescription
+                TPGStreamOutput<TPGParameterDescription> parameterDescription;
+                parameterDescription << uint16_t(ev->Get()->ParameterTypes.size()); // number of fields
+                for (auto type : ev->Get()->ParameterTypes) {
+                    parameterDescription << type;
+                }
+                SendStream(parameterDescription);
+            }
+            if (ev->Get()->DataFields.size() > 0) {
+                // rowDescription
                 TPGStreamOutput<TPGRowDescription> rowDescription;
                 rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
                 for (const auto& field : ev->Get()->DataFields) {
@@ -550,10 +552,11 @@ protected:
                         ;
                 }
                 SendStream(rowDescription);
+            } else {
+                SendMessage(TPGNoData());
             }
             ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -562,21 +565,25 @@ protected:
     void HandleConnected(TEvPGEvents::TEvExecuteResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
             if (ev->Get()->ErrorFields.empty()) {
-                TString tag = "OK";
-                { // dataFields
-                    for (const auto& row : ev->Get()->DataRows) {
-                        TPGStreamOutput<TPGDataRow> dataRow;
-                        dataRow << uint16_t(row.size()); // number of fields
-                        for (const auto& item : row) {
-                            dataRow << uint32_t(item.size()) << item;
+                if (ev->Get()->EmptyQuery) {
+                    SendMessage(TPGEmptyQueryResponse());
+                } else {
+                    TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
+                    { // dataFields
+                        for (const auto& row : ev->Get()->DataRows) {
+                            TPGStreamOutput<TPGDataRow> dataRow;
+                            dataRow << uint16_t(row.size()); // number of fields
+                            for (const auto& item : row) {
+                                dataRow << uint32_t(item.size()) << item;
+                            }
+                            SendStream(dataRow);
                         }
-                        SendStream(dataRow);
                     }
-                }
-                { // commandComplete
-                    TPGStreamOutput<TPGCommandComplete> commandComplete;
-                    commandComplete << tag << '\0';
-                    SendStream(commandComplete);
+                    { // commandComplete
+                        TPGStreamOutput<TPGCommandComplete> commandComplete;
+                        commandComplete << tag << '\0';
+                        SendStream(commandComplete);
+                    }
                 }
             } else {
                 // error response
@@ -587,10 +594,8 @@ protected:
                 errorResponse << '\0';
                 SendStream(errorResponse);
             }
-            SendReadyForQuery();
             ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -600,10 +605,8 @@ protected:
         if (IsEventExpected(ev)) {
             TPGStreamOutput<TPGParseComplete> parseComplete;
             SendStream(parseComplete);
-            SendReadyForQuery();
             ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -614,8 +617,18 @@ protected:
             TPGStreamOutput<TPGBindComplete> bindComplete;
             SendStream(bindComplete);
             ++OutgoingSequenceNumber;
-            ReplayPostponedEvents();
-            FlushAndPoll();
+            BecomeReadyForQuery();
+        } else {
+            PostponeEvent(ev);
+        }
+    }
+
+    void HandleConnected(TEvPGEvents::TEvCloseResponse::TPtr& ev) {
+        if (IsEventExpected(ev)) {
+            TPGStreamOutput<TPGCloseComplete> closeComplete;
+            SendStream(closeComplete);
+            ++OutgoingSequenceNumber;
+            BecomeReadyForQuery();
         } else {
             PostponeEvent(ev);
         }
@@ -655,33 +668,39 @@ protected:
                     while (HasInputMessage()) {
                         const TPGMessage* message = GetInputMessage();
                         PrintMessage(EDirection::Incoming, *message);
-                        switch (static_cast<EMessageCode>(message->Message)) {
-                            case EMessageCode::Initial:
+                        switch (message->Message) {
+                            case TPGInitial::CODE:
                                 HandleMessage(static_cast<const TPGInitial*>(message));
                                 break;
-                            case EMessageCode::Query:
+                            case TPGQuery::CODE:
                                 HandleMessage(static_cast<const TPGQuery*>(message));
                                 break;
-                            case EMessageCode::Terminate:
+                            case TPGTerminate::CODE:
                                 HandleMessage(static_cast<const TPGTerminate*>(message));
                                 break;
-                            case EMessageCode::PasswordMessage:
+                            case TPGPasswordMessage::CODE:
                                 HandleMessage(static_cast<const TPGPasswordMessage*>(message));
                                 break;
-                            case EMessageCode::Parse:
+                            case TPGParse::CODE:
                                 HandleMessage(static_cast<const TPGParse*>(message));
                                 break;
-                            case EMessageCode::ParameterStatus:
-                                HandleMessage(static_cast<const TPGParameterStatus*>(message));
+                            case TPGSync::CODE:
+                                HandleMessage(static_cast<const TPGSync*>(message));
                                 break;
-                            case EMessageCode::Bind:
+                            case TPGBind::CODE:
                                 HandleMessage(static_cast<const TPGBind*>(message));
                                 break;
-                            case EMessageCode::Describe:
+                            case TPGDescribe::CODE:
                                 HandleMessage(static_cast<const TPGDescribe*>(message));
                                 break;
-                            case EMessageCode::Execute:
+                            case TPGExecute::CODE:
                                 HandleMessage(static_cast<const TPGExecute*>(message));
+                                break;
+                            case TPGClose::CODE:
+                                HandleMessage(static_cast<const TPGClose*>(message));
+                                break;
+                            case TPGFlush::CODE:
+                                HandleMessage(static_cast<const TPGFlush*>(message));
                                 break;
                             default:
                                 BLOG_ERROR("invalid message (" << message->Message << ")");
@@ -699,7 +718,7 @@ protected:
                     continue;
                 } else if (!res) {
                     // connection closed
-                    BLOG_D("connection closed");
+                    BLOG_D("connection closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
                     return PassAway();
                 } else {
                     BLOG_D("connection closed - error in recv: " << strerror(-res));
@@ -787,6 +806,7 @@ protected:
             hFunc(TEvPGEvents::TEvBindResponse, HandleConnected);
             hFunc(TEvPGEvents::TEvDescribeResponse, HandleConnected);
             hFunc(TEvPGEvents::TEvExecuteResponse, HandleConnected);
+            hFunc(TEvPGEvents::TEvCloseResponse, HandleConnected);
         }
     }
 };

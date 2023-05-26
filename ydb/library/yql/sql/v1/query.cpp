@@ -168,6 +168,9 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
     }
+    if (desc.Settings.AwsRegion) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("aws_region"), desc.Settings.AwsRegion)));
+    }
     if (const auto& sink = desc.Settings.SinkSettings) {
         switch (sink->index()) {
             case 0: // local
@@ -2215,11 +2218,11 @@ public:
             }
 
             for (const auto& lib : ctx.Libraries) {
-                auto node = Y("library", new TAstAtomNodeImpl(Pos, lib.first, TNodeFlags::ArbitraryContent));
-                if (lib.second) {
-                    node = L(node, new TAstAtomNodeImpl(Pos, lib.second->first, TNodeFlags::ArbitraryContent));
-                    if (lib.second->second) {
-                        node = L(node, new TAstAtomNodeImpl(Pos, lib.second->second, TNodeFlags::ArbitraryContent));
+                auto node = Y("library", new TAstAtomNodeImpl(std::get<TPosition>(lib.second), lib.first, TNodeFlags::ArbitraryContent));
+                if (const auto& first = std::get<1U>(lib.second)) {
+                    node = L(node, new TAstAtomNodeImpl(first->second, first->first, TNodeFlags::ArbitraryContent));
+                    if (const auto& second = std::get<2U>(lib.second)) {
+                        node = L(node, new TAstAtomNodeImpl(second->second, second->first, TNodeFlags::ArbitraryContent));
                     }
                 }
 

@@ -79,7 +79,7 @@ public:
     TLLVMFieldsStructureForState(llvm::LLVMContext& context)
         : TBase(context)
         , IndexType(Type::getInt32Ty(context))
-        , StatusType(Type::getInt32Ty(context)) 
+        , StatusType(Type::getInt32Ty(context))
         , FieldsCount(GetFields().size())
     {
     }
@@ -288,11 +288,11 @@ private:
         const auto placeholder = NYql::NCodegen::ETarget::Windows == ctx.Codegen->GetEffectiveTarget() ?
             new AllocaInst(valueType, 0U, "placeholder", block) : nullptr;
 
-        const auto statePtr = GetElementPtrInst::CreateInBounds(ctx.GetMutables(), {ConstantInt::get(indexType, static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto posPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetPosition() }, "pos_ptr", block);
+        const auto posPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetPosition() }, "pos_ptr", block);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -302,7 +302,7 @@ private:
 
         block = loop;
 
-        const auto pos = new LoadInst(posPtr, "pos", block);
+        const auto pos = new LoadInst(indexType, posPtr, "pos", block);
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Get));
 
@@ -310,12 +310,12 @@ private:
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
             const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-            input = CallInst::Create(getPtr, {stateArg, pos}, "input", block);
+            input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
         } else {
             const auto getType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), placeholder->getType(), pos->getType()}, false);
             const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-            CallInst::Create(getPtr, {stateArg, placeholder, pos}, "", block);
-            input = new LoadInst(placeholder, "input", block);
+            CallInst::Create(getType, getPtr, {stateArg, placeholder, pos}, "", block);
+            input = new LoadInst(valueType, placeholder, "input", block);
         }
 
         const auto plus = BinaryOperator::CreateAdd(pos, ConstantInt::get(pos->getType(), 1), "plus", block);
@@ -384,22 +384,22 @@ public:
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSwitchFlowWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetIndex() }, "index_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetIndex() }, "index_ptr", block);
 
         BranchInst::Create(more, block);
 
         block = more;
 
-        const auto index = new LoadInst(indexPtr, "index", block);
+        const auto index = new LoadInst(indexType, indexPtr, "index", block);
         const auto empty = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, index, ConstantInt::get(index->getType(), Handlers.size()), "empty", block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -416,9 +416,9 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
 
-            const auto last = new LoadInst(statusPtr, "last", block);
+            const auto last = new LoadInst(statusType, statusPtr, "last", block);
 
             result->addIncoming(GetFinish(context), block);
             const auto choise = SwitchInst::Create(last, pull, 2U, block);
@@ -456,7 +456,7 @@ public:
             const auto addArg = WrapArgumentForWindows(item, ctx, block);
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), addArg->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
-            CallInst::Create(addPtr, {stateArg, addArg}, "", block);
+            CallInst::Create(addType, addPtr, {stateArg, addArg}, "", block);
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
             BranchInst::Create(done, loop, check, block);
@@ -468,7 +468,7 @@ public:
             const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::PushStat));
             const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
             const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
-            CallInst::Create(statPtr, {stateArg, stat}, "", block);
+            CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
 
             BranchInst::Create(more, block);
         }
@@ -521,7 +521,7 @@ public:
             const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Clear));
             const auto clearType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
-            CallInst::Create(clearPtr, {stateArg}, "", block);
+            CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
 
             BranchInst::Create(more, block);
 
@@ -825,7 +825,7 @@ private:
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
         auto block = main;
 
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetIndex() }, "index_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetIndex() }, "index_ptr", block);
 
         const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", block);
         new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
@@ -834,7 +834,7 @@ private:
 
         block = more;
 
-        const auto index = new LoadInst(indexPtr, "index", block);
+        const auto index = new LoadInst(indexType, indexPtr, "index", block);
         const auto empty = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, index, ConstantInt::get(index->getType(), Handlers.size()), "empty", block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -852,9 +852,9 @@ private:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
+            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetStatus() }, "last", block);
 
-            const auto last = new LoadInst(statusPtr, "last", block);
+            const auto last = new LoadInst(statusType, statusPtr, "last", block);
 
             const auto choise = SwitchInst::Create(last, pull, 2U, block);
             choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), rest);
@@ -872,7 +872,7 @@ private:
             const auto used = GetMemoryUsed(MemLimit, ctx, block);
 
             const auto stream = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-                new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+                new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
             BranchInst::Create(loop, block);
 
@@ -890,7 +890,7 @@ private:
             const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValueBase::Add));
             const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), itemPtr->getType()}, false);
             const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "add", block);
-            CallInst::Create(addPtr, {stateArg, itemPtr}, "", block);
+            CallInst::Create(addType, addPtr, {stateArg, itemPtr}, "", block);
 
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
             BranchInst::Create(done, loop, check, block);
@@ -900,7 +900,7 @@ private:
             const auto resetFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValueBase::Reset));
             const auto resetType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto resetPtr = CastInst::Create(Instruction::IntToPtr, resetFunc, PointerType::getUnqual(resetType), "reset", block);
-            CallInst::Create(resetPtr, {stateArg}, "", block);
+            CallInst::Create(resetType, resetPtr, {stateArg}, "", block);
 
             BranchInst::Create(more, block);
         }
@@ -918,7 +918,7 @@ private:
             const auto nextFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TValueBase::Get));
             const auto nextType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), valuePtr->getType()}, false);
             const auto nextPtr = CastInst::Create(Instruction::IntToPtr, nextFunc, PointerType::getUnqual(nextType), "next", block);
-            const auto has = CallInst::Create(nextPtr, {stateArg, valuePtr}, "has", block);
+            const auto has = CallInst::Create(nextType, nextPtr, {stateArg, valuePtr}, "has", block);
 
             BranchInst::Create(good, more, has, block);
 
@@ -936,7 +936,7 @@ private:
                     choise->addCase(idx, var);
                     block = var;
 
-                    const auto output = new LoadInst(valuePtr, "output", block);
+                    const auto output = new LoadInst(valueType, valuePtr, "output", block);
                     ValueRelease(Handlers[i].Kind, output, ctx, block);
 
                     const auto unpack = Handlers[i].IsOutputVariant ? GetVariantParts(output, ctx, block) : std::make_pair(ConstantInt::get(indexType, 0), output);

@@ -1255,6 +1255,7 @@ message TVDiskStatus {
 
     // payload
     optional EVDiskStatus Status = 6;
+    optional bool OnlyPhantomsRemain = 7; // substate of REPLICATING status
 }
 
 message TEvControllerUpdateDiskStatus {

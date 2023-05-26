@@ -37,10 +37,10 @@ TUnboxedValuePod PeelData(const TDataTypeId nodeType, const TUnboxedValuePod val
 }
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod TryPeelDom(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
+TUnboxedValuePod TryPeelDom(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod PeelList(const ITypeInfoHelper::TPtr typeHelper, const TType* itemType, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod PeelList(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
         case ENodeType::List: {
             if (!x.IsBoxed())
@@ -87,7 +87,7 @@ TUnboxedValuePod PeelList(const ITypeInfoHelper::TPtr typeHelper, const TType* i
 }
 
 template<bool Strict, bool AutoConvert, bool Utf8Keys>
-TUnboxedValuePod PeelDict(const ITypeInfoHelper::TPtr typeHelper, const TType* itemType, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod PeelDict(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
         case ENodeType::Dict:
             if (!x.IsBoxed())
@@ -130,7 +130,7 @@ TUnboxedValuePod PeelDict(const ITypeInfoHelper::TPtr typeHelper, const TType* i
     return valueBuilder->NewEmptyList().Release();
 }
 
-TUnboxedValuePod MakeStub(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod MakeStub(const ITypeInfoHelper* typeHelper, const TType* shape, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (const auto kind = typeHelper->GetTypeKind(shape)) {
         case ETypeKind::Optional:
             return TUnboxedValuePod();
@@ -191,7 +191,7 @@ TUnboxedValuePod MakeStub(const ITypeInfoHelper::TPtr typeHelper, const TType* s
 }
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod PeelTuple(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod PeelTuple(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     if (const auto tupleTypeInspector = TTupleTypeInspector(*typeHelper, shape); auto count = tupleTypeInspector.GetElementsCount()) {
         switch (GetNodeType(x)) {
             case ENodeType::List: {
@@ -254,7 +254,7 @@ TUnboxedValuePod PeelTuple(const ITypeInfoHelper::TPtr typeHelper, const TType* 
 }
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod PeelStruct(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod PeelStruct(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     if (const auto structTypeInspector = TStructTypeInspector(*typeHelper, shape)) {
         const auto size = structTypeInspector.GetMembersCount();
         switch (GetNodeType(x)) {
@@ -307,7 +307,7 @@ TUnboxedValuePod PeelStruct(const ITypeInfoHelper::TPtr typeHelper, const TType*
 }
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod PeelOptional(const ITypeInfoHelper::TPtr typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod PeelOptional(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     if (IsNodeType<ENodeType::Entity>(value))
         return TUnboxedValuePod().MakeOptional();
 
@@ -320,7 +320,7 @@ TUnboxedValuePod PeelOptional(const ITypeInfoHelper::TPtr typeHelper, const TTyp
 }
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod TryPeelDom(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod TryPeelDom(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (const auto kind = typeHelper->GetTypeKind(shape)) {
         case ETypeKind::Data:
             return PeelData<Strict, AutoConvert>(TDataTypeInspector(*typeHelper, shape).GetTypeId(), value, valueBuilder, pos);
@@ -356,7 +356,7 @@ TUnboxedValuePod TryPeelDom(const ITypeInfoHelper::TPtr typeHelper, const TType*
 }
 
 template<bool Strict, bool AutoConvert>
-TUnboxedValuePod PeelDom(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
+TUnboxedValuePod PeelDom(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     if (const auto result = TryPeelDom<Strict, AutoConvert>(typeHelper, shape, value, valueBuilder, pos))
         return result.GetOptionalValue();
     ::TStringBuilder sb;
@@ -365,9 +365,9 @@ TUnboxedValuePod PeelDom(const ITypeInfoHelper::TPtr typeHelper, const TType* sh
     UdfTerminate(sb.c_str());
 }
 
-template TUnboxedValuePod PeelDom<true, true>(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
-template TUnboxedValuePod PeelDom<false, true>(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
-template TUnboxedValuePod PeelDom<true, false>(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
-template TUnboxedValuePod PeelDom<false, false>(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
+template TUnboxedValuePod PeelDom<true, true>(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
+template TUnboxedValuePod PeelDom<false, true>(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
+template TUnboxedValuePod PeelDom<true, false>(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
+template TUnboxedValuePod PeelDom<false, false>(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
 
 }

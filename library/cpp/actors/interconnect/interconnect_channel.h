@@ -137,7 +137,8 @@ namespace NActors {
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
 
-        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool external, size_t *bytesSerialized);
+        template<bool External>
+        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
         bool FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);

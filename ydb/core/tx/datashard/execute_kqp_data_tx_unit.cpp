@@ -4,9 +4,12 @@
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+#include "probes.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
 namespace NDataShard {
@@ -217,6 +220,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         if (op->HasVolatilePrepareFlag()) {
             dataTx->SetVolatileTxId(tx->GetTxId());
         }
+
+        LWTRACK(ProposeTransactionKqpDataExecute, op->Orbit);
 
         KqpCommitLocks(tabletId, tx, writeVersion, DataShard);
 

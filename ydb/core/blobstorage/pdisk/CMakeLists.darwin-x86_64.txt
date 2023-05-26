@@ -56,6 +56,7 @@ target_sources(core-blobstorage-pdisk PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_log.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_log_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_logreader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.cpp

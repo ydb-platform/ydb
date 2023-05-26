@@ -2,6 +2,8 @@
 
 #include "grpc_server.h"
 
+#include <library/cpp/string_utils/quote/quote.h>
+
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 #include <util/system/yassert.h>
@@ -24,7 +26,10 @@ public:
     }
 
     TString GetPeerName() const {
-        return Context.peer();
+        // Decode URL-encoded square brackets
+        auto ip = Context.peer();
+        CGIUnescape(ip);
+        return ip;
     }
 
     TInstant Deadline() const {

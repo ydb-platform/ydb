@@ -7,7 +7,7 @@ description: "В разделе приведены примеры кода ау�
 
 {% include [work in progress message](_includes/addition.md) %}
 
-При использовании данного метода режим аутентификации и его параметры будут определены окружением, в котором запускается приложение, в [описанном здесь порядке](../auth.md#env). 
+При использовании данного метода режим аутентификации и его параметры будут определены окружением, в котором запускается приложение, в [описанном здесь порядке](../auth.md#env).
 
 Установив одну из следующих переменных окружения, можно управлять способом аутентификации:
 
@@ -28,7 +28,7 @@ description: "В разделе приведены примеры кода ау�
   import (
     "context"
     "os"
-    
+
     environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
@@ -57,7 +57,7 @@ description: "В разделе приведены примеры кода ау�
     "context"
     "database/sql"
     "os"
-    
+
     environ "github.com/ydb-platform/ydb-go-sdk-auth-environ"
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
@@ -72,7 +72,7 @@ description: "В разделе приведены примеры кода ау�
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -88,11 +88,11 @@ description: "В разделе приведены примеры кода ау�
   ```java
   public void work(String connectionString) {
       AuthProvider authProvider = CloudAuthHelper.getAuthProviderFromEnviron();
- 
+
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -105,5 +105,13 @@ description: "В разделе приведены примеры кода ау�
 - Node.js
 
   {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
+
+- Python
+
+  {% include [auth-env](../../../../_includes/python/auth-env.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-env](../../../../_includes/python/async/auth-env.md) %}
 
 {% endlist %}

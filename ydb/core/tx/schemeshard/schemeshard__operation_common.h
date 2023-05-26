@@ -686,7 +686,6 @@ public:
                                                      databaseId,
                                                      databasePath,
                                                      txState->TxType,
-                                                     ssId,
                                                      context);
                 } else {
                     event = MakeEvUpdateConfig(OperationId.GetTxId(),
@@ -754,9 +753,23 @@ public:
                     tablet->SetIdx(ui64(p.first.GetLocalId()));
                     for (const auto& pq : pqShard->Partitions) {
                         auto info = event->Record.AddPartitions();
-                        info->SetPartition(pq.PqId);
+                        info->SetPartition(pq->PqId);
                         info->SetTabletId(ui64(tabletId));
-                        info->SetGroup(pq.GroupId);
+                        info->SetGroup(pq->GroupId);
+                        info->SetCreateVersion(pq->CreateVersion);
+
+                        if (pq->KeyRange) {
+                            pq->KeyRange->SerializeToProto(*info->MutableKeyRange());
+                        }
+                        info->SetStatus(pq->Status);
+                        info->MutableParentPartitionIds()->Reserve(pq->ParentPartitionIds.size());
+                        for (const auto parent : pq->ParentPartitionIds) {
+                            info->MutableParentPartitionIds()->AddAlreadyReserved(parent);
+                        }
+                        info->MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
+                        for (const auto children : pq->ChildPartitionIds) {
+                            info->MutableChildPartitionIds()->AddAlreadyReserved(children);
+                        }
                     }
                 }
 
@@ -806,12 +819,22 @@ private:
         }
 
         for (const auto& pq : pqShard.Partitions) {
-            config.AddPartitionIds(pq.PqId);
+            config.AddPartitionIds(pq->PqId);
 
             auto& partition = *config.AddPartitions();
-            partition.SetPartitionId(pq.PqId);
-            if (pq.KeyRange) {
-                pq.KeyRange->SerializeToProto(*partition.MutableKeyRange());
+            partition.SetPartitionId(pq->PqId);
+            partition.SetCreateVersion(pq->CreateVersion);
+            if (pq->KeyRange) {
+                pq->KeyRange->SerializeToProto(*partition.MutableKeyRange());
+            }
+            partition.SetStatus(pq->Status);
+            partition.MutableParentPartitionIds()->Reserve(pq->ParentPartitionIds.size());
+            for (const auto parent : pq->ParentPartitionIds) {
+                partition.MutableParentPartitionIds()->AddAlreadyReserved(parent);
+            }
+            partition.MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
+            for (const auto children : pq->ChildPartitionIds) {
+                partition.MutableChildPartitionIds()->AddAlreadyReserved(children);
             }
         }
     }
@@ -851,7 +874,6 @@ private:
                                  const TString& databaseId,
                                  const TString& databasePath,
                                  TTxState::ETxType txType,
-                                 TTabletId ssId,
                                  const TOperationContext& context);
     static THolder<TEvPersQueue::TEvUpdateConfig>
         MakeEvUpdateConfig(TTxId txId,
@@ -885,7 +907,7 @@ public:
     }
 
     bool HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override;
-    bool HandleReply(TEvTxProcessing::TEvReadSet::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, TOperationContext& context) override;
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
@@ -945,18 +967,18 @@ public:
     }
 
 private:
+    bool CanPersistState(const TTxState& txState,
+                         TOperationContext& context);
+    void PersistState(const TTxState& txState,
+                      TOperationContext& context) const;
     bool TryPersistState(TOperationContext& context);
-    void SendEvReadSetAck(TOperationContext& context);
+    void SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
+                                        TOperationContext& context);
 
     void PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context);
 
-    struct TReadSetAck {
-        THolder<TEvTxProcessing::TEvReadSetAck> Event;
-        TActorId Receiver;
-    };
-
-    THashMap<ui64, TReadSetAck> ReadSetAcks;
-    size_t ReadSetCount = 0;
+    TPathId PathId;
+    TPathElement::TPtr Path;
 };
 
 } // NPQState

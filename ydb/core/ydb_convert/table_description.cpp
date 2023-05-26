@@ -132,8 +132,14 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         }
     }
 
-    if (in.HasTTLSettings() && in.GetTTLSettings().HasEnabled()) {
-        AddTtl(out, in.GetTTLSettings().GetEnabled());
+    if (in.HasTTLSettings()) {
+        if (in.GetTTLSettings().HasEnabled()) {
+            AddTtl(out, in.GetTTLSettings().GetEnabled());
+        }
+
+        if (in.GetTTLSettings().HasUseTiering()) {
+            out.set_tiering(in.GetTTLSettings().GetUseTiering());
+        }
     }
 }
 
@@ -170,8 +176,14 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
         }
     }
 
-    if (in.HasTtlSettings() && in.GetTtlSettings().HasEnabled()) {
-        AddTtl(out, in.GetTtlSettings().GetEnabled());
+    if (in.HasTtlSettings()) {
+        if (in.GetTtlSettings().HasEnabled()) {
+            AddTtl(out, in.GetTtlSettings().GetEnabled());
+        }
+
+        if (in.GetTtlSettings().HasUseTiering()) {
+            out.set_tiering(in.GetTtlSettings().GetUseTiering());
+        }
     }
 }
 
@@ -449,6 +461,7 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 
         changefeed->set_name(stream.GetName());
         changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
+        changefeed->set_aws_region(stream.GetAwsRegion());
 
         switch (stream.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
@@ -465,6 +478,9 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         switch (stream.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
             changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            break;
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson:
+            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
             break;
         default:
             break;
@@ -489,6 +505,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
+    out.SetAwsRegion(in.aws_region());
 
     switch (in.mode()) {
     case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:
@@ -507,6 +524,9 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     switch (in.format()) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson);
+        break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDynamoDBStreamsJson);
         break;
     default:
         status = Ydb::StatusIds::BAD_REQUEST;

@@ -18,7 +18,7 @@ Helm-чарт устанавливает в кластер {{ k8s }} контр�
 * _storage nodes_ — обеспечивают слой хранения данных;
 * _dynamic nodes_ — реализуют доступ к данным и их обработку.
 
-Для развертывания каждого из компонентов достаточно создать соответствующий ресурс: [Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-sample.yaml) или [Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database-sample.yaml) с желаемыми параметрами. Со схемой ресурсов можно ознакомиться [здесь](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy/ydb-operator/crds).
+Для развертывания каждого из компонентов достаточно создать соответствующий ресурс: [Storage](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/storage-block-4-2.yaml) или [Database](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/samples/database.yaml) с желаемыми параметрами. Со схемой ресурсов можно ознакомиться [здесь](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy/ydb-operator/crds).
 
 После обработки чарта контроллером будут созданы следующие ресурсы:
 

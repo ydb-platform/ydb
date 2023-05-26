@@ -1,9 +1,10 @@
 #include "datashard_impl.h"
 #include "datashard_txs.h"
+#include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-#include <ydb/core/formats/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -11,6 +12,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+
+LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
 
@@ -127,6 +130,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , SnapshotManager(this)
     , SchemaSnapshotManager(this)
     , VolatileTxManager(this)
+    , ConflictsCache(this)
     , DisableByKeyFilter(0, 0, 1)
     , MaxTxInFly(15000, 0, 100000)
     , MaxTxLagMilliseconds(5*60*1000, 0, 30*24*3600*1000ll)
@@ -162,6 +166,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.Get();
+
+    RegisterDataShardProbes();
 }
 
 NTabletPipe::TClientConfig TDataShard::GetPipeClientConfig() {
@@ -563,6 +569,7 @@ public:
 
         ui64 resultSize = Result->GetTxResult().size();
         ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
+        LWTRACK(ProposeTransactionSendResult, Result->Orbit);
         Self->Send(Target, Result.Release(), flags);
     }
 
@@ -605,6 +612,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
 
     ui64 resultSize = res->GetTxResult().size();
     ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
+    LWTRACK(ProposeTransactionSendResult, res->Orbit);
     ctx.Send(target, res.Release(), flags);
 }
 
@@ -2483,6 +2491,7 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
     bool reject = CheckDataTxReject(txDescr, ctx, rejectStatus, rejectReason);
 
     if (reject) {
+        LWTRACK(ProposeTransactionReject, msg->Orbit);
         THolder<TEvDataShard::TEvProposeTransactionResult> result =
             THolder(new TEvDataShard::TEvProposeTransactionResult(msg->GetTxKind(),
                                                             TabletID(),
@@ -2507,12 +2516,16 @@ void TDataShard::UpdateProposeQueueSize() const {
 }
 
 void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
+    LWTRACK(ProposeTransactionRequest, msg->Orbit);
+
     // Check if we need to delay an immediate transaction
     if (MediatorStateWaiting &&
         (ev->Get()->GetFlags() & TTxFlags::Immediate) &&
         !(ev->Get()->GetFlags() & TTxFlags::ForceOnline))
     {
         // We cannot calculate correct version until we restore mediator state
+        LWTRACK(ProposeTransactionWaitMediatorState, msg->Orbit);
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
         return;
@@ -2521,6 +2534,7 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     if (Pipeline.HasProposeDelayers()) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Handle TEvProposeTransaction delayed at " << TabletID() << " until dependency graph is restored");
+        LWTRACK(ProposeTransactionWaitDelayers, msg->Orbit);
         DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
         return;
@@ -2589,6 +2603,9 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, con
 }
 
 void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
+    LWTRACK(ProposeTransactionRequest, msg->Orbit);
+
     IncCounter(COUNTER_PREPARE_REQUEST);
 
     if (TxInFly() > GetMaxTxInFly()) {
@@ -2629,11 +2646,12 @@ void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
 }
 
 void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
     bool mayRunImmediate = false;
 
-    if ((ev->Get()->GetFlags() & TTxFlags::Immediate) &&
-        !(ev->Get()->GetFlags() & TTxFlags::ForceOnline) &&
-        ev->Get()->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA)
+    if ((msg->GetFlags() & TTxFlags::Immediate) &&
+        !(msg->GetFlags() & TTxFlags::ForceOnline) &&
+        msg->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA)
     {
         // This transaction may run in immediate mode
         mayRunImmediate = true;
@@ -2641,6 +2659,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
 
     if (mayRunImmediate) {
         // Enqueue immediate transactions so they don't starve existing operations
+        LWTRACK(ProposeTransactionEnqueue, msg->Orbit);
         ProposeQueue.Enqueue(std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, ctx);
         UpdateProposeQueueSize();
     } else {
@@ -3051,6 +3070,8 @@ bool TDataShard::WaitPlanStep(ui64 step) {
 }
 
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
+    auto* msg = ev->Get();
+
     if (MvccSwitchState == TSwitchState::SWITCHING) {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction needs to wait because of mvcc state switching");
         return true;
@@ -3062,6 +3083,7 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
         TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge(GetEnablePrioritizedMvccSnapshotReads());
         if (rowVersion >= unreadableEdge) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction reads from " << rowVersion << " which is not before unreadable edge " << unreadableEdge);
+            LWTRACK(ProposeTransactionWaitSnapshot, msg->Orbit, rowVersion.Step, rowVersion.TxId);
             return true;
         }
     }
@@ -3926,14 +3948,8 @@ public:
     }
 
     void OnSkipUncommitted(ui64 txId) override {
-        if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
-            if (info->State != EVolatileTxState::Aborting) {
-                Y_VERIFY(VolatileDependencies);
-                VolatileDependencies->insert(txId);
-            }
-        } else {
-            Self->SysLocksTable().BreakLock(txId);
-        }
+        Y_VERIFY(VolatileDependencies);
+        Self->BreakWriteConflict(txId, *VolatileDependencies);
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
@@ -3981,10 +3997,13 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
 {
     const auto localTid = GetLocalTableId(tableId);
     Y_VERIFY(localTid);
-    const NTable::TScheme& scheme = db.GetScheme();
-    const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTid);
-    TSmallVec<TRawTypeValue> key;
-    NMiniKQL::ConvertTableKeys(scheme, tableInfo, keyCells, key, nullptr);
+
+    if (auto* cached = GetConflictsCache().GetTableCache(localTid).FindUncommittedWrites(keyCells)) {
+        for (ui64 txId : *cached) {
+            BreakWriteConflict(txId, volatileDependencies);
+        }
+        return true;
+    }
 
     if (!BreakWriteConflictsTxObserver) {
         BreakWriteConflictsTxObserver = new TBreakWriteConflictsTxObserver(this);
@@ -3997,7 +4016,7 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
     // We are not actually interested in the row version, we only need to
     // detect uncommitted transaction skips on the path to that version.
     auto res = db.SelectRowVersion(
-        localTid, key, /* readFlags */ 0,
+        localTid, keyCells, /* readFlags */ 0,
         nullptr,
         BreakWriteConflictsTxObserver);
 
@@ -4006,6 +4025,16 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
     }
 
     return true;
+}
+
+void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies) {
+    if (auto* info = GetVolatileTxManager().FindByCommitTxId(txId)) {
+        if (info->State != EVolatileTxState::Aborting) {
+            volatileDependencies.insert(txId);
+        }
+    } else {
+        SysLocksTable().BreakLock(txId);
+    }
 }
 
 class TDataShard::TTxGetOpenTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -4020,9 +4049,9 @@ public:
         auto it = pathId ? Self->GetUserTables().find(pathId.LocalPathId) : Self->GetUserTables().begin();
         Y_VERIFY(it != Self->GetUserTables().end());
 
-        auto txs = txc.DB.GetOpenTxs(it->second->LocalTid);
+        auto openTxs = txc.DB.GetOpenTxs(it->second->LocalTid);
 
-        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(txs));
+        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(openTxs));
         return true;
     }
 

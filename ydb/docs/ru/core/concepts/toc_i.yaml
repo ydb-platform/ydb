@@ -13,6 +13,7 @@ items:
 - { name: Time to Live (TTL),                     href: ttl.md }
 - { name: Скан запросы,                           href: scan_query.md }
 - { name: Ограничения базы данных,                href: limits-ydb.md }
+- { name: Многоверсионное управление конкурентным доступом (MVCC), href: mvcc.md }
 - name: Кластер YDB
   items:
   - name: Обзор

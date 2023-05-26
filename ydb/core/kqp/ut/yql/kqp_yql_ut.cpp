@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
-    Y_UNIT_TEST(StrictDml) {
+    Y_UNIT_TEST(NonStrictDml) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -262,10 +262,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             UPDATE `/Root/Test` SET Comment = "Updated" WHERE Group = 2;
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
-        result.GetIssues().PrintTo(Cerr);
-
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_READ_MODIFIED_TABLE));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateUseTable) {
@@ -400,6 +397,24 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             "9.223372036854776e+18";
             "1.844674407370955e+19"]
         ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(JsonCast) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT
+                CAST("" as JsonDocument)
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+
+        CompareYson(R"([[
+            #
+        ]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

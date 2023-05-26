@@ -131,6 +131,9 @@ namespace NActors {
         }
 
         UsageHisto.fill(0);
+        InputTrafficArray.fill(0);
+
+        XXH3_64bits_reset(&XxhashXdcState);
     }
 
     void TInputSessionTCP::Bootstrap() {
@@ -218,6 +221,7 @@ namespace NActors {
                 // we have hit processing time limit for this message, send notification to resume processing a bit later
                 TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
                 enoughCpu = false;
+                ++CpuStarvationEvents;
                 break;
             }
 
@@ -308,6 +312,17 @@ namespace NActors {
                 break;
             }
         }
+
+        for (size_t channel = 0; channel < InputTrafficArray.size(); ++channel) {
+            if (auto& value = InputTrafficArray[channel]) {
+                Metrics->AddInputChannelsIncomingTraffic(channel, std::exchange(value, 0));
+            }
+        }
+        for (auto& [channel, value] : std::exchange(InputTrafficMap, {})) {
+            if (value) {
+                Metrics->AddInputChannelsIncomingTraffic(channel, std::exchange(value, 0));
+            }
+        }
     }
 
     void TInputSessionTCP::ProcessHeader() {
@@ -319,7 +334,15 @@ namespace NActors {
         const ui64 confirm = header.Confirm;
         if (!Params.Encryption) {
             ChecksumExpected = std::exchange(header.Checksum, 0);
-            Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
+            if (Params.UseXxhash) {
+                XXH3_64bits_reset(&XxhashState);
+                XXH3_64bits_update(&XxhashState, &header, sizeof(header));
+                if (!PayloadSize) {
+                    Checksum = XXH3_64bits_digest(&XxhashState);
+                }
+            } else {
+                Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
+            }
             if (!PayloadSize && Checksum != ChecksumExpected) {
                 LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
@@ -387,7 +410,14 @@ namespace NActors {
         State = EState::HEADER;
         if (!Params.Encryption) { // see if we are checksumming packet body
             for (const auto&& [data, size] : Payload) {
-                Checksum = Crc32cExtendMSanCompatible(Checksum, data, size);
+                if (Params.UseXxhash) {
+                    XXH3_64bits_update(&XxhashState, data, size);
+                } else {
+                    Checksum = Crc32cExtendMSanCompatible(Checksum, data, size);
+                }
+            }
+            if (Params.UseXxhash) {
+                Checksum = XXH3_64bits_digest(&XxhashState);
             }
             if (Checksum != ChecksumExpected) { // validate payload checksum
                 LOG_ERROR_IC_SESSION("ICIS04", "payload checksum error");
@@ -448,7 +478,12 @@ namespace NActors {
                 ProcessEvents(context);
             }
 
-            Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
+            const ui32 traffic = sizeof(part) + part.Size;
+            if (channel < InputTrafficArray.size()) {
+                InputTrafficArray[channel] += traffic;
+            } else {
+                InputTrafficMap[channel] += traffic;
+            }
         }
 
         // mark packet as processed
@@ -639,15 +674,11 @@ namespace NActors {
         LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
             do {
                 const ui64 begin = GetCycleCountFast();
-#ifndef _win_
                 if (num == 1) {
                     recvres = socket.Recv(iov->Data, iov->Size, &err);
                 } else {
                     recvres = socket.ReadV(reinterpret_cast<const iovec*>(iov), num);
                 }
-#else
-                recvres = socket.Recv(iov->Data, iov->Size, &err);
-#endif
                 const ui64 end = GetCycleCountFast();
                 Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
             } while (recvres == -EINTR);
@@ -673,18 +704,26 @@ namespace NActors {
         return recvres;
     }
 
+    constexpr ui64 GetUsageCountClearMask(size_t items, int bits) {
+        ui64 mask = 0;
+        for (size_t i = 0; i < items; ++i) {
+            mask |= ui64(1 << bits - 2) << i * bits;
+        }
+        return mask;
+    }
+
     bool TInputSessionTCP::ReadMore() {
         PreallocateBuffers();
 
-        TStackVec<TIoVec, 16> buffs;
-        size_t offset = FirstBufferOffset;
-        for (const auto& item : Buffers) {
-            TIoVec iov{item->GetBuffer() + offset, item->GetCapacity() - offset};
-            buffs.push_back(iov);
+        TStackVec<TIoVec, MaxBuffers> buffs;
+        for (auto& item : Buffers) {
+            buffs.push_back({item.GetDataMut(), item.size()});
             if (Params.Encryption) {
                 break; // do not put more than one buffer in queue to prevent using ReadV
             }
-            offset = 0;
+#ifdef _win_
+            break; // do the same thing for Windows build
+#endif
         }
 
         ssize_t recvres = Read(*Socket, PollerToken, &Context->MainReadPending, buffs.data(), buffs.size());
@@ -701,27 +740,46 @@ namespace NActors {
         while (recvres) {
             Y_VERIFY(!Buffers.empty());
             auto& buffer = Buffers.front();
-            const size_t bytes = Min<size_t>(recvres, buffer->GetCapacity() - FirstBufferOffset);
-            IncomingData.Insert(IncomingData.End(), TRcBuf{buffer, {buffer->GetBuffer() + FirstBufferOffset, bytes}});
+            const size_t bytes = Min<size_t>(recvres, buffer.size());
             recvres -= bytes;
-            FirstBufferOffset += bytes;
-            if (FirstBufferOffset == buffer->GetCapacity()) {
+            if (const size_t newSize = buffer.size() - bytes) {
+                IncomingData.Insert(IncomingData.End(), TRcBuf(TRcBuf::Piece, buffer.data(), bytes, buffer));
+                buffer.TrimFront(newSize);
+            } else {
+                IncomingData.Insert(IncomingData.End(), std::move(buffer));
                 Buffers.pop_front();
-                FirstBufferOffset = 0;
             }
             ++numBuffersCovered;
         }
 
         if (Buffers.empty()) { // we have read all the data, increase number of buffers
             CurrentBuffers = Min(CurrentBuffers * 2, MaxBuffers);
-        } else if (++UsageHisto[numBuffersCovered - 1] == 64) { // time to shift
-            for (auto& value : UsageHisto) {
-                value /= 2;
+        } else {
+            Y_VERIFY_DEBUG(numBuffersCovered);
+
+            const size_t index = numBuffersCovered - 1;
+
+            static constexpr ui64 itemMask = (1 << BitsPerUsageCount) - 1;
+
+            const size_t word = index / ItemsPerUsageCount;
+            const size_t offset = index % ItemsPerUsageCount * BitsPerUsageCount;
+
+            if ((UsageHisto[word] >> offset & itemMask) == itemMask) { // time to shift
+                for (ui64& w : UsageHisto) {
+                    static constexpr ui64 mask = GetUsageCountClearMask(ItemsPerUsageCount, BitsPerUsageCount);
+                    w = (w & mask) >> 1;
+                }
             }
-            while (CurrentBuffers > 1 && !UsageHisto[CurrentBuffers - 1]) {
-                --CurrentBuffers;
+            UsageHisto[word] += ui64(1) << offset;
+
+            while (CurrentBuffers > 1) {
+                const size_t index = CurrentBuffers - 1;
+                if (UsageHisto[index / ItemsPerUsageCount] >> index % ItemsPerUsageCount * BitsPerUsageCount & itemMask) {
+                    break;
+                } else {
+                    --CurrentBuffers;
+                }
             }
-            Y_VERIFY_DEBUG(UsageHisto[CurrentBuffers - 1]);
         }
 
         LastReceiveTimestamp = TActivationContext::Monotonic();
@@ -886,10 +944,18 @@ namespace NActors {
             Y_VERIFY_DEBUG(!XdcChecksumQ.empty());
             auto& [size, expected] = XdcChecksumQ.front();
             const size_t n = Min<size_t>(size, span.size());
-            XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            if (Params.UseXxhash) {
+                XXH3_64bits_update(&XxhashXdcState, span.data(), n);
+            } else {
+                XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            }
             span = span.SubSpan(n, Max<size_t>());
             size -= n;
             if (!size) {
+                if (Params.UseXxhash) {
+                    XdcCurrentChecksum = XXH3_64bits_digest(&XxhashXdcState);
+                    XXH3_64bits_reset(&XxhashXdcState);
+                }
                 if (XdcCurrentChecksum != expected) {
                     LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
@@ -904,7 +970,7 @@ namespace NActors {
         // ensure that we have exactly "numBuffers" in queue
         LWPROBE_IF_TOO_LONG(SlowICReadLoopAdjustSize, ms) {
             while (Buffers.size() < CurrentBuffers) {
-                Buffers.emplace_back(TRopeAlignedBuffer::Allocate(Common->Settings.PreallocatedBufferSize));
+                Buffers.push_back(TRcBuf::Uninitialized(Common->Settings.PreallocatedBufferSize));
             }
         }
     }
@@ -998,6 +1064,7 @@ namespace NActors {
                             MON_VAR(BytesReadFromXdcSocket)
                             MON_VAR(XdcSections)
                             MON_VAR(XdcRefs)
+                            MON_VAR(CpuStarvationEvents)
 
                             MON_VAR(PayloadSize)
                             MON_VAR(InboundPacketQ.size())

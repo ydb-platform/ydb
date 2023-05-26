@@ -629,12 +629,8 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
 }
 
 ui64 GetVersion(const TString& config) {
-    auto parser = NFyaml::TParser::Create(config);
-    auto header = parser.NextDocument();
-    auto str = header ? header->Root().Map().at("version").Scalar() : "";
-    ui64 version = 0;
-    TryFromString<ui64>(str, version);
-    return version;
+    auto metadata = GetMetadata(config);
+    return metadata.Version.value_or(0);
 }
 
 /**
@@ -659,13 +655,11 @@ void ResolveAndParseYamlConfig(
     TString* resolvedYamlConfig,
     TString* resolvedJsonConfig) {
 
-    auto parser = NFyaml::TParser::Create(yamlConfig);
-    parser.NextDocument();
-    auto tree = parser.NextDocument();
+    auto tree = NFyaml::TDocument::Parse(yamlConfig);
 
     for (auto& [_, config] : volatileYamlConfigs) {
         auto d = NFyaml::TDocument::Parse(config);
-        NYamlConfig::AppendVolatileConfigs(tree.value(), d);
+        NYamlConfig::AppendVolatileConfigs(tree, d);
     }
 
     TSet<NYamlConfig::TNamedLabel> namedLabels;
@@ -673,7 +667,7 @@ void ResolveAndParseYamlConfig(
         namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
     }
 
-    auto config = NYamlConfig::Resolve(tree.value(), namedLabels);
+    auto config = NYamlConfig::Resolve(tree, namedLabels);
 
     if (resolvedYamlConfig) {
         TStringStream resolvedYamlConfigStream;
@@ -708,6 +702,74 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     if (from.NamedConfigsSize()) {
         to.MutableNamedConfigs()->CopyFrom(from.GetNamedConfigs());
     }
+}
+
+/**
+ * Parses config metadata
+ */
+TMetadata GetMetadata(const TString& config) {
+    if (config.empty()) {
+        return {};
+    }
+
+    auto doc = NFyaml::TDocument::Parse(config);
+
+    if (auto node = doc.Root().Map()["metadata"]; node) {
+        auto versionNode = node.Map()["version"];
+        auto clusterNode = node.Map()["cluster"];
+        return TMetadata{
+            .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
+            .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
+/**
+ * Replaces metadata in config
+ */
+TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
+    auto doc = NFyaml::TDocument::Parse(config);
+
+    TStringStream sstr;
+    auto serializeMetadata = [&]() {
+        sstr
+          << "metadata:\n  cluster: \""
+          << *metadata.Cluster << "\""
+          << "\n  version: "
+          << *metadata.Version;
+    };
+    if (doc.Root().Style() == NFyaml::ENodeStyle::Flow) {
+        if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
+            doc.Root().Map().Remove(pair);
+        }
+        serializeMetadata();
+        sstr << "\n" << doc;
+    } else {
+        if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
+            auto begin = pair.Key().BeginMark().InputPos;
+            auto end = pair.Value().EndMark().InputPos;
+            sstr << config.substr(0, begin);
+            serializeMetadata();
+            if (end < config.length() && config[end] == ':') {
+                end = end + 1;
+            }
+            sstr << config.substr(end, TString::npos);
+        } else {
+            if (doc.HasExplicitDocumentStart()) {
+                auto docStart = doc.BeginMark().InputPos + 4;
+                sstr << config.substr(0, docStart);
+                serializeMetadata();
+                sstr << "\n" << config.substr(docStart, TString::npos);
+            } else {
+                serializeMetadata();
+                sstr << "\n" << config;
+            }
+        }
+    }
+
+    return sstr.Str();
 }
 
 } // namespace NYamlConfig

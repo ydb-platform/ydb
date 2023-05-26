@@ -563,7 +563,6 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffse
 }
 
 TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount, ui32* rsize, ui64* insideHeadOffset) {
-    Y_UNUSED(readTimestampMs);
     ui32& count = *rcount;
     ui32& size = *rsize;
     TVector<TClientBlob> res;

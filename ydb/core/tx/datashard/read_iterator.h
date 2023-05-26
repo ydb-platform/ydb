@@ -64,10 +64,11 @@ struct TReadIteratorState {
     };
 
 public:
-    TReadIteratorState(const TActorId& sessionId, bool isHeadRead, TMonotonic ts)
+    TReadIteratorState(const TActorId& sessionId, bool isHeadRead, TMonotonic ts, NLWTrace::TOrbit&& orbit = {})
         : IsHeadRead(isHeadRead)
         , SessionId(sessionId)
         , StartTs(ts)
+        , Orbit(std::move(orbit))
     {}
 
     bool IsExhausted() const { return State == EState::Exhausted; }
@@ -198,6 +199,9 @@ public:
     ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey = 0;
+
+    // Orbit used for tracking progress
+    NLWTrace::TOrbit Orbit;
 };
 
 using TReadIteratorStatePtr = std::unique_ptr<TReadIteratorState>;

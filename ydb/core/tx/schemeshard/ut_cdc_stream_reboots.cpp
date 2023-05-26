@@ -66,6 +66,45 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         CreateStream({}, true);
     }
 
+    Y_UNIT_TEST(CreateStreamWithAwsRegion) {
+        TTestWithReboots t;
+        t.GetTestEnvOptions().EnableChangefeedDynamoDBStreamsFormat(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"__document_api_version", "1"}}));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeNewAndOldImages
+                  Format: ECdcStreamFormatDynamoDBStreamsJson
+                  AwsRegion: "ru-central1"
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+                    NLs::PathExist,
+                    NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeNewAndOldImages),
+                    NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson),
+                    NLs::StreamAwsRegion("ru-central1"),
+                });
+            }
+        });
+    }
+
     Y_UNIT_TEST(DisableStream) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

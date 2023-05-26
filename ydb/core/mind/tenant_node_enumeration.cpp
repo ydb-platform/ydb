@@ -99,7 +99,7 @@ public:
             return ReportErrorAndDie();
 
         const TString path = MakeTenantNodeEnumerationPath(TenantName);
-        LookupActor = Register(CreateBoardLookupActor(path, SelfId(), statestorageGroupId, EBoardLookupMode::Majority, false, false));
+        LookupActor = Register(CreateBoardLookupActor(path, SelfId(), statestorageGroupId, EBoardLookupMode::Majority));
 
         Become(&TThis::StateWait);
     }

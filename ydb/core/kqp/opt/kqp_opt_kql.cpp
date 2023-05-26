@@ -161,23 +161,35 @@ TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription
 }
 
 TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescription& tableData,
-    const TString& indexName, bool withSystemColumns, TExprContext& ctx)
+    const TString& indexName, bool withSystemColumns, TExprContext& ctx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
 {
-    auto kqlReadTable = Build<TKqlReadTableIndex>(ctx, read.Pos())
-        .Table(BuildTableMeta(tableData, read.Pos(), ctx))
-        .Range()
-            .From<TKqlKeyInc>()
+    if (UseReadTableRanges(tableData, kqpCtx)) {
+        return Build<TKqlReadTableIndexRanges>(ctx, read.Pos())
+            .Table(BuildTableMeta(tableData, read.Pos(), ctx))
+            .Ranges<TCoVoid>()
                 .Build()
-            .To<TKqlKeyInc>()
+            .ExplainPrompt()
                 .Build()
-            .Build()
-        .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
-        .Settings()
-            .Build()
-        .Index().Build(indexName)
-        .Done();
-
-    return kqlReadTable;
+            .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
+            .Settings()
+                .Build()
+            .Index().Build(indexName)
+            .Done();
+    } else {
+        return Build<TKqlReadTableIndex>(ctx, read.Pos())
+            .Table(BuildTableMeta(tableData, read.Pos(), ctx))
+            .Range()
+                .From<TKqlKeyInc>()
+                    .Build()
+                .To<TKqlKeyInc>()
+                    .Build()
+                .Build()
+            .Columns(read.GetSelectColumns(ctx, tableData, withSystemColumns))
+            .Settings()
+                .Build()
+            .Index().Build(indexName)
+            .Done();
+    }
 }
 
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
@@ -592,7 +604,7 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
             return nullptr;
         }
 
-        return BuildReadTableIndex(read, tableData, indexName, withSystemColumns, ctx).Ptr();
+        return BuildReadTableIndex(read, tableData, indexName, withSystemColumns, ctx, kqpCtx).Ptr();
     }
 
     return BuildReadTable(read, tableData, withSystemColumns, ctx, kqpCtx).Ptr();

@@ -38,6 +38,7 @@ protected:
 
 private:
     void PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
+    static bool IsDirectoryLike(const NScheme::TSchemeEntry& entry);
 
 protected:
     NTable::TTableClient TableClient;

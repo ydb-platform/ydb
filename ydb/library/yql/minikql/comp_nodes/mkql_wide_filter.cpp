@@ -191,7 +191,7 @@ public:
 
         block = test;
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto done = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetFalse(context), "done", block);
         result->addIncoming(ConstantInt::get(resultType, -1), block);
 
@@ -284,7 +284,7 @@ public:
         const auto result = PHINode::Create(resultType, 4U, "result", done);
         result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(Type::getInt128Ty(context), statePtr, "state", block);
         const auto finished = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, GetTrue(context), "finished", block);
 
         BranchInst::Create(done, work, IsValid(statePtr, block), block);

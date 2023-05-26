@@ -23,7 +23,7 @@ namespace {
     class TTextFormatBuilder : public IBlockBuilder {
     public:
         bool Start(
-                const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+                const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
                 ui64 maxRowsInBlock,
                 ui64 maxBytesInBlock,
                 TString& err) override
@@ -65,7 +65,7 @@ namespace {
         }
 
     private:
-        TVector<std::pair<TString, NScheme::TTypeInfo>> Columns;
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
         TString Buffer;
     };
 
@@ -2631,7 +2631,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (0, 0);
             )"), commitSender, commitSenderTxId, true));
- 
+
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!observer.BlockedReadSets.empty());
         observer.InjectClearTasks = false;

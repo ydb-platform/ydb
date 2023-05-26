@@ -85,6 +85,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::Replication;
     case ::Ydb::Scheme::Entry::TOPIC:
         return ESchemeEntryType::Topic;
+    case ::Ydb::Scheme::Entry::COLUMN_STORE:
+        return ESchemeEntryType::ColumnStore;
     default:
         return ESchemeEntryType::Unknown;
     }

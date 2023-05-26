@@ -50,13 +50,15 @@ EExecutionStatus TReceiveSnapshotCleanupUnit::Execute(TOperation::TPtr op,
     size_t removedTxs = 0;
     for (const auto& pr : DataShard.GetUserTables()) {
         auto localTid = pr.second->LocalTid;
-        for (ui64 txId : txc.DB.GetOpenTxs(localTid)) {
+        auto openTxs = txc.DB.GetOpenTxs(localTid);
+        for (ui64 txId : openTxs) {
             if (removedTxs >= 1000) {
                 // We don't want to remove more than 1000 txs at a time
                 // Commit current changes and reschedule
                 return EExecutionStatus::Reschedule;
             }
             txc.DB.RemoveTx(localTid, txId);
+            DataShard.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(txId, txc.DB);
             ++removedTxs;
         }
     }

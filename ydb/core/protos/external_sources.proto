@@ -3,7 +3,6 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/public/api/protos/ydb_value.proto";
 
-import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 message TSchema {

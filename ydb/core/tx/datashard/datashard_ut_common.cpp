@@ -1048,17 +1048,13 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
     }
+    request->Record.SetRequestType("_document_api_request");
     request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     request->Record.MutableRequest()->SetType(dml
                                               ? NKikimrKqp::QUERY_TYPE_SQL_DML
                                               : NKikimrKqp::QUERY_TYPE_SQL_DDL);
     request->Record.MutableRequest()->SetQuery(sql);
     return request;
-}
-
-void InitRoot(Tests::TServer::TPtr server,
-    TActorId sender) {
-    server->SetupRootStoragePools(sender);
 }
 
 static THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
@@ -1143,6 +1139,12 @@ void CreateShardedTable(
         }
     }
 
+    for (const auto& [k, v] : opts.Attributes_) {
+        auto* attr = tx.MutableAlterUserAttributes()->AddUserAttributes();
+        attr->SetKey(k);
+        attr->SetValue(v);
+    }
+
     desc->SetUniformPartitionsCount(opts.Shards_);
 
     if (!opts.EnableOutOfOrder_)
@@ -1218,35 +1220,6 @@ ui64 AsyncCreateCopyTable(
     desc.SetCopyFromTable(from);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
-}
-
-NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server,
-                                                     TActorId sender,
-                                                     const TString &path)
-{
-    auto &runtime = *server->GetRuntime();
-    TAutoPtr<IEventHandle> handle;
-    TVector<ui64> shards;
-
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-    request->Record.MutableDescribePath()->SetPath(path);
-    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-
-    return *reply->MutableRecord();
-}
-
-TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
-                             TActorId sender,
-                             const TString &path)
-{
-    TVector<ui64> shards;
-    auto lsResult = DescribeTable(server, sender, path);
-    for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
-
-    return shards;
 }
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
@@ -1656,6 +1629,8 @@ ui64 AsyncAlterAddStream(
         const TShardedTableOptions::TCdcStream& streamDesc)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateCdcStream, workingDir);
+    request->Record.SetRequestType("_document_api_request");
+
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateCdcStream();
     desc.SetTableName(tableName);
     desc.MutableStreamDescription()->SetName(streamDesc.Name);
@@ -1664,6 +1639,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
     if (streamDesc.InitialState) {
         desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
+    }
+    if (streamDesc.AwsRegion) {
+        desc.MutableStreamDescription()->SetAwsRegion(*streamDesc.AwsRegion);
     }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));

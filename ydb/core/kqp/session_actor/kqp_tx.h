@@ -123,8 +123,9 @@ private:
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
     explicit TKqpTransactionContext(bool implicit, const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-        : Implicit(implicit)
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider, bool enableImmediateEffects)
+        : NYql::TKikimrTransactionContextBase(enableImmediateEffects)
+        , Implicit(implicit)
         , ParamsState(MakeIntrusive<TParamsState>())
     {
         CreationTime = TInstant::Now();
@@ -221,32 +222,19 @@ public:
         };
     }
 
-    bool ShouldAcquireLocks(const NKqpProto::TKqpPhyQuery* query, bool commit) {
-        if (*EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
+    bool ShouldExecuteDeferredEffects() const {
+        if (HasUncommittedChangesRead) {
+            YQL_ENSURE(EnableImmediateEffects);
+            return !DeferredEffects.Empty();
+        }
+
+        return false;
+    }
+
+    bool CanDeferEffects() const {
+        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
+            YQL_ENSURE(EnableImmediateEffects);
             return false;
-        }
-
-        if (Locks.Broken()) {
-            return false;  // Do not acquire locks after first lock issue
-        }
-
-        if (TxHasEffects()) {
-            return true; // Acquire locks in read write tx
-        }
-
-        YQL_ENSURE(query);
-        for (auto& tx : query->GetTransactions()) {
-            if (tx.GetHasEffects()) {
-                return true; // Acquire locks in read write tx
-            }
-        }
-
-        if (!commit) {
-            return true; // Is not a commit tx
-        }
-
-        if (GetSnapshot().IsValid()) {
-            return false; // It is a read only tx with snapshot, no need to acquire locks
         }
 
         return true;

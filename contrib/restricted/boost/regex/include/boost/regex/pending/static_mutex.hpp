@@ -128,9 +128,9 @@ private:
 #define BOOST_REGEX_H1 <boost/thread/once.hpp>
 #define BOOST_REGEX_H2 <boost/thread/recursive_mutex.hpp>
 #define BOOST_REGEX_H3 <boost/thread/lock_types.hpp>
-#include BOOST_REGEX_H1
-#include BOOST_REGEX_H2
-#include BOOST_REGEX_H3
+#error #include BOOST_REGEX_H1
+#error #include BOOST_REGEX_H2
+#error #include BOOST_REGEX_H3
 #undef BOOST_REGEX_H1
 #undef BOOST_REGEX_H2
 #undef BOOST_REGEX_H3

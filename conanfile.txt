@@ -1,5 +1,5 @@
 [requires]
-c-ares/1.18.1
+c-ares/1.19.0
 libiconv/1.15
 openssl/1.1.1s
 zlib/1.2.13

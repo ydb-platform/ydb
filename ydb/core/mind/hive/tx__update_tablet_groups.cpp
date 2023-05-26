@@ -136,7 +136,7 @@ public:
                 channel = &tabletChannels[channelId];
                 Y_VERIFY(channel->Channel == channelId);
                 if (!tablet->ReleaseAllocationUnit(channelId)) {
-                    BLOG_ERROR("Failed to release AU for tablet " << tablet->Id << " channel " << channelId);
+                    BLOG_W("Failed to release AU for tablet " << tablet->Id << " channel " << channelId);
                 }
             } else {
                 // increasing number of tablet channels

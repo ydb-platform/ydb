@@ -8,19 +8,19 @@
 namespace NKikimr {
 namespace NPQ {
 
-
-TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
-: Key(key)
-, Data(blob.c_str())
-, End(Data + blob.size())
-, Batch()
-, Offset(key.GetOffset())
-, Count(0)
-, InternalPartsCount(0)
-{
-    Y_VERIFY(Data != End);
-    ParseBatch(true);
-}
+    TBlobIterator::TBlobIterator(const TKey& key, const TString& blob, bool createBatch)
+        : CreateBatch(createBatch)
+        , Batch()
+        , Key(key)
+        , Data(blob.c_str())
+        , End(Data + blob.size())
+        , Offset(key.GetOffset())
+        , Count(0)
+        , InternalPartsCount(0)
+    {
+        Y_VERIFY(Data != End);
+        ParseBatch(true);
+    }
 
 void TBlobIterator::ParseBatch(bool isFirst) {
     Y_VERIFY(Data < End);
@@ -34,7 +34,10 @@ void TBlobIterator::ParseBatch(bool isFirst) {
     Y_VERIFY(Count <= Key.GetCount());
     Y_VERIFY(InternalPartsCount <= Key.GetInternalPartsCount());
 
-    Batch = TBatch(header, Data + sizeof(ui16) + header.ByteSize());
+    if(CreateBatch)
+        Batch = TBatch(header, Data + sizeof(ui16) + header.ByteSize());
+    else
+        Header = std::move(header);
 }
 
 bool TBlobIterator::IsValid()
@@ -45,7 +48,7 @@ bool TBlobIterator::IsValid()
 bool TBlobIterator::Next()
 {
     Y_VERIFY(IsValid());
-    auto& header = Batch.Header;
+    NKikimrPQ::TBatchHeader& header = CreateBatch ? Batch.Header : Header;
     Data += header.GetPayloadSize() + sizeof(ui16) + header.ByteSize();
     if (Data == End) { //this was last batch
         Y_VERIFY(Count == Key.GetCount());
@@ -58,17 +61,18 @@ bool TBlobIterator::Next()
 
 const TBatch& TBlobIterator::GetBatch()
 {
+    Y_VERIFY(CreateBatch);
     Y_VERIFY(IsValid());
     return Batch;
 }
 
 void CheckBlob(const TKey& key, const TString& blob)
 {
-    for (TBlobIterator it(key, blob); it.IsValid(); it.Next());
+    for (TBlobIterator it(key, blob, false); it.IsValid(); it.Next());
 }
 
 
-void TClientBlob::Serialize(TBuffer& res) const
+void TClientBlob::SerializeTo(TBuffer& res) const
 {
     ui32 totalSize = GetBlobSize();
     ui32 psize = res.Size();
@@ -181,13 +185,16 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     return TClientBlob(sourceId, seqNo, dt, std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey);
 }
 
-TString TBatch::Serialize() {
+void TBatch::SerializeTo(TString& res) {
     Y_VERIFY(Packed);
-    TString res;
+
     ui16 sz = Header.ByteSize();
-    bool rs = Header.SerializeToString(&res);
+    res.append((const char*)&sz, sizeof(ui16));
+
+    bool rs = Header.AppendToString(&res);
     Y_VERIFY(rs);
-    return TStringBuf((const char*)&sz, sizeof(ui16)) + res + PackedData;
+
+    res += PackedData;
 }
 
 template <typename TCodec>
@@ -367,7 +374,7 @@ void TBatch::Pack() {
         Header.SetFormat(NKikimrPQ::TBatchHeader::EUncompressed);
         res.Clear();
         for (ui32 i = 0; i < Blobs.size(); ++i) {
-            Blobs[i].Serialize(res);
+            Blobs[i].SerializeTo(res);
         }
         PackedData = TString{res.Data(), res.Size()};
         Header.SetPayloadSize(PackedData.size());
@@ -756,7 +763,7 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
     if (glueHead) {
         for (ui32 pp = 0; pp < head.Batches.size(); ++pp) {
             Y_VERIFY(head.Batches[pp].Packed);
-            valueD += head.Batches[pp].Serialize();
+            head.Batches[pp].SerializeTo(valueD);
         }
     }
     if (glueNewHead) {
@@ -770,7 +777,7 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
                 b = &batch;
             }
             Y_VERIFY(b->Packed);
-            valueD += b->Serialize();
+            b->SerializeTo(valueD);
         }
     }
     return valueD;
@@ -811,7 +818,7 @@ std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
             Blobs.clear();
             batch.Pack();
             Y_VERIFY(batch.Packed);
-            valueD += batch.Serialize();
+            batch.SerializeTo(valueD);
         }
         res.second = valueD;
         Y_VERIFY(res.second.size() <= MaxBlobSize && (res.second.size() + size + 1_MB > MaxBlobSize

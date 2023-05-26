@@ -1055,9 +1055,10 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
     record.Chain = {};
     ui32 storage_channel = 0;
     if (request.Status == NKikimrProto::SCHEDULED) {
-        TString inlineData = request.Data;
-        record.Chain.push_back(TIndexRecord::TChainItem(inlineData, 0));
-        CountWriteRecord(0, inlineData.size());
+        TRcBuf inlineData = request.Data;
+        const size_t size = inlineData.size();
+        record.Chain.push_back(TIndexRecord::TChainItem(std::move(inlineData), 0));
+        CountWriteRecord(0, size);
         request.Status = NKikimrProto::OK;
         storage_channel = InlineStorageChannelInPublicApi;
     } else {
@@ -1176,8 +1177,8 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
 
 void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
         NKikimrClient::TKeyValueResponse::TConcatResult *legacyResponse,
-        NKikimrKeyValue::StorageChannel */*response*/,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
+        NKikimrKeyValue::StorageChannel* /*response*/,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat& /*stat*/, ui64 unixTime,
         TIntermediate *intermediate)
 {
     TVector<TIndexRecord::TChainItem> chain;
@@ -1190,7 +1191,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
 
         for (TIndexRecord::TChainItem& chainItem : input.Chain) {
             if (chainItem.IsInline()) {
-                chain.push_back(TIndexRecord::TChainItem(chainItem.InlineData, offset));
+                chain.push_back(TIndexRecord::TChainItem(TRcBuf(chainItem.InlineData), offset));
             } else {
                 const TLogoBlobID& id = chainItem.LogoBlobId;
                 chain.push_back(TIndexRecord::TChainItem(id, offset));
@@ -2256,7 +2257,7 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
         }
 
         interm.Key = request.GetKey();
-        interm.Data = request.GetValue();
+        interm.Data = TRcBuf(request.GetValue());
         interm.Tactic = TEvBlobStorage::TEvPut::TacticDefault;
         switch (request.GetTactic()) {
             case NKikimrClient::TKeyValueRequest::MIN_LATENCY:
@@ -2456,7 +2457,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
     intermediate->Commands.emplace_back(TIntermediate::TWrite());
     auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back());
     cmd.Key = request.key();
-    cmd.Data = request.value();
+    cmd.Data = TRcBuf(request.value());
     switch (request.tactic()) {
     case TCommand::Write::TACTIC_MIN_LATENCY:
         cmd.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency;

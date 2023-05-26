@@ -8,6 +8,8 @@
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
@@ -20,32 +22,6 @@ namespace {
     bool IsEmptyList(const TExprNode::TPtr& x) {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
-
-    bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx) {
-        if (!EnsureStructType(input->Pos(), *originalExtractorType, ctx)) {
-            return false;
-        }
-
-        auto structType = originalExtractorType->Cast<TStructExprType>();
-        if (structType->GetSize() != 1) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                TStringBuilder() << "Expected struct with one member"));
-            return false;
-        }
-
-        input->SetTypeAnn(structType->GetItems()[0]->GetItemType());
-        if (isMany) {
-            if (input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected optional state"));
-                return false;
-            }
-
-            input->SetTypeAnn(input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType());
-        }
-
-        return true;
-    }
 
     TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx) {
         auto exprLambda = node.Child(1);
@@ -5360,6 +5336,61 @@ namespace {
             input->SetTypeAnn(retType);
         } else if (name == "some") {
             input->SetTypeAnn(lambda->GetTypeAnn());
+        } else if (name.StartsWith("pg_")) {
+            auto func = name;
+            func.SkipPrefix("pg_");
+            TVector<ui32> argTypes;
+            bool needRetype = false;
+            if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr);
+                status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+
+            if (overState && !hasOriginalType) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Partial aggregation of " << name << " is not supported"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const TTypeAnnotationNode* originalResultType = nullptr;
+            if (hasOriginalType) {
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                originalResultType = GetOriginalResultType(input->Pos(), isMany, originalExtractorType, ctx.Expr);
+                if (!originalResultType) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            const NPg::TAggregateDesc* aggDescPtr;
+            try {
+                if (overState) {
+                    if (argTypes.size() != 1) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                            "Expected only one argument")); 
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes[0], originalResultType->Cast<TPgExprType>()->GetId());
+                } else {
+                    aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
+                }
+                if (aggDescPtr->Kind != NPg::EAggKind::Normal) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        "Only normal aggregation supported"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } catch (const yexception& e) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (overState) {
+                input->SetTypeAnn(originalResultType);
+            } else {
+                const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
+                const auto& finalDesc = NPg::LookupProc(aggDesc.FinalFuncId ? aggDesc.FinalFuncId : aggDesc.TransFuncId);
+                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(finalDesc.ResultType));
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));
@@ -5372,7 +5403,7 @@ namespace {
     IGraphTransformer::TStatus AggBlockApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         const bool overState = input->Content().EndsWith("State");
-        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, overState ? 2 : 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -5380,23 +5411,38 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
+        const TTypeAnnotationNode* originalType = nullptr;
+        if (overState && !input->Child(1)->IsCallable("Void")) {
+            if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+
+            originalType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        }
+
         auto name = input->Child(0)->Content();
-        ui32 expectedArgs;
-        if (name == "count_all") {
-            expectedArgs = overState ? 2 : 1;
-        } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max" || name == "some") {
-            expectedArgs = 2;
-        } else {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Unsupported agg name: " << name));
-            return IGraphTransformer::TStatus::Error;
+        if (!name.StartsWith("pg_")) {
+            ui32 expectedArgs;
+            if (name == "count_all") {
+                expectedArgs = overState ? 2 : 1;
+            } else if (name == "count" || name == "sum" || name == "avg" || name == "min" || name == "max" || name == "some") {
+                expectedArgs = 2;
+            } else {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Unsupported agg name: " << name));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (overState) {
+                ++expectedArgs;
+            }
+
+            if (!EnsureArgsCount(*input, expectedArgs, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
-        if (!EnsureArgsCount(*input, expectedArgs, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        for (ui32 i = 1; i < expectedArgs; ++i) {
+        for (ui32 i = overState ? 2 : 1; i < input->ChildrenSize(); ++i) {
             if (auto status = EnsureTypeRewrite(input->ChildRef(i), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -5405,7 +5451,7 @@ namespace {
         if (name == "count_all" || name == "count") {
             const TTypeAnnotationNode* retType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
             if (overState) {
-                auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                auto itemType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
                 if (!IsSameAnnotation(*itemType, *retType)) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                         TStringBuilder() << "Mismatch count type, expected: " << *itemType << ", but got: " << *retType));
@@ -5415,7 +5461,7 @@ namespace {
 
             input->SetTypeAnn(retType);
         } else if (name == "sum") {
-            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;
             if (!GetSumResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -5431,7 +5477,7 @@ namespace {
 
             input->SetTypeAnn(retType);
         } else if (name == "avg") {
-            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;
             if (!overState) {
                 if (!GetAvgResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
@@ -5445,7 +5491,7 @@ namespace {
 
             input->SetTypeAnn(retType);
         } else if (name == "min" || name == "max") {
-            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;
             if (!GetMinMaxResultType(input->Pos(), *itemType, retType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -5461,9 +5507,37 @@ namespace {
 
             input->SetTypeAnn(retType);
         } else if (name == "some") {
-            auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType = itemType;
             input->SetTypeAnn(retType);
+        } else if (name.StartsWith("pg_")) {
+            auto func = name.SubStr(3);
+            TVector<ui32> argTypes;
+            for (ui32 i = 1 + (overState ? 1 : 0); i < input->ChildrenSize(); ++i) {
+                argTypes.push_back(input->Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId());
+            }
+
+            const NPg::TAggregateDesc* aggDescPtr;
+            if (overState) {
+                YQL_ENSURE(argTypes.size() == 1);
+                if (!originalType) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Partial aggreation is not supported for: " << name));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                auto resultType = originalType->Cast<TPgExprType>()->GetId();
+                aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes[0], resultType);
+            } else {
+                aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
+            }
+
+            if (overState) {
+                input->SetTypeAnn(originalType);
+            } else {
+                auto stateType = NPg::LookupProc(aggDescPtr->SerializeFuncId ? aggDescPtr->SerializeFuncId : aggDescPtr->TransFuncId).ResultType;
+                input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(stateType));
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));

@@ -37,6 +37,7 @@ namespace NKikimr::NDataShard {
                 for (ui64 commitTxId : info->CommitTxIds) {
                     if (txc.DB.HasOpenTx(tid, commitTxId)) {
                         txc.DB.CommitTx(tid, commitTxId, info->Version);
+                        Self->GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(commitTxId, txc.DB);
                     }
                 }
             }
@@ -145,6 +146,7 @@ namespace NKikimr::NDataShard {
                 for (ui64 commitTxId : info->CommitTxIds) {
                     if (txc.DB.HasOpenTx(tid, commitTxId)) {
                         txc.DB.RemoveTx(tid, commitTxId);
+                        Self->GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(commitTxId, txc.DB);
                     }
                 }
             }

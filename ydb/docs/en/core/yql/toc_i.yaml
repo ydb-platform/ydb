@@ -1,6 +1,8 @@
 items:
 - name: Overview
   href: reference/index.md
+- name: Getting started with YQL
+  href: ../getting_started/yql.md
 - include: { mode: link, path: reference/toc_i.yaml }
 - name: YQL tutorial
   include: { mode: link, path: tutorial/toc_i.yaml }

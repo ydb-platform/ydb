@@ -17,17 +17,13 @@
 
 #include <openssl/crypto.h>
 #include <openssl/opensslv.h>
+#include <string.h>
 
 #include "crypto/s2n_crypto.h"
 #include "crypto/s2n_fips.h"
 #include "crypto/s2n_openssl.h"
 #include "utils/s2n_safety.h"
 #include "utils/s2n_safety_macros.h"
-#if S2N_OPENSSL_VERSION_AT_LEAST(3, 0, 0)
-    #error #include <openssl/provider.h>
-#endif
-
-#include <string.h>
 
 /* Note: OpenSSL 1.0.2 -> 1.1.0 implemented a new API to get the version number
  * and version name. We have to handle that by using old functions
@@ -43,9 +39,9 @@
  * distinguish AWS-LC fips and non-fips at pre-processing time since AWS-LC
  * doesn't distribute fips-specific header files.
  */
-#define EXPECTED_AWSLC_VERSION_PREFIX_FIPS_OR_OLD "BoringSSL"
-#define EXPECTED_AWSLC_VERSION_PREFIX_NON_FIPS    "AWS-LC"
-#define EXPECTED_BORINGSSL_VERSION_PREFIX         "BoringSSL"
+#define EXPECTED_AWSLC_VERSION_PREFIX_OLD "BoringSSL"
+#define EXPECTED_AWSLC_VERSION_PREFIX_NEW "AWS-LC"
+#define EXPECTED_BORINGSSL_VERSION_PREFIX "BoringSSL"
 
 /* https://www.openssl.org/docs/man{1.0.2, 1.1.1, 3.0}/man3/OPENSSL_VERSION_NUMBER.html
  * OPENSSL_VERSION_NUMBER in hex is: MNNFFPPS major minor fix patch status.
@@ -140,39 +136,14 @@ bool s2n_libcrypto_is_boringssl()
 #endif
 }
 
-S2N_RESULT s2n_libcrypto_init(void)
+bool s2n_libcrypto_is_libressl()
 {
-#if S2N_OPENSSL_VERSION_AT_LEAST(3, 0, 0)
-    RESULT_ENSURE(OSSL_PROVIDER_load(NULL, "default") != NULL, S2N_ERR_OSSL_PROVIDER);
-    #ifdef S2N_LIBCRYPTO_SUPPORTS_EVP_RC4
-    /* needed to support RC4 algorithm
-     * https://www.openssl.org/docs/man3.0/man7/OSSL_PROVIDER-legacy.html
-     */
-    RESULT_ENSURE(OSSL_PROVIDER_load(NULL, "legacy") != NULL, S2N_ERR_OSSL_PROVIDER);
-    #endif
-#endif
-
-    return S2N_RESULT_OK;
-}
-
-#if S2N_OPENSSL_VERSION_AT_LEAST(3, 0, 0)
-int s2n_libcrypto_cleanup_cb(OSSL_PROVIDER *provider, void *cbdata)
-{
-    return OSSL_PROVIDER_unload(provider);
-}
-
-S2N_RESULT s2n_libcrypto_cleanup(void)
-{
-    RESULT_GUARD_OSSL(OSSL_PROVIDER_do_all(NULL, *s2n_libcrypto_cleanup_cb, NULL), S2N_ERR_ATEXIT);
-
-    return S2N_RESULT_OK;
-}
+#if defined(LIBRESSL_VERSION_NUMBER)
+    return true;
 #else
-S2N_RESULT s2n_libcrypto_cleanup(void)
-{
-    return S2N_RESULT_OK;
-}
+    return false;
 #endif
+}
 
 /* Performs various checks to validate that the libcrypto used at compile-time
  * is the same libcrypto being used at run-time.
@@ -192,10 +163,10 @@ S2N_RESULT s2n_libcrypto_validate_runtime(void)
          * don't meet anymore "old" AWS-LC libcrypto's, this API version check
          * can be removed.
          */
-        if (s2n_libcrypto_is_fips() || s2n_libcrypto_awslc_api_version() < 17) {
-            expected_awslc_name_prefix = EXPECTED_AWSLC_VERSION_PREFIX_FIPS_OR_OLD;
+        if (s2n_libcrypto_awslc_api_version() < 17) {
+            expected_awslc_name_prefix = EXPECTED_AWSLC_VERSION_PREFIX_OLD;
         } else {
-            expected_awslc_name_prefix = EXPECTED_AWSLC_VERSION_PREFIX_NON_FIPS;
+            expected_awslc_name_prefix = EXPECTED_AWSLC_VERSION_PREFIX_NEW;
         }
         RESULT_GUARD(s2n_libcrypto_validate_expected_version_prefix(expected_awslc_name_prefix));
     } else if (s2n_libcrypto_is_boringssl()) {

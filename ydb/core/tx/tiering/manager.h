@@ -12,7 +12,7 @@
 namespace NKikimr::NColumnShard {
 namespace NTiers {
 
-NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
+NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
 
 class TManager {
 private:

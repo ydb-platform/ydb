@@ -64,6 +64,14 @@ void TTable::RollbackChanges()
             void operator()(const TRollbackRemoveRemovedTx& op) const {
                 Self->RemovedTransactions.Remove(op.TxId);
             }
+
+            void operator()(const TRollbackAddOpenTx& op) const {
+                Self->OpenTxs.insert(op.TxId);
+            }
+
+            void operator()(const TRollbackRemoveOpenTx& op) const {
+                Self->OpenTxs.erase(op.TxId);
+            }
         };
 
         std::visit(TApplyRollbackOp{ this }, RollbackOps.back());
@@ -477,6 +485,7 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
                 CheckTransactions.insert(txId);
             }
             TxRefs.erase(it);
+            OpenTxs.erase(txId);
         }
     }
 
@@ -592,6 +601,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
         }
+        OpenTxs.erase(txId);
     }
     for (auto& item : txStatus->TxStatusPage->GetRemovedItems()) {
         const ui64 txId = item.GetTxId();
@@ -601,6 +611,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
         if (!TxRefs.contains(txId)) {
             CheckTransactions.insert(txId);
         }
+        OpenTxs.erase(txId);
     }
 
     if (Mutable && txStatus->Epoch >= Mutable->Epoch) {
@@ -723,7 +734,10 @@ void TTable::AddSafe(TPartView partView)
         if (partView->TxIdStats) {
             for (const auto& item : partView->TxIdStats->GetItems()) {
                 const ui64 txId = item.GetTxId();
-                ++TxRefs[txId];
+                const auto newCount = ++TxRefs[txId];
+                if (newCount == 1 && !CommittedTransactions.Find(txId) && !RemovedTransactions.Contains(txId)) {
+                    OpenTxs.insert(txId);
+                }
             }
         }
 
@@ -820,9 +834,17 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemG
 
 void TTable::AddTxRef(ui64 txId)
 {
-    ++TxRefs[txId];
+    const auto newCount = ++TxRefs[txId];
+    const bool addOpenTx = newCount == 1 && !CommittedTransactions.Find(txId) && !RemovedTransactions.Contains(txId);
+    if (addOpenTx) {
+        auto res = OpenTxs.insert(txId);
+        Y_VERIFY(res.second);
+    }
     if (RollbackState) {
         RollbackOps.emplace_back(TRollbackRemoveTxRef{ txId });
+        if (addOpenTx) {
+            RollbackOps.emplace_back(TRollbackRemoveOpenTx{ txId });
+        }
     }
 }
 
@@ -865,6 +887,12 @@ void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
             }
             RemovedTransactions.Remove(txId);
         }
+        if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
+            if (RollbackState) {
+                RollbackOps.emplace_back(TRollbackAddOpenTx{ txId });
+            }
+            OpenTxs.erase(it);
+        }
     }
 
     // We don't know which keys have been commited, invalidate everything
@@ -884,16 +912,18 @@ void TTable::RemoveTx(ui64 txId)
             RollbackOps.emplace_back(TRollbackRemoveRemovedTx{ txId });
         }
         RemovedTransactions.Add(txId);
+        if (auto it = OpenTxs.find(txId); it != OpenTxs.end()) {
+            if (RollbackState) {
+                RollbackOps.emplace_back(TRollbackAddOpenTx{ txId });
+            }
+            OpenTxs.erase(it);
+        }
     }
 }
 
 bool TTable::HasOpenTx(ui64 txId) const
 {
-    if (TxRefs.contains(txId)) {
-        return !CommittedTransactions.Find(txId) && !RemovedTransactions.Contains(txId);
-    }
-
-    return false;
+    return OpenTxs.contains(txId);
 }
 
 bool TTable::HasTxData(ui64 txId) const
@@ -911,18 +941,14 @@ bool TTable::HasRemovedTx(ui64 txId) const
     return RemovedTransactions.Contains(txId);
 }
 
-TVector<ui64> TTable::GetOpenTxs() const
+const absl::flat_hash_set<ui64>& TTable::GetOpenTxs() const
 {
-    TVector<ui64> txs;
+    return OpenTxs;
+}
 
-    for (auto& pr : TxRefs) {
-        ui64 txId = pr.first;
-        if (!CommittedTransactions.Find(txId) && !RemovedTransactions.Contains(txId)) {
-            txs.push_back(txId);
-        }
-    }
-
-    return txs;
+size_t TTable::GetOpenTxCount() const
+{
+    return OpenTxs.size();
 }
 
 TMemTable& TTable::MemTable()
@@ -1157,9 +1183,27 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
-    Y_VERIFY(ColdParts.empty(), "Cannot select with cold parts");
-
     const TCelled key(key_, *Scheme->Keys, true);
+
+    return SelectRowVersion(key, env, readFlags, visible, observer);
+}
+
+TSelectRowVersionResult TTable::SelectRowVersion(
+        TArrayRef<const TCell> key_, IPages* env, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    const TCelled key(key_, *Scheme->Keys, true);
+
+    return SelectRowVersion(key, env, readFlags, visible, observer);
+}
+
+TSelectRowVersionResult TTable::SelectRowVersion(
+        const TCelled& key, IPages* env, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    Y_VERIFY(ColdParts.empty(), "Cannot select with cold parts");
 
     const TRemap remap(*Scheme, { });
 

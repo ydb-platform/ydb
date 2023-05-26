@@ -2,7 +2,8 @@
 #include "abstract.h"
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
-#include <ydb/services/metadata/request/common.h>
+#include <ydb/library/conclusion/result.h>
+#include <ydb/core/base/events.h>
 
 namespace NKikimr::NConveyor {
 
@@ -28,9 +29,9 @@ struct TEvExecution {
 
     class TEvTaskProcessedResult:
         public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult>,
-        public NMetadata::NRequest::TMaybeResult<ITask::TPtr> {
+        public TConclusion<ITask::TPtr> {
     private:
-        using TBase = NMetadata::NRequest::TMaybeResult<ITask::TPtr>;
+        using TBase = TConclusion<ITask::TPtr>;
     public:
         using TBase::TBase;
     };

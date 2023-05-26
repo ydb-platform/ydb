@@ -30,7 +30,7 @@
     if err != nil {
       panic(err)
     }
-    defer db.Close(ctx) 
+    defer db.Close(ctx)
     ...
   }
   ```
@@ -60,7 +60,7 @@
     if err != nil {
       panic(err)
     }
-    defer nativeDriver.Close(ctx) 
+    defer nativeDriver.Close(ctx)
     connector, err := ydb.Connector(nativeDriver)
     if err != nil {
       panic(err)
@@ -75,12 +75,12 @@
 
   ```java
   public void work(String connectionString) {
-      AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider(); 
+      AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -93,5 +93,13 @@
 - Node.js
 
   {% include [auth-metadata](../../../../_includes/nodejs/auth-metadata.md) %}
+
+- Python
+
+  {% include [auth-metadata](../../../../_includes/python/auth-metadata.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-metadata](../../../../_includes/python/async/auth-metadata.md) %}
 
 {% endlist %}

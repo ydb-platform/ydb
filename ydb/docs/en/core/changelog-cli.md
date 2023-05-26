@@ -1,8 +1,27 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.3.0 {#2-3-0}
+
+Released on May 5, 2023. To update to version **2.3.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**What's new:**
+
+* Added interactive query execution mode. It can be launched using [ydb yql](reference/ydb-cli/yql.md) command without arguments. This mode is experimental and is a subject to change.
+* Added [ydb table index rename](reference/ydb-cli/commands/_includes/secondary_index.md#rename) command for atomic [secondary index replacement](best_practices/secondary_indexes.md#atomic-index-replacement) or renaming.
+* Added `ydb workload topic` command section that allows to run a workload of writes and reads to topics.
+* Added [--recursive](reference/ydb-cli/commands/_includes/dir.md#rmdir-options) option for `ydb scheme rmdir` command that allows to remove a directory recursively with all its content.
+* Added `topic` and `coordination node` support for [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command.
+* Added [--commit](reference/ydb-cli/topic-read.md#osnovnye-opcionalnye-parametry) option for `ydb topic consumer` command to commit offset for consumer.
+* Added [--columns](reference/ydb-cli/export_import/_includes/import-file.md#optional) option for `ydb import file csv|tsv` command to list column names in, instead of placing it into file header.
+* Added [--newline-delimited](reference/ydb-cli/export_import/_includes/import-file.md#optional) option for `ydb import file csv|tsv` command that confirms that there is no newline characters inside records which allows to read from several sections of a file simultaneously.
+
+**Bug fixes:**
+
+* Fixed a bug that caused executing the `ydb import file` command to consume too much memory and CPU.
+
 ## Version 2.2.0 {#2-2-0}
 
-Released on 03/03/2023. To update to version **2.2.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on March 3, 2023. To update to version **2.2.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **What's new:**
 
@@ -16,7 +35,7 @@ Released on 03/03/2023. To update to version **2.2.0**, select the [Downloads](d
 
 ## Version 2.1.1 {#2-1-1}
 
-Released on 30/12/2022. To update to version **2.1.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on December 30, 2022. To update to version **2.1.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **Improvements:**
 
@@ -26,7 +45,7 @@ Released on 30/12/2022. To update to version **2.1.1**, select the [Downloads](d
 
 ## Version 2.1.0 {#2-1-0}
 
-Released on 18/11/2022. To update to version **2.1.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on November 18, 2022. To update to version **2.1.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **What's new:**
 
@@ -45,7 +64,7 @@ Released on 18/11/2022. To update to version **2.1.0**, select the [Downloads](d
 
 ## Version 2.0.0 {#2-0-0}
 
-Released on 20/09/2022. To update to version **2.1.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on September 20, 2022. To update to version **2.0.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **What's new:**
 
@@ -75,7 +94,7 @@ Released on 20/09/2022. To update to version **2.1.0**, select the [Downloads](d
 
 ## Version 1.9.1 {#1-9-1}
 
-Released on 25/06/2022. To update to version **2.1.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+Released on June 25, 2022. To update to version **1.9.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **What's new:**
 

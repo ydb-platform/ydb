@@ -152,6 +152,34 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
     }
 }
 
+const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
+    auto name = type->Cast<TPgExprType>()->GetName();
+    const TDataExprType* dataType;
+    if (name == "bool") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Bool);
+    } else if (name == "int2") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int16);
+    } else if (name == "int4") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+    } else if (name == "int8") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+    } else if (name == "float4") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Float);
+    } else if (name == "float8") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Double);
+    } else if (name == "text" || name == "varchar" || name == "cstring") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::Utf8);
+    } else if (name == "bytea") {
+        dataType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    } else {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Unsupported type: " << name));
+        return nullptr;
+    }
+
+    return ctx.MakeType<TOptionalExprType>(dataType);
+}
+
 IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -171,58 +199,20 @@ IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto name = input->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
-    const TDataExprType* dataType;
-    if (name == "bool") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
-    } else if (name == "int2") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int16);
-    } else if (name == "int4") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int32);
-    } else if (name == "int8") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
-    } else if (name == "float4") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Float);
-    } else if (name == "float8") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double);
-    } else if (name == "text" || name == "varchar" || name == "cstring") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8);
-    } else if (name == "bytea") {
-        dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
-    } else {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            TStringBuilder() << "Unsupported type: " << name));
+    auto resultType = FromPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr);
+    if (!resultType) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto result = ctx.Expr.MakeType<TOptionalExprType>(dataType);
-    input->SetTypeAnn(result);
+    input->SetTypeAnn(resultType);
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!EnsureComputable(input->Head(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (IsNull(input->Head())) {
-        output = input->TailPtr();
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
-        output = input->HeadPtr();
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
+const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
     bool isOptional;
     const TDataExprType* dataType;
-    if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
+    if (!EnsureDataOrOptionalOfData(pos, type, isOptional, dataType, ctx)) {
+        return nullptr;
     }
 
     TString pgType;
@@ -252,19 +242,74 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
         pgType = "text";
         break;
     default:
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << dataType->GetName()));
-        return IGraphTransformer::TStatus::Error;
+        return nullptr;
     }
 
     try {
-        auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
-        input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
+        auto result = ctx.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
+        return result;
     } catch (const yexception& e) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
+        ctx.AddError(TIssue(ctx.GetPosition(pos), e.what()));
+        return nullptr;
+    }
+}
+
+IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
+
+    if (!EnsureComputable(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsNull(input->Head())) {
+        output = input->TailPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto resultType = ToPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr);
+    if (!resultType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureDependsOnTail(*input, ctx.Expr, 1)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsNull(input->Head())) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    auto type = input->Head().GetTypeAnn();
+    ui32 argType;
+    bool convertToPg;
+    if (!ExtractPgType(type, argType, convertToPg, input->Head().Pos(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (convertToPg) {
+        input->ChildRef(0) = ctx.Expr.NewCallable(input->Head().Pos(), "ToPg", { input->ChildPtr(0) });
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(argType);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
@@ -472,7 +517,7 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
     }
 
     try {
-        const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
+        const auto& aggDesc = NPg::LookupAggregation(TString(name), argTypes);
         if (aggDesc.Kind != NPg::EAggKind::Normal) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 "Only normal aggregation supported"));
@@ -1036,323 +1081,26 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
 
     TVector<ui32> argTypes;
     bool needRetype = false;
-    for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
-        auto type = lambda->Child(i)->GetTypeAnn();
-        ui32 argType;
-        bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx.Expr)) {
+    if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr);
+        status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    const NPg::TAggregateDesc* aggDescPtr;
+    try {
+        aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
+        if (aggDescPtr->Kind != NPg::EAggKind::Normal) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                "Only normal aggregation supported"));
             return IGraphTransformer::TStatus::Error;
         }
-
-        if (convertToPg) {
-            needRetype = true;
-        }
-
-        argTypes.push_back(argType);
-    }
-
-    if (needRetype) {
-        auto newLambda = ctx.Expr.DeepCopyLambda(*lambda);
-        for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
-            auto type = lambda->Child(i)->GetTypeAnn();
-            ui32 argType;
-            bool convertToPg;
-            if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (convertToPg) {
-                newLambda->ChildRef(i) = ctx.Expr.NewCallable(newLambda->Child(i)->Pos(), "ToPg", { newLambda->ChildPtr(i) });
-            }
-        }
-
-        lambda = newLambda;
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    const auto& aggDesc = NPg::LookupAggregation(func, argTypes);
-    if (aggDesc.Kind != NPg::EAggKind::Normal) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            "Only normal aggregation supported"));
+    } catch (const yexception& e) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto idLambda = ctx.Expr.Builder(input->Pos())
-        .Lambda()
-            .Param("state")
-            .Arg("state")
-        .Seal()
-        .Build();
-
-    auto saveLambda = idLambda;
-    auto loadLambda = idLambda;
-    auto finishLambda = idLambda;
-    if (aggDesc.FinalFuncId) {
-        finishLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-            .Param("state")
-            .Callable("PgResolvedCallCtx")
-                .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
-                .Atom(1, ToString(aggDesc.FinalFuncId))
-                .List(2)
-                .Seal()
-                .Arg(3, "state")
-            .Seal()
-            .Seal()
-            .Build();
-    }
-
-    auto nullValue = ctx.Expr.NewCallable(input->Pos(), "Null", {});
-    auto initValue = nullValue;
-    if (aggDesc.InitValue) {
-        initValue = ctx.Expr.Builder(input->Pos())
-            .Callable("PgCast")
-                .Callable(0, "PgConst")
-                    .Atom(0, aggDesc.InitValue)
-                    .Callable(1, "PgType")
-                        .Atom(0, "text")
-                    .Seal()
-                .Seal()
-                .Callable(1, "PgType")
-                    .Atom(0, NPg::LookupType(aggDesc.TransTypeId).Name)
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-    const auto& transFuncDesc = NPg::LookupProc(aggDesc.TransFuncId);
-    // use first non-null value as state if transFunc is strict
-    bool searchNonNullForState = false;
-    if (transFuncDesc.IsStrict && !aggDesc.InitValue) {
-        Y_ENSURE(argTypes.size() == 1);
-        searchNonNullForState = true;
-    }
-
-    TExprNode::TPtr initLambda, updateLambda;
-    if (!searchNonNullForState) {
-        initLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-                .Param("row")
-                .Callable("PgResolvedCallCtx")
-                    .Atom(0, transFuncDesc.Name)
-                    .Atom(1, ToString(aggDesc.TransFuncId))
-                    .List(2)
-                    .Seal()
-                    .Add(3, initValue)
-                    .Apply(4, lambda)
-                        .With(0, "row")
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
-        updateLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-                .Param("row")
-                .Param("state")
-                .Callable("Coalesce")
-                    .Callable(0, "PgResolvedCallCtx")
-                        .Atom(0, transFuncDesc.Name)
-                        .Atom(1, ToString(aggDesc.TransFuncId))
-                        .List(2)
-                        .Seal()
-                        .Callable(3, "Coalesce")
-                            .Arg(0, "state")
-                            .Add(1, initValue)
-                        .Seal()
-                        .Apply(4, lambda)
-                            .With(0, "row")
-                        .Seal()
-                    .Seal()
-                    .Arg(1, "state")
-                .Seal()
-            .Seal()
-            .Build();
-    } else {
-        initLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-                .Param("row")
-                .Apply(lambda)
-                    .With(0, "row")
-                .Seal()
-            .Seal()
-            .Build();
-
-        if (lambdaResult->GetKind() == ETypeAnnotationKind::Null) {
-            initLambda = ctx.Expr.Builder(input->Pos())
-                .Lambda()
-                    .Param("row")
-                    .Callable("PgCast")
-                        .Apply(0, initLambda)
-                            .With(0, "row")
-                        .Seal()
-                        .Callable(1, "PgType")
-                            .Atom(0, NPg::LookupType(aggDesc.TransTypeId).Name)
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-        }
-
-        updateLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-                .Param("row")
-                .Param("state")
-                .Callable("If")
-                    .Callable(0, "Exists")
-                        .Arg(0, "state")
-                    .Seal()
-                    .Callable(1, "Coalesce")
-                        .Callable(0, "PgResolvedCallCtx")
-                            .Atom(0, transFuncDesc.Name)
-                            .Atom(1, ToString(aggDesc.TransFuncId))
-                            .List(2)
-                            .Seal()
-                            .Arg(3, "state")
-                            .Apply(4, lambda)
-                                .With(0, "row")
-                            .Seal()
-                        .Seal()
-                        .Arg(1, "state")
-                    .Seal()
-                    .Apply(2, lambda)
-                        .With(0, "row")
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-    auto mergeLambda = ctx.Expr.Builder(input->Pos())
-        .Lambda()
-            .Param("state1")
-            .Param("state2")
-            .Callable("Void")
-            .Seal()
-        .Seal()
-        .Build();
-
-    auto zero = ctx.Expr.Builder(input->Pos())
-            .Callable("PgConst")
-                .Atom(0, "0")
-                .Callable(1, "PgType")
-                    .Atom(0, "int8")
-                .Seal()
-            .Seal()
-            .Build();
-
-    auto defaultValue = (func != "count") ? nullValue : zero;
-
-    if (aggDesc.SerializeFuncId) {
-        const auto& serializeFuncDesc = NPg::LookupProc(aggDesc.SerializeFuncId);
-        saveLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-                .Param("state")
-                .Callable("PgResolvedCallCtx")
-                    .Atom(0, serializeFuncDesc.Name)
-                    .Atom(1, ToString(aggDesc.SerializeFuncId))
-                    .List(2)
-                    .Seal()
-                    .Arg(3, "state")
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-    if (aggDesc.DeserializeFuncId) {
-        const auto& deserializeFuncDesc = NPg::LookupProc(aggDesc.DeserializeFuncId);
-        loadLambda = ctx.Expr.Builder(input->Pos())
-            .Lambda()
-                .Param("state")
-                .Callable("PgResolvedCallCtx")
-                    .Atom(0, deserializeFuncDesc.Name)
-                    .Atom(1, ToString(aggDesc.DeserializeFuncId))
-                    .List(2)
-                    .Seal()
-                    .Arg(3, "state")
-                    .Callable(4, "PgInternal0")
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-    if (aggDesc.CombineFuncId) {
-        const auto& combineFuncDesc = NPg::LookupProc(aggDesc.CombineFuncId);
-        if (combineFuncDesc.IsStrict) {
-            mergeLambda = ctx.Expr.Builder(input->Pos())
-                .Lambda()
-                    .Param("state1")
-                    .Param("state2")
-                    .Callable("If")
-                        .Callable(0, "Exists")
-                            .Arg(0, "state1")
-                        .Seal()
-                        .Callable(1, "Coalesce")
-                            .Callable(0, "PgResolvedCallCtx")
-                                .Atom(0, combineFuncDesc.Name)
-                                .Atom(1, ToString(aggDesc.CombineFuncId))
-                                .List(2)
-                                .Seal()
-                                .Arg(3, "state1")
-                                .Arg(4, "state2")
-                            .Seal()
-                            .Arg(1, "state1")
-                        .Seal()
-                        .Arg(2, "state2")
-                    .Seal()
-                .Seal()
-                .Build();
-        } else {
-            mergeLambda = ctx.Expr.Builder(input->Pos())
-                .Lambda()
-                    .Param("state1")
-                    .Param("state2")
-                    .Callable("PgResolvedCallCtx")
-                        .Atom(0, combineFuncDesc.Name)
-                        .Atom(1, ToString(aggDesc.CombineFuncId))
-                        .List(2)
-                        .Seal()
-                        .Arg(3, "state1")
-                        .Arg(4, "state2")
-                    .Seal()
-                .Seal()
-                .Build();
-        }
-    }
-
-    auto typeNode = ExpandType(input->Pos(), *itemType, ctx.Expr);
-    if (onWindow) {
-        output = ctx.Expr.Builder(input->Pos())
-            .Callable("WindowTraits")
-                .Add(0, typeNode)
-                .Add(1, initLambda)
-                .Add(2, updateLambda)
-                .Lambda(3)
-                    .Param("value")
-                    .Param("state")
-                    .Callable("Void")
-                    .Seal()
-                .Seal()
-                .Add(4, finishLambda)
-                .Add(5, defaultValue)
-            .Seal()
-            .Build();
-    } else {
-        output = ctx.Expr.Builder(input->Pos())
-            .Callable("AggregationTraits")
-                .Add(0, typeNode)
-                .Add(1, initLambda)
-                .Add(2, updateLambda)
-                .Add(3, saveLambda)
-                .Add(4, loadLambda)
-                .Add(5, mergeLambda)
-                .Add(6, finishLambda)
-                .Add(7, defaultValue)
-            .Seal()
-            .Build();
-    }
-
+    const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
+    output = ExpandPgAggregationTraits(input->Pos(), aggDesc, onWindow, lambda, argTypes, itemType, ctx.Expr);
     return IGraphTransformer::TStatus::Repeat;
 }
 

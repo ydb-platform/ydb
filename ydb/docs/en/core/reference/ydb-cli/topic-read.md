@@ -84,32 +84,32 @@ In all the examples below, a topic named `topic1` and a consumer named `c1` are 
 
 * Reading a single message with output to the terminal: If the topic doesn't contain new messages for this consumer, the command terminates with no data output:
    ```bash
-   {{ ydb-cli }} -p db1 topic read topic1 -c c1
+   {{ ydb-cli }} -p quickstart topic read topic1 -c c1
    ```
 
 * Waiting for and reading a single message written to a file named `message.bin`. The command keeps running until new messages appear in the topic for this consumer. However, you can terminate it with `Ctrl+C`:
    ```bash
-   {{ ydb-cli }} -p db1 topic read topic1 -c c1 -w -f message.bin
+   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w -f message.bin
    ```
 
 * Viewing information about messages waiting to be handled by the consumer without committing them. Up to 10 first messages are output:
    ```bash
-   {{ ydb-cli }} -p db1 topic read topic1 -c c1 --format pretty --commit false
+   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format pretty --commit false
    ```
 
 * Output messages to the terminal as they appear, using newline delimiter characters and transforming messages into Base64. The command will be running until you terminate it with `Ctrl+C`:
    ```bash
-   {{ ydb-cli }} -p db1 topic read topic1 -c c1 -w --format newline-delimited --transform base64
+   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w --format newline-delimited --transform base64
    ```
 
 * Track when new messages with the `ERROR` text appear in the topic and output them to the terminal once they arrive:
    ```bash
-   {{ ydb-cli }} -p db1 topic read topic1 -c c1 --format newline-delimited -w | grep ERROR
+   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 --format newline-delimited -w | grep ERROR
    ```
 
 * Receive another non-empty batch of no more than 150 messages transformed into base64, delimited with newline characters, and written to the `batch.txt` file:
    ```bash
-   {{ ydb-cli }} -p db1 topic read topic1 -c c1 \
+   {{ ydb-cli }} -p quickstart topic read topic1 -c c1 \
      --format newline-delimited -w --limit 150 \
      --transform base64 -f batch.txt
    ```

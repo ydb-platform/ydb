@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <ydb/library/yql/core/yql_data_provider.h>
@@ -50,12 +51,14 @@ SIMPLE_UDF(TRandString, char*(ui32)) {
 }
 
 SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
     auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
     funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule());
+    funcRegistry->AddModule("", "Json2", CreateJson2Module());
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
@@ -101,15 +104,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
-
-    if (settings.FeatureFlags.GetEnableKqpImmediateEffects()) {
-        Tests::TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
-
-        ServerSettings->SetControls(controls);
-    }
 
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
@@ -415,7 +409,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
@@ -1016,6 +1010,41 @@ THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime,
 
     return THolder(response);
 }
+
+ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server,
+                                                        TActorId sender,
+                                                        const TString &path)
+{
+    auto &runtime = *server->GetRuntime();
+    TAutoPtr<IEventHandle> handle;
+    TVector<ui64> shards;
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+
+    return *reply->MutableRecord();
+}
+
+TVector<ui64> GetTableShards(Tests::TServer* server,
+                            TActorId sender,
+                            const TString &path)
+{
+    TVector<ui64> shards;
+    auto lsResult = DescribeTable(server, sender, path);
+    for (auto &part : lsResult.GetPathDescription().GetTablePartitions())
+        shards.push_back(part.GetDatashardId());
+
+    return shards;
+}
+
+TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
+                                TActorId sender,
+                                const TString &path) {
+    return GetTableShards(server.Get(), sender, path);
+ }
 
 } // namspace NKqp
 } // namespace NKikimr

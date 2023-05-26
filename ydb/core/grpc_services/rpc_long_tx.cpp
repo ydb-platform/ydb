@@ -8,7 +8,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -48,14 +48,19 @@ std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumn
 
 class TShardInfo {
 private:
+    const TString SchemaData;
     const TString Data;
     const ui32 RowsCount;
 public:
-    TShardInfo(const TString& data, const ui32 rowsCount)
-        : Data(data)
+    TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount)
+        : SchemaData(schemaData)
+        , Data(data)
         , RowsCount(rowsCount)
     {
 
+    }
+    const TString& GetSchemaData() const {
+        return SchemaData;
     }
     const TString& GetData() const {
         return Data;
@@ -75,6 +80,17 @@ public:
         : ShardsCount(shardsCount)
         , ErrorString(errString)
     {}
+
+    TString ShortLogString(const ui32 sizeLimit) const {
+        TStringBuilder sb;
+        for (auto&& i : ShardsInfo) {
+            sb << i.first << ",";
+            if (sb.size() >= sizeLimit) {
+                break;
+            }
+        }
+        return sb;
+    }
 
     ui32 GetShardRequestsCount() const {
         ui32 result = 0;
@@ -116,7 +132,7 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
             return result.SetErrorString("cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
         }
         for (auto&& b : blobsSplitted.GetResult()) {
-            TShardInfo splitInfo(b.GetData(), b.GetRowsCount());
+            TShardInfo splitInfo(b.GetSchemaData(), b.GetData(), b.GetRowsCount());
             result.AddShardInfo(tabletIds[0], std::move(splitInfo));
         }
         return result;
@@ -144,7 +160,7 @@ TFullSplitData SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
                 return result.SetErrorString("cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
             }
             for (auto&& b : blobsSplitted.GetResult()) {
-                TShardInfo splitInfo(b.GetData(), b.GetRowsCount());
+                TShardInfo splitInfo(b.GetSchemaData(), b.GetData(), b.GetRowsCount());
                 result.AddShardInfo(tabletIds[i], std::move(splitInfo));
             }
         }
@@ -473,6 +489,7 @@ private:
     const ui64 WritePartIdx;
     const ui64 TableId;
     const TString DedupId;
+    const TString SchemaData;
     const TString Data;
     ui32 NumRetries;
     TWritersController::TPtr ExternalController;
@@ -495,12 +512,13 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ_SHARD_WRITER;
     }
 
-    TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const TString& data,
+    TShardWriter(const ui64 shardId, const ui64 tableId, const TString& dedupId, const TString& schemaData, const TString& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
         , DedupId(dedupId)
+        , SchemaData(schemaData)
         , Data(data)
         , ExternalController(externalController)
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
@@ -519,6 +537,7 @@ public:
 
     void Bootstrap() {
         auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, Data, WritePartIdx);
+        ev->SetArrowSchema(SchemaData);
         SendToTablet(std::move(ev));
         Become(&TShardWriter::StateMain);
     }
@@ -669,7 +688,9 @@ protected:
         if (sharding.HasRandomSharding()) {
             InternalController = std::make_shared<TWritersController>(1, this->SelfId(), LongTxId);
             const ui64 shard = sharding.GetColumnShards(RandomNumber<ui32>(sharding.ColumnShardsSize()));
-            this->Register(new TShardWriter(shard, tableId, DedupId, GetSerializedData(), ActorSpan, InternalController, ++writeIdx));
+            Y_VERIFY(description.HasSchema());
+            this->Register(new TShardWriter(shard, tableId, DedupId, NArrow::SerializeSchema(*ExtractArrowSchema(description.GetSchema())),
+                GetSerializedData(), ActorSpan, InternalController, ++writeIdx));
         } else if (sharding.HasHashSharding()) {
             const TFullSplitData batches = HasDeserializedBatch() ?
                 SplitData(GetDeserializedBatch(), description) :
@@ -684,13 +705,15 @@ protected:
                 for (auto&& info : infos) {
                     sumBytes += info.GetData().size();
                     rowsCount += info.GetRowsCount();
-                    this->Register(new TShardWriter(shard, tableId, DedupId, info.GetData(), ActorSpan, InternalController, ++writeIdx));
+                    this->Register(new TShardWriter(shard, tableId, DedupId, info.GetSchemaData(), info.GetData(), ActorSpan, InternalController, ++writeIdx));
                 }
             }
             pSpan.Attribute("affected_shards_count", (long)batches.GetShardsInfo().size());
             pSpan.Attribute("bytes", (long)sumBytes);
             pSpan.Attribute("rows", (long)rowsCount);
             pSpan.Attribute("shards_count", (long)batches.GetShardsCount());
+            AFL_DEBUG(NKikimrServices::LONG_TX_SERVICE)("affected_shards_count", batches.GetShardsInfo().size())("shards_count", batches.GetShardsCount())
+                ("path", Path)("shards_info", batches.ShortLogString(32));
         } else {
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Sharding method is not supported");
         }

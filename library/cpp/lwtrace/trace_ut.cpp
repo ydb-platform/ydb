@@ -717,27 +717,59 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         TManager manager(*Singleton<TProbeRegistry>(), false);
 
         TOrbit orbit;
+        TOrbit child;
+
         TTraceRequest req;
         req.SetIsTraced(true);
-        manager.HandleTraceRequest(req, orbit);
+        bool traced = manager.HandleTraceRequest(req, orbit);
+        UNIT_ASSERT(traced);
 
         LWTRACK(NoParam, orbit);
+
+        orbit.Fork(child);
+
         LWTRACK(IntParam, orbit, 1);
-        LWTRACK(StringParam, orbit, "str");
+        LWTRACK(IntParam, child, 2);
+
+        LWTRACK(StringParam, orbit, "str1");
+        LWTRACK(StringParam, child, "str2");
+
         LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC);
         LWTRACK(InstantParam, orbit, TInstant::Seconds(42));
         LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146));
         LWTRACK(ProtoEnum, orbit, OT_EQ);
         LWTRACK(IntIntParams, orbit, 1, 2);
 
-        TTraceResponse resp;
-        auto& r = *resp.MutableTrace();
-        orbit.Serialize(0, r);
+        orbit.Join(child);
 
-        TOrbit orbit1;
+        TTraceResponse resp1;
+        auto& r1 = *resp1.MutableTrace();
+        orbit.Serialize(0, r1);
+
+        UNIT_ASSERT_VALUES_EQUAL(r1.EventsSize(), 12);
+
+        TOrbit other;
+        traced = manager.HandleTraceRequest(req, other);
+        UNIT_ASSERT(traced);
+
         UNIT_ASSERT_VALUES_EQUAL(
-            manager.HandleTraceResponse(resp, manager.GetProbesMap(), orbit1).IsSuccess,
+            manager.HandleTraceResponse(resp1, manager.GetProbesMap(), other).IsSuccess,
             true);
+
+        TTraceResponse resp2;
+        auto& r2 = *resp2.MutableTrace();
+        other.Serialize(0, r2);
+        UNIT_ASSERT_VALUES_EQUAL(r2.EventsSize(), 12);
+
+        TString proto1;
+        bool parsed = NProtoBuf::TextFormat::PrintToString(resp1, &proto1);
+        UNIT_ASSERT(parsed);
+
+        TString proto2;
+        parsed = NProtoBuf::TextFormat::PrintToString(resp2, &proto2);
+        UNIT_ASSERT(parsed);
+
+        UNIT_ASSERT_VALUES_EQUAL(proto1, proto2);
     }
 
     Y_UNIT_TEST(TrackForkJoin) {

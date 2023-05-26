@@ -39,6 +39,25 @@ void CreateSampleTables(TKikimrRunner& kikimr) {
 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
+    AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+        --!syntax_v1
+
+        CREATE TABLE `/Root/test_table_idx_idx` (
+            str_field String,
+            complex_field Uint64,
+            id Uint64,
+            PRIMARY KEY (str_field, complex_field)
+        );
+
+        CREATE TABLE `/Root/test_table_idx` (
+            id Uint64,
+            complex_field Uint64,
+            str_field String,
+            Value String,
+            PRIMARY KEY (id)
+        );
+    )").GetValueSync());
+
     session.Close();
 }
 
@@ -281,7 +300,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto& lookup = operators[lookupMember].GetMapSafe();
         UNIT_ASSERT(lookup.at("Name") == "TablePointLookup");
-        UNIT_ASSERT(lookup.at("ReadRange").GetArraySafe()[0] == "App (new_app_1)");
+        UNIT_ASSERT_VALUES_EQUAL(lookup.at("ReadRange").GetArraySafe()[0], "App («new_app_1»)");
     }
 
     Y_UNIT_TEST(SortStage) {
@@ -844,6 +863,49 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
                 UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
             }
         }
+    }
+
+    Y_UNIT_TEST_TWIN(IdxFullscan, Source) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(Source);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        CreateSampleTables(kikimr);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto res = session.ExplainDataQuery(R"(
+            PRAGMA kikimr.OptEnablePredicateExtract = 'true';
+            SELECT t.*
+            FROM
+               (SELECT * FROM `/Root/test_table_idx_idx`
+               WHERE `str_field` is NULL
+               ) as idx
+            INNER JOIN
+               `/Root/test_table_idx` AS t
+            USING (`id`)
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        auto strPlan = res.GetPlan();
+        UNIT_ASSERT(strPlan);
+
+        Cerr << strPlan << Endl;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(strPlan, &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        auto fullscan = FindPlanNodeByKv(
+            plan,
+            "Name",
+            "TableFullScan"
+       );
+        UNIT_ASSERT(!fullscan.IsDefined());
     }
 }
 

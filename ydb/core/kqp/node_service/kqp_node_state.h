@@ -52,7 +52,7 @@ struct TRemoveTaskContext {
 class TState {
 public:
     struct TRequestId {
-        ui64 TxId;
+        ui64 TxId = 0;
         TActorId Requester;
     };
 

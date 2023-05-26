@@ -176,8 +176,13 @@ public:
         data.ClearRaw();
         if (FirstStoredId < NextStoredId) {
             YQL_ENSURE(Storage);
+            LOG("Loading spilled blob. BlobId: " << FirstStoredId);
             TBuffer blob;
-            YQL_ENSURE(Storage->Get(FirstStoredId++, blob), "Lost block in storage");
+            if (!Storage->Get(FirstStoredId, blob)) {
+                LOG("BlobId " << FirstStoredId << " not ready yet");
+                return false;
+            }
+            ++FirstStoredId;
             ui64 rows;
             YQL_ENSURE(blob.size() >= sizeof(rows));
             std::memcpy((char*)&rows, blob.data(), sizeof(rows));

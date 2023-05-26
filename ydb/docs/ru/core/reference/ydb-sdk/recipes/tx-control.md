@@ -5,15 +5,13 @@ description: "В статье вы ознакомитесь как в разны
 
 # Установка режима выполнения транзакции
 
+Для выполнения запросов в {{ ydb-short-name }} SDK необходимо указывать [режим выполнения транзакции](../../../concepts/transactions.md#modes).
+
+Ниже приведены примеры кода, которые используют встроенные в {{ ydb-short-name }} SDK средства создания объекта *режим выполнения транзакции*.
+
 {% include [work in progress message](_includes/addition.md) %}
 
-В SDK для выполнения запросов к {{ ydb-short-name }} необходимо всегда указывать режим выполнения транзакции.
-
-<[Тут умные слова или отсылка к разделу документации о том, какие режимы выполнения транзакций поддерживаются в YDB.]>
-
-Ниже приведены примеры кода использования встроенных в {{ ydb-short-name }} SDK средств создания объекта режим выполнения транзакции:
-
-## SerializableReadWrite
+## Serializable {#serializable}
 
 {% list tabs %}
 
@@ -55,10 +53,9 @@ description: "В статье вы ознакомитесь как в разны
   }
   ```
 
-
 {% endlist %}
 
-## OnlineReadOnly
+## Online Read-Only {#online-read-only}
 
 {% list tabs %}
 
@@ -100,10 +97,9 @@ description: "В статье вы ознакомитесь как в разны
   }
   ```
 
-
 {% endlist %}
 
-## StaleReadOnly
+## Stale Read-Only {#stale-read-only}
 
 {% list tabs %}
 
@@ -145,10 +141,9 @@ description: "В статье вы ознакомитесь как в разны
   }
   ```
 
-
 {% endlist %}
 
-## SnapshotReadOnly
+## Snapshot Read-Only {#snapshot-read-only}
 
 {% list tabs %}
 
@@ -189,6 +184,5 @@ description: "В статье вы ознакомитесь как в разны
     }
   }
   ```
-
 
 {% endlist %}

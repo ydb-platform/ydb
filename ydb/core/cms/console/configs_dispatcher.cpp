@@ -82,7 +82,7 @@ private:
         using TPtr = TIntrusivePtr<TSubscription>;
 
         TDynBitMap Kinds;
-        THashSet<TActorId> Subscribers;
+        THashMap<TActorId, ui64> Subscribers;
 
         // Set to true for all yaml kinds.
         // Some 'legacy' kinds, which is usually managed by some automation e.g. NetClassifierDistributableConfigItem
@@ -106,7 +106,6 @@ private:
         // Subscribers who didn't respond yet to the latest config update.
         THashSet<TActorId> SubscribersToUpdate;
 
-        bool FirstUpdate = false;
     };
 
     /**
@@ -234,6 +233,7 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
+
 };
 
 TConfigsDispatcher::TConfigsDispatcher(
@@ -265,7 +265,8 @@ void TConfigsDispatcher::Bootstrap()
         TVector<ui32>(DYNAMIC_KINDS.begin(), DYNAMIC_KINDS.end()),
         CurrentConfig,
         0,
-        true);
+        true,
+        1);
     CommonSubscriptionClient = RegisterWithSameMailbox(commonClient);
 
     Become(&TThis::StateInit);
@@ -330,13 +331,17 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 {
     NKikimrConfig::TAppConfig newYamlProtoConfig = {};
 
-    NYamlConfig::ResolveAndParseYamlConfig(
-        YamlConfig,
-        VolatileYamlConfigs,
-        Labels,
-        newYamlProtoConfig,
-        &ResolvedYamlConfig,
-        &ResolvedJsonConfig);
+    try {
+        NYamlConfig::ResolveAndParseYamlConfig(
+            YamlConfig,
+            VolatileYamlConfigs,
+            Labels,
+            newYamlProtoConfig,
+            &ResolvedYamlConfig,
+            &ResolvedJsonConfig);
+    } catch (const yexception& ex) {
+        BLOG_ERROR("Got invalid config from console error# " << ex.what());
+    }
 
     return newYamlProtoConfig;
 }
@@ -473,8 +478,9 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                 << "  Subscription: " << Endl
                                 << "    Yaml: " << subscription->Yaml << Endl
                                 << "    Subscribers: " << Endl;
-                            for (auto &id : subscription->Subscribers) {
+                            for (auto &[id, updates] : subscription->Subscribers) {
                                 str << "    - Actor: " << id << Endl;
+                                str << "      UpdatesSent: " << updates << Endl;
                             }
                             if (subscription->YamlVersion) {
                                 str << "    YamlVersion: " << subscription->YamlVersion->Version << ".[";
@@ -672,7 +678,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         bool hasAffectedKinds = false;
 
         if (subscription->Yaml && YamlConfigEnabled) {
-            ReplaceConfigItems(YamlProtoConfig, trunc, subscription->Kinds);
+            ReplaceConfigItems(YamlProtoConfig, trunc, subscription->Kinds, InitialConfig);
         } else {
             Y_FOR_EACH_BIT(kind, kinds) {
                 if (affectedKinds.contains(kind)) {
@@ -681,17 +687,14 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             }
 
             // we try resend all configs if yaml config was turned off
-            if (!hasAffectedKinds && !yamlConfigTurnedOff) {
+            if (!hasAffectedKinds && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
                 continue;
             }
 
-            ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, kinds);
+            ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, kinds, InitialConfig);
         }
 
-        subscription->FirstUpdate = true;
-
-        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc))
-        {
+        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc) || CurrentStateFunc() == &TThis::StateInit) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             subscription->UpdateInProcess->Record.SetLocal(true);
@@ -705,10 +708,11 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 UpdateYamlVersion(subscription);
             }
 
-            for (auto &subscriber : subscription->Subscribers) {
+            for (auto &[subscriber, updates] : subscription->Subscribers) {
                 auto k = kinds;
                 BLOG_TRACE("Sending for kinds: " << KindsToString(k));
                 SendUpdateToSubscriber(subscription, subscriber);
+                ++updates;
             }
         } else if (YamlConfigEnabled && subscription->Yaml) {
             UpdateYamlVersion(subscription);
@@ -754,7 +758,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     }
 
     auto trunc = std::make_shared<NKikimrConfig::TAppConfig>();
-    ReplaceConfigItems(CurrentConfig, *trunc, KindsToBitMap(ev->Get()->ConfigItemKinds));
+    ReplaceConfigItems(CurrentConfig, *trunc, KindsToBitMap(ev->Get()->ConfigItemKinds), InitialConfig);
     resp->Config = trunc;
 
     BLOG_TRACE("Send TEvConfigsDispatcher::TEvGetConfigResponse"
@@ -796,7 +800,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
 
         SubscriptionsByKinds.emplace(kinds, subscription);
     }
-    subscription->Subscribers.insert(subscriberActor);
+    auto [subscriberIt, _] = subscription->Subscribers.emplace(subscriberActor, 0);
     SubscriptionsBySubscriber.emplace(subscriberActor, subscription);
 
     auto subscriber = FindSubscriber(subscriberActor);
@@ -810,15 +814,15 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     // We don't care about versions and kinds here
     Send(ev->Sender, new TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
-    if (subscription->FirstUpdate) {
+    if (CurrentStateFunc() != &TThis::StateInit) {
         // first time we send even empty config
         if (!subscription->UpdateInProcess) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
             if (YamlConfigEnabled) {
-                ReplaceConfigItems(YamlProtoConfig, trunc, kinds);
+                ReplaceConfigItems(YamlProtoConfig, trunc, kinds, InitialConfig);
             } else {
-                ReplaceConfigItems(CurrentConfig, trunc, kinds);
+                ReplaceConfigItems(CurrentConfig, trunc, kinds, InitialConfig);
             }
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             Y_FOR_EACH_BIT(kind, kinds) {
@@ -829,6 +833,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         }
         BLOG_TRACE("Sending for kinds: " << KindsToString(kinds));
         SendUpdateToSubscriber(subscription, subscriber->Subscriber);
+        ++(subscriberIt->second);
     }
 }
 

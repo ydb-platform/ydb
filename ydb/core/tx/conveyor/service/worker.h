@@ -5,7 +5,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/protos/services.pb.h>
-#include <ydb/services/metadata/request/common.h>
+#include <ydb/library/conclusion/result.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -29,12 +29,12 @@ public:
 
 struct TEvInternal {
     enum EEv {
-        EvNewTask = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd");
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expected EvEnd < EventSpaceEnd");
 
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
@@ -53,13 +53,13 @@ struct TEvInternal {
 
     class TEvTaskProcessedResult:
         public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult>,
-        public NMetadata::NRequest::TMaybeResult<ITask::TPtr> {
+        public TConclusion<ITask::TPtr> {
     private:
-        using TBase = NMetadata::NRequest::TMaybeResult<ITask::TPtr>;
+        using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(NActors::TActorId, OwnerId);
     public:
         TEvTaskProcessedResult(const NActors::TActorId& ownerId, const TString& errorMessage)
-            : TBase(errorMessage)
+            : TBase(TConclusionStatus::Fail(errorMessage))
             , OwnerId(ownerId) {
 
         }

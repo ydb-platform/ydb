@@ -92,7 +92,7 @@ struct TClientBlob {
 
     static const ui32 OVERHEAD = sizeof(ui32)/*totalSize*/ + sizeof(ui64)/*SeqNo*/ + sizeof(ui16) /*SourceId*/ + sizeof(ui64) /*WriteTimestamp*/ + sizeof(ui64) /*CreateTimestamp*/;
 
-    void Serialize(TBuffer& buffer) const;
+    void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);
 
 };
@@ -189,7 +189,7 @@ struct TBatch {
     void UnpackToType0(TVector<TClientBlob> *result);
     void UnpackToType1(TVector<TClientBlob> *result);
 
-    TString Serialize();
+    void SerializeTo(TString& res);
 
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 
@@ -197,7 +197,8 @@ struct TBatch {
 
 class TBlobIterator {
 public:
-    TBlobIterator(const TKey& key, const TString& blob);
+    TBlobIterator(const TKey& key, const TString& blob, bool createBatch = true);
+
     //return true is there is batch
     bool IsValid();
     //get next batch and return false if there is no next batch
@@ -207,10 +208,16 @@ public:
 private:
     void ParseBatch(bool isFirst);
 
+    // if true, Batch is filled, otherwise only Header.
+    bool CreateBatch;
+
+    TBatch Batch;
+    NKikimrPQ::TBatchHeader Header;
+
     const TKey& Key;
     const char *Data;
     const char *End;
-    TBatch Batch;
+
     ui64 Offset;
     ui32 Count;
     ui16 InternalPartsCount;

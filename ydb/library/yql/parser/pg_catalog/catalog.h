@@ -189,10 +189,10 @@ enum class EHashAmProcNum {
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
-bool HasReturnSetProc(const TStringBuf& name);
+bool HasReturnSetProc(const TString& name);
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f);
 
-bool HasType(const TStringBuf& name);
+bool HasType(const TString& name);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
 void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
@@ -204,8 +204,9 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds);
 const TOperDesc& LookupOper(ui32 operId);
 
-bool HasAggregation(const TStringBuf& name);
-const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui32>& argTypeIds);
+bool HasAggregation(const TString& name);
+const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds);
+const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType);
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId);
 const TOpClassDesc* LookupDefaultOpClass(EOpClassMethod method, ui32 typeId);

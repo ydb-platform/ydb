@@ -50,11 +50,13 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf ReverseSettingName = "Reverse";
     static constexpr TStringBuf SortedSettingName = "Sorted";
+    static constexpr TStringBuf SequentialSettingName = "Sequential";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     bool Reverse = false;
     bool Sorted = false;
+    TMaybe<ui64> SequentialInFlight;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

@@ -81,8 +81,8 @@ public:
             BranchInst::Create(good, done, more, block);
 
             block = good;
-            const auto itemPtr = GetElementPtrInst::CreateInBounds(elements, {index}, "item_ptr", block);
-            const auto item = new LoadInst(itemPtr, "item", block);
+            const auto itemPtr = GetElementPtrInst::CreateInBounds(valueType, elements, {index}, "item_ptr", block);
+            const auto item = new LoadInst(valueType, itemPtr, "item", block);
 
             codegenItem->CreateSetValue(ctx, block, item);
 
@@ -103,7 +103,7 @@ public:
                 new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);
-            const auto iter = new LoadInst(iterPtr, "iter", block);
+            const auto iter = new LoadInst(valueType, iterPtr, "iter", block);
 
             const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);

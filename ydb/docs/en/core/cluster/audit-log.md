@@ -1,7 +1,5 @@
 # Audit log
 
-{% include [release-candidate](../_includes/trunk.md) %}
-
 _An audit log_ is a stream that includes data about all the operations that tried to change the {{ ydb-short-name }} objects, successfully or unsuccessfully:
 
 * Database: Creating, editing, and deleting databases.
@@ -51,17 +49,17 @@ The information about each operation is saved to the audit log as a separate eve
 
 ## Enabling audit log {#enabling-audit-log}
 
-Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `unified_agent_backend`) or their combination:
+Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../deploy/configuration/config.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `stderr_backend`) or their combination:
 
 ```yaml
-audit:
+audit_config:
   file_backend:
     format: audit_log_format
     file_path: "path_to_log_file"
   unified_agent_backend:
     format: audit_log_format
     log_name: session_meta_log_name
-  unified_agent_backend:
+  stderr_backend:
     format: audit_log_format
 ```
 
@@ -77,7 +75,7 @@ audit:
 Sample configuration that saves the audit log text to `/var/log/ydb-audit.log`:
 
 ```yaml
-audit:
+audit_config:
   file_backend:
     format: TXT
     file_path: "/var/log/ydb-audit.log"
@@ -86,7 +84,7 @@ audit:
 Sample configuration that saves the audit log text to Yandex Unified Agent with the `audit` label and outputs it to `stderr` in JSON format:
 
 ```yaml
-audit:
+audit_config:
   unified_agent_backend:
     format: TXT
     log_name: audit

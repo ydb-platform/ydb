@@ -1,11 +1,14 @@
 #include "type_ann_blocks.h"
 #include "type_ann_list.h"
 #include "type_ann_wide.h"
+#include "type_ann_pg.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 
 namespace NYql {
 namespace NTypeAnnImpl {
@@ -355,6 +358,60 @@ IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto child = input->Child(0);
+    if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+    auto resultType = ToPgImpl(input->Pos(), blockItemType, ctx.Expr);
+    if (!resultType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+    
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;    
+}
+
+IGraphTransformer::TStatus BlockFromPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto child = input->Child(0);
+    if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
+    auto resultType = FromPgImpl(input->Pos(), blockItemType, ctx.Expr);
+    if (!resultType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isScalar) {
+        resultType = ctx.Expr.MakeType<TScalarExprType>(resultType);
+    } else {
+        resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
+    }
+
+    input->SetTypeAnn(resultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 2U, ctx.Expr)) {
@@ -473,7 +530,7 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             return false;
         }
 
-        if (agg->ChildrenSize() != agg->Head().ChildrenSize()) {
+        if (agg->ChildrenSize() + (overState ? 1 : 0) != agg->Head().ChildrenSize()) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Different amount of input arguments"));
             return false;
         }
@@ -491,7 +548,7 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
                 return false;
             }
 
-            auto applyArgType = agg->Head().Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto applyArgType = agg->Head().Child(i + (overState ? 1 : 0))->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             auto expectedType = many ? ctx.MakeType<TOptionalExprType>(applyArgType) : applyArgType;
             if (!IsSameAnnotation(*inputItems[argColumnIndex], *expectedType)) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
@@ -768,6 +825,156 @@ IGraphTransformer::TStatus WideSortBlocksWrapper(const TExprNode::TPtr& input, T
     input->SetTypeAnn(input->Head().GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
+
+IGraphTransformer::TStatus BlockPgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureMaxArgsCount(*input, 4, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto name = input->Head().Content();
+    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> argTypes;
+    bool allScalars = true;
+    for (ui32 i = 2; i < input->ChildrenSize(); ++i) {
+        if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isScalar;
+        auto itemType = GetBlockItemType(*input->Child(i)->GetTypeAnn(), isScalar);
+        if (itemType->GetKind() != ETypeAnnotationKind::Pg) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected PG type, but got: " << *itemType));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        allScalars = allScalars && isScalar;
+        ui32 argType = itemType->Cast<TPgExprType>()->GetId();
+        argTypes.push_back(argType);
+    }
+
+    auto operId = FromString<ui32>(input->Child(1)->Content());
+    const auto& oper = NPg::LookupOper(operId, argTypes);
+    if (oper.Name != name) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Mismatch of resolved operator name, expected: " << name << ", but got:" << oper.Name));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(oper.ResultType);
+    if (allScalars) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(result));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(result));
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockPgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto name = input->Head().Content();
+
+    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureTuple(*input->Child(2), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& setting : input->Child(2)->Children()) {
+        if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto content = setting->Head().Content();
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Unexpected setting " << content << " in function " << name));
+
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> argTypes;
+    bool allScalars = true;
+    for (ui32 i = 3; i < input->ChildrenSize(); ++i) {
+        if (!EnsureBlockOrScalarType(*input->Child(i), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isScalar;
+        auto itemType = GetBlockItemType(*input->Child(i)->GetTypeAnn(), isScalar);
+        if (itemType->GetKind() != ETypeAnnotationKind::Pg) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected PG type, but got: " << *itemType));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        allScalars = allScalars && isScalar;
+        ui32 argType = itemType->Cast<TPgExprType>()->GetId();
+        argTypes.push_back(argType);
+    }
+
+    auto procId = FromString<ui32>(input->Child(1)->Content());
+    const auto& proc = NPg::LookupProc(procId, argTypes);
+    if (proc.Name != name) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got:" << proc.Name));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (proc.Kind == NPg::EProcKind::Window) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Window function " << name << " cannot be called directly"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (proc.Kind == NPg::EProcKind::Aggregate) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Aggregate function " << name << " cannot be called directly"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
+    if (proc.ReturnSet) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Not supported return set"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (allScalars) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TScalarExprType>(result));
+    } else {
+        input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(result));
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
 
 } // namespace NTypeAnnImpl
 }

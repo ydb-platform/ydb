@@ -3,6 +3,7 @@
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -28,15 +29,28 @@ constexpr int RESULT_ROWS_LIMIT = 1000;
 
 class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
 public:
-    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request)
+    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration)
         : Request(request)
+        , Database(database)
+        , LeaseGeneration(leaseGeneration)
     {}
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
         Become(&TRunScriptActor::StateFunc);
+    }
 
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        hFunc(NActors::TEvents::TEvPoison, Handle);
+        hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+        hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+        hFunc(NKqp::TEvKqp::TEvFetchScriptResultsRequest, Handle);
+    )
+
+    void Start() {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record = Request;
 
@@ -48,12 +62,14 @@ public:
         }
     }
 
-private:
-    STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-        hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-        hFunc(NKqp::TEvKqp::TEvFetchScriptResultsRequest, Handle);
-    )
+    // TODO: remove this after there will be a normal way to store results and generate execution id
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        Start();
+    }
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
@@ -134,8 +150,17 @@ private:
         LOG_D("Received partial result. Rows added: " << rowsAdded << ". Truncated: " << IsTruncated());
     }
 
+    static Ydb::Query::ExecStatus GetExecStatusFromStatusCode(Ydb::StatusIds::StatusCode status) {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            return Ydb::Query::EXEC_STATUS_COMPLETED;
+        } else {
+            return Ydb::Query::EXEC_STATUS_FAILED;
+        }
+    }
+
     void Finish(Ydb::StatusIds::StatusCode status) {
         Status = status;
+        Register(CreateScriptExecutionFinisher(SelfId().ToString() /*executionId*/, Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
     }
 
     bool IsFinished() const {
@@ -148,6 +173,8 @@ private:
 
 private:
     const NKikimrKqp::TEvQueryRequest Request;
+    const TString Database;
+    const ui64 LeaseGeneration;
 
     // Result
     NYql::TIssues Issues;
@@ -157,8 +184,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request) {
-    return new TRunScriptActor(request);
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration) {
+    return new TRunScriptActor(request, database, leaseGeneration);
 }
 
 } // namespace NKikimr::NKqp

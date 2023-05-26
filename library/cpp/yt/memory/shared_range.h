@@ -55,7 +55,7 @@ public:
     { }
 
     //! Constructs an empty TSharedRange from a nullptr expression.
-    TSharedRange(nullptr_t)
+    TSharedRange(std::nullptr_t)
         : TRange<T>(nullptr, 0UL)
         , Holder_(nullptr)
     { }
@@ -212,7 +212,7 @@ TSharedRange<U> ReinterpretCastRange(const TSharedRange<T>& range)
 {
     static_assert(sizeof(T) == sizeof(U), "T and U must have equal sizes.");
     return TSharedRange<U>(reinterpret_cast<const U*>(range.Begin()), range.Size(), range.GetHolder());
-};
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

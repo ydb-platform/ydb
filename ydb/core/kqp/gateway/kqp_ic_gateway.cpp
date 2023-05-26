@@ -1,5 +1,6 @@
 #include "kqp_gateway.h"
-#include "kqp_ic_gateway_actors.h"
+#include "actors/kqp_ic_gateway_actors.h"
+#include "actors/scheme.h"
 #include "kqp_metadata_loader.h"
 
 #include <ydb/core/base/appdata.h>
@@ -474,8 +475,9 @@ public:
     }
 
     TKqpExecLiteralRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
-        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params)
+        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params, ui32 txIndex)
         : Request(std::move(request))
+        , TxIndex(txIndex)
         , Parameters(params)
         , Counters(counters)
         , Promise(promise)
@@ -516,7 +518,10 @@ private:
                 result.Results.emplace_back(tx.GetMkql());
             }
             Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
-            Parameters->AddTxResults(std::move(txResults));
+
+            if (!txResults.empty()) {
+                Parameters->AddTxResults(TxIndex, std::move(txResults));
+            }
         }
         Promise.SetValue(std::move(result));
         this->PassAway();
@@ -524,179 +529,10 @@ private:
 
 private:
     IKqpGateway::TExecPhysicalRequest Request;
+    const ui32 TxIndex;
     TQueryData::TPtr Parameters;
     TKqpRequestCounters::TPtr Counters;
     TPromise<TResult> Promise;
-};
-
-
-class TSchemeOpRequestHandler: public TRequestHandlerBase<
-    TSchemeOpRequestHandler,
-    TEvTxUserProxy::TEvProposeTransaction,
-    TEvTxUserProxy::TEvProposeTransactionStatus,
-    IKqpGateway::TGenericResult>
-{
-public:
-    using TBase = typename TSchemeOpRequestHandler::TBase;
-    using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-    using TResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
-    using TResult = IKqpGateway::TGenericResult;
-
-    TSchemeOpRequestHandler(TRequest* request, TPromise<TResult> promise, bool failedOnAlreadyExists)
-        : TBase(request, promise, {})
-        , FailedOnAlreadyExists(failedOnAlreadyExists)
-        {}
-
-
-    void Bootstrap(const TActorContext& ctx) {
-        TActorId txproxy = MakeTxProxyID();
-        ctx.Send(txproxy, this->Request.Release());
-
-        this->Become(&TSchemeOpRequestHandler::AwaitState);
-    }
-
-    using TBase::Handle;
-
-    void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        auto& response = ev->Get()->Record;
-        auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(response.GetStatus());
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvProposeTransactionStatus for scheme request"
-            << ", TxId: " << response.GetTxId()
-            << ", status: " << status
-            << ", scheme shard status: " << response.GetSchemeShardStatus());
-
-        switch (status) {
-            case TEvTxUserProxy::TResultStatus::ExecInProgress: {
-                ui64 schemeShardTabletId = response.GetSchemeShardTabletId();
-                IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
-                Y_VERIFY(pipeActor);
-                ShemePipeActorId = ctx.ExecutorThread.RegisterActor(pipeActor);
-
-                auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
-                request->Record.SetTxId(response.GetTxId());
-                NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
-
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request"
-                    << ", TxId: " << response.GetTxId());
-
-                return;
-            }
-
-            case TEvTxUserProxy::TResultStatus::AccessDenied: {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request"
-                    << ", TxId: " << response.GetTxId());
-
-                TIssue issue(NYql::TPosition(), "Access denied.");
-                Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_ACCESS_DENIED,
-                    "Access denied for scheme request", {issue}));
-                this->Die(ctx);
-                return;
-            }
-
-            case TEvTxUserProxy::TResultStatus::ExecComplete: {
-                if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
-                    (!FailedOnAlreadyExists && response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists))
-                {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
-                    << ", TxId: " << response.GetTxId());
-
-                    IKqpGateway::TGenericResult result;
-                    result.SetSuccess();
-                    Promise.SetValue(std::move(result));
-                    this->Die(ctx);
-                    return;
-                }
-                break;
-            }
-
-            case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable: {
-                Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    "Schemeshard not available", {}));
-                this->Die(ctx);
-                return;
-            }
-
-            case TEvTxUserProxy::TResultStatus::ResolveError: {
-                Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    response.GetSchemeShardReason(), {}));
-                this->Die(ctx);
-                return;
-            }
-
-            case TEvTxUserProxy::TResultStatus::ExecError:
-                switch (response.GetSchemeShardStatus()) {
-                    case NKikimrScheme::EStatus::StatusMultipleModifications: {
-                        Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS,
-                            response.GetSchemeShardReason(), {}));
-                        this->Die(ctx);
-                        return;
-                    }
-                    case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
-                        Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_SCHEME_ERROR,
-                            response.GetSchemeShardReason(), {}));
-                        this->Die(ctx);
-                        return;
-                    }
-
-                    default:
-                        break;
-                }
-                break;
-
-            default:
-                break;
-        }
-
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_GATEWAY, "Unexpected error on scheme request"
-            << ", TxId: " << response.GetTxId()
-            << ", ProxyStatus: " << status
-            << ", SchemeShardReason: " << response.GetSchemeShardReason());
-
-        TStringBuilder message;
-        message << "Scheme operation failed, status: " << status;
-        if (!response.GetSchemeShardReason().empty()) {
-            message << ", reason: " << response.GetSchemeShardReason();
-        }
-
-        Promise.SetValue(ResultFromError<TResult>(TIssue({}, message)));
-        this->Die(ctx);
-    }
-
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record;
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request"
-            << ", TxId: " << response.GetTxId());
-
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
-            << ", TxId: " << response.GetTxId());
-
-        IKqpGateway::TGenericResult result;
-        result.SetSuccess();
-
-        Promise.SetValue(std::move(result));
-        NTabletPipe::CloseClient(ctx, ShemePipeActorId);
-        this->Die(ctx);
-    }
-
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {}
-
-    STFUNC(AwaitState) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TResponse, HandleResponse);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-        default:
-            TBase::HandleUnexpectedEvent("TSchemeOpRequestHandler", ev->GetTypeRewrite());
-        }
-    }
-
-private:
-    TActorId ShemePipeActorId;
-    bool FailedOnAlreadyExists = false;
 };
 
 template<typename TResult>
@@ -823,12 +659,16 @@ public:
     TFuture<TTableMetadataResult> LoadTableMetadata(const TString& cluster, const TString& table,
         TLoadTableMetadataSettings settings) override {
         try {
-            if (!CheckCluster(cluster)) {
+            if (!settings.WithExternalDatasources_ && !CheckCluster(cluster)) {
                 return InvalidCluster<TTableMetadataResult>(cluster);
             }
 
-            return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken);
-
+            settings.WithExternalDatasources_ = !CheckCluster(cluster);
+            // In the case of reading from an external data source,
+            // we have a construction of the form: `/Root/external_data_source`.`/path_in_external_system` WITH (...)
+            // In this syntax, information about path_in_external_system is already known and we only need information about external_data_source.
+            // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard
+            return MetadataLoader->LoadTableMetadata(settings.WithExternalDatasources_ ? GetDefaultCluster() : cluster, settings.WithExternalDatasources_ ? cluster : table, settings, Database, UserToken);
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
         }
@@ -1001,7 +841,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) override {
+    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req, const TMaybe<TString>& requestType) override {
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
@@ -1012,7 +852,7 @@ public:
             using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
                 Ydb::Table::AlterTableResponse>;
 
-            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat());
+            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat(), requestType);
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -1561,7 +1401,7 @@ public:
     private:
         TKikimrIcGateway& Owner;
     protected:
-        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+        virtual TFuture<TConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const TSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) = 0;
         ui32 GetNodeId() const {
@@ -1596,17 +1436,22 @@ public:
                 if (GetUserToken()) {
                     context.SetUserToken(*GetUserToken());
                 }
-                return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<NMetadata::NModifications::TObjectOperatorResult>& f) {
-                    if (f.HasValue() && !f.HasException() && f.GetValue().IsSuccess()) {
+                context.SetDatabase(Owner.Database);
+                return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TConclusionStatus>& f) {
+                    if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
                         TGenericResult result;
                         result.SetSuccess();
                         return NThreading::MakeFuture<TGenericResult>(result);
-                    } else {
+                    } else if (f.HasValue()) {
                         TGenericResult result;
                         result.AddIssue(NYql::TIssue(f.GetValue().GetErrorMessage()));
                         return NThreading::MakeFuture<TGenericResult>(result);
+                    } else {
+                        TGenericResult result;
+                        result.AddIssue(NYql::TIssue("Haven't reply"));
+                        return NThreading::MakeFuture<TGenericResult>(result);
                     }
-                    });
+                });
             } catch (yexception& e) {
                 return MakeFuture(ResultFromException<TGenericResult>(e));
             }
@@ -1617,7 +1462,7 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TCreateObjectSettings>;
     protected:
-        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+        virtual TFuture<TConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TCreateObjectSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override
         {
@@ -1631,7 +1476,7 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TAlterObjectSettings>;
     protected:
-        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+        virtual TFuture<TConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TAlterObjectSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->AlterObject(settings, TBase::GetNodeId(), manager, context);
@@ -1644,7 +1489,7 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TDropObjectSettings>;
     protected:
-        virtual TFuture<NMetadata::NModifications::TObjectOperatorResult> DoExecute(
+        virtual TFuture<TConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TDropObjectSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->DropObject(settings, TBase::GetNodeId(), manager, context);
@@ -1844,7 +1689,7 @@ public:
         }
     }
 
-    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params) override {
+    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
@@ -1867,7 +1712,7 @@ public:
 
         YQL_ENSURE(containOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();
-        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params);
+        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
@@ -1940,27 +1785,31 @@ public:
     }
 
     TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
-        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target) override
+        TQueryData::TPtr params, const TAstQuerySettings& settings, const NActors::TActorId& target,
+        std::shared_ptr<NGRpcService::IRequestCtxMtSafe> ctx) override
     {
         YQL_ENSURE(cluster == Cluster);
+        YQL_ENSURE(ctx);
 
-        using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
-        auto ev = MakeHolder<TRequest>();
-        if (UserToken) {
-            ev->Record.SetUserToken(UserToken->GetSerializedToken());
-        }
+        auto q = query;
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            NKikimrKqp::QUERY_ACTION_EXECUTE,
+            NKikimrKqp::QUERY_TYPE_AST_SCAN,
+            target,
+            ctx,
+            TString(), //sessionId
+            std::move(q),
+            TString(), //queryId
+            nullptr, //tx_control
+            nullptr,
+            settings.CollectStats,
+            nullptr, // query_cache_policy
+            nullptr
+        );
 
-        ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
-        ev->Record.MutableRequest()->SetQuery(query);
-        ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
-
-        ActorIdToProto(target, ev->Record.MutableCancelationActor());
-
+        // TODO: Rewrite CollectParameters at kqp_host
         FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,
@@ -2161,8 +2010,8 @@ private:
     }
 
     template<typename TRpc>
-    TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token) {
-        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
+    TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token, const TMaybe<TString>& requestType = {}) {
+        return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, requestType, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
             auto r = future.ExtractValue();
             NYql::TIssues issues;
             NYql::IssuesFromMessage(r.operation().issues(), issues);

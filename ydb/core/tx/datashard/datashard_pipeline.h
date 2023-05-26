@@ -107,7 +107,7 @@ public:
 
     // tx propose
 
-    void SaveForPropose(TValidatedDataTx::TPtr tx);
+    bool SaveForPropose(TValidatedDataTx::TPtr tx);
     void SetProposed(ui64 txId, const TActorId& actorId);
 
     void ForgetUnproposedTx(ui64 txId);
@@ -265,6 +265,8 @@ public:
     {
         return tx->RestoreTxData(Self, txc, ctx);
     }
+
+    void RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db);
 
     // Execution units
     TExecutionUnit &GetExecutionUnit(EExecutionUnitKind kind)

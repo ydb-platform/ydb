@@ -62,22 +62,6 @@ uint8_t s2n_x509_trust_store_has_certs(struct s2n_x509_trust_store *store)
     return store->trust_store ? (uint8_t) 1 : (uint8_t) 0;
 }
 
-int s2n_x509_trust_store_from_system_defaults(struct s2n_x509_trust_store *store)
-{
-    if (!store->trust_store) {
-        store->trust_store = X509_STORE_new();
-        POSIX_ENSURE_REF(store->trust_store);
-    }
-
-    int err_code = X509_STORE_set_default_paths(store->trust_store);
-    if (!err_code) {
-        s2n_x509_trust_store_wipe(store);
-        POSIX_BAIL(S2N_ERR_X509_TRUST_STORE);
-    }
-
-    return 0;
-}
-
 int s2n_x509_trust_store_add_pem(struct s2n_x509_trust_store *store, const char *pem)
 {
     POSIX_ENSURE_REF(store);
@@ -141,6 +125,7 @@ void s2n_x509_trust_store_wipe(struct s2n_x509_trust_store *store)
     if (store->trust_store) {
         X509_STORE_free(store->trust_store);
         store->trust_store = NULL;
+        store->loaded_system_certs = false;
     }
 }
 
@@ -354,11 +339,26 @@ static S2N_RESULT s2n_verify_host_information(struct s2n_connection *conn, X509 
 
     /* Check SubjectAltNames before CommonName as per RFC 6125 6.4.4 */
     s2n_result result = s2n_verify_host_information_san(conn, public_cert, &entry_found);
+
+    /*
+     *= https://www.rfc-editor.org/rfc/rfc6125#section-6.4.4
+     *# As noted, a client MUST NOT seek a match for a reference identifier
+     *# of CN-ID if the presented identifiers include a DNS-ID, SRV-ID,
+     *# URI-ID, or any application-specific identifier types supported by the
+     *# client.
+     */
     if (entry_found) {
         return result;
     }
 
-    /* if no SubjectAltNames of type DNS found, go to the common name. */
+    /*
+     *= https://www.rfc-editor.org/rfc/rfc6125#section-6.4.4
+     *# Therefore, if and only if the presented identifiers do not include a
+     *# DNS-ID, SRV-ID, URI-ID, or any application-specific identifier types
+     *# supported by the client, then the client MAY as a last resort check
+     *# for a string whose form matches that of a fully qualified DNS domain
+     *# name in a Common Name field of the subject field (i.e., a CN-ID).
+     */
     result = s2n_verify_host_information_common_name(conn, public_cert, &entry_found);
     if (entry_found) {
         return result;
@@ -717,6 +717,30 @@ S2N_RESULT s2n_validate_certificate_signature(struct s2n_connection *conn, X509 
     const struct s2n_security_policy *security_policy;
     RESULT_GUARD_POSIX(s2n_connection_get_security_policy(conn, &security_policy));
 
+    /**
+     * We only restrict the signature algorithm on the certificates in the
+     * peer's certificate chain if the certificate_signature_preferences field
+     * is set in the security policy. This is contrary to the RFC, which
+     * specifies that the signatures in the "signature_algorithms" extension
+     * apply to signatures in the certificate chain in certain scenarios, so RFC
+     * compliance would imply validating that the certificate chain signature
+     * algorithm matches one of the algorithms specified in the
+     * "signature_algorithms" extension.
+     *
+     *= https://www.rfc-editor.org/rfc/rfc5246#section-7.4.2
+     *= type=exception
+     *= reason=not implemented due to lack of utility
+     *# If the client provided a "signature_algorithms" extension, then all
+     *# certificates provided by the server MUST be signed by a
+     *# hash/signature algorithm pair that appears in that extension.
+     *
+     *= https://www.rfc-editor.org/rfc/rfc8446#section-4.2.3
+     *= type=exception
+     *= reason=not implemented due to lack of utility
+     *# If no "signature_algorithms_cert" extension is present, then the
+     *# "signature_algorithms" extension also applies to signatures appearing in
+     *# certificates.
+     */
     if (security_policy->certificate_signature_preferences == NULL) {
         return S2N_RESULT_OK;
     }

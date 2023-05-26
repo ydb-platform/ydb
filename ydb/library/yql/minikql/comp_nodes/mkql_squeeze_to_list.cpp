@@ -109,7 +109,7 @@ public:
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSqueezeToListWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), limit->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, limit, statePtr}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, limit, statePtr}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -121,7 +121,7 @@ public:
 
         const auto result = PHINode::Create(valueType, 3U, "result", over);
 
-        const auto state = new LoadInst(statePtr, "state", block);
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
@@ -146,7 +146,7 @@ public:
 
         const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), arg->getType()}, false);
         const auto pushPtr = CastInst::Create(Instruction::IntToPtr, push, PointerType::getUnqual(pushType), "push", block);
-        const auto stop = CallInst::Create(pushPtr, {stateArg, arg}, "stop", block);
+        const auto stop = CallInst::Create(pushType, pushPtr, {stateArg, arg}, "stop", block);
 
         BranchInst::Create(done, more, stop, block);
 
@@ -157,15 +157,15 @@ public:
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto pullType = FunctionType::get(valueType, {stateArg->getType(), ctx.Ctx->getType()}, false);
             const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pull, PointerType::getUnqual(pullType), "pull", block);
-            const auto list = CallInst::Create(pullPtr, {stateArg, ctx.Ctx}, "list", block);
+            const auto list = CallInst::Create(pullType, pullPtr, {stateArg, ctx.Ctx}, "list", block);
             UnRefBoxed(state, ctx, block);
             result->addIncoming(list, block);
         } else {
             const auto ptr = new AllocaInst(valueType, 0U, "ptr", block);
             const auto pullType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), ptr->getType(), ctx.Ctx->getType()}, false);
             const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pull, PointerType::getUnqual(pullType), "pull", block);
-            CallInst::Create(pullPtr, {stateArg, ptr, ctx.Ctx}, "", block);
-            const auto list = new LoadInst(ptr, "list", block);
+            CallInst::Create(pullType, pullPtr, {stateArg, ptr, ctx.Ctx}, "", block);
+            const auto list = new LoadInst(valueType, ptr, "list", block);
             UnRefBoxed(state, ctx, block);
             result->addIncoming(list, block);
         }

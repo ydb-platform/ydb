@@ -14,6 +14,7 @@ target_compile_options(providers-common-udf_resolve PRIVATE
 target_link_libraries(providers-common-udf_resolve PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-digest-md5
   cpp-protobuf-util
   yql-core-file_storage
   library-yql-minikql

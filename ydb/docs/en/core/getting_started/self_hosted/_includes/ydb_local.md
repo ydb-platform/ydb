@@ -4,13 +4,13 @@ This section describes how to deploy a local single-node {{ ydb-short-name }} cl
 
 ## Connection parameters {#conn}
 
-As a result of completing the steps below, you'll get a YDB database running on a local machine that you can connect to using the following:
+As a result of completing the steps described below, you'll get a YDB database running on your local machine, which you can connect to using the following parameters:
 
 - [Endpoint](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
 - [DB path](../../../concepts/connect.md#database): `/Root/test`
 - [Authentication](../../../concepts/auth.md): Anonymous (no authentication)
 
-## Installation {#install}
+## Installing {#install}
 
 Create a working directory. In this directory, run a script to download an archive with the `ydbd` executable file and libraries required for using {{ ydb-short-name }}, as well as a set of scripts and auxiliary files to start and stop a server:
 
@@ -22,7 +22,7 @@ curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 
 ## Starting {#start}
 
-The local YDB server can be started in two modes:
+You can start a local YDB server with a disk or in-memory storage:
 
 {% list tabs %}
 
@@ -64,7 +64,7 @@ To stop the server, run the following command in the working directory:
 
 ## Making queries via the YDB CLI {#cli}
 
-[Install the YDB CLI](../../../reference/ydb-cli/install.md) and make queries as described in [YDB CLI - Getting started](../../cli.md). To do this, use the endpoint and DB path specified [in the beginning of this article](#conn). For example:
+[Install](../../../reference/ydb-cli/install.md) the YDB CLI and run a query, for example:
 
 ```bash
 ydb -e grpc://localhost:2136 -d /Root/test scheme ls

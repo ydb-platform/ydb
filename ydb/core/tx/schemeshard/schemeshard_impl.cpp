@@ -1546,6 +1546,7 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
         NIceDb::TUpdate<Schema::CdcStream::Mode>(alterData->Mode),
         NIceDb::TUpdate<Schema::CdcStream::Format>(alterData->Format),
         NIceDb::TUpdate<Schema::CdcStream::VirtualTimestamps>(alterData->VirtualTimestamps),
+        NIceDb::TUpdate<Schema::CdcStream::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State)
     );
 
@@ -1570,6 +1571,7 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
         NIceDb::TUpdate<Schema::CdcStreamAlterData::Mode>(alterData->Mode),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::Format>(alterData->Format),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::VirtualTimestamps>(alterData->VirtualTimestamps),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::AwsRegion>(alterData->AwsRegion),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State)
     );
 }
@@ -2506,7 +2508,7 @@ void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId path
 
         for (const auto& shard : pqGroup->Shards) {
             for (const auto& pqInfo : shard.second->Partitions) {
-                PersistRemovePersQueue(db, pathId, pqInfo.PqId);
+                PersistRemovePersQueue(db, pathId, pqInfo->PqId);
             }
         }
 
@@ -2539,10 +2541,20 @@ void TSchemeShard::PersistRemovePersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId
 void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardIdx shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo) {
     Y_VERIFY(IsLocalId(pathId));
 
-    db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, pqInfo.PqId).Update(
-        NIceDb::TUpdate<Schema::PersQueues::ShardIdx>(shardIdx.GetLocalId()),
-        NIceDb::TUpdate<Schema::PersQueues::GroupId>(pqInfo.GroupId),
-        NIceDb::TUpdate<Schema::PersQueues::AlterVersion>(pqInfo.AlterVersion));
+    Y_VERIFY(pqInfo.ParentPartitionIds.size() <= 2);
+    auto it = pqInfo.ParentPartitionIds.begin();
+    const auto parent = it != pqInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+    const auto adjacentParent = it != pqInfo.ParentPartitionIds.end() ? (it++).cur->val : Max<ui32>();
+
+    db.Table<Schema::PersQueues>()
+        .Key(pathId.LocalPathId, pqInfo.PqId)
+        .Update(NIceDb::TUpdate<Schema::PersQueues::ShardIdx>(shardIdx.GetLocalId()),
+                NIceDb::TUpdate<Schema::PersQueues::GroupId>(pqInfo.GroupId),
+                NIceDb::TUpdate<Schema::PersQueues::AlterVersion>(pqInfo.AlterVersion),
+                NIceDb::TUpdate<Schema::PersQueues::CreateVersion>(pqInfo.CreateVersion),
+                NIceDb::TUpdate<Schema::PersQueues::Status>(pqInfo.Status),
+                NIceDb::TUpdate<Schema::PersQueues::Parent>(parent),
+                NIceDb::TUpdate<Schema::PersQueues::AdjacentParent>(adjacentParent));
 
     if (pqInfo.KeyRange) {
         if (pqInfo.KeyRange->FromBound) {
@@ -3106,12 +3118,12 @@ void TSchemeShard::PersistOlapStore(NIceDb::TNiceDb& db, TPathId pathId, const T
 
     TString serialized;
     TString serializedSharding;
-    Y_VERIFY(storeInfo.Description.SerializeToString(&serialized));
+    Y_VERIFY(storeInfo.GetDescription().SerializeToString(&serialized));
     Y_VERIFY(storeInfo.Sharding.SerializeToString(&serializedSharding));
 
     if (isAlter) {
         db.Table<Schema::OlapStoresAlters>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::OlapStoresAlters::AlterVersion>(storeInfo.AlterVersion),
+            NIceDb::TUpdate<Schema::OlapStoresAlters::AlterVersion>(storeInfo.GetAlterVersion()),
             NIceDb::TUpdate<Schema::OlapStoresAlters::Description>(serialized),
             NIceDb::TUpdate<Schema::OlapStoresAlters::Sharding>(serializedSharding));
         if (storeInfo.AlterBody) {
@@ -3122,7 +3134,7 @@ void TSchemeShard::PersistOlapStore(NIceDb::TNiceDb& db, TPathId pathId, const T
         }
     } else {
         db.Table<Schema::OlapStores>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::OlapStores::AlterVersion>(storeInfo.AlterVersion),
+            NIceDb::TUpdate<Schema::OlapStores::AlterVersion>(storeInfo.GetAlterVersion()),
             NIceDb::TUpdate<Schema::OlapStores::Description>(serialized),
             NIceDb::TUpdate<Schema::OlapStores::Sharding>(serializedSharding));
     }
@@ -3821,7 +3833,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
             case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
                 Y_VERIFY_S(OlapStores.contains(pathId),
                            "no olap store with id: " << pathId << ", at schemeshard: " << SelfTabletId());
-                result.SetColumnStoreVersion(OlapStores.at(pathId)->AlterVersion);
+                result.SetColumnStoreVersion(OlapStores.at(pathId)->GetAlterVersion());
                 generalVersion += result.GetColumnStoreVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: {
@@ -4379,7 +4391,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
-        HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -4947,36 +4959,25 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
-void TSchemeShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
+void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
 {
-    auto sendReadSetAck = [&]() {
-        auto ack = std::make_unique<TEvTxProcessing::TEvReadSetAck>(*ev->Get(), TabletID()); 
-        ctx.Send(ev->Sender, ack.release());
-    };
-
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvTxProcessing::TEvReadSet"
-                   << " for unknown txId " << txId
-                   << " message " << ev->Get()->Record.ShortDebugString());
-
-        sendReadSetAck();
-
+                   "Got TEvPersQueue::TEvProposeTransactionAttachResult"
+                   << " for unknown txId: " << txId
+                   << " message: " << ev->Get()->Record.ShortDebugString());
         return;
     }
 
-    const TTabletId tabletId(ev->Get()->Record.GetTabletSource());
-    const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
+    TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvProposeTransactionResult but partId is unknown"
+                   "Got TEvPersQueue::TEvProposeTransactionAttachResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());
-
-        sendReadSetAck();
-
         return;
     }
 
@@ -6323,7 +6324,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, const TVector<TShardIdx>& par
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
-    SetPartitioning(pathId, storeInfo->ColumnShards);
+    SetPartitioning(pathId, storeInfo->GetColumnShards());
 }
 
 void TSchemeShard::SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo) {
@@ -6687,6 +6688,10 @@ void TSchemeShard::ChangeDiskSpaceTablesIndexBytes(i64 delta) {
 
 void TSchemeShard::ChangeDiskSpaceTablesTotalBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
+    TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
 
 void TSchemeShard::ChangeDiskSpaceQuotaExceeded(i64 delta) {

@@ -38,18 +38,7 @@ items:
 - name: Пакетная вставка данных
   href: bulk-upsert.md
 - name: Установка режима выполнения транзакции
-  hidden: true
-  items:
-  - name: Обзор
-    href: tx-control.md
-  - name: SerializableReadWrite
-    href: tx-control-serializable-read-write.md
-  - name: OnlineReadOnly
-    href: tx-control-online-read-only.md
-  - name: StaleReadOnly
-    href: tx-control-stale-read-only.md
-  - name: SnapshotReadOnly
-    href: tx-control-snapshot-read-only.md
+  href: tx-control.md
 - name: Диагностика проблем
   items:
   - name: Обзор

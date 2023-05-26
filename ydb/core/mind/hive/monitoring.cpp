@@ -746,7 +746,8 @@ public:
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
-             TTabletTypes::BlobDepot}) {
+             TTabletTypes::BlobDepot,
+             TTabletTypes::ColumnShard}) {
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -1094,7 +1095,8 @@ public:
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
-             TTabletTypes::BlobDepot}) {
+             TTabletTypes::BlobDepot,
+             TTabletTypes::ColumnShard}) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
                    "<td>" << LongToShortTabletName(TTabletTypes::TypeToStr(tabletType)) << "</td>";
@@ -3478,7 +3480,7 @@ class TTxMonEvent_Storage : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     THolder<NMon::TEvRemoteHttpInfo> Event;
-    bool Kinds = true;
+    bool Kinds = false;
 
     TTxMonEvent_Storage(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -3534,6 +3536,11 @@ public:
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
 
+        if (Kinds) {
+            out << "<p><a href=\"?TabletID=" << Self->HiveId << "&page=Storage&kinds=false\">Turn off kinds grouping</a></p>";
+        } else {
+            out << "<p><a href=\"?TabletID=" << Self->HiveId << "&page=Storage&kinds=true\">Turn on kinds grouping</a></p>";
+        }
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         if (Kinds) {

@@ -344,6 +344,9 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
+    TString lookupTable;
+    TString indexName;
+
     auto rightReadMatch = MatchRead<TKqlReadTableBase>(join.RightInput());
     if (!rightReadMatch) {
         if (auto readRangesMatch = MatchRead<TKqlReadTableRangesBase>(join.RightInput())) {
@@ -361,6 +364,12 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                         .To<TKqlKeyInc>().Build()
                         .Build()
                     .Done();
+                if (auto indexRead = read.Maybe<TKqlReadTableIndexRanges>()) {
+                    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+                    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(indexRead.Index().Cast().StringValue());
+                    lookupTable = indexMeta->Name;
+                    indexName = indexRead.Cast().Index().StringValue();
+                }
             } else {
                 return {};
             }
@@ -389,13 +398,10 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
     auto rightTableKeyPrefix = maybeRightTableKeyPrefix.Cast();
 
-    TString lookupTable;
-    TString indexName;
-
     if (auto indexRead = rightRead.Maybe<TKqlReadTableIndex>()) {
         indexName = indexRead.Cast().Index().StringValue();
         lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
-    } else {
+    } else if (!indexName) {
         lookupTable = read.Table().Path().StringValue();
     }
 

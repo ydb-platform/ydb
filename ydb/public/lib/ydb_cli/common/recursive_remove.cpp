@@ -25,6 +25,16 @@ TStatus RemoveTable(TTableClient& client, const TString& path, const TDropTableS
     });
 }
 
+TStatus RemoveColumnStore(TTableClient& client, const TString& path, const TRemoveDirectorySettings& settings) {
+    // This is temporary solution, safe deleting of columnstore is impossible now
+    return client.RetryOperationSync([path, settings](TSession session) {
+        auto execSettings = TExecSchemeQuerySettings().UseClientTimeoutForOperation(settings.UseClientTimeoutForOperation_)
+            .ClientTimeout(settings.ClientTimeout_).OperationTimeout(settings.OperationTimeout_).CancelAfter(settings.CancelAfter_)
+            .Header(settings.Header_).ReportCostInfo(settings.ReportCostInfo_).RequestType(settings.RequestType_).TraceId(settings.TraceId_);
+        return session.ExecuteSchemeQuery("DROP TABLESTORE `" + path + "`", execSettings).ExtractValueSync();
+    });
+}
+
 TStatus RemoveTopic(TTopicClient& client, const TString& path, const TDropTopicSettings& settings) {
     return RetryFunction([&]() -> TStatus {
         return client.DropTopic(path, settings).ExtractValueSync();
@@ -107,6 +117,13 @@ TStatus RemoveDirectoryRecursive(
                 }
                 break;
 
+            case ESchemeEntryType::ColumnStore:
+                if (auto result = Remove(&RemoveColumnStore, tableClient, entry, prompt, settings); !result.IsSuccess()) {
+                    return result;
+                }
+                break;
+
+            case ESchemeEntryType::ColumnTable:
             case ESchemeEntryType::Table:
                 if (auto result = Remove(&RemoveTable, tableClient, entry, prompt, settings); !result.IsSuccess()) {
                     return result;

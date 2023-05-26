@@ -863,6 +863,14 @@ public:
 class TColumnTablesLayout;
 
 struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
+private:
+    TString Name;
+    ui64 NextSchemaPresetId = 1;
+    ui64 NextTtlSettingsPresetId = 1;
+    NKikimrSchemeOp::TColumnStorageConfig StorageConfig;
+    NKikimrSchemeOp::TColumnStoreDescription Description;
+    ui64 AlterVersion = 0;
+public:
     using TPtr = TIntrusivePtr<TOlapStoreInfo>;
 
     class ILayoutPolicy {
@@ -883,11 +891,13 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     protected:
         virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
     };
-
-    ui64 AlterVersion = 0;
+   
     TPtr AlterData;
 
-    NKikimrSchemeOp::TColumnStoreDescription Description;
+    const NKikimrSchemeOp::TColumnStoreDescription& GetDescription() const {
+        return Description;
+    }
+
     NKikimrSchemeOp::TColumnStoreSharding Sharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody;
 
@@ -901,9 +911,40 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     TAggregatedStats Stats;
 
     TOlapStoreInfo() = default;
-    TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description,
+    TOlapStoreInfo(ui64 alterVersion,
             NKikimrSchemeOp::TColumnStoreSharding&& sharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
+
+    static TOlapStoreInfo::TPtr BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody);
+
+    const NKikimrSchemeOp::TColumnStorageConfig& GetStorageConfig() const {
+        return StorageConfig;
+    }
+
+    const TVector<TShardIdx>& GetColumnShards() const {
+        return ColumnShards;
+    }
+
+    ui64 GetAlterVersion() const {
+        return AlterVersion;
+    }
+
+    void ApplySharding(const TVector<TShardIdx>& shardsIndexes) {
+        Y_VERIFY(ColumnShards.size() == shardsIndexes.size());
+        Sharding.ClearColumnShards();
+        for (ui64 i = 0; i < ColumnShards.size(); ++i) {
+            const auto& idx = shardsIndexes[i];
+            ColumnShards[i] = idx;
+            auto* shardInfoProto = Sharding.AddColumnShards();
+            shardInfoProto->SetOwnerId(idx.GetOwnerId());
+            shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
+        }
+    }
+    
+    void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
+    void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
+    bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);
+    bool UpdatePreset(const TString& presetName, const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);
 
     const TAggregatedStats& GetStats() const {
         return Stats;
@@ -947,6 +988,8 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
     }
 
+    static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
+
     bool IsStandalone() const {
         return !OwnedColumnShards.empty();
     }
@@ -985,16 +1028,42 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         TMaybe<TString> ToBound;
 
         void SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const;
+        void DeserializeFromProto(const NKikimrPQ::TPartitionKeyRange& proto);
     };
 
     struct TTopicPartitionInfo {
+        // Partition id
         ui32 PqId = 0;
         ui32 GroupId = 0;
+        // AlterVersion of topic which partition was updated last.
         ui64 AlterVersion = 0;
+        // AlterVersion of topic which partition was created.
+        // For example, it required for generate "timebased" offsets for kinesis protocol.
+        ui64 CreateVersion;
+
+        NKikimrPQ::ETopicPartitionStatus Status = NKikimrPQ::ETopicPartitionStatus::Active;
+
         TMaybe<TKeyRange> KeyRange;
+
+        // Split and merge operations form the partitions graph. Each partition created in this way has a parent
+        // partition. In turn, the parent partition knows about the partitions formed after the split and merge
+        // operations.
+        THashSet<ui32> ParentPartitionIds;
+        THashSet<ui32> ChildPartitionIds;
+
+        void SetStatus(const TActorContext& ctx, ui32 value) {
+            if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&
+                value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
+                Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
+            } else {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Read unknown topic partition status value " << value);
+                Status = NKikimrPQ::ETopicPartitionStatus::Active;
+            }
+        }
     };
 
-    TVector<TTopicPartitionInfo> Partitions;
+    TVector<TAutoPtr<TTopicPartitionInfo>> Partitions;
 
     size_t PartsCount() const {
         return Partitions.size();
@@ -1129,12 +1198,14 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         ui32 PartitionId;
         ui32 GroupId;
         TMaybe<TKeyRange> KeyRange;
+        THashSet<ui32> ParentPartitionIds;
 
-        explicit TPartitionToAdd(ui32 partitionId, ui32 groupId, const TMaybe<TKeyRange>& keyRange = Nothing())
+        explicit TPartitionToAdd(ui32 partitionId, ui32 groupId, const TMaybe<TKeyRange>& keyRange = Nothing(),
+                                 const THashSet<ui32>& parentPartitionIds = {})
             : PartitionId(partitionId)
             , GroupId(groupId)
             , KeyRange(keyRange)
-        {
+            , ParentPartitionIds(parentPartitionIds) {
         }
 
         bool operator==(const TPartitionToAdd& rhs) const {
@@ -1164,11 +1235,41 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
     TTopicInfo::TPtr AlterData; // changes to be applied
     TTabletId BalancerTabletID = InvalidTabletId;
     TShardIdx BalancerShardIdx = InvalidShardIdx;
+    THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*> Partitions;
 
     TString PreSerializedPathDescription; // Cached path description
     TString PreSerializedPartitionsDescription; // Cached partition description
 
     TTopicStats Stats;
+
+    void AddPartition(TShardIdx shardIdx, TTopicTabletInfo::TTopicPartitionInfo* partition) {
+        TTopicTabletInfo::TPtr& pqShard = Shards[shardIdx];
+        if (!pqShard) {
+            pqShard.Reset(new TTopicTabletInfo());
+        }
+        pqShard->Partitions.push_back(partition);
+        Partitions[partition->PqId] = pqShard->Partitions.back().Get();
+    }
+
+    void UpdateSplitMergeGraph(const TTopicTabletInfo::TTopicPartitionInfo& partition) {
+        for (const auto parent : partition.ParentPartitionIds) {
+            auto it = Partitions.find(parent);
+            Y_VERIFY(it != Partitions.end(),
+                     "Partition %" PRIu32 " has parent partition %" PRIu32 " which doesn't exists", partition.GroupId,
+                     parent);
+            it->second->ChildPartitionIds.emplace(partition.PqId);
+        }
+    }
+
+    void InitSplitMergeGraph() {
+        for (const auto& [_, partition] : Partitions) {
+            UpdateSplitMergeGraph(*partition);
+        }
+    }
+
+    bool SupportSplitMerge() {
+        return KeySchema.empty();
+    }
 
     bool FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, TString& error);
     bool FillKeySchema(const TString& tabletConfig);
@@ -1229,6 +1330,15 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         BalancerTabletID = AlterData->BalancerTabletID;
         BalancerShardIdx = AlterData->BalancerShardIdx;
         AlterData.Reset();
+
+        Partitions.clear();
+        for (const auto& [_, shard] : Shards) {
+            for (auto& partition : shard->Partitions) {
+                Partitions[partition->PqId] = partition.Get();
+            }
+        }
+
+        InitSplitMergeGraph();
     }
 };
 
@@ -1300,6 +1410,7 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
@@ -2336,11 +2447,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
 
     static constexpr ui32 MaxInProgressShards = 10;
 
-    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, EState state)
+    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TString& awsRegion, EState state)
         : AlterVersion(version)
         , Mode(mode)
         , Format(format)
         , VirtualTimestamps(vt)
+        , AwsRegion(awsRegion)
         , State(state)
     {}
 
@@ -2354,12 +2466,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
-    static TPtr New(EMode mode, EFormat format, bool vt) {
-        return new TCdcStreamInfo(0, mode, format, vt, EState::ECdcStreamStateInvalid);
+    static TPtr New(EMode mode, EFormat format, bool vt, const TString& awsRegion) {
+        return new TCdcStreamInfo(0, mode, format, vt, awsRegion, EState::ECdcStreamStateInvalid);
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
-        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps());
+        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps(), desc.GetAwsRegion());
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2373,6 +2485,7 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     EMode Mode;
     EFormat Format;
     bool VirtualTimestamps;
+    TString AwsRegion;
     EState State;
 
     TCdcStreamInfo::TPtr AlterData = nullptr;

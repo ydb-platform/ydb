@@ -1278,6 +1278,31 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(JoinPragmaHashJoinMode) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        auto query = Q1_(R"(
+            PRAGMA ydb.HashJoinMode='grace';
+
+            SELECT t1.Value
+                FROM `/Root/Join1_1` AS t1
+                INNER JOIN `/Root/Join1_2` AS t2
+                ON t1.Value == t2.Value;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto explain = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT(explain.GetAst().Contains("GraceJoinCore"));
+    }
+
 }
 
 } // namespace NKqp

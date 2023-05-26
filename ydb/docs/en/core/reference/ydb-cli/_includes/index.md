@@ -2,11 +2,7 @@
 
 The {{ ydb-short-name }} CLI provides software for managing your data in {{ ydb-short-name }}.
 
-To learn how to use the {{ ydb-short-name }} CLI, see [Installing the {{ ydb-short-name }} CLI](../install.md).
-
-When connecting to a database, you need to authenticate. To connect for the first time, you can use the quick recipe from the [Authentication](../../../getting_started/auth.md) section under "Getting started".
-
-Full information about defining DB connection and authentication parameters is given in the [Connecting to a database and authenticating with the {{ ydb-short-name }} CLI](../connect.md) article in this section.
+To use the {{ ydb-short-name }} CLI, first [install](../install.md) it and then set up the [connection and authentication](../connect.md).
 
 For a full description of {{ ydb-short-name }} CLI commands, see the following articles of this section:
 

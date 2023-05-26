@@ -3,6 +3,7 @@
 #include "event_helpers.h"
 #include "partition.h"
 #include "read.h"
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -28,8 +29,6 @@ static constexpr char TMP_REQUEST_MARKER[] = "__TMP__REQUEST__MARKER__";
 static constexpr ui32 CACHE_SIZE = 100_MB;
 static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10_KB;
-
-constexpr const auto InvalidTabletId = Max<ui64>();
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
@@ -78,8 +77,9 @@ struct TChangeNotification {
     ui64 TxId;
 };
 
-static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTabletConfig::TPartition& proto) {
-    if (!proto.HasKeyRange()) {
+static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTabletConfig& config,
+                                                       const NKikimrPQ::TPQTabletConfig::TPartition& proto) {
+    if (!proto.HasKeyRange() || config.GetPartitionKeySchema().empty()) {
         return Nothing();
     }
     return TPartitionKeyRange::Parse(proto.GetKeyRange());
@@ -599,21 +599,6 @@ struct TPersQueue::TReplyToActor {
     TEventBasePtr Event;
 };
 
-struct TPersQueue::TReplyToPipe {
-    using TEventBasePtr = std::unique_ptr<IEventBase>;
-
-    TReplyToPipe(ui64 tabletId, ui64 txId, TEventBasePtr event) :
-        TabletId(tabletId),
-        TxId(txId),
-        Event(std::move(event))
-    {
-    }
-
-    ui64 TabletId;
-    ui64 TxId;
-    TEventBasePtr Event;
-};
-
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
 {
     ReplyPersQueueError(
@@ -652,9 +637,9 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     for (const auto& partition : Config.GetPartitions()) {
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
-            Partitions.emplace(partitionId, TPartitionInfo(
-                ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
-                GetPartitionKeyRange(partition),
+            Partitions.emplace(partitionId,
+                TPartitionInfo(ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
+                GetPartitionKeyRange(Config, partition),
                 true,
                 *Counters
             ));
@@ -873,7 +858,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, false, ctx)),
-            GetPartitionKeyRange(partition),
+            GetPartitionKeyRange(Config, partition),
             false,
             *Counters
         ));
@@ -881,6 +866,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     ConfigInited = true;
 
+    InitProcessingParams(ctx);
     InitializeMeteringSink(ctx);
 
     Y_VERIFY(!NewConfigShouldBeApplied);
@@ -2410,7 +2396,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
         HandleConfigTransaction(ev->Release(), ctx);
         break;
     case NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET:
-        SendProposeTransactionAbort(ActorIdFromProto(event.GetActor()),
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     ctx);
         break;
@@ -2444,7 +2430,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     }
 
     if (TabletState != NKikimrPQ::ENormal) {
-        SendProposeTransactionAbort(ActorIdFromProto(event.GetActor()),
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     ctx);
         return;
@@ -2485,6 +2471,8 @@ void TPersQueue::HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransa
 
 void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvPlanStep");
+
     NKikimrTx::TEvMediatorPlanStep& event = ev->Get()->Record;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
@@ -2499,6 +2487,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCont
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvReadSet");
+
     NKikimrTx::TEvReadSet& event = ev->Get()->Record;
     Y_VERIFY(event.HasTxId());
 
@@ -2525,6 +2515,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvTxProcessing::TEvReadSetAck");
+
     NKikimrTx::TEvReadSetAck& event = ev->Get()->Record;
     Y_VERIFY(event.HasTxId());
 
@@ -2546,6 +2538,14 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorCo
 void TPersQueue::Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorContext& ctx)
 {
     const TEvPQ::TEvTxCalcPredicateResult& event = *ev->Get();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                "Tablet " << TabletID() <<
+                " Handle TEvPQ::TEvTxCalcPredicateResult" <<
+                " Step " << event.Step <<
+                " TxId " << event.TxId <<
+                " Partition " << event.Partition <<
+                " Predicate " << (event.Predicate ? "true" : "false"));
 
     auto tx = GetTransaction(ctx, event.TxId);
     if (!tx) {
@@ -2579,6 +2579,8 @@ void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const 
 
 void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvPQ::TEvTxCommitDone");
+
     const TEvPQ::TEvTxCommitDone& event = *ev->Get();
 
     auto tx = GetTransaction(ctx, event.TxId);
@@ -2665,24 +2667,25 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         EvProposeTransactionQueue.pop_front();
 
         const NKikimrPQ::TEvProposeTransaction& event = front->Record;
-
         TDistributedTransaction& tx = Txs[event.GetTxId()];
+
         switch (tx.State) {
-        case NKikimrPQ::TTransaction::UNKNOWN: {
-            tx.OnProposeTransaction(event, GetAllowedStep());
+        case NKikimrPQ::TTransaction::UNKNOWN:
+            tx.OnProposeTransaction(event, GetAllowedStep(),
+                                    TabletID());
             CheckTxState(ctx, tx);
             break;
-        }
-        case NKikimrPQ::TTransaction::PREPARING: {
-            break;
-        }
-        case NKikimrPQ::TTransaction::PREPARED: {
+        case NKikimrPQ::TTransaction::PREPARING:
+        case NKikimrPQ::TTransaction::PREPARED:
+            //
+            // the sender re-sent the TEvProposeTransaction. the actor ID could have changed. you need to
+            // update the ID in the transaction and schedule a response to the new actor
+            //
+            tx.SourceActor = ActorIdFromProto(event.GetSourceActor());
             ScheduleProposeTransactionResult(tx);
             break;
-        }
-        default: {
+        default:
             Y_FAIL();
-        }
         }
     }
 }
@@ -2733,10 +2736,6 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
                                    " Transaction already planned for step " << tx.Step <<
                                    ", Step: " << step <<
                                    ", TxId: " << txId);
-
-                        if (tx.State > NKikimrPQ::TTransaction::PLANNING) {
-                            SendEvProposeTransactionResult(ctx, tx);
-                        }
                     }
                 } else {
                     LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
@@ -2838,11 +2837,11 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
 
-    if (tx.SourceTablet != InvalidTabletId) {
-        RepliesToPipe.emplace_back(tx.SourceTablet, tx.TxId, std::move(event));
-    } else {
-        RepliesToActor.emplace_back(tx.SourceActor, std::move(event));
+    if (ProcessingParams) {
+        event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
+
+    RepliesToActor.emplace_back(tx.SourceActor, std::move(event));
 }
 
 void TPersQueue::SchedulePlanStepAck(ui64 step,
@@ -2875,14 +2874,16 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
     Y_VERIFY(data.SerializeToString(&body));
 
     for (ui64 receiverId : tx.Receivers) {
-        auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(tx.Step,
-                                                                   tx.TxId,
-                                                                   TabletID(),
-                                                                   receiverId,
-                                                                   TabletID(),
-                                                                   body,
-                                                                   0);
-        SendToPipe(receiverId, tx, std::move(event), ctx);
+        if (receiverId != TabletID()) {
+            auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(tx.Step,
+                                                                       tx.TxId,
+                                                                       TabletID(),
+                                                                       receiverId,
+                                                                       TabletID(),
+                                                                       body,
+                                                                       0);
+            SendToPipe(receiverId, tx, std::move(event), ctx);
+        }
     }
 
     tx.ReadSetAcks.clear();
@@ -2967,11 +2968,8 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
     result->Record.SetTxId(tx.TxId);
     result->Record.SetStep(tx.Step);
 
-    if (tx.SourceTablet != InvalidTabletId) {
-        SendToPipe(tx.SourceTablet, tx, std::move(result), ctx);
-    } else {
-        ctx.Send(tx.SourceActor, std::move(result));
-    }
+
+    ctx.Send(tx.SourceActor, std::move(result));
 }
 
 void TPersQueue::SendToPipe(ui64 tabletId,
@@ -3207,26 +3205,10 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
 
 void TPersQueue::SendReplies(const TActorContext& ctx)
 {
-    SendRepliesToActors(ctx);
-    SendRepliesToPipes(ctx);
-}
-
-void TPersQueue::SendRepliesToActors(const TActorContext& ctx)
-{
     for (auto& [actorId, event] : RepliesToActor) {
         ctx.Send(actorId, event.release());
     }
     RepliesToActor.clear();
-}
-
-void TPersQueue::SendRepliesToPipes(const TActorContext& ctx)
-{
-    for (auto& [tabletId, txId, event] : RepliesToPipe) {
-        auto* tx = GetTransaction(ctx, txId);
-        Y_VERIFY(tx);
-        SendToPipe(tabletId, *tx, std::move(event), ctx);
-    }
-    RepliesToPipe.clear();
 }
 
 void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
@@ -3238,6 +3220,15 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
         CheckTxState(ctx, *tx);
     }
     ChangedTxs.clear();
+}
+ 
+void TPersQueue::InitProcessingParams(const TActorContext& ctx)
+{
+    auto appdata = AppData(ctx);
+    const ui32 domainId = appdata->DomainsInfo->GetDomainUidByTabletId(TabletID());
+    Y_VERIFY(domainId != appdata->DomainsInfo->BadDomainId);
+    const auto& domain = appdata->DomainsInfo->GetDomain(domainId);
+    ProcessingParams = ExtractProcessingParams(domain);
 }
 
 bool TPersQueue::AllTransactionsHaveBeenProcessed() const
@@ -3285,7 +3276,6 @@ TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
                           ctx.SelfID,
                           CacheActor,
                           topicConverter,
-                          IsLocalDC,
                           DCId,
                           IsServerless,
                           config,
@@ -3319,7 +3309,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
         Partitions.emplace(std::piecewise_construct,
                            std::forward_as_tuple(partitionId),
                            std::forward_as_tuple(actorId,
-                                                 GetPartitionKeyRange(partition),
+                                                 GetPartitionKeyRange(config, partition),
                                                  true,
                                                  *Counters));
 
@@ -3426,6 +3416,28 @@ void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
     }
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx)
+{
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    NKikimrProto::EReplyStatus status = NKikimrProto::NODATA;
+
+    auto tx = GetTransaction(ctx, txId);
+    if (tx) {
+        //
+        // the actor's ID could have changed from the moment he sent the TEvProposeTransaction. you need to
+        // update the actor ID in the transaction
+        //
+        // if the transaction has progressed beyond WAIT_RS, then a response has been sent to the sender
+        //
+        tx->SourceActor = ev->Sender;
+        if (tx->State <= NKikimrPQ::TTransaction::WAIT_RS) {
+            status = NKikimrProto::OK;
+        }
+    }
+
+    ctx.Send(ev->Sender, new TEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
@@ -3463,6 +3475,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         default:
             return false;
     }

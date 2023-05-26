@@ -123,6 +123,14 @@
             ]
         },
         {
+            "Name": "TKqlReadTableIndexRanges",
+            "Base": "TKqlReadTableRangesBase",
+            "Match": {"Type": "Callable", "Name": "TKqlReadTableIndexRanges"},
+            "Children": [
+                {"Index": 5, "Name": "Index", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpReadOlapTableRanges",
             "Base": "TKqpReadOlapTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqpReadOlapTableRanges"}
@@ -460,6 +468,28 @@
             "Children": [
                 {"Index": 0, "Name": "Column", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TKqpOlapJsonOperationBase",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 0, "Name": "Column", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Path", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapJsonValue",
+            "Base": "TKqpOlapJsonOperationBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapJsonValue"},
+            "Children": [
+                {"Index": 2, "Name": "ReturningType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOlapJsonExists",
+            "Base": "TKqpOlapJsonOperationBase",
+            "Match": {"Type": "Callable", "Name": "KqpOlapJsonExists"}
         },
         {
             "Name": "TKqpOlapAggOperation",

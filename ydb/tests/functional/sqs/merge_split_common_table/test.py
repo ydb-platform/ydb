@@ -30,7 +30,7 @@ class TestSqsSplitMergeTables(KikimrSqsTestBase):
         nodes = len(self.cluster.nodes)
         leaders = []
         for node_index in range(nodes):
-            counters = self._get_counters(node_index, 'utils', counters_format='json')
+            counters = self._get_counters(node_index, 'utils', counters_format='json', dump_to_log=False)
             labels = {
                 'activity': 'SQS_QUEUE_LEADER_ACTOR',
                 'sensor': 'ActorsAliveByActivity'
@@ -69,12 +69,22 @@ class TestSqsSplitMergeTables(KikimrSqsTestBase):
             ),
         ))
 
+    def get_lines_count(self, table_path):
+        settings = ydb.RetrySettings()
+        settings.max_retries = 1
+        session = ydb.retry_operation_sync(lambda: self._driver.table_client.session().create(), retry_settings=settings)
+        res = session.transaction().execute(f'select count(*) as rows_cnt FROM `{table_path}`', commit_tx=True)
+        return res[0].rows[0]["rows_cnt"]
+
     def force_split(self, table_path):
         logging.info(f'force split {table_path}...')
         settings = ydb.RetrySettings()
         settings.max_retries = 1
         session = ydb.retry_operation_sync(lambda: self._driver.table_client.session().create(), retry_settings=settings)
-        session.transaction().execute(f'update `{table_path}` SET {self.__column_to_force_split}="{random_string(5*1024*1024)}"', commit_tx=True)
+
+        lines = self.get_lines_count(table_path)
+        row_size = int(45 * 1024 * 1024 / lines)
+        session.transaction().execute(f'update `{table_path}` SET {self.__column_to_force_split}="{random_string(row_size)}"', commit_tx=True)
 
     def get_nodes_with_leaders(self):
         leaders_per_node = self.get_leaders_per_nodes()
@@ -122,8 +132,8 @@ class TestSqsSplitMergeTables(KikimrSqsTestBase):
             leaders_per_node = self.get_leaders_per_nodes()
             nodes_with_leaders = len(list(filter(bool, leaders_per_node)))
             cur_partitions = self.get_partitions(balancing_table_path)
-            logging.debug(f'wait merge... partitions={cur_partitions}, nodes_with_leaders={nodes_with_leaders} all_leaders={sum(leaders_per_node)} : {leaders_per_node}')
-            if cur_partitions < partitions and nodes_with_leaders <= cur_partitions and sum(leaders_per_node) == queues_count:
+            logging.info(f'wait merge... partitions={cur_partitions}, nodes_with_leaders={nodes_with_leaders} all_leaders={sum(leaders_per_node)} : {leaders_per_node}')
+            if cur_partitions == 1 and nodes_with_leaders == 1 and sum(leaders_per_node) == queues_count:
                 break
             time.sleep(5)
 

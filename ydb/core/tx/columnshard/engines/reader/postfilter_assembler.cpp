@@ -12,15 +12,6 @@ bool TAssembleBatch::DoExecuteImpl() {
     Y_VERIFY(BatchConstructor.GetColumnsCount());
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-    if (Filter->GetInactiveHeadSize() > Filter->GetInactiveTailSize()) {
-        options.SetRecordsCountLimit(Filter->Size() - Filter->GetInactiveHeadSize())
-            .SetForwardAssemble(false);
-        Filter->CutInactiveHead();
-    } else {
-        options.SetRecordsCountLimit(Filter->Size() - Filter->GetInactiveTailSize());
-        Filter->CutInactiveTail();
-    }
-
     auto addBatch = BatchConstructor.Assemble(options);
     Y_VERIFY(addBatch);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
@@ -32,7 +23,7 @@ bool TAssembleBatch::DoExecuteImpl() {
 }
 
 bool TAssembleBatch::DoApply(TGranulesFillingContext& owner) const {
-    TBatch& batch = owner.GetBatchInfo(BatchNo);
+    TBatch& batch = owner.GetBatchInfo(BatchAddress);
     batch.InitBatch(FullBatch);
     return true;
 }
@@ -43,14 +34,14 @@ TAssembleBatch::TAssembleBatch(TPortionInfo::TPreparedBatchData&& batchConstruct
     : TBase(processor)
     , BatchConstructor(batchConstructor)
     , FullColumnsOrder(fullColumnsOrder)
-    , Filter(currentBatch.GetFilter())
-    , FilterBatch(currentBatch.GetFilterBatch())
-    , BatchNo(currentBatch.GetBatchNo())
+    , Filter(currentBatch.GetFetchedInfo().GetFilter())
+    , FilterBatch(currentBatch.GetFetchedInfo().GetFilterBatch())
+    , BatchAddress(currentBatch.GetBatchAddress())
 {
     TBase::SetPriority(TBase::EPriority::High);
-    Y_VERIFY(currentBatch.GetFilter());
-    Y_VERIFY(currentBatch.GetFilterBatch());
-    Y_VERIFY(!currentBatch.GetFilteredBatch());
+    Y_VERIFY(currentBatch.GetFetchedInfo().GetFilter());
+    Y_VERIFY(currentBatch.GetFetchedInfo().GetFilterBatch());
+    Y_VERIFY(!currentBatch.GetFetchedInfo().GetFilteredBatch());
 }
 
 }

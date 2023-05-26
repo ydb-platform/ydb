@@ -146,16 +146,16 @@ enum ExecMode {
     EXEC_MODE_PARSE = 10;
     EXEC_MODE_VALIDATE = 20;
     EXEC_MODE_EXPLAIN = 30;
-    reserved 4;
-    EXEC_MODE_EXECUTE = 3;
+    reserved 40;
+    EXEC_MODE_EXECUTE = 50;
 }
 
 enum StatsMode {
     STATS_MODE_UNSPECIFIED = 0;
-    STATS_MODE_NONE = 1;       // Stats collection is disabled
-    STATS_MODE_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table
-    STATS_MODE_FULL = 3;       // Add execution stats and plan on top of STATS_MODE_BASIC
-    STATS_MODE_PROFILE = 4;    // Detailed execution stats including stats for individual tasks and channels
+    STATS_MODE_NONE = 10;       // Stats collection is disabled
+    STATS_MODE_BASIC = 20;      // Aggregated stats of reads, updates and deletes per table
+    STATS_MODE_FULL = 30;       // Add execution stats and plan on top of STATS_MODE_BASIC
+    STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
 message ExecuteQueryRequest {
@@ -172,9 +172,9 @@ message ExecuteQueryRequest {
     reserved 7; // idempotency_key
     StatsMode stats_mode = 8;
 
-    // For queries with multiple result sets, some of them may be computed in parallel.
+    // For queries with multiple result sets, some of them may be computed concurrently.
     // If true, parts of different results sets may be interleaved in response stream.
-    bool parallel_result_sets = 9;
+    bool concurrent_result_sets = 9;
 }
 
 message ResultSetMeta {
@@ -200,8 +200,14 @@ message ExecuteQueryResponsePart {
     Ydb.TableStats.QueryStats exec_stats = 7;
 }
 
-message SavedScriptId {
+message VersionedScriptId {
+    // Script id
     string id = 1 [(Ydb.length).le = 1024];
+
+    // Script revision.
+    // If specified in method parameters, the real script revision
+    // before modification will be compared with this revision
+    // and request will be cancelled if they don't match.
     int64 revision = 2 [(Ydb.value) = ">= 0"];
 }
 
@@ -215,7 +221,7 @@ message ExecuteScriptRequest {
 
     oneof script {
         QueryContent script_content = 5;
-        SavedScriptId script_id = 6;
+        VersionedScriptId script_id = 6;
     }
 
     map<string, TypedValue> parameters = 7;
@@ -241,10 +247,8 @@ message ExecuteScriptMetadata {
     string execution_id = 1 [(Ydb.length).le = 1024];
     ExecStatus exec_status = 2;
 
-    oneof script {
-        QueryContent script_content = 3;
-        SavedScriptId script_id = 4;
-    }
+    QueryContent script_content = 3;
+    VersionedScriptId script_id = 4;
 
     map<string, string> attributes = 5 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
     repeated ResultSetMeta result_set_meta = 6;
@@ -275,20 +279,21 @@ message FetchScriptResultsResponse {
     string next_fetch_token = 5 [(Ydb.length).le = 1024];
 }
 
-message SavedScript {
-    SavedScriptId id = 1;
-    QueryContent content = 2;
+message Script {
+    VersionedScriptId script_id = 1;
+    QueryContent script_content = 2;
 }
 
 message SaveScriptRequest {
-    QueryContent content = 1;
+    VersionedScriptId script_id = 1; // If specified, set new content to existing script
+    QueryContent script_content = 2;
 }
 
 message SaveScriptResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
 
-    SavedScriptId script_id = 3;
+    VersionedScriptId script_id = 3;
 }
 
 message ListScriptsRequest {
@@ -300,12 +305,12 @@ message ListScriptsResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
 
-    repeated SavedScript scripts = 3;
+    repeated Script scripts = 3;
     string next_page_token = 4 [(Ydb.length).le = 1024];
 }
 
 message DeleteScriptRequest {
-    SavedScriptId script_id = 1;
+    VersionedScriptId script_id = 1;
 }
 
 message DeleteScriptResponse {

@@ -1,0 +1,55 @@
+name: test-python
+description: Run functional Python tests
+inputs:
+  log_suffix:
+    required: true
+    type: string
+  test_label_regexp:
+    required: false
+    type: string
+  aws_key_id:
+    required: true
+    type: string
+  aws_key_value: 
+    required: true
+    type: string
+  aws_bucket:
+    required: true
+    type: string
+  aws_endpoint:
+    required: true
+    type: string
+    
+runs:
+  using: "composite"
+  steps:
+  - name: Test
+    shell: bash
+    run: |
+      export source_root=$(pwd)
+      export build_root=$(pwd)/../build/
+      mkdir -p ../artifacts
+      rm -rf ../artifacts/*
+      source ${source_root}/ydb/tests/oss/launch/prepare.sh
+
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+      cd ${source_root}/ydb/tests/functional/
+      export suite=''
+      if [[ "${{inputs.test_label_regexp}}" != "" ]]; then
+        suite="--suite ${{inputs.test_label_regexp}}"
+      fi
+      python ${source_root}/ydb/tests/oss/launch/launch.py --test-dir ${source_root}/ydb/tests/functional \
+      --xml-dir ${source_root}/ydb/tests/functional/test-results/xml $suite | \
+      sed -e 's/\x1b\[[0-9;]*m//g' | \
+      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-pytest-stdout.gz) | \
+      tee -a $GITHUB_STEP_SUMMARY
+  - name: Upload S3
+    uses: shallwefootball/s3-upload-action@master
+    if: always()
+    with:
+      aws_key_id: ${{inputs.aws_key_id}}
+      aws_secret_access_key: ${{inputs.aws_key_value}}
+      aws_bucket: ${{inputs.aws_bucket}}
+      source_dir: ../artifacts
+      destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
+      endpoint: ${{inputs.aws_endpoint}}

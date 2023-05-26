@@ -25,6 +25,7 @@ target_link_libraries(ydb-services-ydb PUBLIC
   ydb-core-formats
   ydb-core-grpc_services
   core-grpc_services-base
+  core-grpc_services-auth_processor
   ydb-core-grpc_streaming
   ydb-core-protos
   ydb-core-scheme

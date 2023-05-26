@@ -50,7 +50,7 @@ inline bool PrepareUrl(const std::string_view& keyStr, TUri& parser) {
     }; \
     END_SIMPLE_ARROW_UDF(udfName, udfName##KernelExec::Do);
 
-SIMPLE_UDF(TNormalize, TOptional<char*>(TOptional<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TNormalize, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);
     TUri url;
     const bool success = PrepareUrl(args[0].AsStringRef(), url);
@@ -58,6 +58,21 @@ SIMPLE_UDF(TNormalize, TOptional<char*>(TOptional<char*>)) {
                 ? valueBuilder->NewString(url.PrintS(TUri::FlagNoFrag))
                 : TUnboxedValue();
 }
+struct TNormalizeKernelExec : public TUnaryKernelExec<TNormalizeKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        if (!arg) {
+            return sink(TBlockItem());
+        }
+        TUri url;
+        const bool success = PrepareUrl(arg.AsStringRef(), url);
+        if (success) {
+            return sink(TBlockItem(TStringRef(url.PrintS(TUri::FlagNoFrag))));
+        }
+        sink(TBlockItem());
+    }
+};
+END_SIMPLE_ARROW_UDF(TNormalize, TNormalizeKernelExec::Do);
 
 BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetScheme, char*(TAutoMap<char*>)) {
     const std::string_view url(args[0].AsStringRef());

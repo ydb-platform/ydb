@@ -3,7 +3,6 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
@@ -599,8 +598,10 @@ message Consumer {
     // All messages with smaller server written_at timestamp will be skipped.
     google.protobuf.Timestamp read_from = 3;
     reserved 4; // supported_format
+
     // List of supported codecs by this consumer.
     // supported_codecs on topic must be contained inside this list.
+    // If empty, codec compatibility check for the consumer is disabled.
     SupportedCodecs supported_codecs = 5;
 
     // Attributes of consumer
@@ -632,8 +633,10 @@ message AlterConsumer {
     // All messages with smaller server written_at timestamp will be skipped.
     google.protobuf.Timestamp set_read_from = 3;
     reserved 4; // supported_format
+
     // List of supported codecs by this consumer.
     // supported_codecs on topic must be contained inside this list.
+    // If empty, codec compatibility check for the consumer is disabled.
     SupportedCodecs set_supported_codecs = 5;
 
     // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
@@ -675,6 +678,7 @@ enum MeteringMode {
 // Create topic request sent from client to server.
 message CreateTopicRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+
     // Topic path.
     string path = 2;
 
@@ -687,17 +691,22 @@ message CreateTopicRequest {
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
     google.protobuf.Duration retention_period = 4;
+    
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Zero value means infinite limit.
     int64 retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
 
     reserved 6; // supported_format.
+
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
+    // If empty, codec compatibility check for the topic is disabled.
     SupportedCodecs supported_codecs = 7;
+
     // Partition write speed in bytes per second. Must be less than database limit.
     // Zero value means default limit: 1 MB per second.
     int64 partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
+
     // Burst size for write in partition, in bytes. Must be less than database limit.
     // Zero value means default limit: 1 MB.
     int64 partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
@@ -751,6 +760,7 @@ message DescribeTopicResult {
 
     // Settings for partitioning
     PartitioningSettings partitioning_settings = 2;
+    
     // Partitions description.
     repeated PartitionInfo partitions = 3;
 
@@ -759,17 +769,22 @@ message DescribeTopicResult {
     //
     // How long data in partition should be stored.
     google.protobuf.Duration retention_period = 4;
+    
     // How much data in partition should be stored.
     // Zero value means infinite limit.
     int64 retention_storage_mb = 5;
 
     reserved 6; // supported_format.
+
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
+    // If empty, codec compatibility check for the topic is disabled.
     SupportedCodecs supported_codecs = 7;
+    
     // Partition write speed in bytes per second.
     // Zero value means default limit: 1 MB per second.
     int64 partition_write_speed_bytes_per_second = 8;
+
     // Burst size for write in partition, in bytes.
     // Zero value means default limit: 1 MB.
     int64 partition_write_burst_bytes = 9;
@@ -917,16 +932,20 @@ message AlterTopicRequest {
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
     google.protobuf.Duration set_retention_period = 4;
+    
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     optional int64 set_retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
 
     reserved 6; // supported_format.
+
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
+    // If empty, codec compatibility check for the topic is disabled.
     SupportedCodecs set_supported_codecs = 7;
 
     // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
     optional int64 set_partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
+    
     // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
     optional int64 set_partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
 

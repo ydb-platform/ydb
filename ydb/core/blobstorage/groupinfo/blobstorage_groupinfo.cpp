@@ -359,7 +359,7 @@ bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskID& vdisk) const {
     if (vdisk.FailRealm >= FailRealms.size()) {
         return false;
     }
-    if (vdisk.FailDomain >= TotalFailDomains) {
+    if (vdisk.FailDomain >= GetNumFailDomainsPerFailRealm()) {
         return false;
     }
     if (vdisk.VDisk >= GetNumVDisksPerFailDomain()) {
@@ -372,7 +372,7 @@ bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskIdShort& vdisk) con
     if (vdisk.FailRealm >= FailRealms.size()) {
         return false;
     }
-    if (vdisk.FailDomain >= TotalFailDomains) {
+    if (vdisk.FailDomain >= GetNumFailDomainsPerFailRealm()) {
         return false;
     }
     if (vdisk.VDisk >= GetNumVDisksPerFailDomain()) {

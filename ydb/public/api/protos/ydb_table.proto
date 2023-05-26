@@ -137,7 +137,10 @@ message ChangefeedMode {
 message ChangefeedFormat {
     enum Format {
         FORMAT_UNSPECIFIED = 0;
+        // Change record in JSON format for common (row oriented) tables
         FORMAT_JSON = 1;
+        // Change record in JSON format for document (DynamoDB-compatible) tables
+        FORMAT_DYNAMODB_STREAMS_JSON = 2;
     }
 }
 
@@ -156,6 +159,8 @@ message Changefeed {
     bool initial_scan = 6;
     // Attributes. Total size is limited to 10 KB.
     map<string, string> attributes = 7 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
+    // Value that will be emitted in the `awsRegion` field of the record in DYNAMODB_STREAMS_JSON format
+    string aws_region = 8 [(length).le = 128];
 }
 
 message ChangefeedDescription {
@@ -186,6 +191,8 @@ message ChangefeedDescription {
     bool virtual_timestamps = 5;
     // Attributes
     map<string, string> attributes = 6;
+    // Value that will be emitted in the `awsRegion` field of the record in DYNAMODB_STREAMS_JSON format
+    string aws_region = 7;
 }
 
 message StoragePool {
@@ -502,7 +509,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering name for table
+    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
     string tiering = 18;
 }
 
@@ -699,6 +706,8 @@ message DescribeTableResult {
     ReadReplicasSettings read_replicas_settings = 14;
     // List of changefeeds
     repeated ChangefeedDescription changefeeds = 15;
+    // Tiering rules name
+    string tiering = 16;
 }
 
 message Query {

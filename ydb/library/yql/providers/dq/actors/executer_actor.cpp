@@ -54,6 +54,8 @@ public:
         , Counters(counters) // root, component=dq
         , LongWorkersAllocationCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("LongWorkersAllocation"))
         , ExecutionTimeoutCounter(Counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("ExecutionTimeout", /*derivative=*/ true))
+        , WorkersAllocationFailTimeout(TDuration::MilliSeconds(Settings->_LongWorkersAllocationFailTimeout.Get().GetOrElse(TDqSettings::TDefault::LongWorkersAllocationFailTimeout)))
+        , WorkersAllocationWarnTimeout(TDuration::MilliSeconds(Settings->_LongWorkersAllocationWarnTimeout.Get().GetOrElse(TDqSettings::TDefault::LongWorkersAllocationWarnTimeout)))
         , RequestStartTime(requestStartTime)
         , ExecutionHistogram(Counters->GetSubgroup("component", "ServiceProxyActorHistograms")->GetHistogram("ExecutionTime", ExponentialHistogram(10, 3, 1)))
         , AllocationHistogram(Counters->GetSubgroup("component", "ServiceProxyActorHistograms")->GetHistogram("WorkersAllocationTime", ExponentialHistogram(10, 2, 1)))
@@ -233,7 +235,11 @@ private:
         Timeout = tasks.size() == 1
             ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
             : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
-        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeout set to: " << ToString(Timeout);
+        
+        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: " 
+            << ToString(Timeout) << " (global), "
+            << ToString(WorkersAllocationFailTimeout) << " (workers allocation fail), "
+            << ToString(WorkersAllocationWarnTimeout) << " (workers allocation warn) ";
 
         if (Timeout) {
             if (StartTime - RequestStartTime > Timeout) {
@@ -436,16 +442,15 @@ private:
     }
 
     void MaybeFailOnWorkersAllocation() {
-        if (TInstant::Now() - StartTime >
-            TDuration::MilliSeconds(Settings->_LongWorkersAllocationFailTimeout.Get().GetOrElse(TDuration::Seconds(600).MilliSeconds())))
+        if (TInstant::Now() - StartTime > WorkersAllocationFailTimeout)
         {
+            YQL_CLOG(ERROR, ProviderDq) << "Timeout on workers allocation has reached";
             Send(SelfId(), new TEvents::TEvBootstrap);
         }
     }
 
     void MaybeSetAllocationWarnCounter() {
-        if (TInstant::Now() - StartTime >
-            TDuration::MilliSeconds(Settings->_LongWorkersAllocationWarnTimeout.Get().GetOrElse(TDuration::Seconds(30).MilliSeconds())))
+        if (TInstant::Now() - StartTime > WorkersAllocationWarnTimeout)
         {
             if (!AllocationLongWait) {
                 AllocationLongWait = 1;
@@ -471,6 +476,8 @@ private:
 
     THashMap<ui32, std::tuple<Yql::DqsProto::TWorkerInfo, ui64>> WorkerInfo; // DEBUG
     TDuration Timeout;
+    TDuration WorkersAllocationFailTimeout;
+    TDuration WorkersAllocationWarnTimeout;
     TSchedulerCookieHolder ExecutionTimeoutCookieHolder;
     TSchedulerCookieHolder CheckStateCookieHolder;
     bool WorkersAllocated = false;

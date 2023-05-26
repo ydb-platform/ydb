@@ -110,7 +110,6 @@ private:
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             // Overide default forget action which terminate this actor on client disconnect
             hFunc(TRpcServices::TEvForgetOperation, HandleForget);
-            hFunc(TEvSubscribeGrpcCancel, HandleSubscribeiGrpcCancel);
             default: {
                 return ReplyFinishStream(TStringBuilder()
                     << "Unexpected event received in TStreamExecuteYqlScriptRPC::StateWork: " << ev->GetTypeRewrite());
@@ -343,7 +342,7 @@ private:
     }
 
     void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
+        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost, ActorId: " << SelfId());
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
@@ -442,11 +441,6 @@ private:
     }
 
 private:
-    void HandleSubscribeiGrpcCancel(TEvSubscribeGrpcCancel::TPtr& ev) {
-        auto as = TActivationContext::ActorSystem();
-        PassSubscription(ev->Get(), Request_.get(), as);
-    }
-
     const ui64 RpcBufferSize_;
 
     TDuration InactiveClientTimeout_;

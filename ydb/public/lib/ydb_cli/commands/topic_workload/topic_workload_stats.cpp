@@ -5,33 +5,33 @@ using namespace NYdb::NConsoleClient;
 TTopicWorkloadStats::TTopicWorkloadStats()
     : WriteBytes(0)
     , WriteMessages(0)
-    , WriteTimeHist(60000, 2)
-    , InflightMessages(0)
-    , LagMessages(0)
-    , LagTimeHist(60000, 2)
+    , WriteTimeHist(HighestTrackableTime, 2)
+    , InflightMessagesHist(HighestTrackableMessageCount, 2)
+    , LagMessagesHist(HighestTrackableMessageCount, 2)
+    , LagTimeHist(HighestTrackableTime, 2)
     , ReadBytes(0)
     , ReadMessages(0)
-    , FullTimeHist(60000, 5)
+    , FullTimeHist(HighestTrackableTime, 5)
 {
 }
 
-void TTopicWorkloadStats::AddWriterEvent(ui64 messageSize, ui64 writeTime, ui64 inflightMessages)
+void TTopicWorkloadStats::AddWriterEvent(const WriterEvent& event)
 {
     WriteMessages++;
-    WriteBytes += messageSize;
-    WriteTimeHist.RecordValue(writeTime);
-    InflightMessages = Max(InflightMessages, inflightMessages);
+    WriteBytes += event.MessageSize;
+    WriteTimeHist.RecordValue(Min(event.WriteTime, HighestTrackableTime));
+    InflightMessagesHist.RecordValue(Min(event.InflightMessages, HighestTrackableMessageCount));
 }
 
-void TTopicWorkloadStats::AddReaderEvent(ui64 messageSize, ui64 fullTime)
+void TTopicWorkloadStats::AddReaderEvent(const ReaderEvent& event)
 {
     ReadMessages++;
-    ReadBytes += messageSize;
-    FullTimeHist.RecordValue(fullTime);
+    ReadBytes += event.MessageSize;
+    FullTimeHist.RecordValue(Min(event.FullTime, HighestTrackableTime));
 }
 
-void TTopicWorkloadStats::AddLagEvent(ui64 lagMessages, ui64 lagTime)
+void TTopicWorkloadStats::AddLagEvent(const LagEvent& event)
 {
-    LagMessages = Max(LagMessages, lagMessages);
-    LagTimeHist.RecordValue(lagTime);
+    LagMessagesHist.RecordValue(Min(event.LagMessages, HighestTrackableMessageCount));
+    LagTimeHist.RecordValue(Min(event.LagTime, HighestTrackableTime));
 }

@@ -137,6 +137,8 @@ public:
 
     // This function is used in core optimizers to check either the node can be used as input multiple times or not
     virtual bool IsPersistent(const TExprNode& node) = 0;
+    virtual bool IsRead(const TExprNode& node) = 0;
+    virtual bool IsWrite(const TExprNode& node) = 0;
 
     // Right! or worlds are written to syncList
     virtual bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) = 0;

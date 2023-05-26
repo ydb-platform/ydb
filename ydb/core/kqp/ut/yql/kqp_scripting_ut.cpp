@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         NDataShard::gSkipReadIteratorResultFailPoint.Disable();
         int count = 60;
-        while (counters.GetActiveSessionActors()->Val() != 1 && count) {
+        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
             count--;
             Sleep(TDuration::Seconds(1));
         }
@@ -597,6 +597,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             )",
             TExecuteYqlRequestSettings()
                 .ClientTimeout(TDuration::MilliSeconds(i))
+                .UseClientTimeoutForOperation(false)
             ).GetValueSync();
 
             if (it.IsSuccess()) {
@@ -617,8 +618,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
                 UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
             }
         }
-// We unable to close worker actor on timeout right now
-#if 0
+
         int count = 60;
         while (counters.GetActiveSessionActors()->Val() != 0 && count) {
             Cerr << "SESSIONS: " << counters.GetActiveSessionActors()->Val() << Endl;
@@ -627,7 +627,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
-#endif
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanScalar) {

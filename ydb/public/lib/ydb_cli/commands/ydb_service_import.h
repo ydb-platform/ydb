@@ -51,12 +51,14 @@ class TCommandImportFileBase : public TYdbCommand,
 public:
     TCommandImportFileBase(const TString& cmd, const TString& cmdDescription)
       : TYdbCommand(cmd, {}, cmdDescription)
-    {}
+    {
+        Args[0] = "<input files...>";
+    }
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
 
 protected:
-    TString FilePath; // Read from stdin if the file path is empty
+    TVector<TString> FilePaths;
     TString BytesPerRequest;
     ui64 MaxInFlightRequests = 1;
 };

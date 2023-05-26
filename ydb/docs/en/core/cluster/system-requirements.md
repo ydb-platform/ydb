@@ -26,10 +26,12 @@ The number of servers and disks is determined by the fault-tolerance requirement
 
    {{ ydb-short-name }} health and performance weren't tested on any types of virtual or network storage devices.
 
-   When planning space, remember that {{ ydb-short-name }} uses some disk space for its own internal needs. For example, on a medium-sized cluster of 8 nodes, you can expect approximately 100 GB to be consumed for a static group on the whole cluster. On a large cluster with >1500 nodes, this will be about 200 GB. There are also logs of 25.6 GB on each Pdisk and a system area on each Pdisk. Its size depends on the size of the Pdisk, but is no less than 0.2 GB.
+   When planning space, remember that {{ ydb-short-name }} uses some disk space for its own internal needs. For example, on a medium-sized cluster of 8 nodes, you can expect approximately 100 GB to be consumed for a static group on the whole cluster. On a large cluster with more than 1500 nodes, this will be about 200 GB. There are also logs of 25.6 GB on each Pdisk and a system area on each Pdisk. Its size depends on the size of the Pdisk, but is no less than 0.2 GB.
 
 ## Software configuration {#software}
 
-A {{ ydb-short-name }} server can be run on servers running a Linux operating system with kernel 4.19 and higher and libc 2.30 (Ubuntu 20.04, Debian 11, Fedora34).
+A {{ ydb-short-name }} server can be run on servers running a Linux operating system with kernel 4.19 and higher and libc 2.30 (Ubuntu 20.04, Debian 11, Fedora34). YDB uses [TCMalloc](https://google.github.io/tcmalloc) allocator, and we recommend to [enable](https://google.github.io/tcmalloc/tuning.html#system-level-optimizations) the Transparent Huge Pages and Memory overcommitment features for optimization.
 
-MacOS and Windows operating systems are currently not supported.
+If the server hosts more than 32 CPU cores, to increase YDB performance, it makes sense to run each dynamic node in a separate taskset/cpuset of 10 to 32 cores. For example, in the case of 128 CPU cores, the best choice is to run four 32-CPU dynamic nodes, each in its taskset.
+
+MacOS and Windows operating systems are currently not supported for running {{ ydb-short-name }} servers.

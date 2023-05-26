@@ -174,10 +174,16 @@ public:
 
         switch (streamDesc.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamModeUpdate:
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+            break;
+        case NKikimrSchemeOp::ECdcStreamModeUpdate:
+            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
@@ -188,6 +194,23 @@ public:
         switch (streamDesc.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
+            if (!streamDesc.GetAwsRegion().empty()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "AWS_REGION option incompatible with specified stream format");
+                return result;
+            }
+            break;
+        case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+            if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "DYNAMODB_STREAMS_JSON format is not supported yet");
+                return result;
+            }
+            if (tablePath.Base()->DocumentApiVersion < 1) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DYNAMODB_STREAMS_JSON format incompatible with non-document table");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()

@@ -1,6 +1,6 @@
 # Importing data from the file system
 
-The `tools restore` command creates data schema objects in the DB and imports to them the data from the file system that was previously dumped there with the `tools dump` command or prepared manually following the rules described in the [File structure](../file_structure.md) article:
+The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [File structure](../file_structure.md) article:
 
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p PATH -i PATH [options]
@@ -8,83 +8,81 @@ The `tools restore` command creates data schema objects in the DB and imports to
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-If a table already exists in the database, no changes are made to its schema. This may prevent the data import operation from being performed if some columns of the imported files are missing in the DB table or have an incorrect type.
+If the table already exists in the database, no changes will be made to its schema. If some columns present in the imported files are missing in the database or have mismatching types, this may lead to the data import operation failing.
 
-Data import to DB tables is performed using the [YQL `REPLACE`](../../../../yql/reference/syntax/replace_into.md) statement. If before the start of the import operation, the table contained any entries, those of them whose keys exist in the imported files are replaced with data from the files. The entries with keys that are missing in the imported files remain unchanged.
+To import data to the table, use the [YQL `REPLACE` command](../../../../yql/reference/syntax/replace_into.md). If the table included any records before the import, the records whose keys are present in the imported files are replaced by the data from the file. The records whose keys are absent in the imported files aren't affected.
 
 ## Required parameters {#mandatory}
 
-`-p PATH` or `--path PATH`: Path to the DB directory that data will be imported to. To import data to the root directory, specify `.`. Any missing directories specified in the path will be created.
+`-p PATH` or `--path PATH`: Path to the database directory the data will be imported to. To import data to the root directory, specify `.`. All the missing directories along the path will be created.
 
-`-i PATH` or `--input PATH`: Path to the directory in the client file system that data will be imported from.
+`-i PATH` or `--input PATH`: Path to the directory in the client system the data will be imported from.
 
 ## Optional parameters {#optional}
 
-`[options]`: Optional command parameters:
+`[options]`: Optional parameters of the command:
 
-`--restore-data VAL`: Data import flag, 1 (yes) or 0 (no), defaults to 1. If 0, the import operation will only create schema objects without data being restored to them. If there is no data in the file system (only the data schema is exported), it doesn't matter if you change the flag value.
+`--restore-data VAL`: Enables/disables data import, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import only creates items in the schema without populating them with data. If there's no data in the file system (only the schema has been exported), it doesn't make sense to change this option.
 
-`--restore-indexes VAL`: Index import flag, 1 (yes) or 0 (no), defaults to 1. If 0, when running the import operation, secondary indexes will neither be registered in the data schema nor populated with data.
+`--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
 
-`--dry-run`: Mode for checking if the data schema in the DB and file system match without making any changes to the DB, 1 (yes) or 0 (no), defaults to 0. If this mode is enabled, it is checked that:
+`--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
+- All tables in the file system are present in the database
+- These items are based on the same schema, both in the file system and in the database
 
-- All tables in the file system are present in the DB.
-- The object data schema in the DB and file system match.
+`--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 
-`--save-partial-result`: Save the result of an incomplete import operation. If this option isn't enabled, in the event of an error during the import operation, the state of the DB is restored to the point before the operation is started.
+### Workload restriction parameters {#limiters}
 
-### Load limit parameters {#limiters}
+Using the below parameters, you can limit the import workload against the database.
 
-The following parameters let you limit the load on the DB generated by data import processes.
+{% note warning "Attention!" %}
 
-{% note warning "Attention" %}
-
-Some of the parameters listed below have valid default values. This means that even if none of them is specified in the `tools restore` command call, the load will still be limited.
+Some of the below parameters have default values. This means that the workload will be limited even if none of them is mentioned in `tools restore`.
 
 {% endnote %}
 
-`--bandwidth VAL`: Limits the amount of data that can be imported per second, defaults to 0 (not set). `VAL` stands for the data volume that is specified as a prefixed number like 2MiB.
-`--rps VAL`: Limit on the number of requests per second for importing data packets to the DB, defaults to 30.
-`--in-flight VAL`: Limit on the number of concurrently executed requests, defaults to 10.
-`--upload-batch-rows VAL`: Limit on the number of rows in the imported batch, defaults to 0 (unlimited). `VAL` stands for the amount of rows, specified as a number with an optional decimal prefix, such as 1K.
-`--upload-batch-bytes VAL`: Limit on the size of an imported batch, defaults to 512KB. `VAL` stands for the data volume that is specified as a prefixed number like 1MiB.
-`--upload-batch-rus VAL`: Only applies to Serverless databases, limits the use of Request Units (RU) per import of a single batch, defaults 30 RUs. The batch size is selected for the specified value. `VAL` stands for the amount of RUs, specified as a number with an optional decimal prefix, such as 100 or 1K.
+`--bandwidth VAL`: Limit the workload per second, defaults to 0 (not set). `VAL` specifies the data amount with a unit, for example, 2MiB.
+`--rps VAL`: Limits the number of queries used to upload batches to the database per second, the default value is 30.
+`--in-flight VAL`: Limits the number of queries that can be run in parallel, the default value is 10.
+`--upload-batch-rows VAL`: Limits the number of records in the uploaded batch, the default value is 0 (unlimited). `VAL` determines the number of records and is set as a number with an optional unit, for example, 1K.
+`--upload-batch-bytes VAL`: Limits the batch of uploaded data, the default value is 512KB. `VAL` specifies the data amount with a unit, for example, 1MiB.
+`--upload-batch-rus VAL`: Applies only to Serverless databases to limit Request Units (RU) that can be consumed to upload one batch, defaults to 30 RU. The batch size is selected to match the specified value. `VAL` determines the number of RU and is set as a number with an optional unit, for example, 100 or 1K.
 
 ## Examples {#examples}
 
-{% include [example_db1.md](../../_includes/example_db1.md) %}
+{% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
-### Importing data to the DB root
+### Importing to the database root
 
-From the current directory of the file system:
-
-```
-{{ ydb-cli }} -p db1 tools restore -p . -i .
-```
-
-From the specified directory of the file system:
+From the current file system directory:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p . -i ~/backup_db1
+{{ ydb-cli }} -p quickstart tools restore -p . -i .
 ```
 
-### Importing data to the specified DB directory
-
-From the current directory of the file system:
+From the current file system directory:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p dir1/dir2 -i .
+{{ ydb-cli }} -p quickstart tools restore -p . -i ~/backup_quickstart
 ```
 
-From the specified directory of the file system:
+### Uploading data to the specified directory in the database
+
+From the current file system directory:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p dir1/dir2 -i ~/backup_db1
+{{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i .
 ```
 
-Checking if the data schema in the DB and file system match:
+From the current file system directory:
 
 ```
-{{ ydb-cli }} -p db1 tools restore -p dir1/dir2 -i ~/backup_db1 --dry-run
+{{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart
 ```
 
+Matching schemas between the database and file system:
+
+```
+{{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart --dry-run
+```

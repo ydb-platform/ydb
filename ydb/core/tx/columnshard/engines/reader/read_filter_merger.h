@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/core/formats/arrow_filter.h>
-#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/engines/index_info.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/generic/hash.h>
@@ -9,22 +9,87 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
+class TSortableBatchPosition {
+protected:
+    i64 Position = 0;
+    i64 RecordsCount = 0;
+    bool ReverseSort = false;
+    std::vector<std::shared_ptr<arrow::Array>> Columns;
+    std::vector<std::shared_ptr<arrow::Field>> Fields;
+    std::shared_ptr<arrow::RecordBatch> Batch;
+public:
+    TSortableBatchPosition() = default;
+
+    bool IsSameSchema(const std::shared_ptr<arrow::Schema> schema) const;
+
+    TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& columns, const bool reverseSort)
+        : Position(position)
+        , RecordsCount(batch->num_rows())
+        , ReverseSort(reverseSort)
+        , Batch(batch)
+    {
+        Y_VERIFY(batch->num_rows());
+        Y_VERIFY_DEBUG(batch->ValidateFull().ok());
+        for (auto&& i : columns) {
+            auto c = batch->GetColumnByName(i);
+            Y_VERIFY(c);
+            Columns.emplace_back(c);
+            auto f = batch->schema()->GetFieldByName(i);
+            Fields.emplace_back(f);
+        }
+        Y_VERIFY(Columns.size());
+    }
+
+    std::partial_ordering Compare(const TSortableBatchPosition& item) const {
+        Y_VERIFY(item.ReverseSort == ReverseSort);
+        Y_VERIFY_DEBUG(item.Columns.size() == Columns.size());
+        const auto directResult = NArrow::ColumnsCompare(Columns, Position, item.Columns, item.Position);
+        if (ReverseSort) {
+            if (directResult == std::partial_ordering::less) {
+                return std::partial_ordering::greater;
+            } else if (directResult == std::partial_ordering::greater) {
+                return std::partial_ordering::less;
+            } else {
+                return std::partial_ordering::equivalent;
+            }
+        } else {
+            return directResult;
+        }
+    }
+
+    bool operator<(const TSortableBatchPosition& item) const {
+        return Compare(item) == std::partial_ordering::less;
+    }
+
+    bool NextPosition(const i64 delta) {
+        return InitPosition(Position + delta);
+    }
+
+    bool InitPosition(const i64 position) {
+        if (position < RecordsCount && position >= 0) {
+            Position = position;
+            return true;
+        } else {
+            return false;
+        }
+        
+    }
+
+};
+
 class TMergePartialStream {
 private:
     class TBatchIterator {
     private:
-        YDB_ACCESSOR(i64, Position, 0);
+        bool ControlPointFlag;
+        TSortableBatchPosition KeyColumns;
+        TSortableBatchPosition VersionColumns;
+        i64 RecordsCount;
+        int ReverseSortKff;
         YDB_OPT(ui32, PoolId);
-        std::shared_ptr<arrow::RecordBatch> Batch;
 
         std::shared_ptr<NArrow::TColumnFilter> Filter;
         std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
-        std::shared_ptr<NArrow::TColumnFilter::TReverseIterator> ReverseFilterIterator;
-
-        std::vector<std::shared_ptr<arrow::Array>> Columns;
-        std::vector<std::shared_ptr<arrow::Array>> VersionColumns;
-        int ReverseSortKff;
-        i64 RecordsCount;
 
         i32 GetFirstPosition() const {
             if (ReverseSortKff > 0) {
@@ -34,124 +99,124 @@ private:
             }
         }
 
-        i32 GetLastPosition() const {
-            if (ReverseSortKff > 0) {
-                return RecordsCount - 1;
-            } else {
-                return 0;
-            }
+    public:
+        bool IsControlPoint() const {
+            return ControlPointFlag;
         }
 
-    public:
+        const TSortableBatchPosition& GetKeyColumns() const {
+            return KeyColumns;
+        }
+
+        TBatchIterator(const TSortableBatchPosition& keyColumns)
+            : ControlPointFlag(true)
+            , KeyColumns(keyColumns)
+        {
+
+        }
+
         TBatchIterator(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
-            std::shared_ptr<arrow::Schema> sortSchema, const bool reverseSort, const std::optional<ui32> poolId)
-            : PoolId(poolId)
-            , Batch(batch)
+            const std::vector<std::string>& keyColumns, const bool reverseSort, const std::optional<ui32> poolId)
+            : ControlPointFlag(false)
+            , KeyColumns(batch, 0, keyColumns, reverseSort)
+            , VersionColumns(batch, 0, TIndexInfo::GetSpecialColumnNames(), false)
+            , RecordsCount(batch->num_rows())
+            , ReverseSortKff(reverseSort ? 1 : -1)
+            , PoolId(poolId)
             , Filter(filter)
-            , ReverseSortKff(reverseSort ? -1 : 1)
-            , RecordsCount(batch->num_rows()) {
+        {
+            Y_VERIFY(KeyColumns.InitPosition(GetFirstPosition()));
+            Y_VERIFY(VersionColumns.InitPosition(GetFirstPosition()));
             if (Filter) {
-                if (reverseSort) {
-                    ReverseFilterIterator = std::make_shared<NArrow::TColumnFilter::TReverseIterator>(Filter->GetReverseIterator());
-                } else {
-                    FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator());
-                }
+                FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(reverseSort));
                 Y_VERIFY(Filter->Size() == RecordsCount);
-            }
-            Position = GetFirstPosition();
-            Y_UNUSED(Batch);
-            Y_VERIFY(batch->num_rows());
-            Y_VERIFY_DEBUG(batch->ValidateFull().ok());
-            for (auto&& i : sortSchema->fields()) {
-                auto c = batch->GetColumnByName(i->name());
-                Y_VERIFY(c);
-                Columns.emplace_back(c);
-            }
-            {
-                auto c = batch->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-                Y_VERIFY(c);
-                VersionColumns.emplace_back(c);
-            }
-            {
-                auto c = batch->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-                Y_VERIFY(c);
-                VersionColumns.emplace_back(c);
             }
         }
 
         bool CheckNextBatch(const TBatchIterator& nextIterator) {
-            Y_VERIFY_DEBUG(nextIterator.Columns.size() == Columns.size());
-            return NArrow::ColumnsCompare(Columns, GetLastPosition(), nextIterator.Columns, 0) * ReverseSortKff < 0;
+            return KeyColumns.Compare(nextIterator.KeyColumns) == std::partial_ordering::less;
         }
 
         class TPosition {
         private:
-            const TBatchIterator* Owner;
-            ui32 Position = 0;
-            bool DeletedFlag = false;
+            TSortableBatchPosition KeyColumns;
+            TSortableBatchPosition VersionColumns;
+            bool DeletedFlag;
+            bool ControlPointFlag;
         public:
+            const TSortableBatchPosition& GetKeyColumns() const {
+                return KeyColumns;
+            }
+
+            bool IsControlPoint() const {
+                return ControlPointFlag;
+            }
+
             bool IsDeleted() const {
                 return DeletedFlag;
             }
 
             void TakeIfMoreActual(const TBatchIterator& anotherIterator) {
-                if (NArrow::ColumnsCompare(Owner->VersionColumns, Position, anotherIterator.VersionColumns, anotherIterator.Position) < 0) {
-                    Owner = &anotherIterator;
-                    Position = anotherIterator.Position;
-                    DeletedFlag = Owner->IsDeleted();
+                Y_VERIFY_DEBUG(KeyColumns.Compare(anotherIterator.KeyColumns) == std::partial_ordering::equivalent);
+                if (VersionColumns.Compare(anotherIterator.VersionColumns) == std::partial_ordering::less) {
+                    DeletedFlag = anotherIterator.IsDeleted();
+                    ControlPointFlag = anotherIterator.IsControlPoint();
                 }
             }
 
             TPosition(const TBatchIterator& owner)
-                : Owner(&owner)
-                , Position(Owner->Position)
+                : KeyColumns(owner.KeyColumns)
+                , VersionColumns(owner.VersionColumns)
+                , DeletedFlag(owner.IsDeleted())
+                , ControlPointFlag(owner.IsControlPoint())
             {
-                DeletedFlag = Owner->IsDeleted();
-            }
-
-            int CompareNoVersion(const TBatchIterator& item) const {
-                Y_VERIFY_DEBUG(item.Columns.size() == Owner->Columns.size());
-                return NArrow::ColumnsCompare(Owner->Columns, Position, item.Columns, item.Position);
             }
         };
 
-        int CompareNoVersion(const TBatchIterator& item) const {
-            Y_VERIFY_DEBUG(item.Columns.size() == Columns.size());
-            return NArrow::ColumnsCompare(Columns, Position, item.Columns, item.Position);
-        }
-
         bool IsDeleted() const {
-            if (FilterIterator) {
-                return FilterIterator->GetCurrentAcceptance();
-            } else if (ReverseFilterIterator) {
-                return ReverseFilterIterator->GetCurrentAcceptance();
-            } else {
+            if (!FilterIterator) {
                 return false;
             }
+            return FilterIterator->GetCurrentAcceptance();
         }
 
         bool Next() {
-            bool result = false;
-            if (ReverseSortKff > 0) {
-                result = ++Position < RecordsCount;
-            } else {
-                result = --Position >= 0;
-            }
+            const bool result = KeyColumns.NextPosition(ReverseSortKff) && VersionColumns.NextPosition(ReverseSortKff);
             if (FilterIterator) {
                 Y_VERIFY(result == FilterIterator->Next(1));
-            } else if (ReverseFilterIterator) {
-                Y_VERIFY(result == ReverseFilterIterator->Next(1));
             }
             return result;
         }
 
         bool operator<(const TBatchIterator& item) const {
-            const int result = CompareNoVersion(item) * ReverseSortKff;
-            if (result == 0) {
-                return NArrow::ColumnsCompare(VersionColumns, Position, item.VersionColumns, item.Position) < 0;
+            const std::partial_ordering result = KeyColumns.Compare(item.KeyColumns);
+            if (result == std::partial_ordering::equivalent) {
+                if (IsControlPoint() && item.IsControlPoint()) {
+                    return false;
+                } else if (IsControlPoint()) {
+                    return false;
+                } else if (item.IsControlPoint()) {
+                    return true;
+                }
+                //don't need inverse through we need maximal version at first (reverse analytic not included in VersionColumns)
+                return VersionColumns.Compare(item.VersionColumns) == std::partial_ordering::less;
             } else {
-                return result > 0;
+                //inverse logic through we use max heap, but need minimal element if not reverse (reverse analytic included in KeyColumns)
+                return result == std::partial_ordering::greater;
             }
+        }
+    };
+
+    class TIteratorData {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+        YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+    public:
+        TIteratorData(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter)
+            : Batch(batch)
+            , Filter(filter)
+        {
+
         }
     };
 
@@ -174,34 +239,42 @@ private:
                 SortHeap.pop_back();
             } else {
                 it->second.pop_front();
-                TBatchIterator newIterator(it->second.front(), nullptr, SortSchema, Reverse, SortHeap.back().GetPoolIdUnsafe());
-                SortHeap.back().CheckNextBatch(newIterator);
-                std::swap(SortHeap.back(), newIterator);
+                TBatchIterator oldIterator = std::move(SortHeap.back());
+                SortHeap.pop_back();
+                AddNewToHeap(SortHeap.back().GetPoolIdUnsafe(), it->second.front().GetBatch(), it->second.front().GetFilter(), false);
+                oldIterator.CheckNextBatch(SortHeap.back());
                 std::push_heap(SortHeap.begin(), SortHeap.end());
             }
         }
         return SortHeap.size();
     }
 
-    THashMap<ui32, std::deque<std::shared_ptr<arrow::RecordBatch>>> BatchPools;
+    THashMap<ui32, std::deque<TIteratorData>> BatchPools;
     std::vector<std::shared_ptr<arrow::RecordBatch>> IndependentBatches;
     std::vector<TBatchIterator> SortHeap;
     std::shared_ptr<arrow::Schema> SortSchema;
     const bool Reverse;
+    ui32 ControlPoints = 0;
 
     TBatchIterator::TPosition DrainCurrentPosition() {
         Y_VERIFY(SortHeap.size());
         auto position = TBatchIterator::TPosition(SortHeap.front());
+        if (SortHeap.front().IsControlPoint()) {
+            return position;
+        }
         bool isFirst = true;
-        while (SortHeap.size() && (isFirst || !position.CompareNoVersion(SortHeap.front()))) {
+        while (SortHeap.size() && (isFirst || position.GetKeyColumns().Compare(SortHeap.front().GetKeyColumns()) == std::partial_ordering::equivalent)) {
             if (!isFirst) {
                 position.TakeIfMoreActual(SortHeap.front());
             }
+            Y_VERIFY(!SortHeap.front().IsControlPoint());
             NextInHeap(true);
             isFirst = false;
         }
         return position;
     }
+
+    void AddNewToHeap(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const bool restoreHeap);
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, const bool reverse)
         : SortSchema(sortSchema)
@@ -213,22 +286,6 @@ public:
         return SortHeap.size();
     }
 
-    void AddIndependentSource(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-        if (!batch || !batch->num_rows()) {
-            return;
-        }
-        Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortSchema));
-        IndependentBatches.emplace_back(batch);
-        if (!filter || filter->IsTotalAllowFilter()) {
-            SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema, Reverse, {}));
-        } else if (filter->IsTotalDenyFilter()) {
-            return;
-        } else {
-            SortHeap.emplace_back(TBatchIterator(batch, filter, SortSchema, Reverse, {}));
-        }
-        std::push_heap(SortHeap.begin(), SortHeap.end());
-    }
-
     bool HasRecordsInPool(const ui32 poolId) const {
         auto it = BatchPools.find(poolId);
         if (it == BatchPools.end()) {
@@ -237,19 +294,18 @@ public:
         return it->second.size();
     }
 
-    void AddPoolSource(const ui32 poolId, std::shared_ptr<arrow::RecordBatch> batch) {
-        if (!batch || !batch->num_rows()) {
-            return;
-        }
-        auto it = BatchPools.find(poolId);
-        if (it == BatchPools.end()) {
-            it = BatchPools.emplace(poolId, std::deque<std::shared_ptr<arrow::RecordBatch>>()).first;
-        }
-        it->second.emplace_back(batch);
-        if (it->second.size() == 1) {
-            SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema, Reverse, poolId));
-            std::push_heap(SortHeap.begin(), SortHeap.end());
-        }
+    void PutControlPoint(std::shared_ptr<TSortableBatchPosition> point);
+
+    void RemoveControlPoint();
+
+    bool ControlPointEnriched() const {
+        return SortHeap.size() && SortHeap.front().IsControlPoint();
+    }
+
+    void AddPoolSource(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
+
+    bool IsEmpty() const {
+        return SortHeap.empty();
     }
 
     bool DrainCurrent() {
@@ -258,6 +314,9 @@ public:
         }
         while (SortHeap.size()) {
             auto currentPosition = DrainCurrentPosition();
+            if (currentPosition.IsControlPoint()) {
+                return false;
+            }
             if (currentPosition.IsDeleted()) {
                 continue;
             }

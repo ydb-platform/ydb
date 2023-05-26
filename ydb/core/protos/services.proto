@@ -367,6 +367,7 @@ enum EServiceKikimr {
 
     EXT_INDEX = 1900;
     TX_CONVEYOR = 2000;
+    ARROW_HELPER = 2100;
 };
 
 message TActivity {

@@ -208,7 +208,6 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
 
 bool NeedValidateLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Validate:
         case NKikimrTxDataShard::TKqpLocks::Commit:
             return true;
 
@@ -224,7 +223,6 @@ bool NeedEraseLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
         case NKikimrTxDataShard::TKqpLocks::Rollback:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Validate:
         case NKikimrTxDataShard::TKqpLocks::Unspecified:
             return false;
     }
@@ -235,7 +233,6 @@ bool NeedCommitLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
         case NKikimrTxDataShard::TKqpLocks::Commit:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Validate:
         case NKikimrTxDataShard::TKqpLocks::Rollback:
         case NKikimrTxDataShard::TKqpLocks::Unspecified:
             return false;

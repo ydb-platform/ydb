@@ -1979,9 +1979,7 @@ private:
 
             auto locksOp = needCommit
                 ? NKikimrTxDataShard::TKqpLocks::Commit
-                : (Request.ValidateLocks
-                        ? NKikimrTxDataShard::TKqpLocks::Validate
-                        : NKikimrTxDataShard::TKqpLocks::Rollback);
+                : NKikimrTxDataShard::TKqpLocks::Rollback;
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
@@ -2053,9 +2051,6 @@ private:
                     switch (locksOp) {
                     case NKikimrTxDataShard::TKqpLocks::Commit:
                         tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                        break;
-                    case NKikimrTxDataShard::TKqpLocks::Validate:
-                        tx.SetOp(NKikimrPQ::TDataTransaction::Validate);
                         break;
                     case NKikimrTxDataShard::TKqpLocks::Rollback:
                         tx.SetOp(NKikimrPQ::TDataTransaction::Rollback);

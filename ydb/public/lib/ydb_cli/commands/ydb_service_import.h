@@ -61,6 +61,7 @@ protected:
     TVector<TString> FilePaths;
     TString BytesPerRequest;
     ui64 MaxInFlightRequests = 1;
+    ui64 Threads = 0;
 };
 
 class TCommandImportFromCsv : public TCommandImportFileBase {
@@ -108,7 +109,7 @@ public:
 class TCommandImportFromParquet : public TCommandImportFileBase {
 public:
     TCommandImportFromParquet(const TString& cmd = "parquet", const TString& cmdDescription = "Import data from Parquet file")
-        : TCommandImportFileBase(cmd, cmdDescription) 
+        : TCommandImportFileBase(cmd, cmdDescription)
         {
             InputFormat = EOutputFormat::Parquet;
         }

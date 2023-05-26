@@ -168,11 +168,10 @@ TCommandImportFromFile::TCommandImportFromFile()
 void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    config.Opts->SetTrailingArgTitle("<input files...>", 
+    config.Opts->SetTrailingArgTitle("<input files...>",
             "One or more file paths to import from");
     config.Opts->AddLongOption('p', "path", "Database path to table")
         .Required().RequiredArgument("STRING").StoreResult(&Path);
-
     config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
 
     const TImportFileSettings defaults;
@@ -182,6 +181,9 @@ void TCommandImportFileBase::Config(TConfig& config) {
     config.Opts->AddLongOption("max-in-flight",
         "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
         .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests);
+    config.Opts->AddLongOption("threads",
+        "Maximum number of threads; number of available processors if not specified")
+        .DefaultValue(defaults.Threads_).StoreResult(&Threads);
 }
 
 void TCommandImportFileBase::Parse(TConfig& config) {
@@ -226,7 +228,7 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("header",
             "Set if file contains column names at the first not skipped row")
         .StoreTrue(&Header);
-    config.Opts->AddLongOption("columns", 
+    config.Opts->AddLongOption("columns",
             "String with column names that replaces header")
         .RequiredArgument("STR").StoreResult(&HeaderRow);
     config.Opts->AddLongOption("newline-delimited",
@@ -246,6 +248,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
+    settings.Threads(Threads);
     settings.SkipRows(SkipRows);
     settings.Header(Header);
     settings.NewlineDelimited(NewlineDelimited);
@@ -288,6 +291,7 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
+    settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config);
     ThrowOnError(client.Import(FilePaths, Path, settings));
@@ -295,16 +299,17 @@ int TCommandImportFromJson::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-/// Import Parquet 
+/// Import Parquet
 void TCommandImportFromParquet::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
 }
 
 int TCommandImportFromParquet::Run(TConfig& config) {
-    TImportFileSettings settings; 
+    TImportFileSettings settings;
     settings.Format(InputFormat);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
+    settings.Threads(Threads);
 
     TImportFileClient client(CreateDriver(config), config);
     ThrowOnError(client.Import(FilePaths, Path, settings));

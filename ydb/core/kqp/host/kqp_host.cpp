@@ -1067,7 +1067,7 @@ private:
                 binding.Settings["format"] = GetEnv("TEST_S3_FORMAT");
                 binding.Settings["schema"] = GetEnv("TEST_S3_SCHEMA");
 
-                settings.PrivateBindings[GetEnv("TEST_S3_BINDING")] = binding;
+                settings.Bindings[GetEnv("TEST_S3_BINDING")] = binding;
             }
 
             if (sqlVersion) {

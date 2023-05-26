@@ -65,8 +65,7 @@ namespace NSQLTranslation {
         THashSet<TString> Libraries;
         THashSet<TString> Flags;
 
-        THashMap<TString, TTableBindingSettings> PrivateBindings;
-        THashMap<TString, TTableBindingSettings> ScopedBindings;
+        THashMap<TString, TTableBindingSettings> Bindings;
 
         // each (name, type) entry in this map is equivalent to
         // DECLARE $name AS type;

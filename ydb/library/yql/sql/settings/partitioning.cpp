@@ -38,14 +38,13 @@ TString ParsePartitionedByBinding(const TString& name, const TString& value, TVe
 }
 
 TString ExtractBindingInfo(const TTranslationSettings& settings, const TString& binding, TBindingInfo& result) {
-    auto pit = settings.PrivateBindings.find(binding);
-    auto sit = settings.ScopedBindings.find(binding);
+    auto pit = settings.Bindings.find(binding);
 
-    if (pit == settings.PrivateBindings.end() && sit == settings.ScopedBindings.end()) {
+    if (pit == settings.Bindings.end()) {
         return TStringBuilder() << "Table binding `" << binding << "` is not defined";
     }
 
-    const auto& bindSettings = (pit != settings.PrivateBindings.end()) ? pit->second : sit->second;
+    const auto& bindSettings = pit->second;
 
     if (!IsIn({NYql::S3ProviderName, NYql::PqProviderName}, bindSettings.ClusterType)) {
         return TStringBuilder() << "Cluster type " << bindSettings.ClusterType << " is not supported for table bindings";

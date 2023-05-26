@@ -113,7 +113,7 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
             /// @warnign records are not valid cause of empty BlobId and zero Portion
             TColumnRecord record = TColumnRecord::Make(granule, columnId, snapshot, 0);
             auto columnSaver = resultSchema->GetColumnSaver(name, saverContext);
-            auto blob = portionInfo.AddOneChunkColumn(portionBatch->GetColumnByName(name), field, std::move(record), columnSaver);
+            auto blob = portionInfo.AddOneChunkColumn(portionBatch->GetColumnByName(name), field, std::move(record), columnSaver, Counters);
             if (!blob.size()) {
                 ok = false;
                 break;
@@ -211,7 +211,6 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
     auto changes = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(indexChanges);
     Y_VERIFY(!changes->DataToIndex.empty());
     Y_VERIFY(changes->AppendedPortions.empty());
-
 
     auto maxSnapshot = TSnapshot::Zero();
     for (auto& inserted : changes->DataToIndex) {
@@ -533,7 +532,7 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
         return std::make_tuple(std::span(partitioned.begin(), l), std::span(partitioned.begin() + l, partitioned.end()));
     }();
 
-    // Do nothing if there are less than two compacted protions.
+    // Do nothing if there are less than two compacted portions.
     if (compacted.size() < 2) {
         return 0;
     }
@@ -541,9 +540,22 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
     std::sort(compacted.begin(), compacted.end(), [](const TPortionInfo* a, const TPortionInfo* b) {
         return a->IndexKeyStart() < b->IndexKeyStart();
     });
+    Counters.AnalizeCompactedPortions->Add(compacted.size());
+    Counters.AnalizeInsertedPortions->Add(inserted.size());
+    for (auto&& i : inserted) {
+        Counters.RepackedInsertedPortionBytes->Add(i->BlobsBytes());
+    }
+    Counters.RepackedInsertedPortions->Add(inserted.size());
+
     // Check that there are no gaps between two adjacent portions in term of primary key range.
     for (size_t i = 0; i < compacted.size() - 1; ++i) {
         if (compacted[i]->IndexKeyEnd() >= compacted[i + 1]->IndexKeyStart()) {
+            for (auto&& c : compacted) {
+                Counters.SkipPortionBytesMoveThroughIntersection->Add(c->BlobsBytes());
+            }
+
+            Counters.SkipPortionsMoveThroughIntersection->Add(compacted.size());
+            Counters.RepackedCompactedPortions->Add(compacted.size());
             return 0;
         }
     }
@@ -555,12 +567,14 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
         ui32 rows = portionInfo->NumRows();
         Y_VERIFY(rows);
         numRows += rows;
+        Counters.MovedPortionBytes->Add(portionInfo->BlobsBytes());
         tsIds.emplace_back((counter ? TMark(portionInfo->IndexKeyStart()) : ts0), counter + 1);
         toMove.emplace_back(std::move(*portionInfo), counter);
         ++counter;
         // Ensure that std::move will take an effect.
         static_assert(std::swappable<decltype(*portionInfo)>);
     }
+    Counters.MovedPortions->Add(toMove.size());
 
     std::vector<TPortionInfo> out;
     out.reserve(inserted.size());

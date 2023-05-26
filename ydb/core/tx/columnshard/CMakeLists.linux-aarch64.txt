@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(counters)
 add_subdirectory(engines)
 add_subdirectory(ut_rw)
 add_subdirectory(ut_schema)
@@ -36,6 +37,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
   tx-columnshard-engines
+  tx-columnshard-counters
   core-tx-tiering
   tx-conveyor-usage
   tx-long_tx_service-public

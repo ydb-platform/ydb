@@ -26,12 +26,12 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
     LOG_S_INFO("Switched to work at " << TabletID() << " actor " << ctx.SelfID);
 
-    IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID));
+    IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID, IndexationCounters));
     CompactionActor = ctx.Register(
-        CreateCompactionActor(TabletID(), ctx.SelfID, TSettings::MAX_ACTIVE_COMPACTIONS),
+        CreateCompactionActor(TabletID(), ctx.SelfID, TSettings::MAX_ACTIVE_COMPACTIONS, CompactionCounters),
         // Default mail-box and batch pool.
         TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
-    EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID));
+    EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID, EvictionCounters));
     for (auto&& i : TablesManager.GetTables()) {
         ActivateTiering(i.first, i.second.GetTieringUsage());
     }

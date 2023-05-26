@@ -24,9 +24,9 @@ namespace NKikimr::NColumnShard {
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent);
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
-IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent);
+IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
+IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers, const TIndexationCounters& counters);
+IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
 IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                          TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline = TInstant::Max());
@@ -44,7 +44,7 @@ IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui6
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 
 struct TSettings {
-    static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 2;
+    static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 1;
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
 
@@ -381,8 +381,12 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     TBatchCache BatchCache;
-    TScanCounters ReadCounters;
-    TScanCounters ScanCounters;
+    const TScanCounters ReadCounters;
+    const TScanCounters ScanCounters;
+    const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
+    const TIndexationCounters CompactionCounters = TIndexationCounters("Compaction");
+    const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
+    
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;

@@ -10,13 +10,16 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 class TCompactionActor: public TActorBootstrapped<TCompactionActor> {
+private:
+    const TIndexationCounters Counters;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
     }
 
-    TCompactionActor(ui64 tabletId, const TActorId& parent)
-        : TabletId(tabletId)
+    TCompactionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
         , Parent(parent)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId()) {
     }
@@ -41,6 +44,7 @@ public:
             for (const auto& blobRange : ranges) {
                 Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
+                Counters.ReadBytes->Add(blobRange.Size);
             }
             SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
         }
@@ -130,7 +134,7 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
 
-            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering);
+            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
             TxEvent->Blobs = compactionLogic.Apply(TxEvent->IndexChanges);
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
@@ -146,22 +150,26 @@ private:
 };
 
 class TCompactionGroupActor: public TActorBootstrapped<TCompactionGroupActor> {
+private:
+    const TIndexationCounters Counters;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
     }
 
-    TCompactionGroupActor(ui64 tabletId, const TActorId& parent, const ui64 size)
-        : TabletId(tabletId)
+    TCompactionGroupActor(ui64 tabletId, const TActorId& parent, const ui64 size, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
         , Parent(parent)
-        , Idle(size == 0 ? 1 : size) {
+        , Idle(size == 0 ? 1 : size)
+    {
     }
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWait);
 
         for (auto& worker : Idle) {
-            worker = ctx.Register(new TCompactionActor(TabletId, ctx.SelfID));
+            worker = ctx.Register(new TCompactionActor(TabletId, ctx.SelfID, Counters));
         }
     }
 
@@ -217,8 +225,8 @@ private:
 
 } // namespace
 
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers) {
-    return new TCompactionGroupActor(tabletId, parent, workers);
+IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers, const TIndexationCounters& counters) {
+    return new TCompactionGroupActor(tabletId, parent, workers, counters);
 }
 
 } // namespace NKikimr::NColumnShard

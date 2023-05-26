@@ -486,7 +486,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     if (changes->CompactionInfo->InGranule) {
         const TSnapshot completedSnap = std::max(LastSnapshot, outdatedSnapshot);
         if (!InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, limits, completedSnap, changes->MergeBorders)) {
-            // Return granule to Compation list. This is equal to single compaction worker behaviour.
+            // Return granule to Compaction list. This is equal to single compaction worker behaviour.
             CompactionGranules.insert(granule);
             return {};
         }
@@ -704,7 +704,7 @@ void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr
         // Size exceeds the configured limit. Mark granule as overloaded.
         if (size >= limits.GranuleOverloadSize) {
             PathsGranulesOverloaded.emplace(pathId, granule);
-        } else  if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
+        } else if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
             // Size is under limit. Remove granule from the overloaded set.
             pi->second.erase(granule);
             // Remove entry for the pathId if there it has no overloaded granules any more.
@@ -1316,7 +1316,7 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompaction
     bool inGranule = true;
 
     for (auto it = CompactionGranules.upper_bound(lastCompactedGranule); !CompactionGranules.empty();) {
-        // Start from the beggining if the end is reached.
+        // Start from the beginning if the end is reached.
         if (it == CompactionGranules.end()) {
             it = CompactionGranules.begin();
         }

@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
+#include <ydb/core/tx/columnshard/counters/indexation.h>
 
 namespace NKikimr::NOlap {
 
@@ -587,6 +588,7 @@ public:
                               const std::shared_ptr<arrow::Field>& field,
                               TColumnRecord&& record,
                               const TColumnSaver saver,
+                              const NColumnShard::TIndexationCounters& counters,
                               ui32 limitBytes = BLOB_BYTES_LIMIT);
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {

@@ -3,24 +3,27 @@
 #include "defs.h"
 #include "portion_info.h"
 #include "column_engine_logs.h"
+#include <ydb/core/tx/columnshard/counters.h>
 
 namespace NKikimr::NOlap {
 
 class TIndexLogicBase {
 protected:
     const TVersionedIndex& SchemaVersions;
+    const NColumnShard::TIndexationCounters Counters;
 private:
     const THashMap<ui64, NKikimr::NOlap::TTiering>* TieringMap = nullptr;
-
 public:
-    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap)
+    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap, const NColumnShard::TIndexationCounters& counters)
         : SchemaVersions(indexInfo)
+        , Counters(counters)
         , TieringMap(&tieringMap)
     {
     }
 
-    TIndexLogicBase(const TVersionedIndex& indexInfo)
+    TIndexLogicBase(const TVersionedIndex& indexInfo, const NColumnShard::TIndexationCounters& counters)
         : SchemaVersions(indexInfo)
+        , Counters(counters)
     {
     }
 

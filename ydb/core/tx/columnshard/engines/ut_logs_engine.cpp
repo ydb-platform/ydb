@@ -280,7 +280,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
 
     changes->Blobs.insert(blobs.begin(), blobs.end());
 
-    TIndexationLogic logic(engine.GetVersionedIndex());
+    TIndexationLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
     std::vector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
@@ -306,7 +306,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 
-    TCompactionLogic logic(engine.GetVersionedIndex());
+    TCompactionLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
     std::vector<TString> newBlobs = logic.Apply(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);

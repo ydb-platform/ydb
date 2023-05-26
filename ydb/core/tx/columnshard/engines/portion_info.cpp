@@ -45,10 +45,16 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
                                         const std::shared_ptr<arrow::Field>& field,
                                         TColumnRecord&& record,
                                         const TColumnSaver saver,
+                                        const NColumnShard::TIndexationCounters& counters,
                                         const ui32 limitBytes) {
     auto blob = SerializeColumn(array, field, saver);
     if (blob.size() >= limitBytes) {
+        counters.TrashDataSerializationBytes->Add(blob.size());
+        counters.TrashDataSerialization->Add(1);
         return {};
+    } else {
+        counters.CorrectDataSerializationBytes->Add(blob.size());
+        counters.CorrectDataSerialization->Add(1);
     }
 
     record.Chunk = 0;

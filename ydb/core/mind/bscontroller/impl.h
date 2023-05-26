@@ -2102,8 +2102,13 @@ public:
 
         const TMonotonic now = TActivationContext::Monotonic();
         THashSet<TGroupInfo*> groups;
+
+        auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
+            Y_VERIFY_DEBUG(!it->second->IsReady);
+            
+            sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
             it->second->IsReady = true;
             it->second->ResetVSlotReadyTimestampIter();
             if (const TGroupInfo *group = it->second->Group) {
@@ -2120,6 +2125,9 @@ public:
         ScheduleVSlotReadyUpdate();
         if (!timingQ.empty()) {
             Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
+        }
+        if (sh->VDiskIsReadyUpdate) {
+            Send(SelfHealId, sh.release());
         }
     }
 

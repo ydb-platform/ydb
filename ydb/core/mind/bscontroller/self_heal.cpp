@@ -371,6 +371,15 @@ namespace NKikimr::NBsController {
                     }
                 }
             }
+            for (auto& [vdiskId, isReady] : ev->Get()->VDiskIsReadyUpdate) {
+                if (const auto it = Groups.find(vdiskId.GroupID); it != Groups.end()) {
+                    auto& group = it->second;
+                    if (const auto it = group.Content.VDisks.find(vdiskId); it != group.Content.VDisks.end() &&
+                            vdiskId.GroupGeneration == it->first.GroupGeneration) {
+                        it->second.IsReady = isReady;
+                    }
+                }
+            }
             CheckGroups();
         }
 
@@ -406,7 +415,7 @@ namespace NKikimr::NBsController {
 
                     bool allDisksAreFullyOperational = true;
                     for (const auto& [vdiskId, vdisk] : group.Content.VDisks) {
-                        if (vdisk.Bad || vdisk.Faulty || vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
+                        if (vdisk.Bad || vdisk.Faulty || !vdisk.IsReady) {
                             // don't sanitize groups with non-operational or replicating disks
                             allDisksAreFullyOperational = false;
                             break;
@@ -893,6 +902,7 @@ namespace NKikimr::NBsController {
                     slot->PDisk->BadInTermsOfSelfHeal(),
                     slot->PDisk->Decommitted(),
                     slot->OnlyPhantomsRemain,
+                    slot->IsReady,
                     slot->Status,
                 };
             }
@@ -921,6 +931,7 @@ namespace NKikimr::NBsController {
                         slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain());
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
+                            ev->VDiskIsReadyUpdate.emplace_back(vdiskId, slot->IsReady);
                             if (wasReady) {
                                 NotReadyVSlotIds.insert(slot->VSlotId);
                             }

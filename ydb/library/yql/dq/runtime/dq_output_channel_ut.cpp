@@ -91,7 +91,7 @@ void TestSingleRead(TTestContext& ctx) {
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
@@ -131,7 +131,7 @@ void TestPartialRead(TTestContext& ctx) {
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 9; ++i) {
         auto row = ctx.CreateRow(i);
@@ -184,7 +184,7 @@ void TestOverflow(TTestContext& ctx) {
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 8; ++i) {
         auto row = ctx.CreateRow(i);
@@ -212,7 +212,7 @@ void TestPopAll(TTestContext& ctx) {
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 50; ++i) {
         auto row = ctx.CreateRow(i);
@@ -249,7 +249,7 @@ void TestBigRow(TTestContext& ctx) {
     settings.CollectProfileStats = true;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     {
         auto row = ctx.CreateRow(1);
@@ -318,7 +318,7 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
     auto storage = MakeIntrusive<TMockChannelStorage>(100'500ul);
     settings.ChannelStorage = storage;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 35; ++i) {
         auto row = ctx.CreateRow(i);
@@ -394,7 +394,7 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
     auto storage = MakeIntrusive<TMockChannelStorage>(500ul);
     settings.ChannelStorage = storage;
 
-    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.TypeEnv, ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, ctx.OutputType, ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 42; ++i) {
         auto row = ctx.CreateRow(i);

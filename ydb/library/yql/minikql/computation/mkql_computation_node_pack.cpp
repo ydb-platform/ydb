@@ -221,10 +221,13 @@ bool HasOptionalFields(const TType* type) {
     }
 }
 
-TPackProperties ScanTypeProperties(const TType* type) {
+TPackProperties ScanTypeProperties(const TType* type, bool assumeList) {
     TPackProperties props;
     if (HasOptionalFields(type)) {
         props.Set(EPackProps::UseOptionalMask);
+    }
+    if (assumeList) {
+        return props;
     }
     if (type->GetKind() == TType::EKind::Optional) {
         type = static_cast<const TOptionalType*>(type)->GetItemType();
@@ -808,7 +811,7 @@ template<bool Fast>
 TValuePackerGeneric<Fast>::TValuePackerGeneric(bool stable, const TType* type)
     : Stable_(stable)
     , Type_(type)
-    , State_(ScanTypeProperties(Type_))
+    , State_(ScanTypeProperties(Type_, false))
 {
     MKQL_ENSURE(!Fast || !Stable_, "Stable mode is not supported");
 }
@@ -886,7 +889,8 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 template<bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type)
     : Type_(type)
-    , State_(ScanTypeProperties(Type_))
+    , State_(ScanTypeProperties(Type_, false))
+    , IncrementalState_(ScanTypeProperties(Type_, true))
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
 }
@@ -894,7 +898,8 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
 template<bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type)
     : Type_(type)
-    , State_(ScanTypeProperties(Type_))
+    , State_(ScanTypeProperties(Type_, false))
+    , IncrementalState_(ScanTypeProperties(Type_, true))
 {
 }
 
@@ -905,12 +910,10 @@ NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TStringBuf buf, const TH
 
 template<bool Fast>
 void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueVector& result) const {
-    MKQL_ENSURE(Type_->IsList(), "UnpackBatch() requires list type");
-
-    auto& s = State_;
+    auto& s = IncrementalState_;
     ui64 len;
     ui32 topLength;
-    const TType* itemType = static_cast<const TListType*>(Type_)->GetItemType();
+    const TType* itemType = Type_;
     if constexpr (!Fast) {
         auto pair = SkipEmbeddedLength<Fast>(buf);
         topLength = pair.first;
@@ -951,20 +954,19 @@ const TPagedBuffer& TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValueP
 
 template<bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TUnboxedValuePod& value) {
-    MKQL_ENSURE(Type_->IsList(), "AddItem() is only supported for list types");
-    const TType* itemType = static_cast<const TListType*>(Type_)->GetItemType();
+    const TType* itemType = Type_;
     if (!ItemCount_) {
         Buffer_.Clear();
         if constexpr (Fast) {
             // reserve place for list item count
             Buffer_.ReserveHeader(sizeof(ItemCount_));
         } else {
-            State_.OptionalUsageMask.Reset();
+            IncrementalState_.OptionalUsageMask.Reset();
             Buffer_.ReserveHeader(sizeof(ui32) + State_.OptionalMaskReserve + MAX_PACKED64_SIZE);
         }
     }
 
-    PackImpl<Fast, false>(itemType, Buffer_, value, State_);
+    PackImpl<Fast, false>(itemType, Buffer_, value, IncrementalState_);
     ++ItemCount_;
     return *this;
 }
@@ -977,7 +979,6 @@ void TValuePackerTransport<Fast>::Clear() {
 
 template<bool Fast>
 const TPagedBuffer& TValuePackerTransport<Fast>::Finish() {
-    MKQL_ENSURE(Type_->IsList(), "Finish() is only supported for list types");
     if constexpr (Fast) {
         char* dst = Buffer_.Header(sizeof(ItemCount_));
         Y_VERIFY_DEBUG(dst);
@@ -1000,7 +1001,7 @@ void TValuePackerTransport<Fast>::BuildMeta(bool addItemCount) const {
     const size_t itemCountSize = addItemCount ? GetPack64Length(ItemCount_) : 0;
     const size_t packedSize = Buffer_.Size() + itemCountSize;
 
-    auto& s = State_;
+    auto& s = addItemCount ? IncrementalState_ : State_;
 
     const bool useMask = s.Properties.Test(EPackProps::UseOptionalMask);
     const size_t maskSize = useMask ? s.OptionalUsageMask.CalcSerializedSize() : 0;

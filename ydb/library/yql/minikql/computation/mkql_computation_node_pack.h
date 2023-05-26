@@ -72,11 +72,11 @@ class TValuePackerTransport {
 public:
     using TSelf = TValuePackerTransport<Fast>;
 
-    explicit TValuePackerTransport(const TType *type);
+    explicit TValuePackerTransport(const TType* type);
     // for compatibility with TValuePackerGeneric - stable packing is not supported
-    TValuePackerTransport(bool stable, const TType *type);
+    TValuePackerTransport(bool stable, const TType* type);
 
-    // incremental packing - works only for List<T> type
+    // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
     size_t PackedSizeEstimate() const {
         return Buffer_.Size() + Buffer_.ReservedHeaderSize();
@@ -85,8 +85,9 @@ public:
     const TPagedBuffer& Finish();
     TPagedBuffer FinishAndPull();
 
+    // Pack()/Unpack() will pack/unpack single value of type T
     // reference is valid till the next call to Pack()
-    const TPagedBuffer& Pack(const NUdf::TUnboxedValuePod& value) const;
+    const TPagedBuffer& Pack(const NUdf::TUnboxedValuePod &value) const;
     NUdf::TUnboxedValue Unpack(TStringBuf buf, const THolderFactory& holderFactory) const;
     void UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueVector& result) const;
 private:
@@ -96,6 +97,7 @@ private:
     ui64 ItemCount_ = 0;
     mutable TPagedBuffer Buffer_;
     mutable NDetails::TPackerState State_;
+    mutable NDetails::TPackerState IncrementalState_;
 };
 
 using TValuePacker = TValuePackerGeneric<false>;

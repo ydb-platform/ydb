@@ -524,7 +524,8 @@ protected:
         if constexpr (Transport) {
             auto itemType = PgmBuilder.NewDataType(NUdf::TDataType<char *>::Id);
             auto listType = PgmBuilder.NewListType(itemType);
-            TValuePackerType packer(false, listType);
+            TValuePackerType packer(false, itemType);
+            TValuePackerType listPacker(false, listType);
 
             TStringBuf str = "01234567890ABCDEF";
 
@@ -538,7 +539,7 @@ protected:
             TString serializedStr;
             packer.Finish().CopyTo(serializedStr);
 
-            auto listObj = packer.Unpack(serializedStr, HolderFactory);
+            auto listObj = listPacker.Unpack(serializedStr, HolderFactory);
             UNIT_ASSERT_VALUES_EQUAL(listObj.GetListLength(), count);
             ui32 i = 0;
             const auto iter = listObj.GetListIterator();

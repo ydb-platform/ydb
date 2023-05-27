@@ -28,7 +28,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
 
     IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID, IndexationCounters));
     CompactionActor = ctx.Register(
-        CreateCompactionActor(TabletID(), ctx.SelfID, TSettings::MAX_ACTIVE_COMPACTIONS, CompactionCounters),
+        CreateCompactionActor(TabletID(), ctx.SelfID, TSettings::MAX_ACTIVE_COMPACTIONS),
         // Default mail-box and batch pool.
         TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
     EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID, EvictionCounters));

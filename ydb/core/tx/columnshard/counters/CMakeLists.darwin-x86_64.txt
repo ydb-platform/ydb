@@ -17,4 +17,5 @@ target_link_libraries(tx-columnshard-counters PUBLIC
 target_sources(tx-columnshard-counters PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/engine_logs.cpp
 )

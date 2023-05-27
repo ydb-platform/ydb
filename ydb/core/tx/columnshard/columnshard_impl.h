@@ -25,7 +25,7 @@ namespace NKikimr::NColumnShard {
 extern bool gAllowLogBatchingDefaultValue;
 
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers, const TIndexationCounters& counters);
+IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
 IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
 IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
@@ -384,7 +384,6 @@ private:
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
-    const TIndexationCounters CompactionCounters = TIndexationCounters("Compaction");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
     
 

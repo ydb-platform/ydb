@@ -10,21 +10,22 @@ TIndexationCounters::TIndexationCounters(const TString& module) {
     } else {
         SubGroup = new NMonitoring::TDynamicCounters();
     }
-    ReadBytes = SubGroup->GetCounter(module + "/ReadBytes", true);
-    AnalizeCompactedPortions = SubGroup->GetCounter(module + "/AnalizeCompactedPortions", true);
-    AnalizeInsertedPortions = SubGroup->GetCounter(module + "/AnalizeInsertedPortions", true);
-    RepackedInsertedPortions = SubGroup->GetCounter(module + "/RepackedInsertedPortions", true);
-    RepackedInsertedPortionBytes = SubGroup->GetCounter(module + "/RepackedInsertedPortionBytes", true);
-    SkipPortionsMoveThroughIntersection = SubGroup->GetCounter(module + "/SkipPortionsMoveThroughIntersection", true);
-    SkipPortionBytesMoveThroughIntersection = SubGroup->GetCounter(module + "/SkipPortionBytesMoveThroughIntersection", true);
-    RepackedCompactedPortions = SubGroup->GetCounter(module + "/RepackedCompactedPortions", true);
-    MovedPortions = SubGroup->GetCounter(module + "/MovedPortions", true);
-    MovedPortionBytes = SubGroup->GetCounter(module + "/MovedPortionBytes", true);
+    ReadBytes = SubGroup->GetCounter(module + "/Read/Bytes", true);
+    AnalizeInsertedPortions = SubGroup->GetCounter(module + "/AnalizeInsertion/Portions", true);
+    RepackedInsertedPortions = SubGroup->GetCounter(module + "/RepackedInsertion/Portions", true);
+    RepackedInsertedPortionBytes = SubGroup->GetCounter(module + "/RepackedInsertion/Bytes", true);
 
-    TrashDataSerializationBytes = SubGroup->GetCounter(module + "/TrashDataSerializationBytes", true);
-    TrashDataSerialization = SubGroup->GetCounter(module + "/TrashDataSerialization", true);
-    CorrectDataSerializationBytes = SubGroup->GetCounter(module + "/CorrectDataSerializationBytes", true);
-    CorrectDataSerialization = SubGroup->GetCounter(module + "/CorrectDataSerialization", true);
+    AnalizeCompactedPortions = SubGroup->GetCounter(module + "/AnalizeCompaction/Portions", true);
+    SkipPortionsMoveThroughIntersection = SubGroup->GetCounter(module + "/SkipMoveThroughIntersection/Portions", true);
+    SkipPortionBytesMoveThroughIntersection = SubGroup->GetCounter(module + "/SkipMoveThroughIntersection/Bytes", true);
+    RepackedCompactedPortions = SubGroup->GetCounter(module + "/RepackedCompaction/Portions", true);
+    MovedPortions = SubGroup->GetCounter(module + "/Moved/Portions", true);
+    MovedPortionBytes = SubGroup->GetCounter(module + "/Moved/Bytes", true);
+
+    TrashDataSerializationBytes = SubGroup->GetCounter(module + "/TrashDataSerialization/Bytes", true);
+    TrashDataSerialization = SubGroup->GetCounter(module + "/TrashDataSerialization/Count", true);
+    CorrectDataSerializationBytes = SubGroup->GetCounter(module + "/CorrectDataSerialization/Bytes", true);
+    CorrectDataSerialization = SubGroup->GetCounter(module + "/CorrectDataSerialization/Count", true);
 }
 
 }

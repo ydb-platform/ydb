@@ -71,6 +71,7 @@ public:
     using TIndexLogicBase::TIndexLogicBase;
 
     std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
+    static bool IsSplit(std::shared_ptr<TColumnEngineChanges> changes);
 
 private:
     std::vector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;

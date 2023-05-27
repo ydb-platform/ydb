@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "column_engine.h"
 #include "scalars.h"
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -21,6 +22,8 @@ class TCountersTable;
 ///
 /// @note One instance per tablet.
 class TColumnEngineForLogs : public IColumnEngine {
+private:
+    const NColumnShard::TEngineLogsCounters SignalCounters;
 public:
     class TMarksGranules {
     public:

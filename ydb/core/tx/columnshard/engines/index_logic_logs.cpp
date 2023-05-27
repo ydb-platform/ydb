@@ -115,8 +115,13 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
             auto columnSaver = resultSchema->GetColumnSaver(name, saverContext);
             auto blob = portionInfo.AddOneChunkColumn(portionBatch->GetColumnByName(name), field, std::move(record), columnSaver, Counters);
             if (!blob.size()) {
+                Counters.TrashDataSerializationBytes->Add(blob.size());
+                Counters.TrashDataSerialization->Add(1);
                 ok = false;
                 break;
+            } else {
+                Counters.CorrectDataSerializationBytes->Add(blob.size());
+                Counters.CorrectDataSerialization->Add(1);
             }
 
             // TODO: combine small columns in one blob
@@ -316,11 +321,11 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TCompactionLogic::Comp
 std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const {
     const ui64 pathId = changes->SrcGranule->PathId;
     std::vector<TString> blobs;
-    auto& switchedProtions = changes->SwitchedPortions;
-    Y_VERIFY(switchedProtions.size());
+    auto& switchedPortions = changes->SwitchedPortions;
+    Y_VERIFY(switchedPortions.size());
 
-    ui64 granule = switchedProtions[0].Granule();
-    auto [batch, maxSnapshot] = CompactInOneGranule(granule, switchedProtions, changes->Blobs);
+    ui64 granule = switchedPortions[0].Granule();
+    auto [batch, maxSnapshot] = CompactInOneGranule(granule, switchedPortions, changes->Blobs);
 
     auto resultSchema = SchemaVersions.GetLastSchema();
     std::vector<TPortionInfo> portions;
@@ -714,6 +719,11 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
     return blobs;
 }
 
+bool TCompactionLogic::IsSplit(std::shared_ptr<TColumnEngineChanges> changes) {
+    auto castedChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
+    return !castedChanges->CompactionInfo->InGranule;
+}
+
 std::vector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
     Y_VERIFY(changes);
     Y_VERIFY(changes->CompactionInfo);
@@ -723,10 +733,11 @@ std::vector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChange
     Y_VERIFY(changes->AppendedPortions.empty());  // dst meta
 
     auto castedChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
-    if (castedChanges->CompactionInfo->InGranule) {
+    if (!IsSplit(castedChanges)) {
         return CompactInGranule(castedChanges);
+    } else {
+        return CompactSplitGranule(castedChanges);
     }
-    return CompactSplitGranule(castedChanges);
 }
 
 std::vector<TString> TEvictionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {

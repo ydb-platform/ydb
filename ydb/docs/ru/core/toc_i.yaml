@@ -3,7 +3,7 @@ items:
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
-  href: administration/quickstart.md
+  href: getting_started/quickstart.md
 # - name: Начало работы
 #   hidden: true
 #   include: { mode: link, path: getting_started/toc_p.yaml }

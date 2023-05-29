@@ -1273,7 +1273,7 @@ void TEngineBay::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     }
 }
 
-NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx) {
+NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTransaction& tx) {
     if (!KqpTasksRunner) {
         NYql::NDq::TDqTaskRunnerSettings settings;
 
@@ -1291,7 +1291,7 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
         settings.TerminateOnError = false;
 
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(tx.GetTasks(), KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;

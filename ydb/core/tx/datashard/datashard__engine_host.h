@@ -120,7 +120,7 @@ public:
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
 
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx);
+    NKqp::TKqpTasksRunner& GetKqpTasksRunner(NKikimrTxDataShard::TKqpTransaction& tx);
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
 
 private:

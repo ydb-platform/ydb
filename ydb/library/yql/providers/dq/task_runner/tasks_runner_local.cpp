@@ -113,7 +113,7 @@ private:
 
 class TLocalTaskRunner: public ITaskRunner {
 public:
-    TLocalTaskRunner(const NDqProto::TDqTask& task, TIntrusivePtr<IDqTaskRunner> runner)
+    TLocalTaskRunner(const NDq::TDqTaskSettings& task, TIntrusivePtr<IDqTaskRunner> runner)
         : Task(task)
         , Runner(runner)
     { }
@@ -196,7 +196,7 @@ private:
         QueryStat.AddTaskRunnerStats(*Runner->GetStats(), Stats, Task.GetId());
     }
 
-    NDqProto::TDqTask Task;
+    NDq::TDqTaskSettings Task;
     TIntrusivePtr<IDqTaskRunner> Runner;
     TCounters QueryStat;
     TDqTaskRunnerStats Stats;
@@ -252,11 +252,11 @@ public:
         , TerminateOnError(terminateOnError)
     { }
 
-    ITaskRunner::TPtr GetOld(const NDqProto::TDqTask& task, const TString& traceId) override {
+    ITaskRunner::TPtr GetOld(const TDqTaskSettings& task, const TString& traceId) override {
         return new TLocalTaskRunner(task, Get(task, traceId));
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDqProto::TDqTask& task, const TString& traceId) override {
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(const TDqTaskSettings& task, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;

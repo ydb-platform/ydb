@@ -54,7 +54,7 @@ IActor* CreateComputeActor(
         }
     }
 
-    auto taskRunnerFactory = [=](const NDqProto::TDqTask& task, const NDq::TLogFunc& logger) {
+    auto taskRunnerFactory = [=](const NDq::TDqTaskSettings& task, const NDq::TLogFunc& logger) {
         Y_UNUSED(logger);
         return options.Factory->Get(task, {});
     };

@@ -1477,8 +1477,8 @@ public:
         return Task.GetId();
     }
 
-    void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider&) override
+    void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
+        const IDqTaskRunnerExecutionContext& execCtx) override
     {
         Y_UNUSED(memoryLimits);
         Y_UNUSED(execCtx);
@@ -1729,7 +1729,7 @@ public:
         TaskScheduler.Start();
     }
 
-    ITaskRunner::TPtr GetOld(const NDqProto::TDqTask& tmp, const TString& traceId) override {
+    ITaskRunner::TPtr GetOld(const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
         ui64 stageId = taskMeta.GetStageId();
@@ -1738,7 +1738,7 @@ public:
         return new TTaskRunner(task, std::move(result), stageId, traceId);
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDqProto::TDqTask& tmp, const TString& traceId) override
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& tmp, const TString& traceId) override
     {
         Yql::DqsProto::TTaskMeta taskMeta;
         tmp.GetMeta().UnpackTo(&taskMeta);
@@ -1780,9 +1780,9 @@ private:
         return exePath + "," + settings.ToString();
     }
 
-    NDqProto::TDqTask PrepareTask(const NDqProto::TDqTask& tmp, TChildProcess* result) {
+    NDqProto::TDqTask PrepareTask(const NDq::TDqTaskSettings& tmp, TChildProcess* result) {
         // get files from fileCache
-        NDqProto::TDqTask task = tmp;
+        auto task = tmp.GetSerializedTask();
         Yql::DqsProto::TTaskMeta taskMeta;
 
         task.GetMeta().UnpackTo(&taskMeta);

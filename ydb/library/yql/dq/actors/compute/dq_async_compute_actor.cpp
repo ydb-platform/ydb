@@ -59,7 +59,7 @@ public:
 
         TLogFunc logger;
         if (IsDebugLogEnabled(actorSystem)) {
-            logger = [actorSystem, txId = GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
+            logger = [actorSystem, txId = GetTxId(), taskId = Task.GetId()] (const TString& message) {
                 LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
                     << ", task: " << taskId << ": " << message);
             };
@@ -73,7 +73,7 @@ public:
             }
         }
         std::tie(TaskRunnerActor, actor) = TaskRunnerActorFactory->Create(
-            this, GetTxId(), GetTask().GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
+            this, GetTxId(), Task.GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
         TaskRunnerActorId = RegisterWithSameMailbox(actor);
 
         TDqTaskRunnerMemoryLimits limits;
@@ -87,7 +87,7 @@ public:
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(
-                GetTask(), limits, execCtx));
+                Task.GetSerializedTask(), limits, execCtx));
 
         CA_LOG_D("Use CPU quota: " << UseCpuQuota() << ". Rate limiter resource: { \"" << Task.GetRateLimiter() << "\", \"" << Task.GetRateLimiterResource() << "\" }");
     }

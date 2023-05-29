@@ -1395,7 +1395,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
             badRequest("Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction");
             return tx;
-        } else if (tx->IsKqpScanTransaction() && dataTx->GetKqpTransaction().HasSnapshot()) {
+        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
             badRequest("Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction");
             return tx;
         }
@@ -1423,9 +1423,9 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 
         if (!tx->IsImmediate() || !Self->IsMvccEnabled()) {
             // No op
-        } else if (tx->IsKqpScanTransaction() && dataTx->GetKqpTransaction().HasSnapshot()) {
+        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
             // to be consistent while dependencies calculation
-            auto snapshot = dataTx->GetKqpTransaction().GetSnapshot();
+            auto snapshot = dataTx->GetKqpSnapshot();
             tx->SetMvccSnapshot(TRowVersion(snapshot.GetStep(), snapshot.GetTxId()));
         }
     }

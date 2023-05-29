@@ -89,9 +89,9 @@ class IProxyFactory: public TThrRefBase, private TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<IProxyFactory>;
 
-    virtual ITaskRunner::TPtr GetOld(const NDqProto::TDqTask& task, const TString& traceId = "") = 0;
+    virtual ITaskRunner::TPtr GetOld(const NDq::TDqTaskSettings& task, const TString& traceId = "") = 0;
 
-    virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDqProto::TDqTask& task, const TString& traceId = "TODO") = 0;
+    virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& task, const TString& traceId = "TODO") = 0;
 };
 
 

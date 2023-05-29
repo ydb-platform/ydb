@@ -74,7 +74,7 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
     Y_VERIFY(tasks.size() == actorIds.size());
 
     for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
-        auto& task = tasks[i];
+        const auto& task = GetTask(i);
         auto& actorId = TaskIdToActor[task.GetId()];
         if (actorId) {
             OnInternalError(TStringBuilder() << "Duplicate task id: " << task.GetId());

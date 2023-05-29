@@ -125,7 +125,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     }
 
     try {
-        auto& kqpTx = dataTx->GetKqpTransaction();
+        auto& kqpLocks = dataTx->GetKqpLocks();
+        bool useGenericReadSets = dataTx->GetUseGenericReadSets();
         auto& tasksRunner = dataTx->GetKqpTasksRunner();
 
         ui64 consumedMemory = dataTx->GetTxSize() + tasksRunner.GetAllocatedMemory();
@@ -200,7 +201,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         NKqp::NRm::TKqpResourcesRequest req;
         req.MemoryPool = NKqp::NRm::EKqpMemoryPool::DataQuery;
         req.Memory = txc.GetMemoryLimit();
-        ui64 taskId = kqpTx.GetTasks().empty() ? std::numeric_limits<ui64>::max() : kqpTx.GetTasks()[0].GetId();
+        ui64 taskId = dataTx->GetFirstKqpTaskId();
         NKqp::GetKqpResourceManager()->NotifyExternalResourcesAllocated(tx->GetTxId(), taskId, req);
 
         Y_DEFER {
@@ -228,7 +229,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
         auto result = KqpCompleteTransaction(ctx, tabletId, op->GetTxId(),
-            op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), kqpTx, tasksRunner, computeCtx);
+            op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), kqpLocks, useGenericReadSets, tasksRunner, computeCtx);
 
         if (!result && computeCtx.HadInconsistentReads()) {
             LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
@@ -357,7 +358,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());
-        auto statsMode = kqpTx.GetRuntimeSettings().GetStatsMode();
+        auto statsMode = dataTx->GetKqpStatsMode();
         KqpFillStats(DataShard, tasksRunner, computeCtx, statsMode, *op->Result());
     } catch (const TMemoryLimitExceededException&) {
         dataTx->ResetCollectedChanges();

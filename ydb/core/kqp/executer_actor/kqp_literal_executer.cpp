@@ -210,8 +210,9 @@ public:
         auto taskRunner = CreateKqpTaskRunner(context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
-        taskRunner->Prepare(protoTask, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext(),
-            TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params));
+        auto taskSettings = NDq::TDqTaskSettings(std::move(protoTask));
+        taskSettings.SetParamsProvider(std::move(TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params)));
+        taskRunner->Prepare(taskSettings, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext());
 
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);

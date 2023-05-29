@@ -53,7 +53,7 @@ public:
             };
         }
 
-        auto taskRunner = TaskRunnerFactory(GetTask(), logger);
+        auto taskRunner = TaskRunnerFactory(Task, logger);
         SetTaskRunner(taskRunner);
         PrepareTaskRunner();
 

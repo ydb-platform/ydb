@@ -309,7 +309,7 @@ struct TComputeMemoryLimits {
 };
 
 using TTaskRunnerFactory = std::function<
-    TIntrusivePtr<IDqTaskRunner>(const NDqProto::TDqTask& task, const TLogFunc& logFunc)
+    TIntrusivePtr<IDqTaskRunner>(const TDqTaskSettings& task, const TLogFunc& logFunc)
 >;
 
 void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,

@@ -20,7 +20,7 @@ enum ECheckpointingMode : int;
 
 namespace NYql::NDq {
 
-NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task);
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
 
 class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
 {
@@ -35,7 +35,7 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
     };
 
     struct TPendingCheckpoint {
-        TPendingCheckpoint(const NDqProto::TDqTask& task)
+        TPendingCheckpoint(const TDqTaskSettings& task)
             : SinksCount(GetSinksCount(task))
         {
         }
@@ -54,7 +54,7 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
             return SavedComputeActorState && SinksCount == SavedSinkStatesCount;
         }
 
-        static size_t GetSinksCount(const NDqProto::TDqTask& task);
+        static size_t GetSinksCount(const TDqTaskSettings& task);
 
         const size_t SinksCount;
         TMaybe<NDqProto::TCheckpoint> Checkpoint;
@@ -89,7 +89,7 @@ public:
         ComputeActorCurrentStateVersion = 2,
     };
 
-    TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor);
+    TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor);
     void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
     [[nodiscard]]
     bool HasPendingCheckpoint() const;
@@ -140,7 +140,7 @@ private:
 private:
     const NActors::TActorId Owner;
     const TTxId TxId;
-    const NDqProto::TDqTask Task;
+    const TDqTaskSettings Task;
     const bool IngressTask;
 
     const NActors::TActorId CheckpointStorage;

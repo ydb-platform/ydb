@@ -210,9 +210,58 @@ public:
         return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_SCAN;
     }
 
-    const NKikimrTxDataShard::TKqpTransaction &GetKqpTransaction() const { return Tx.GetKqpTransaction(); }
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& GetKqpTasks() const;
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpTasksRunner(Tx.GetKqpTransaction()); }
+    bool GetUseGenericReadSets() const {
+        Y_VERIFY(IsKqpDataTx());
+        return Tx.GetKqpTransaction().GetUseGenericReadSets();
+    }
+
+    inline const ::NKikimrTxDataShard::TKqpLocks& GetKqpLocks() const {
+        Y_VERIFY(IsKqpDataTx());
+        return Tx.GetKqpTransaction().GetLocks();
+    }
+
+    inline bool HasKqpLocks() const {
+        Y_VERIFY(IsKqpDataTx());
+        return Tx.GetKqpTransaction().HasLocks();
+    }
+
+    inline bool HasKqpSnapshot() const {
+        Y_VERIFY(IsKqpDataTx());
+        return Tx.GetKqpTransaction().HasSnapshot();
+    }
+
+    inline const ::NKikimrKqp::TKqpSnapshot& GetKqpSnapshot() const {
+        Y_VERIFY(IsKqpDataTx());
+        return Tx.GetKqpTransaction().GetSnapshot();
+    }
+
+    inline const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TDqTask>& GetTasks() const {
+        Y_VERIFY(IsKqpDataTx());
+        // ensure that GetTasks is not called after task runner is built
+        Y_VERIFY(!BuiltTaskRunner);
+        return Tx.GetKqpTransaction().GetTasks();
+    }
+
+    inline ui64 GetFirstKqpTaskId() {
+        ui64 taskId = std::numeric_limits<ui64>::max();
+        const auto& tasks = GetKqpTasksRunner().GetTasks();
+        if (!tasks.empty()) {
+            taskId = tasks.begin()->second.GetId();
+        }
+        return taskId;
+    }
+
+    NKqp::TKqpTasksRunner& GetKqpTasksRunner() {
+        Y_VERIFY(IsKqpDataTx());
+        BuiltTaskRunner = true;
+        return EngineBay.GetKqpTasksRunner(*Tx.MutableKqpTransaction());
+    }
+
+    ::NYql::NDqProto::EDqStatsMode GetKqpStatsMode() const {
+        Y_VERIFY(IsKqpDataTx());
+        return Tx.GetKqpTransaction().GetRuntimeSettings().GetStatsMode();
+    }
+
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
@@ -252,6 +301,7 @@ private:
     ui64 TxSize;
     ui64 TxCacheUsage;
     bool IsReleased;
+    bool BuiltTaskRunner;
     TMaybe<ui64> PerShardKeysSizeLimitBytes_;
     bool IsReadOnly;
     bool AllowCancelROwithReadsets;

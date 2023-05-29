@@ -108,6 +108,7 @@ struct TComputeActorStateFuncHelper<void (T::*)(STFUNC_SIG)> {
 
 } // namespace NDetails
 
+
 template<typename TDerived>
 class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TDqComputeActorChannels::ICallbacks
@@ -1458,7 +1459,11 @@ protected:
         return TxId;
     }
 
-    const NDqProto::TDqTask& GetTask() const {
+    const TDqTaskSettings& GetTask() const {
+        return Task;
+    }
+
+    TDqTaskSettings& GetTaskRef() {
         return Task;
     }
 
@@ -1475,8 +1480,7 @@ protected:
         TaskRunner = taskRunner;
     }
 
-    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext(),
-        const TDqTaskRunnerParameterProvider& parameterProvider = {}) {
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) {
         YQL_ENSURE(TaskRunner);
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota->GetMkqlMemoryLimit());
@@ -1488,7 +1492,7 @@ protected:
         limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
-        TaskRunner->Prepare(Task, limits, execCtx, parameterProvider);
+        TaskRunner->Prepare(Task, limits, execCtx);
 
         FillIoMaps(
             TaskRunner->GetHolderFactory(),
@@ -2099,7 +2103,7 @@ protected:
 protected:
     const NActors::TActorId ExecuterId;
     const TTxId TxId;
-    const NDqProto::TDqTask Task;
+    TDqTaskSettings Task;
     TString LogPrefix;
     const TComputeRuntimeSettings RuntimeSettings;
     TComputeMemoryLimits MemoryLimits;

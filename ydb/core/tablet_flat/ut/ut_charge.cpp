@@ -127,9 +127,15 @@ namespace {
 
         void CheckByKeys(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
         {
-            CheckPrechargeByKeys(lower, upper, items, false, shouldPrecharge);
-            CheckPrechargeByKeys(lower, upper, items, true, shouldPrecharge);
+            CheckPrechargeByKeys(lower, upper, items, false, shouldPrecharge, false);
+            CheckPrechargeByKeys(lower, upper, items, true, shouldPrecharge, false);
             CheckIterByKeys(lower, upper, items ? items : Max<ui32>(), shouldPrecharge);
+        }
+
+        void CheckByKeysReverse(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
+        {
+            CheckPrechargeByKeys(lower, upper, items, false, shouldPrecharge, true);
+            CheckPrechargeByKeys(lower, upper, items, true, shouldPrecharge, true);
         }
 
         void CheckByRows(TPageId row1, TPageId row2, ui64 items, TMap<TGroupId, TArr> shouldPrecharge) const
@@ -138,7 +144,7 @@ namespace {
             CheckPrechargeByRows(row1, row2, items, true, shouldPrecharge);
         }
 
-        void CheckPrechargeByKeys(ui32 lower, ui32 upper, ui64 items, bool fail, const TMap<TGroupId, TArr>& shouldPrecharge) const
+        void CheckPrechargeByKeys(ui32 lower, ui32 upper, ui64 items, bool fail, const TMap<TGroupId, TArr>& shouldPrecharge, bool reverse) const
         {
             Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
@@ -159,10 +165,11 @@ namespace {
                 tags.push_back(c.Tag);
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                !fail,
-                TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>()),
-                AssertMesage(fail));
+            bool ready = !reverse
+                ? TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>())
+                : TCharge::RangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.Touched.empty(), ready, AssertMesage(fail));
 
             AssertEqual(env.Touched, shouldPrecharge, fail ? TPageIdFlags::IfFail : TPageIdFlags::IfNoFail);
         }
@@ -316,7 +323,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         { /*_ 1xx: A set of some edge and basic cases */
 
             me.To(100).CheckByKeys(33, 34, 0, { 8 });     // keys on the last page
-            me.To(101).CheckByKeys(0, 0, 0, { 0, 1_f });    // keys before the part
+            me.To(101).CheckByKeys(0, 0, 0, { 0, 1_I });    // keys before the part
             me.To(102).CheckByKeys(3, 4, 0, { 0, 1 });
             me.To(103).CheckByKeys(3, 5, 0, { 0, 1, 2_I });
             me.To(104).CheckByKeys(4, 8, 0, { 0, 1, 2 });
@@ -389,7 +396,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         /*_ 1xx: Play with first page */ {
             me.To(100).CheckByKeys(0, 0, 0, TMap<TGroupId, TArr>{
-                {TGroupId{0}, {0, 1_f}},
+                {TGroupId{0}, {0, 1_I}},
                 {TGroupId{1}, {}},
                 {TGroupId{2}, {}}
             });
@@ -703,6 +710,130 @@ Y_UNIT_TEST_SUITE(Charge) {
             me.To(base + 2).CheckByKeys(lead + 2, 35, 1, span1);
             me.To(base + 3).CheckByKeys(lead + 3, 35, 1, span2);
         }
+    }
+
+    Y_UNIT_TEST(ByKeysReverse)
+    {
+        TModel me;
+
+        /*
+        
+        keys by pages:
+        group0 = |1 2 3|5 6 7|9 10 11|13 14 15|..
+        group1 = |1 2|3 5|6 7|9 10|11 13|14 15|..
+        group3 = |1|2|3|5|6|7|9|10|11|13|14|15|..
+        
+        */
+
+        me.To(100).CheckByKeysReverse(15, 15, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3}},
+            {TGroupId{2}, {11_g}}
+        });
+
+        me.To(101).CheckByKeysReverse(15, 5, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5_g, 4_g, 3_g}}
+        });
+
+        me.To(102).CheckByKeysReverse(15, 4, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1, 0}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3}}
+        });
+
+        me.To(103).CheckByKeysReverse(15, 3, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1, 0}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3, 2_g}}
+        });
+
+        me.To(104).CheckByKeysReverse(15, 1, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1, 0}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3, 2_g, 1_g, 0_g}}
+        });
+
+        me.To(105).CheckByKeysReverse(15, 0, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1, 0}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4, 3, 2, 1, 0}}
+        });
+
+        me.To(106).CheckByKeysReverse(17, 17, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {4}},
+            {TGroupId{2}, {12_g}}
+        });
+        
+        me.To(107).CheckByKeysReverse(16, 16, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3}},
+            {TGroupId{2}, {}}
+        });
+
+        me.To(108).CheckByKeysReverse(35, 35, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8}},
+            {TGroupId{2}, {26_g}}
+        });
+
+        me.To(109).CheckByKeysReverse(35, 33, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8}},
+            {TGroupId{2}, {26_g, 25_g, 24_g}}
+        });
+
+        me.To(110).CheckByKeysReverse(35, 32, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7}},
+            {TGroupId{2}, {26_g, 25_g, 24_g}}
+        });
+
+        me.To(111).CheckByKeysReverse(4, 1, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {0}},
+            {TGroupId{2}, {2_g, 1_g, 0_g}}
+        });
+
+        me.To(112).CheckByKeysReverse(1, 1, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {0}},
+            {TGroupId{2}, {0_g}}
+        });
+
+        me.To(113).CheckByKeysReverse(1, 0, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {0}},
+            {TGroupId{2}, {0_g}}
+        });
+
+        me.To(114).CheckByKeysReverse(0, 0, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {}},
+            {TGroupId{2}, {}}
+        });
+
+        me.To(200).CheckByKeysReverse(15, 3, 6, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1, 0_f}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4_f, 3_f}} // here we touh extra pages, but it's fine
+        });
+
+        me.To(201).CheckByKeysReverse(15, 3, 5, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1_f}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5_f, 4_f, 3_f}} // here we touh extra pages, but it's fine
+        });
+
+        me.To(202).CheckByKeysReverse(15, 5, 5, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1_f}},
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6}}
+        });
+
+        me.To(203).CheckByKeysReverse(13, 3, 4, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1}},
+            {TGroupId{2}, {9_g, 8, 7, 6, 5, 4_f}} // here we touh extra pages, but it's fine
+        });
+
+        me.To(204).CheckByKeysReverse(13, 3, 3, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2, 1_f}},
+            {TGroupId{2}, {9_g, 8, 7, 6, 5_f}} // here we touh extra pages, but it's fine
+        });
+
+        me.To(205).CheckByKeysReverse(13, 3, 2, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2}},
+            {TGroupId{2}, {9_g, 8, 7, 6_f}} // here we touh extra pages, but it's fine
+        });
+
+        me.To(206).CheckByKeysReverse(13, 3, 1, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3, 2}},
+            {TGroupId{2}, {9_g, 8, 7_f}} // here we touh extra pages, but it's fine
+        });
     }
 
     Y_UNIT_TEST(ByRows)

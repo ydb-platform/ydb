@@ -7,11 +7,11 @@
 
 
 
-add_executable(benchmark)
-target_compile_options(benchmark PRIVATE
+add_executable(jsonpath-benchmark)
+target_compile_options(jsonpath-benchmark PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(benchmark PUBLIC
+target_link_libraries(jsonpath-benchmark PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
@@ -26,10 +26,10 @@ target_link_libraries(benchmark PUBLIC
   udf-service-exception_policy
   yql-sql-pg_dummy
 )
-target_sources(benchmark PRIVATE
+target_sources(jsonpath-benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/benchmark/main.cpp
 )
-target_allocator(benchmark
+target_allocator(jsonpath-benchmark
   system_allocator
 )
-vcs_info(benchmark)
+vcs_info(jsonpath-benchmark)

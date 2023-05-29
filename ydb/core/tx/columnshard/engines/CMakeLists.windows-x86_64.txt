@@ -8,6 +8,7 @@
 
 add_subdirectory(predicate)
 add_subdirectory(reader)
+add_subdirectory(storage)
 add_subdirectory(ut)
 get_built_tool_path(
   TOOL_enum_parser_bin
@@ -32,6 +33,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   ydb-core-tablet_flat
   columnshard-engines-reader
   columnshard-engines-predicate
+  columnshard-engines-storage
   formats-arrow-compression
   udf-service-exception_policy
   tools-enum_parser-enum_serialization_runtime

@@ -297,10 +297,9 @@ struct TExpected {
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
              const TExpected& expected) {
-    ui64 lastCompactedGranule = 0;
-    auto compactionInfo = engine.Compact(TestLimits(), lastCompactedGranule);
-    UNIT_ASSERT_VALUES_EQUAL(compactionInfo->Granules.size(), 1);
-    UNIT_ASSERT(!compactionInfo->InGranule);
+    auto compactionInfo = engine.Compact(TestLimits());
+    UNIT_ASSERT(!!compactionInfo);
+    UNIT_ASSERT(!compactionInfo->InGranule());
 
     std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TSnapshot::Zero(), TestLimits());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);

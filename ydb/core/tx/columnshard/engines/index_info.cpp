@@ -104,6 +104,16 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
     }
 }
 
+std::vector<ui32> TIndexInfo::GetColumnIds() const {
+    std::vector<ui32> result;
+    for (auto&& i : Columns) {
+        result.emplace_back(i.first);
+    }
+    result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
+    result.emplace_back((ui32)ESpecialColumn::TX_ID);
+    return result;
+}
+
 std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) const {
     std::vector<TString> out;
     out.reserve(ids.size());
@@ -181,19 +191,18 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::PrepareForInsert(const TString& 
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema() const {
-    if (Schema) {
-        return Schema;
+    if (!Schema) {
+        std::vector<ui32> ids;
+        ids.reserve(Columns.size());
+        for (const auto& [id, _] : Columns) {
+            ids.push_back(id);
+        }
+
+        // The ids had a set type before so we keep them sorted.
+        std::sort(ids.begin(), ids.end());
+        Schema = MakeArrowSchema(Columns, ids);
     }
 
-    std::vector<ui32> ids;
-    ids.reserve(Columns.size());
-    for (const auto& [id, _] : Columns) {
-        ids.push_back(id);
-    }
-
-    // The ids had a set type before so we keep them sorted.
-    std::sort(ids.begin(), ids.end());
-    Schema = MakeArrowSchema(Columns, ids);
     return Schema;
 }
 

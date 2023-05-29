@@ -50,7 +50,7 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
     for (auto& rec : portionInfo.Records) {
         auto pos = resultSchema->GetFieldIndex(rec.ColumnId);
         Y_VERIFY(pos >= 0);
-        auto field = resultSchema->GetField(pos);
+        auto field = resultSchema->GetFieldByIndex(pos);
         auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
 
         auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(field->name()), field, columnSaver);
@@ -75,7 +75,7 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
                                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                                             const ui64 granule,
                                                             const TSnapshot& snapshot,
-                                                            std::vector<TString>& blobs) const {
+                                                            std::vector<TString>& blobs, const TGranuleMeta* granuleMeta) const {
     Y_VERIFY(batch->num_rows());
 
     auto resultSchema = SchemaVersions.GetSchema(snapshot);
@@ -101,34 +101,48 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
         TPortionInfo portionInfo;
         portionInfo.Records.reserve(resultSchema->GetSchema()->num_fields());
         std::vector<TString> portionBlobs;
-        portionBlobs.reserve(resultSchema->GetSchema()->num_fields());
+        portionBlobs.resize(resultSchema->GetSchema()->num_fields());
 
         // Serialize portion's columns into blobs
 
         bool ok = true;
-        for (const auto& field : resultSchema->GetSchema()->fields()) {
-            const auto& name = field->name();
-            ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(name);
+
+        std::vector<TColumnSummary> sortedColumnIds;
+        if (granuleMeta) {
+            sortedColumnIds = granuleMeta->GetSummary().GetColumnIdsSortedBySizeDescending();
+        } else {
+            for (auto&& i : resultSchema->GetIndexInfo().GetColumnIds()) {
+                sortedColumnIds.emplace_back(TColumnSummary(i, 0));
+            }
+        }
+
+        ui32 fillCounter = 0;
+        for (const auto& columnSummary : sortedColumnIds) {
+            const TString& columnName = resultSchema->GetIndexInfo().GetColumnName(columnSummary.GetColumnId());
+            const int idx = resultSchema->GetFieldIndex(columnSummary.GetColumnId());
+            Y_VERIFY(idx >= 0);
+            auto field = resultSchema->GetFieldByIndex(idx);
+            Y_VERIFY(field);
+            auto array = portionBatch->GetColumnByName(columnName);
+            Y_VERIFY(array);
 
             /// @warnign records are not valid cause of empty BlobId and zero Portion
-            TColumnRecord record = TColumnRecord::Make(granule, columnId, snapshot, 0);
-            auto columnSaver = resultSchema->GetColumnSaver(name, saverContext);
-            auto blob = portionInfo.AddOneChunkColumn(portionBatch->GetColumnByName(name), field, std::move(record), columnSaver, Counters);
-            if (!blob.size()) {
-                Counters.TrashDataSerializationBytes->Add(blob.size());
-                Counters.TrashDataSerialization->Add(1);
+            TColumnRecord record = TColumnRecord::Make(granule, columnSummary.GetColumnId(), snapshot, 0);
+            auto columnSaver = resultSchema->GetColumnSaver(columnSummary.GetColumnId(), saverContext);
+            TString blob = TPortionInfo::SerializeColumnWithLimit(array, field, columnSaver, Counters);
+            if (!blob) {
                 ok = false;
                 break;
-            } else {
-                Counters.CorrectDataSerializationBytes->Add(blob.size());
-                Counters.CorrectDataSerialization->Add(1);
             }
 
-            // TODO: combine small columns in one blob
-            portionBlobs.emplace_back(std::move(blob));
+            portionInfo.InsertOneChunkColumn(idx, std::move(record));
+
+            portionBlobs[idx] = std::move(blob);
+            ++fillCounter;
         }
 
         if (ok) {
+            Y_VERIFY(fillCounter == portionBlobs.size());
             portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
             out.emplace_back(std::move(portionInfo));
             for (auto& blob : portionBlobs) {
@@ -268,9 +282,9 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
 
         // We could merge data here cause tablet limits indexing data portions
 #if 0
-    auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortDescription()); // insert: no replace
-    Y_VERIFY(merged);
-    Y_VERIFY_DEBUG(NArrow::IsSorted(merged, indexInfo.GetReplaceKey()));
+        auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortDescription()); // insert: no replace
+        Y_VERIFY(merged);
+        Y_VERIFY_DEBUG(NArrow::IsSorted(merged, indexInfo.GetReplaceKey()));
 #else
         auto merged = NArrow::CombineSortedBatches(batches, resultSchema->GetIndexInfo().SortReplaceDescription());
         Y_VERIFY(merged);
@@ -280,7 +294,7 @@ std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChange
 
         auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {
-            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs);
+            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, changes->GetGranuleMeta());
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 changes->AppendedPortions.emplace_back(std::move(portion));
@@ -338,13 +352,13 @@ std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnE
             if (!slice || slice->num_rows() == 0) {
                 continue;
             }
-            auto tmp = MakeAppendedPortions(pathId, slice, granule, maxSnapshot, blobs);
+            auto tmp = MakeAppendedPortions(pathId, slice, granule, maxSnapshot, blobs, changes->GetGranuleMeta());
             for (auto&& portionInfo : tmp) {
                 portions.emplace_back(std::move(portionInfo));
             }
         }
     } else {
-        portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs);
+        portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, changes->GetGranuleMeta());
     }
 
     Y_VERIFY(portions.size() > 0);
@@ -689,10 +703,9 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
 
         for (const auto& [mark, id] : marksGranules.GetOrderedMarks()) {
             ui64 tmpGranule = changes->SetTmpGranule(pathId, mark);
-
             for (const auto& batch : idBatches[id]) {
                 // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-                auto newPortions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs);
+                auto newPortions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs, changes->GetGranuleMeta());
                 Y_VERIFY(newPortions.size() > 0);
                 for (auto& portion : newPortions) {
                     changes->AppendedPortions.emplace_back(std::move(portion));
@@ -708,7 +721,7 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
             ui64 tmpGranule = changes->SetTmpGranule(pathId, ts);
 
             // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-            auto portions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs);
+            auto portions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs, changes->GetGranuleMeta());
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 changes->AppendedPortions.emplace_back(std::move(portion));
@@ -721,7 +734,7 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
 
 bool TCompactionLogic::IsSplit(std::shared_ptr<TColumnEngineChanges> changes) {
     auto castedChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
-    return !castedChanges->CompactionInfo->InGranule;
+    return !castedChanges->CompactionInfo->InGranule();
 }
 
 std::vector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {

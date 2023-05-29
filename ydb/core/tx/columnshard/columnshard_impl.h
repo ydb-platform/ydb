@@ -349,7 +349,6 @@ private:
     TWriteId LastWriteId = TWriteId{0};
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
-    ui64 LastCompactedGranule = 0;
     ui64 LastExportNo = 0;
     ui64 WritesInFly = 0;
     ui64 OwnerPathId = 0;

@@ -259,7 +259,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->ActiveCompaction--;
 
         Y_VERIFY(changes->CompactionInfo);
-        bool inGranule = changes->CompactionInfo->InGranule;
+        bool inGranule = changes->CompactionInfo->InGranule();
 
         if (inGranule) {
             Self->IncCounter(ok ? COUNTER_COMPACTION_SUCCESS : COUNTER_COMPACTION_FAIL);

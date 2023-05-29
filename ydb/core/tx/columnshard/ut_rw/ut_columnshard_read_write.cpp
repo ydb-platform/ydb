@@ -2568,7 +2568,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
                 if (msg->IndexChanges->CompactionInfo) {
                     ++compactionsHappened;
-                    Cerr << "Compaction at snaphsot "<< msg->IndexChanges->InitSnapshot
+                    Cerr << "Compaction at snapshot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : msg->IndexChanges->SwitchedPortions) {

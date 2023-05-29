@@ -113,20 +113,68 @@ private:
     static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
 };
 
-struct TCompactionInfo {
-    TSet<ui64> Granules;
-    bool InGranule{false};
+class ICompactionObjectCallback {
+public:
+    virtual ~ICompactionObjectCallback() = default;
+    virtual void OnCompactionStarted(const bool inGranule) = 0;
+    virtual void OnCompactionFinished() = 0;
+    virtual void OnCompactionFailed(const TString& reason) = 0;
+    virtual void OnCompactionCanceled(const TString& reason) = 0;
+    virtual TString DebugString() const = 0;
+};
 
-    bool Empty() const { return Granules.empty(); }
-    bool Good() const { return Granules.size() == 1; }
+struct TCompactionInfo {
+private:
+    std::shared_ptr<ICompactionObjectCallback> CompactionObject;
+    mutable bool StatusProvided = false;
+    const bool InGranuleFlag = false;
+public:
+    TCompactionInfo(std::shared_ptr<ICompactionObjectCallback> compactionObject, const bool inGranule)
+        : CompactionObject(compactionObject)
+        , InGranuleFlag(inGranule)
+    {
+        Y_VERIFY(compactionObject);
+        CompactionObject->OnCompactionStarted(InGranuleFlag);
+    }
+
+    bool InGranule() const {
+        return InGranuleFlag;
+    }
+
+    template <class T>
+    const T& GetObject() const {
+        auto result = dynamic_cast<const T*>(CompactionObject.get());
+        Y_VERIFY(result);
+        return *result;
+    }
+
+    void CompactionFinished() const {
+        Y_VERIFY(!StatusProvided);
+        StatusProvided = true;
+        CompactionObject->OnCompactionFinished();
+    }
+
+    void CompactionCanceled(const TString& reason) const {
+        Y_VERIFY(!StatusProvided);
+        StatusProvided = true;
+        CompactionObject->OnCompactionCanceled(reason);
+    }
+
+    void CompactionFailed(const TString& reason) const {
+        Y_VERIFY(!StatusProvided);
+        StatusProvided = true;
+        CompactionObject->OnCompactionFailed(reason);
+    }
+
+    ~TCompactionInfo() {
+        Y_VERIFY_DEBUG(StatusProvided);
+        if (!StatusProvided) {
+            CompactionObject->OnCompactionFailed("compaction unexpectedly finished");
+        }
+    }
 
     friend IOutputStream& operator << (IOutputStream& out, const TCompactionInfo& info) {
-        if (info.Good() == 1) {
-            ui64 granule = *info.Granules.begin();
-            out << (info.InGranule ? "in granule" : "split granule") << " compaction of granule " << granule;
-        } else {
-            out << "wrong compaction of " << info.Granules.size() << " granules";
-        }
+        out << (info.InGranuleFlag ? "in granule" : "split granule") << " compaction of granule: " << info.CompactionObject->DebugString();
         return out;
     }
 };
@@ -194,7 +242,7 @@ public:
                 return "insert";
             case COMPACTION:
                 return CompactionInfo
-                    ? (CompactionInfo->InGranule ? "compaction in granule" : "compaction split granule" )
+                    ? (CompactionInfo->InGranule() ? "compaction in granule" : "compaction split granule" )
                     : "compaction";
             case CLEANUP:
                 return "cleanup";
@@ -593,7 +641,7 @@ public:
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const THashSet<ui32>& columnIds,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
-    virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, ui64& lastCompactedGranule) = 0;
+    virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                                   const TSnapshot& outdatedSnapshot, const TCompactionLimits& limits) = 0;

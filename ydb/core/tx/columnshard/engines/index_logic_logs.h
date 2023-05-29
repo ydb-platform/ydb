@@ -14,7 +14,8 @@ protected:
 private:
     const THashMap<ui64, NKikimr::NOlap::TTiering>* TieringMap = nullptr;
 public:
-    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap, const NColumnShard::TIndexationCounters& counters)
+    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
+        const NColumnShard::TIndexationCounters& counters)
         : SchemaVersions(indexInfo)
         , Counters(counters)
         , TieringMap(&tieringMap)
@@ -40,7 +41,7 @@ protected:
                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                             const ui64 granule,
                                             const TSnapshot& minSnapshot,
-                                            std::vector<TString>& blobs) const;
+                                            std::vector<TString>& blobs, const TGranuleMeta* granuleMeta) const;
 
     static std::shared_ptr<arrow::RecordBatch> GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                             const TIndexInfo& indexInfo);

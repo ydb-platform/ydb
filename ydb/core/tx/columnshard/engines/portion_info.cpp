@@ -18,7 +18,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldColumnIndex = dataSchema.GetFieldIndex(columnId);
         if (oldColumnIndex >= 0) { // ClumnExists
-            auto oldColumnInfo = dataSchema.GetField(oldColumnIndex);
+            auto oldColumnInfo = dataSchema.GetFieldByIndex(oldColumnIndex);
             Y_VERIFY(oldColumnInfo);
             auto columnData = batch->GetColumnByName(oldColumnInfo->name());
             Y_VERIFY(columnData);
@@ -41,12 +41,9 @@ TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array
     return saver.Apply(batch);
 }
 
-TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
-                                        const std::shared_ptr<arrow::Field>& field,
-                                        TColumnRecord&& record,
-                                        const TColumnSaver saver,
-                                        const NColumnShard::TIndexationCounters& counters,
-                                        const ui32 limitBytes) {
+TString TPortionInfo::SerializeColumnWithLimit(const std::shared_ptr<arrow::Array>& array,
+    const std::shared_ptr<arrow::Field>& field,
+    const TColumnSaver saver, const NColumnShard::TIndexationCounters& counters, const ui32 limitBytes) {
     auto blob = SerializeColumn(array, field, saver);
     if (blob.size() >= limitBytes) {
         counters.TrashDataSerializationBytes->Add(blob.size());
@@ -56,10 +53,15 @@ TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& arr
         counters.CorrectDataSerializationBytes->Add(blob.size());
         counters.CorrectDataSerialization->Add(1);
     }
-
-    record.Chunk = 0;
-    Records.emplace_back(std::move(record));
     return blob;
+}
+
+void TPortionInfo::InsertOneChunkColumn(const ui32 idx, TColumnRecord&& record) {
+    record.Chunk = 0;
+    if (Records.size() <= idx) {
+        Records.resize(idx + 1);
+    }
+    Records[idx] = std::move(record);
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {

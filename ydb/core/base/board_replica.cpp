@@ -31,7 +31,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
     };
 
     struct TPathSubscribeData {
-        THashMap<TActorId, ui32> Subscribers; // Subcriber -> Cookie
+        THashMap<TActorId, ui64> Subscribers; // Subcriber -> Cookie
     };
 
     struct TSubscriber {
@@ -253,6 +253,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
         auto &record = ev->Get()->Record;
         const auto &path = record.GetPath();
 
+        ui32 flags = 0;
         if (record.GetSubscribe()) {
             auto& pathSubscribeData  = PathToSubscribers[path];
             pathSubscribeData.Subscribers[ev->Sender] = ev->Cookie;
@@ -268,37 +269,28 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
                     sessionsIt->second.Subscribers.insert(ev->Sender);
                 }
             }
-        }
-
-        ui32 flags = 0;
-        if (record.GetSubscribe()) {
             flags = IEventHandle::FlagTrackDelivery;
         }
 
+        std::unique_ptr<TEvStateStorage::TEvReplicaBoardInfo> reply;
+
         auto pathIt = IndexPath.find(path);
         if (pathIt == IndexPath.end()) {
-            auto reply = std::make_unique<TEvStateStorage::TEvReplicaBoardInfo>(path, true);
-            auto resp = std::make_unique<IEventHandle>(
-                ev->Sender, ev->Recipient, reply.release(), flags, ev->Cookie);
-            if (ev->InterconnectSession) {
-                resp->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+            reply = std::make_unique<TEvStateStorage::TEvReplicaBoardInfo>(path, true);
+        } else {
+            reply = std::make_unique<TEvStateStorage::TEvReplicaBoardInfo>(path, false);
+            auto *info = reply->Record.MutableInfo();
+            info->Reserve(pathIt->second.size());
+            for (ui32 entryIndex : pathIt->second) {
+                const TEntry &entry = Entries[entryIndex];
+                auto *ex = info->Add();
+                ActorIdToProto(entry.Owner, ex->MutableOwner());
+                ex->SetPayload(entry.Payload);
             }
-            TActivationContext::Send(resp.release());
-            return;
-        }
-
-        auto reply = MakeHolder<TEvStateStorage::TEvReplicaBoardInfo>(path, false);
-        auto *info = reply->Record.MutableInfo();
-        info->Reserve(pathIt->second.size());
-        for (ui32 entryIndex : pathIt->second) {
-            const TEntry &entry = Entries[entryIndex];
-            auto *ex = info->Add();
-            ActorIdToProto(entry.Owner, ex->MutableOwner());
-            ex->SetPayload(entry.Payload);
         }
 
         auto resp = std::make_unique<IEventHandle>(
-            ev->Sender, SelfId(), reply.Release(), flags, ev->Cookie);
+            ev->Sender, SelfId(), reply.release(), flags, ev->Cookie);
         if (ev->InterconnectSession) {
             resp->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
         }

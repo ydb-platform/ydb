@@ -60,13 +60,23 @@ class TBoardSubscriberTest: public NUnitTest::TTestBase {
         Context->DispatchEvents(options);
     }
 
+    TVector<TActorId> ResolveReplicas() {
+        const TActorId proxy = MakeStateStorageProxyID(0);
+        const TActorId edge = Context->AllocateEdgeActor();
+
+        Context->Send(proxy, edge, new TEvStateStorage::TEvResolveBoard("path"));
+        auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+
+        auto allReplicas = ev->Get()->Replicas;
+        return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
+    }
+
+
 public:
     void SetUp() override {
-        Context = MakeHolder<TTestBasicRuntime>(2);
+        Context = MakeHolder<TTestBasicRuntime>(3);
 
-        for (ui32 i : xrange(Context->GetNodeCount())) {
-            SetupStateStorage(*Context, i, 0);
-        }
+        SetupCustomStateStorage(*Context, 3, 3, 1, 0);
 
         Context->Initialize(TAppPrepare().Unwrap());
     }
@@ -78,12 +88,16 @@ public:
     UNIT_TEST_SUITE(TBoardSubscriberTest);
     UNIT_TEST(SimpleSubscriber);
     UNIT_TEST(ManySubscribersManyPublisher);
-    UNIT_TEST(DisconnectReplica);
+    UNIT_TEST(NotAvailableByShutdown);
+    UNIT_TEST(ReconnectReplica);
+    UNIT_TEST(DropByDisconnect);
     UNIT_TEST_SUITE_END();
 
     void SimpleSubscriber();
     void ManySubscribersManyPublisher();
-    void DisconnectReplica();
+    void NotAvailableByShutdown();
+    void ReconnectReplica();
+    void DropByDisconnect();
 
 private:
     THolder<TTestBasicRuntime> Context;
@@ -109,20 +123,26 @@ void TBoardSubscriberTest::SimpleSubscriber() {
         auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
         UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
         UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
-        const auto &update = event->Get()->Update;
+        const auto &updates = event->Get()->Updates;
+        UNIT_ASSERT(updates.size() == 1);
 
-        UNIT_ASSERT(!update.Dropped);
-        UNIT_ASSERT_EQUAL(update.Owner, publisher);
-        UNIT_ASSERT_EQUAL(update.Payload, "test");
+        auto updatesIt = updates.find(publisher);
+        UNIT_ASSERT(updatesIt != updates.end());
+
+        UNIT_ASSERT(!updatesIt->second.Dropped);
+        UNIT_ASSERT_EQUAL(updatesIt->second.Payload, "test");
     }
 
     KillPublisher(edgePublisher, publisher, 1);
 
     {
         auto event = Context->GrabEdgeEventIf<TEvStateStorage::TEvBoardInfoUpdate>(
-            {edgeSubscriber}, [edgeSubscriber](const auto& ev){
-            const auto &update = ev->Get()->Update;
-            if (ev->Recipient == edgeSubscriber && update.Dropped) {
+            {edgeSubscriber}, [edgeSubscriber, publisher](const auto& ev){
+            const auto &updates = ev->Get()->Updates;
+            UNIT_ASSERT(updates.size() == 1);
+            auto updatesIt = updates.find(publisher);
+            UNIT_ASSERT(updatesIt != updates.end());
+            if (ev->Recipient == edgeSubscriber && updatesIt->second.Dropped) {
                 return true;
             }
             return false;
@@ -130,10 +150,11 @@ void TBoardSubscriberTest::SimpleSubscriber() {
         UNIT_ASSERT(event);
         UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
         UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
-        const auto &update = event->Get()->Update;
+        const auto &updates = event->Get()->Updates;
 
-        UNIT_ASSERT(update.Dropped);
-        UNIT_ASSERT_EQUAL(update.Owner, publisher);
+        auto updatesIt = updates.find(publisher);
+        UNIT_ASSERT(updatesIt != updates.end());
+        UNIT_ASSERT(updatesIt->second.Dropped);
     }
 }
 
@@ -144,8 +165,8 @@ void TBoardSubscriberTest::ManySubscribersManyPublisher() {
     THashSet<TActorId> subscribers;
 
     for (size_t i = 0; i < subscribersCount; i++) {
-        const auto edgeSubscriber = Context->AllocateEdgeActor(i % 2);
-        CreateSubscriber("path", edgeSubscriber, i % 2);
+        const auto edgeSubscriber = Context->AllocateEdgeActor(i % 3);
+        CreateSubscriber("path", edgeSubscriber, i % 3);
         subscribers.insert(edgeSubscriber);
         {
             auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
@@ -156,41 +177,162 @@ void TBoardSubscriberTest::ManySubscribersManyPublisher() {
     }
 
     for (size_t i = 0; i < publishersCount; i++) {
-        const auto edgePublisher = Context->AllocateEdgeActor(i % 2);
-        const auto publisher = CreatePublisher("path", ToString(i), edgePublisher, i % 2);
+        const auto edgePublisher = Context->AllocateEdgeActor(i % 3);
+        const auto publisher = CreatePublisher("path", ToString(i), edgePublisher, i % 3);
         for (const auto& subscriber : subscribers) {
             auto event = Context->GrabEdgeEventIf<TEvStateStorage::TEvBoardInfoUpdate>(
                 {subscriber}, [publisher](const auto& ev) mutable {
-                    if (ev->Get()->Update.Owner == publisher) {
+                    const auto &updates = ev->Get()->Updates;
+                    UNIT_ASSERT(updates.size() == 1);
+                    auto updatesIt = updates.find(publisher);
+                    if (updatesIt != updates.end()) {
                         return true;
                     }
                     return false;
                 });
             UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
-            UNIT_ASSERT_EQUAL(event->Get()->Update.Payload, ToString(i));
+
+            const auto &updates = event->Get()->Updates;
+            UNIT_ASSERT(updates.size() == 1);
+
+            auto updatesIt = updates.find(publisher);
+            UNIT_ASSERT(updatesIt != updates.end());
+
+            UNIT_ASSERT_EQUAL(updatesIt->second.Payload, ToString(i));
         }
     }
 }
 
-void TBoardSubscriberTest::DisconnectReplica() {
+void TBoardSubscriberTest::NotAvailableByShutdown() {
 
-    std::vector<TActorId> replicas;
+    auto replicas = ResolveReplicas();
+
+    const auto edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
 
     {
-        const auto edgeSubscriber = Context->AllocateEdgeActor(1);
-        CreateSubscriber("path", edgeSubscriber, 1);
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        UNIT_ASSERT(event->Get()->InfoEntries.empty());
+    }
 
-        {
-            auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
-            UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
-            UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
-            UNIT_ASSERT(event->Get()->InfoEntries.empty());
-        }
+    Send(replicas[0], TActorId(), new TEvents::TEvPoisonPill(), 0, true);
+    Send(replicas[1], TActorId(), new TEvents::TEvPoisonPill(), 0, true);
 
-        Disconnect(1, 0);
 
+    auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
+    UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
+}
+
+void TBoardSubscriberTest::ReconnectReplica() {
+
+    const auto edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+
+    {
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        UNIT_ASSERT(event->Get()->InfoEntries.empty());
+    }
+
+    Disconnect(1, 0);
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(TEvStateStorage::EvReplicaBoardInfo);
+    Context->DispatchEvents(options);
+
+    Disconnect(1, 2);
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    const TActorId publisher = CreatePublisher("path", "test", edgePublisher, 0);
+
+    {
         auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
-        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        const auto &updates = event->Get()->Updates;
+        UNIT_ASSERT(updates.size() == 1);
+
+        auto updatesIt = updates.find(publisher);
+        UNIT_ASSERT(updatesIt != updates.end());
+
+        UNIT_ASSERT_EQUAL(updatesIt->second.Payload, "test");
+    }
+}
+
+void TBoardSubscriberTest::DropByDisconnect() {
+    auto replicas = ResolveReplicas();
+
+    const auto edgeSubscriber = Context->AllocateEdgeActor(1);
+    CreateSubscriber("path", edgeSubscriber, 1);
+
+    {
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfo>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        UNIT_ASSERT(event->Get()->InfoEntries.empty());
+    }
+
+    auto prevObserverFunc = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+            case TEvStateStorage::TEvReplicaBoardPublish::EventType: {
+                if (ev->Recipient != replicas[0]) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    const auto edgePublisher = Context->AllocateEdgeActor(0);
+    const TActorId publisher = CreatePublisher("path", "test", edgePublisher, 0);
+
+    {
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        const auto &updates = event->Get()->Updates;
+        UNIT_ASSERT(updates.size() == 1);
+
+        auto updatesIt = updates.find(publisher);
+        UNIT_ASSERT(updatesIt != updates.end());
+
+        UNIT_ASSERT_EQUAL(updatesIt->second.Payload, "test");
+    }
+
+    Disconnect(1, 0);
+
+    {
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        const auto &updates = event->Get()->Updates;
+        UNIT_ASSERT(updates.size() == 1);
+
+        auto updatesIt = updates.find(publisher);
+        UNIT_ASSERT(updatesIt != updates.end());
+
+        UNIT_ASSERT(updatesIt->second.Dropped);
+    }
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(TEvStateStorage::EvReplicaBoardInfo);
+    Context->DispatchEvents(options);
+
+    {
+        auto event = Context->GrabEdgeEvent<TEvStateStorage::TEvBoardInfoUpdate>(edgeSubscriber);
+        UNIT_ASSERT_EQUAL(event->Get()->Status, TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        UNIT_ASSERT_EQUAL(event->Get()->Path, "path");
+        const auto &updates = event->Get()->Updates;
+        UNIT_ASSERT(updates.size() == 1);
+
+        auto updatesIt = updates.find(publisher);
+        UNIT_ASSERT(updatesIt != updates.end());
+
+        UNIT_ASSERT_EQUAL(updatesIt->second.Payload, "test");
     }
 }
 

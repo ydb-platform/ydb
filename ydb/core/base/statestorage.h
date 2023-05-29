@@ -459,24 +459,17 @@ struct TEvStateStorage {
     struct TEvBoardInfoUpdate : public TEventLocal<TEvBoardInfoUpdate, EvBoardInfoUpdate> {
 
         struct TInfoEntryUpdate {
-            TActorId Owner;
             TString Payload;
             bool Dropped = false;
         };
 
         const TEvBoardInfo::EStatus Status;
         const TString Path;
-        TInfoEntryUpdate Update;
+        TMap<TActorId,TInfoEntryUpdate> Updates;
 
         TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path)
             : Status(status)
             , Path(path)
-        {}
-
-        TEvBoardInfoUpdate(const TEvBoardInfoUpdate &x)
-            : Status(x.Status)
-            , Path(x.Path)
-            , Update(x.Update)
         {}
     };
 };

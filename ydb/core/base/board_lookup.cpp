@@ -1,5 +1,7 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 
@@ -26,17 +28,38 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     const ui32 StateStorageGroupId;
     const bool Subscriber;
 
+    static constexpr int MAX_REPLICAS_COUNT_EXP = 32; // Replicas.size() <= 2**MAX_REPLICAS_COUNT_EXP
+
+    struct TEvPrivate {
+        enum EEv {
+            EvReconnectReplicas = EventSpaceBegin(TEvents::ES_PRIVATE),
+        };
+
+        struct TEvReconnectReplicas :
+                public TEventLocal<TEvReconnectReplicas, EEv::EvReconnectReplicas> {
+            ui32 ReplicaIdx;
+
+            TEvReconnectReplicas(ui32 replicaIdx) : ReplicaIdx(replicaIdx) {
+            }
+        };
+    };
+
     enum class EReplicaState {
         Unknown,
         NotAvailable,
         NoInfo,
         Ready,
+        Reconnect,
     };
 
     struct TReplica {
         TActorId Replica;
         EReplicaState State = EReplicaState::Unknown;
         THashSet<TActorId> Infos;
+        bool IsScheduled = false;
+        ui32 ReconnectNumber = 0;
+        NMonotonic::TMonotonic LastReconnectAt = TMonotonic::Zero();
+        TDuration CurrentDelay = TDuration::MilliSeconds(100);
     };
 
     TVector<TReplica> Replicas;
@@ -45,6 +68,19 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     THashMap<TActorId, THashSet<ui32>> InfoReplicas;
 
     ui32 WaitForReplicasToSuccess;
+
+    TDuration GetReconnectDelayForReplica(TReplica& replica) {
+        auto ret = replica.CurrentDelay;
+        auto newDelay = replica.CurrentDelay;
+        newDelay *= 2;
+        if (newDelay > TDuration::Seconds(5)) {
+            newDelay = TDuration::Seconds(5);
+        }
+        newDelay *= AppData()->RandomProvider->Uniform(100, 115);
+        newDelay /= 100;
+        replica.CurrentDelay = newDelay;
+        return ret;
+    }
 
     struct {
         ui32 Replied = 0;
@@ -121,8 +157,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         for (auto idx : xrange(msg->Replicas.size())) {
             const TActorId &replica = msg->Replicas[idx];
             Send(replica,
-                new TEvStateStorage::TEvReplicaBoardLookup(Path, TActorId(), Subscriber),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, idx);
+                new TEvStateStorage::TEvReplicaBoardLookup(Path, Subscriber),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+                EncodeCookie(idx, 0));
             Replicas[idx].Replica = replica;
             Replicas[idx].State = EReplicaState::Unknown;
         }
@@ -149,18 +186,20 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaBoardInfoUpdate::TPtr &ev) {
-        const auto &record = ev->Get()->Record;
-        const ui32 idx = ev->Cookie;
-        if (idx >= Replicas.size()) {
+        const auto [idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+
+        if (idx >= Replicas.size())
             return;
-        }
         auto &replica = Replicas[idx];
-        if (replica.State == EReplicaState::NotAvailable) {
+
+        if (reconnectNumber != replica.ReconnectNumber) {
+            return;
+        }
+        if (replica.State != EReplicaState::Ready && replica.State != EReplicaState::NoInfo) {
             return;
         }
 
-        replica.State = EReplicaState::Ready;
-
+        const auto &record = ev->Get()->Record;
         auto& info = record.GetInfo();
         const TActorId oid = ActorIdFromProto(info.GetOwner());
 
@@ -174,26 +213,27 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         if (CurrentStateFunc() == &TThis::StateSubscribe) {
-            TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate update;
-            update.Owner = oid;
+            std::optional<TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate> update;
             if (info.GetDropped()) {
                 if (!replicas.empty()) {
                     return;
                 }
                 InfoReplicas.erase(oid);
                 Info.erase(oid);
-                update.Dropped = true;
+                update = { "", true };
             } else {
-                if (Info[oid].Payload != info.GetPayload()) {
-                    Info[oid].Payload = info.GetPayload();
-                    update.Payload = std::move(info.GetPayload());
+                auto& currentInfo = Info[oid];
+                if (currentInfo.Payload != info.GetPayload()) {
+                    currentInfo.Payload = info.GetPayload();
+                    update = { info.GetPayload(), false };
                 }
             }
-
-            auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
-            reply->Update = std::move(update);
-            Send(Owner, std::move(reply));
+            if (update.has_value()) {
+                auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                reply->Updates = { { oid, std::move(update.value()) } };
+                Send(Owner, std::move(reply));
+            }
         } else {
             if (info.GetDropped()) {
                 if (!replicas.empty()) {
@@ -202,20 +242,34 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 InfoReplicas.erase(oid);
                 Info.erase(oid);
             } else {
-                Info[oid].Payload = std::move(info.GetPayload());
+                Info[oid].Payload = info.GetPayload();
             }
         }
     }
 
     void Handle(TEvStateStorage::TEvReplicaBoardInfo::TPtr &ev) {
-        const auto &record = ev->Get()->Record;
-        const ui32 idx = ev->Cookie;
+        const auto [idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+
         if (idx >= Replicas.size())
             return;
         auto &replica = Replicas[idx];
-        if (replica.State != EReplicaState::Unknown)
+
+        if (reconnectNumber != replica.ReconnectNumber) {
             return;
-        ++Stats.Replied;
+        }
+        if (replica.State != EReplicaState::Unknown && replica.State != EReplicaState::Reconnect) {
+            return;
+        }
+
+        const auto &record = ev->Get()->Record;
+
+        if (replica.State == EReplicaState::Unknown) {
+            Stats.Replied++;
+        } else {
+            Y_VERIFY(Stats.NotAvailable);
+            Stats.NotAvailable--;
+        }
+
         if (record.GetDropped()) {
             replica.State = EReplicaState::NoInfo;
             ++Stats.NoInfo;
@@ -224,11 +278,29 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             replica.State = EReplicaState::Ready;
             ++Stats.HasInfo;
 
-            for (auto &x : record.GetInfo()) {
+            bool isStateSubscribe = (CurrentStateFunc() == &TThis::StateSubscribe);
+            TMap<TActorId, TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate> updates;
+
+            for (const auto &x : record.GetInfo()) {
                 const TActorId oid = ActorIdFromProto(x.GetOwner());
-                Info[oid].Payload = std::move(x.GetPayload());
+
+                auto& currentInfo = Info[oid];
+                if (currentInfo.Payload != x.GetPayload()) {
+                    currentInfo.Payload = x.GetPayload();
+                    if (isStateSubscribe) {
+                        updates[oid] = {x.GetPayload(), false};
+                    }
+                }
+
                 InfoReplicas[oid].insert(idx);
                 replica.Infos.insert(oid);
+            }
+
+            if (isStateSubscribe && !updates.empty()) {
+                auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                reply->Updates = std::move(updates);
+                Send(Owner, std::move(reply));
             }
         }
 
@@ -244,13 +316,23 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                     ++Stats.Replied;
                 }
                 if (replica.State != EReplicaState::NotAvailable) {
+                    if (replica.State == EReplicaState::Ready) {
+                        Y_VERIFY(Stats.HasInfo);
+                        Stats.HasInfo--;
+                    } else if (replica.State == EReplicaState::NoInfo) {
+                        Y_VERIFY(Stats.NoInfo);
+                        Stats.NoInfo--;
+                    }
+                    if (replica.State != EReplicaState::Reconnect) {
+                        ++Stats.NotAvailable;
+                    }
                     replica.State = EReplicaState::NotAvailable;
-                    ++Stats.NotAvailable;
                 }
 
-                for (auto infoId : replica.Infos) {
-                    InfoReplicas[infoId].erase(idx);
-                }
+                ClearInfosByReplica(idx);
+                replica.Infos.clear();
+
+                ReconnectReplica(idx);
             }
         }
 
@@ -258,23 +340,33 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaShutdown::TPtr &ev) {
-        const ui32 idx = ev->Cookie;
+        const auto [idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+
         if (idx >= Replicas.size())
             return;
         auto &replica = Replicas[idx];
-        Y_VERIFY(replica.Replica == ev->Sender);
 
-        if (replica.State == EReplicaState::Unknown) {
-            ++Stats.Replied;
-        }
-        if (replica.State != EReplicaState::NotAvailable) {
-            replica.State = EReplicaState::NotAvailable;
-            ++Stats.NotAvailable;
+        if (reconnectNumber != replica.ReconnectNumber) {
+            return;
         }
 
-        for (auto infoId : replica.Infos) {
-            InfoReplicas[infoId].erase(idx);
+        if (replica.State != EReplicaState::Ready && replica.State != EReplicaState::NoInfo) {
+            return;
         }
+
+        if (replica.State == EReplicaState::Ready) {
+            Y_VERIFY(Stats.HasInfo);
+            --Stats.HasInfo;
+        } else if (replica.State == EReplicaState::NoInfo) {
+            Y_VERIFY(Stats.NoInfo);
+            --Stats.NoInfo;
+        }
+
+        replica.State = EReplicaState::NotAvailable;
+        ++Stats.NotAvailable;
+
+        ClearInfosByReplica(idx);
+        replica.Infos.clear();
 
         CheckCompletion();
     }
@@ -283,22 +375,103 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         auto *msg = ev->Get();
         if (msg->SourceType != TEvStateStorage::TEvReplicaBoardLookup::EventType)
             return;
-        const ui32 idx = ev->Cookie;
+
+        const auto [idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+
         if (idx >= Replicas.size())
             return;
         auto &replica = Replicas[idx];
-        if (replica.State != EReplicaState::Unknown)
-            return;
-        replica.State = EReplicaState::NotAvailable;
-        ++Stats.Replied;
-        ++Stats.NotAvailable;
 
-        for (auto infoId : replica.Infos) {
-            InfoReplicas[infoId].erase(idx);
+        if (reconnectNumber != replica.ReconnectNumber) {
+            return;
         }
+        if (replica.State != EReplicaState::Reconnect && replica.State != EReplicaState::Unknown) {
+            return;
+        }
+
+        if (replica.State == EReplicaState::Unknown) {
+            ++Stats.Replied;
+            ++Stats.NotAvailable;
+        }
+
+        replica.State = EReplicaState::NotAvailable;
+
+        ClearInfosByReplica(idx);
+        replica.Infos.clear();
 
         CheckCompletion();
     }
+
+    void ReconnectReplica(ui32 replicaIdx) {
+        auto& replica = Replicas[replicaIdx];
+
+        if (!Subscriber) {
+            return;
+        }
+        if (replica.IsScheduled || replica.State != EReplicaState::NotAvailable) {
+            return;
+        }
+
+        auto now = TlsActivationContext->Monotonic();
+        if (now - replica.LastReconnectAt < replica.CurrentDelay) {
+            auto at = replica.LastReconnectAt + GetReconnectDelayForReplica(replica);
+            replica.IsScheduled = true;
+            Schedule(at - now, new TEvPrivate::TEvReconnectReplicas(replicaIdx));
+            return;
+        }
+
+        replica.ReconnectNumber++;
+        replica.State = EReplicaState::Reconnect;
+        Send(replica.Replica,
+            new TEvStateStorage::TEvReplicaBoardLookup(Path, Subscriber),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+            EncodeCookie(replicaIdx, replica.ReconnectNumber));
+
+        replica.LastReconnectAt = now;
+    }
+
+    void Handle(TEvPrivate::TEvReconnectReplicas::TPtr& ev) {
+        const auto& idx = ev->Get()->ReplicaIdx;
+        Replicas[idx].IsScheduled = false;
+        ReconnectReplica(idx);
+    }
+
+    std::pair<ui64, ui64> DecodeCookie(ui64 cookie) {
+        return {((1ULL << MAX_REPLICAS_COUNT_EXP) - 1) & cookie, cookie >> MAX_REPLICAS_COUNT_EXP};
+    }
+
+    ui64 EncodeCookie(ui64 idx, ui64 reconnectNumber) {
+        return idx | (reconnectNumber << MAX_REPLICAS_COUNT_EXP);
+    }
+
+    void ClearInfosByReplica(ui32 replicaIdx) {
+        bool isStateSubscribe = (CurrentStateFunc() == &TThis::StateSubscribe);
+        TMap<TActorId, TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate> updates;
+
+        const auto& replica = Replicas[replicaIdx];
+        for (auto infoId : replica.Infos) {
+            auto infoReplicasIt = InfoReplicas.find(infoId);
+            if (infoReplicasIt == InfoReplicas.end()) {
+                continue;
+            }
+            infoReplicasIt->second.erase(replicaIdx);
+            if (infoReplicasIt->second.empty()) {
+                if (isStateSubscribe) {
+                    auto& update = updates[infoId];
+                    update.Dropped = true;
+                }
+                InfoReplicas.erase(infoId);
+                Info.erase(infoId);
+            }
+        }
+        if (isStateSubscribe && !updates.empty()) {
+            auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
+                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+            reply->Updates = std::move(updates);
+            Send(Owner, std::move(reply));
+        }
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BOARD_LOOKUP_ACTOR;
@@ -333,16 +506,19 @@ public:
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvStateStorage::TEvReplicaShutdown, Handle);
+            hFunc(TEvPrivate::TEvReconnectReplicas, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
     STATEFN(StateSubscribe) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvReplicaBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvReplicaBoardInfoUpdate, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvStateStorage::TEvReplicaShutdown, Handle);
+            hFunc(TEvPrivate::TEvReconnectReplicas, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

@@ -292,10 +292,9 @@ struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage:
     TEvReplicaBoardLookup()
     {}
 
-    TEvReplicaBoardLookup(const TString &path, TActorId owner, bool sub)
+    TEvReplicaBoardLookup(const TString &path, bool sub)
     {
         Record.SetPath(path);
-        ActorIdToProto(owner, Record.MutableOwner());
         Record.SetSubscribe(sub);
     }
 };

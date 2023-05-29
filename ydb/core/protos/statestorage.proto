@@ -96,7 +96,7 @@ message TEvReplicaBoardPublishAck {
 
 message TEvReplicaBoardLookup {
     optional string Path = 1;
-    optional NActorsProto.TActorId Owner = 2;
+    reserved 2;
     optional bool Subscribe = 3;
 };
 

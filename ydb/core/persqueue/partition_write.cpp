@@ -966,21 +966,21 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         bool lastBlobPart = blob.IsLastPart();
 
         //will return compacted tmp blob
-        std::pair<TKey, TString> newWrite = PartitionedBlob.Add(std::move(blob));
+        auto newWrite = PartitionedBlob.Add(std::move(blob));
 
-        if (!newWrite.second.empty()) {
+        if (newWrite && !newWrite->second.empty()) {
             auto write = request->Record.AddCmdWrite();
-            write->SetKey(newWrite.first.Data(), newWrite.first.Size());
-            write->SetValue(newWrite.second);
-            Y_VERIFY(!newWrite.first.IsHead());
-            auto channel = GetChannel(NextChannel(newWrite.first.IsHead(), newWrite.second.Size()));
+            write->SetKey(newWrite->first.Data(), newWrite->first.Size());
+            write->SetValue(newWrite->second);
+            Y_VERIFY(!newWrite->first.IsHead());
+            auto channel = GetChannel(NextChannel(newWrite->first.IsHead(), newWrite->second.Size()));
             write->SetStorageChannel(channel);
             write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 
-            TKey resKey = newWrite.first;
+            TKey resKey = newWrite->first;
             resKey.SetType(TKeyPrefix::TypeData);
             write->SetKeyToCache(resKey.Data(), resKey.Size());
-            WriteCycleSize += newWrite.second.size();
+            WriteCycleSize += newWrite->second.size();
 
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PERSQUEUE,
@@ -988,8 +988,8 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                         "' partition " << Partition <<
                         " part blob sourceId '" << EscapeC(p.Msg.SourceId) <<
                         "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo <<
-                        " result is " << TStringBuf(newWrite.first.Data(), newWrite.first.Size()) <<
-                        " size " << newWrite.second.size()
+                        " result is " << TStringBuf(newWrite->first.Data(), newWrite->first.Size()) <<
+                        " size " << newWrite->second.size()
             );
         }
 

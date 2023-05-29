@@ -267,8 +267,7 @@ public:
     TPartitionedBlob(const ui32 partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
                      const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize);
 
-
-    std::pair<TKey, TString> Add(TClientBlob&& blob);
+    std::optional<std::pair<TKey, TString>> Add(TClientBlob&& blob);
 
     bool IsInited() const { return !SourceId.empty(); }
 

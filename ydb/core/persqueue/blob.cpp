@@ -783,11 +783,10 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
     return valueD;
 }
 
-std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
+std::optional<std::pair<TKey, TString>> TPartitionedBlob::Add(TClientBlob&& blob)
 {
     Y_VERIFY(NewHead.Offset >= Head.Offset);
     ui32 size = blob.GetBlobSize();
-    std::pair<TKey, TString> res;
     Y_VERIFY(InternalPartsCount < 1000); //just check for future packing
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize)
         NeedCompactHead = true;
@@ -795,7 +794,8 @@ std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
         NeedCompactHead = false;
     }
 
-    if (NeedCompactHead) { //need form blob without last chunk, on start or in case of big head
+    std::optional<std::pair<TKey, TString>> res;
+    if (NeedCompactHead) { // need form blob without last chunk, on start or in case of big head
         NeedCompactHead = false;
         HeadPartNo = NextPartNo;
         ui32 count = (GlueHead ? Head.GetCount() : 0) + (GlueNewHead ? NewHead.GetCount() : 0);
@@ -804,7 +804,7 @@ std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
 
         Y_VERIFY(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
-        res.first = TKey(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
+        TKey key(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
 
         StartOffset = Offset;
         StartPartNo = NextPartNo;
@@ -820,14 +820,15 @@ std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
             Y_VERIFY(batch.Packed);
             batch.SerializeTo(valueD);
         }
-        res.second = valueD;
-        Y_VERIFY(res.second.size() <= MaxBlobSize && (res.second.size() + size + 1_MB > MaxBlobSize
-                    || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
+
+        Y_VERIFY(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
         HeadSize = 0;
         BlobsSize = 0;
-        CheckBlob(res.first, res.second);
-        FormedBlobs.push_back(std::make_pair(res.first, res.second.size()));
+        CheckBlob(key, valueD);
+        FormedBlobs.emplace_back(key, valueD.size());
         Blobs.clear();
+
+        res = {key, valueD};
     }
     BlobsSize += size + GetMaxHeaderSize();
     ++NextPartNo;

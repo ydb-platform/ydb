@@ -88,8 +88,8 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         );
         all.push_back(clientBlob);
         auto res = blob.Add(std::move(clientBlob));
-        if (!res.second.empty())
-            formed.push_back(res);
+        if (res && !res->second.empty())
+            formed.push_back(*res);
     }
     UNIT_ASSERT(blob.IsComplete());
     UNIT_ASSERT(formed.size() == blob.GetFormedBlobs().size());

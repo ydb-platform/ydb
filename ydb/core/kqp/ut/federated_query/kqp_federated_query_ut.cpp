@@ -81,43 +81,6 @@ NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb:
 }
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
-    Y_UNIT_TEST(ExecuteScript) {
-        CreateBucketWithObject("test_bucket", "Root/test_object", TEST_CONTENT);
-        SetEnv("TEST_S3_BUCKET", "test_bucket");
-        SetEnv("TEST_S3_OBJECT", "test_object");
-        SetEnv("TEST_S3_CONNECTION", "test_connection");
-        SetEnv("TEST_S3_BINDING", "test_binding");
-        SetEnv("TEST_S3_FORMAT", "json_each_row");
-        SetEnv("TEST_S3_SCHEMA", TEST_SCHEMA);
-
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto scriptExecutionOperation = db.ExecuteScript(R"(
-            PRAGMA s3.AtomicUploadCommit = "1";  --Check that pragmas are OK
-            SELECT * FROM bindings.test_binding;
-        )").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
-
-        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId).ExtractValueSync();
-        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-
-        TResultSetParser resultSet(results.ExtractResultSet());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
-
-        UNIT_ASSERT(resultSet.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
-
-        UNIT_ASSERT(resultSet.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
-    }
-
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
@@ -155,6 +118,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "1";  --Check that pragmas are OK
                 SELECT * FROM `{external_table}`
             )", "external_table"_a=externalTableName);
 

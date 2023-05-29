@@ -26,8 +26,6 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-#include <util/system/env.h>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -1057,19 +1055,6 @@ private:
         TAstParseResult astRes;
         if (isSql) {
             NSQLTranslation::TTranslationSettings settings{};
-
-            // TODO: remove this test crutch when dynamic bindings discovery will be implemented // YQ-1964
-            if ((SessionCtx->Query().Type == EKikimrQueryType::Script || SessionCtx->Query().Type == EKikimrQueryType::Query) && GetEnv("TEST_S3_CONNECTION")) {
-                NSQLTranslation::TTableBindingSettings binding;
-                binding.ClusterType = "s3";
-                binding.Settings["cluster"] = GetEnv("TEST_S3_CONNECTION");
-                binding.Settings["path"] = GetEnv("TEST_S3_OBJECT");
-                binding.Settings["format"] = GetEnv("TEST_S3_FORMAT");
-                binding.Settings["schema"] = GetEnv("TEST_S3_SCHEMA");
-
-                settings.Bindings[GetEnv("TEST_S3_BINDING")] = binding;
-            }
-
             if (sqlVersion) {
                 settings.SyntaxVersion = *sqlVersion;
 
@@ -1483,14 +1468,7 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = nullptr; // TODO
 
-        // TODO: remove this test crutch after dynamic connections resolving implementation // YQ-1964
         NYql::TS3GatewayConfig cfg;
-        if (GetEnv("TEST_S3_CONNECTION")) {
-            auto* mapping = cfg.AddClusterMapping();
-            mapping->SetName(GetEnv("TEST_S3_CONNECTION"));
-            mapping->SetUrl(TStringBuilder() << GetEnv("S3_ENDPOINT") << "/" << GetEnv("TEST_S3_BUCKET") << "/");
-        }
-
         state->Configuration->Init(cfg, TypesCtx);
 
         auto dataSource = NYql::CreateS3DataSource(state, HttpGateway);

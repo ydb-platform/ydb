@@ -760,6 +760,20 @@ TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table
     return NYdb::FormatResultSetYson(streamPart.ExtractPart());
 }
 
+bool ValidatePlanNodeIds(const NJson::TJsonValue& plan) {
+    ui32 planNodeId = 0;
+    ui32 count = 0;
+
+    do {
+        count = CountPlanNodesByKv(plan, "PlanNodeId", std::to_string(++planNodeId));
+        if (count > 1) {
+            return false;
+        }
+    } while (count > 0);
+
+    return true;
+}
+
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
     ui32 result = 0;
 

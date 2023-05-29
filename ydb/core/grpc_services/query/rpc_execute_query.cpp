@@ -131,11 +131,27 @@ bool FillTxControl(const Ydb::Query::TransactionControl& from, Ydb::Table::Trans
     return true;
 }
 
+bool NeedReportStats(const Ydb::Query::ExecuteQueryRequest& req) {
+    switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest)
 {
     kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
     switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_VALIDATE:
+            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_VALIDATE);
+            break;
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            break;
         case Ydb::Query::EXEC_MODE_EXECUTE:
             kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             break;
@@ -198,7 +214,8 @@ private:
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-                hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -307,12 +324,35 @@ private:
         ctx.Send(ev->Sender, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record.GetRef();
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, issues);
+
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS && NeedReportStats(*Request_->GetProtoRequest())) {
+            Ydb::Query::ExecuteQueryResponsePart response;
+            response.set_status(Ydb::StatusIds::SUCCESS);
+
+            auto& kqpResponse = record.GetResponse();
+            FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+
+            TString out;
+            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+            Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+        }
+
+        ReplyFinishStream(record.GetYdbStatus(), issues);
+    }
+
+    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext&) {
+        auto& record = ev->Get()->Record;
+
+        NYql::TIssues issues;
+        if (record.HasError()) {
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, record.GetError()));
+        }
 
         ReplyFinishStream(record.GetYdbStatus(), issues);
     }

@@ -15,6 +15,7 @@ target_link_libraries(client-ydb_table-impl PUBLIC
   api-protos
   lib-operation_id-protos
   client-impl-ydb_endpoints
+  client-ydb_table-query_stats
   public-issue-protos
 )
 target_sources(client-ydb_table-impl PRIVATE

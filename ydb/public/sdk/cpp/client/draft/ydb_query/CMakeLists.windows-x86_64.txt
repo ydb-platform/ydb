@@ -14,11 +14,11 @@ target_link_libraries(client-draft-ydb_query PUBLIC
   yutil
   draft-ydb_query-impl
   cpp-client-ydb_common_client
-  cpp-client-ydb_table
   client-ydb_types-operation
 )
 target_sources(client-draft-ydb_query PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/client.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_query/tx.cpp
 )

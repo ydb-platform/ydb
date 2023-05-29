@@ -142,6 +142,31 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
+    Y_UNIT_TEST(ExplainQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$value").Int64(17).Build()
+            .Build();
+
+        auto settings = TExecuteQuerySettings()
+            .ExecMode(EExecMode::Explain);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT $value;
+        )", TTxControl::NoTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().empty());
+
+        UNIT_ASSERT(result.GetStats().Defined());
+        UNIT_ASSERT(result.GetStats()->GetPlan().Defined());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+    }
+
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
         NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;

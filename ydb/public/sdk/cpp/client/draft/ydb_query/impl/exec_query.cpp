@@ -60,7 +60,7 @@ public:
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
             if (!grpcStatus.Ok()) {
                 self->Finished_ = true;
-                promise.SetValue({TStatus(TPlainStatus(grpcStatus, self->Endpoint_))});
+                promise.SetValue({TStatus(TPlainStatus(grpcStatus, self->Endpoint_)), {}});
             } else {
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(self->Response_.issues(), issues);
@@ -69,14 +69,20 @@ public:
                 TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
                 TStatus status{std::move(plainStatus)};
 
+                TMaybe<TExecStats> stats;
+                if (self->Response_.has_exec_stats()) {
+                    stats = TExecStats(std::move(*self->Response_.mutable_exec_stats()));
+                }
+
                 if (self->Response_.has_result_set()) {
                     promise.SetValue({
                         std::move(status),
                         TResultSet(std::move(*self->Response_.mutable_result_set())),
-                        self->Response_.result_set_index()
+                        self->Response_.result_set_index(),
+                        std::move(stats)
                     });
                 } else {
-                    promise.SetValue({std::move(status)});
+                    promise.SetValue({std::move(status), std::move(stats)});
                 }
             }
         };
@@ -112,6 +118,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     TExecuteQueryIterator Iterator_;
     TVector<NYql::TIssue> Issues_;
     TVector<Ydb::ResultSet> ResultSets_;
+    TMaybe<TExecStats> Stats_;
 
     void Next() {
         TPtr self(this);
@@ -123,9 +130,11 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 if (part.EOS()) {
                     TVector<NYql::TIssue> issues;
                     TVector<Ydb::ResultSet> resultProtos;
+                    TMaybe<TExecStats> stats;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
+                    std::swap(self->Stats_, stats);
 
                     TVector<TResultSet> resultSets;
                     for (auto& proto : resultProtos) {
@@ -134,10 +143,11 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
                     self->Promise_.SetValue(TExecuteQueryResult(
                         TStatus(EStatus::SUCCESS, NYql::TIssues(std::move(issues))),
-                        std::move(resultSets)
+                        std::move(resultSets),
+                        std::move(stats)
                     ));
                 } else {
-                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}));
+                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, {}));
                 }
 
                 return;
@@ -160,6 +170,10 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 resultSet.mutable_rows()->Add(inRsProto.rows().begin(), inRsProto.rows().end());
             }
 
+            if (part.GetStats().Defined()) {
+                self->Stats_ = part.GetStats();
+            }
+
             self->Next();
         });
     }
@@ -171,16 +185,20 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     const TExecuteQuerySettings& settings)
 {
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
-    request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+    request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.mutable_query_content()->set_text(query);
 
-    auto requestTxControl = request.mutable_tx_control();
-    requestTxControl->set_commit_tx(txControl.CommitTx_);
-    if (txControl.TxId_) {
-        requestTxControl->set_tx_id(*txControl.TxId_);
+    if (txControl.HasTx()) {
+        auto requestTxControl = request.mutable_tx_control();
+        requestTxControl->set_commit_tx(txControl.CommitTx_);
+        if (txControl.TxId_) {
+            requestTxControl->set_tx_id(*txControl.TxId_);
+        } else {
+            Y_ASSERT(txControl.TxSettings_);
+            SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());
+        }
     } else {
-        Y_ASSERT(txControl.TxSettings_);
-        SetTxSettings(*txControl.TxSettings_, requestTxControl->mutable_begin_tx());
+        Y_ASSERT(!txControl.CommitTx_);
     }
 
     if (params) {

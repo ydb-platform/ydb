@@ -8,7 +8,7 @@ General format of the command:
 {{ ydb-cli }} [global options...] workload [subcommands...]
 ```
 
-* `global options`: [Global parameters](../../../commands/global-options.md).
+* `global options`: [Global options](../../../commands/global-options.md).
 * `subcommands`: The [subcommands](#subcomands).
 
 See the description of the command to run the data load:

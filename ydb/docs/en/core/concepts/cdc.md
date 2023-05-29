@@ -15,9 +15,9 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 * The number of topic partitions is fixed as of changefeed creation and remains unchanged (unlike tables, topics are not elastic).
 * Changefeeds support records of the following types of operations:
    * Updates
-   * Deletes
+   * Erases
 
-   Adding rows is a special case of updates, and a record of adding a row in a changefeed will look similar to an update record.
+   Adding rows is a special update case, and a record of adding a row in a changefeed will look similar to an update record.
 
 ## Virtual timestamps {#virtual-timestamps}
 
@@ -57,6 +57,8 @@ During the scanning process, depending on the table update frequency, you might 
 
 Depending on the [changefeed parameters](../yql/reference/syntax/alter_table.md#changefeed-options), the structure of a record may differ.
 
+### JSON format {#json-record-structure}
+
 A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 
 ```json
@@ -72,9 +74,9 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 
 * `key`: An array of primary key component values. Always present.
 * `update`: Update flag. Present if a record matches the update operation. In `UPDATES` mode, it also contains the names and values of updated columns.
-* `erase`: Erase flag. Present if a record matches the delete operation.
-* `newImage`: Row snapshot that results from its change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
-* `oldImage`: Row snapshot before its change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
+* `erase`: Erase flag. Present if a record matches the erase operation.
+* `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
+* `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `ts`: Virtual timestamp. Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
 
 > Sample record of an update in `UPDATES` mode:
@@ -129,12 +131,24 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 
 {% note info %}
 
-* The same record may not contain the `update` and `erase` fields simultaneously, since these fields are operation flags (you can't update and erase a table row at the same time). However, each record contains one of these fields (any operation is either an update or erase).
+* The same record may not contain the `update` and `erase` fields simultaneously, since these fields are operation flags (you can't update and erase a table row at the same time). However, each record contains one of these fields (any operation is either an update or an erase).
 * In `UPDATES` mode, the `update` field for update operations is an operation flag (update) and contains the names and values of updated columns.
 * JSON object fields containing column names and values (`newImage`, `oldImage`, and `update` in `UPDATES` mode), *do not include* the columns that are primary key components.
 * If a record contains the `erase` field (indicating that the record matches the erase operation), this is always an empty JSON object (`{}`).
 
 {% endnote %}
+
+### Amazon DynamoDB-compatible JSON format {#dynamodb-streams-json-record-structure}
+
+For [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html)-compatible document tables, {{ ydb-short-name }} can generate change records in the [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html)-compatible format.
+
+The record structure is the same as for [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_Record.html) records:
+* `awsRegion`: Includes the string delivered in the `AWS_REGION` option when creating a changefeed.
+* `dynamodb`: [StreamRecord](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_streams_StreamRecord.html).
+* `eventID`: Unique record ID.
+* `eventName`: `INSERT`, `MODIFY`, or `REMOVE`. You can only use `INSERT` in the `NEW_AND_OLD_IMAGES` mode.
+* `eventSource`: Includes the `ydb:document-table` string.
+* `eventVersion`: Includes the `1.0` string.
 
 ## Record retention period {#retention-period}
 
@@ -152,7 +166,7 @@ To set up the record retention period, specify the [RETENTION_PERIOD](../yql/ref
 
 ## Creating and deleting a changefeed {#ddl}
 
-You can add a changefeed to an existing table or delete it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement. When deleting a table, the changefeed added to it is also deleted.
+You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
 
 ## CDC purpose and use {#best_practices}
 

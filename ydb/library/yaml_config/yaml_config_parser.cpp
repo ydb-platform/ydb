@@ -271,6 +271,11 @@ namespace NKikimr::NYaml {
         }
 
         auto& config = json["actor_system_config"];
+
+        if (config.Has("use_auto_config") && config["use_auto_config"].GetBooleanSafe()) {
+            return; // do nothing for auto config
+        }
+
         auto& executors = config["executor"];
 
         const std::vector<std::pair<TString, TString>> defaultExecutors = {{"io_executor", "IO"}, {"sys_executor", "SYSTEM"}, {"user_executor", "USER"}, {"batch_executor", "BATCH"}};

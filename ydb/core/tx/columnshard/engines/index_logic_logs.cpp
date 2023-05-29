@@ -362,9 +362,9 @@ std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnE
     }
 
     Y_VERIFY(portions.size() > 0);
-    for (auto& portion : portions) {
-        changes->AppendedPortions.emplace_back(std::move(portion));
-    }
+    Y_VERIFY(changes->AppendedPortions.empty());
+    // Set appended portions.
+    changes->AppendedPortions.swap(portions);
 
     return blobs;
 }

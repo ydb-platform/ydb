@@ -21,34 +21,37 @@ using namespace NActors;
 using namespace NKikimr;
 
 extern NActors::IActor* CreatePgwireKqpProxy(
-    NActors::TActorId actorId,
-    ui64 cookie,
     std::unordered_map<TString, TString> params
 );
 
-class TPgYdbConnection : public TActorBootstrapped<TPgYdbConnection> {
-    using TBase = TActorBootstrapped<TPgYdbConnection>;
+NActors::IActor* CreatePgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
+
+class TPgYdbConnection : public TActor<TPgYdbConnection> {
+    using TBase = TActor<TPgYdbConnection>;
 
     std::unordered_map<TString, TString> ConnectionParams;
     std::unordered_map<TString, TParsedStatement> ParsedStatements;
     TString CurrentStatement;
     Ydb::StatusIds QueryStatus;
     std::unordered_map<ui32, NYdb::TResultSet> ResultSets;
+
 public:
     TPgYdbConnection(std::unordered_map<TString, TString> params)
-        : ConnectionParams(std::move(params))
+        : TActor<TPgYdbConnection>(&TPgYdbConnection::StateWork)
+        , ConnectionParams(std::move(params))
     {}
-
-    void Bootstrap() {
-        Become(&TPgYdbConnection::StateWork);
-    }
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
         BLOG_D("TEvQuery " << ev->Sender);
-        IActor* actor = CreatePgwireKqpProxy(ev->Sender, ev->Cookie, ConnectionParams);
-        TActorId actorId = Register(actor);
-        BLOG_D("Created pgwireKqpProxy: " << actorId);
-        Forward(ev, actorId);
+        if (IsQueryEmpty(ev->Get()->Message->GetQuery())) {
+            auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
+            response->EmptyQuery = true;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
+
+        TActorId actorId = Register(CreatePgwireKqpProxyQuery(ConnectionParams, std::move(ev)));
+        BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
     }
 
     void Handle(NPG::TEvPGEvents::TEvParse::TPtr& ev) {

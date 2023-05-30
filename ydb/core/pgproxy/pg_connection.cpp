@@ -478,7 +478,6 @@ protected:
                 if (ev->Get()->EmptyQuery) {
                     SendMessage(TPGEmptyQueryResponse());
                 } else {
-                    TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
                     if (!ev->Get()->DataFields.empty()) { // rowDescription
                         TPGStreamOutput<TPGRowDescription> rowDescription;
                         rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
@@ -505,7 +504,9 @@ protected:
                             SendStream(dataRow);
                         }
                     }
-                    { // commandComplete
+                    if (ev->Get()->CommandCompleted) {
+                        // commandComplete
+                        TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
                         TPGStreamOutput<TPGCommandComplete> commandComplete;
                         commandComplete << tag << '\0';
                         SendStream(commandComplete);
@@ -520,7 +521,9 @@ protected:
                 errorResponse << '\0';
                 SendStream(errorResponse);
             }
-            BecomeReadyForQuery();
+            if (ev->Get()->CommandCompleted) {
+                BecomeReadyForQuery();
+            }
         } else {
             PostponeEvent(ev);
         }

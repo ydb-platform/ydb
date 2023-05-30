@@ -279,11 +279,11 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "DECLARE $num AS Uint64; "\
                  "DECLARE $date AS Date; "\
                  "SELECT $str AS str, $num as num, $date as date; "
-        self.write_data(param_data1, "params1.json")
-        self.write_data(param_data2, "params2.json")
-        self.write_data(param_data3, "params3.json")
+        self.write_data(param_data1, "param1.json")
+        self.write_data(param_data2, "param2.json")
+        self.write_data(param_data3, "param3.json")
         output = self.execute_ydb_cli_command_with_db(
-            command + ["--param-file", "params1.json", "--param-file", "params2.json", "--param-file", "params3.json", "-s", script]
+            command + ["--param-file", "param1.json", "--param-file", "param2.json", "--param-file", "param3.json", "-s", script]
         )
         return self.canonical_result(output)
 

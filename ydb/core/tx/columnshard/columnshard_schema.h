@@ -211,9 +211,10 @@ struct Schema : NIceDb::Schema {
         struct Granule : Column<4, NScheme::NTypeIds::Uint64> {};   // FK: {Index, Granule} -> TIndexColumns
         struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
         struct TxId : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct Metadata : Column<7, NScheme::NTypeIds::String> {};  // NKikimrTxColumnShard.TIndexGranuleMeta
 
         using TKey = TableKey<Index, PathId, IndexKey>;
-        using TColumns = TableColumns<Index, PathId, IndexKey, Granule, PlanStep, TxId>;
+        using TColumns = TableColumns<Index, PathId, IndexKey, Granule, PlanStep, TxId, Metadata>;
     };
 
     struct IndexColumns : NIceDb::Schema::Table<ColumnsTableId> {
@@ -486,7 +487,7 @@ struct Schema : NIceDb::Schema {
                 ui64 indexTxId = rowset.GetValue<InsertTable::IndexTxId>();
                 indexSnapshot = NOlap::TSnapshot(indexPlanStep, indexTxId);
             }
-            
+
             TString error;
             NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
             Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
@@ -521,10 +522,20 @@ struct Schema : NIceDb::Schema {
 
     static void IndexGranules_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
                                     const TGranuleRecord& row) {
+        TString metaStr;
+        const auto& indexInfo = engine.GetIndexInfo();
+        if (indexInfo.IsCompositeIndexKey()) {
+            NKikimrTxColumnShard::TIndexGranuleMeta meta;
+            Y_VERIFY(indexInfo.GetIndexKey());
+            meta.SetMarkSize(indexInfo.GetIndexKey()->num_fields());
+            Y_VERIFY(meta.SerializeToString(&metaStr));
+        }
+
         db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
             NIceDb::TUpdate<IndexGranules::Granule>(row.Granule),
             NIceDb::TUpdate<IndexGranules::PlanStep>(row.GetCreatedAt().GetPlanStep()),
-            NIceDb::TUpdate<IndexGranules::TxId>(row.GetCreatedAt().GetTxId())
+            NIceDb::TUpdate<IndexGranules::TxId>(row.GetCreatedAt().GetTxId()),
+            NIceDb::TUpdate<IndexGranules::Metadata>(metaStr)
         );
     }
 
@@ -545,8 +556,19 @@ struct Schema : NIceDb::Schema {
             ui64 granule = rowset.GetValue<IndexGranules::Granule>();
             ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
             ui64 txId = rowset.GetValue<IndexGranules::TxId>();
+            TString metaStr = rowset.GetValue<IndexGranules::Metadata>();
 
-            callback(TGranuleRecord(pathId, granule, NOlap::TSnapshot(planStep, txId), engine.DeserializeMark(indexKey)));
+            std::optional<ui32> markNumKeys;
+            if (metaStr.size()) {
+                NKikimrTxColumnShard::TIndexGranuleMeta meta;
+                Y_VERIFY(meta.ParseFromString(metaStr));
+                if (meta.HasMarkSize()) {
+                    markNumKeys = meta.GetMarkSize();
+                }
+            }
+
+            callback(TGranuleRecord(pathId, granule, NOlap::TSnapshot(planStep, txId),
+                engine.DeserializeMark(indexKey, markNumKeys)));
 
             if (!rowset.Next())
                 return false;

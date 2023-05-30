@@ -102,6 +102,7 @@ public:
     static NArrow::TReplaceKey DeserializeComposite(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
 
     static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::Schema>& schema);
+    static NArrow::TReplaceKey ExtendBorder(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
 
     std::string ToString() const;
 
@@ -634,7 +635,7 @@ public:
     virtual bool HasOverloadedGranules() const { return false; }
 
     virtual TString SerializeMark(const NArrow::TReplaceKey& key) const = 0;
-    virtual NArrow::TReplaceKey DeserializeMark(const TString& key) const = 0;
+    virtual NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const = 0;
 
     virtual bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) = 0;
 

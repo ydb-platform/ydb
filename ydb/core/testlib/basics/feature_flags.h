@@ -48,6 +48,7 @@ public:
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
     FEATURE_FLAG_SETTER(EnableTopicSplitMerge)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
+    FEATURE_FLAG_SETTER(ForceColumnTablesCompositeMarks)
 
     #undef FEATURE_FLAG_SETTER
 };

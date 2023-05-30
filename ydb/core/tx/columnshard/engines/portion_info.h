@@ -185,6 +185,7 @@ struct TPortionMeta {
     EProduced Produced{UNSPECIFIED};
     THashMap<ui32, TColumnMeta> ColumnMeta;
     ui32 FirstPkColumn = 0;
+    std::shared_ptr<arrow::RecordBatch> ReplaceKeyEdges; // first and last PK rows
     std::optional<NArrow::TReplaceKey> IndexKeyStart;
     std::optional<NArrow::TReplaceKey> IndexKeyEnd;
 
@@ -228,7 +229,7 @@ struct TPortionInfo {
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
-    bool Valid() const { return !Empty() && Produced() && Meta.HasPkMinMax(); }
+    bool Valid() const { return !Empty() && Produced() && Meta.HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool IsEvicted() const { return Meta.Produced == TPortionMeta::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
@@ -311,10 +312,10 @@ struct TPortionInfo {
         }
     }
 
-    void UpdateRecordsMeta(const TIndexInfo& indexInfo, TPortionMeta::EProduced produced) {
+    void UpdateRecordsMeta(TPortionMeta::EProduced produced) {
         Meta.Produced = produced;
         for (auto& record : Records) {
-            record.Metadata = GetMetadata(indexInfo, record);
+            record.Metadata = GetMetadata(record);
         }
     }
 
@@ -329,7 +330,7 @@ struct TPortionInfo {
         LoadMetadata(indexInfo, rec);
     }
 
-    TString GetMetadata(const TIndexInfo& indexInfo, const TColumnRecord& rec) const;
+    TString GetMetadata(const TColumnRecord& rec) const;
     void LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord& rec);
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                      const TString& tierName);

@@ -107,6 +107,12 @@ public:
         return *(*Columns)[i];
     }
 
+    std::shared_ptr<arrow::Array> ColumnPtr(int i) const {
+        Y_VERIFY_DEBUG(Columns);
+        Y_VERIFY_DEBUG((size_t)i < Columns->size());
+        return (*Columns)[i];
+    }
+
     TReplaceKeyTemplate<const TArrayVec*> ToRaw() const {
         if constexpr (IsOwning) {
             return TReplaceKeyTemplate<const TArrayVec*>(Columns.get(), Position);

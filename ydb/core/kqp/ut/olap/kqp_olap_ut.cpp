@@ -1763,7 +1763,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(AggregationCountPushdown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -1808,7 +1808,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -1855,7 +1855,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -1900,7 +1900,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(CountAllNoPushdown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         // EnableDebugLogging(kikimr);
@@ -2080,7 +2080,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         //EnableDebugLogging(kikimr);
@@ -2174,7 +2174,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
 //        EnableDebugLogging(kikimr);
@@ -2270,7 +2270,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         EnableDebugLogging(kikimr);
@@ -4331,7 +4331,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -4387,7 +4387,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -4441,7 +4441,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -4775,7 +4775,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(Olap_InsertFails) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         EnableDebugLogging(kikimr);
@@ -4795,7 +4795,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         EnableDebugLogging(kikimr);
@@ -4821,7 +4821,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(OlapRead_UsesScanOnJoin) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         EnableDebugLogging(kikimr);
@@ -4844,7 +4844,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(OlapRead_UsesScanOnJoinWithDataShardTable) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
         EnableDebugLogging(kikimr);

@@ -330,6 +330,7 @@ enum EServiceKikimr {
     VIEWER = 1166;
 
     DB_POOL = 1167;
+    YTS = 1168;
 
     // 1024 - 1099 is reserved for nbs
 

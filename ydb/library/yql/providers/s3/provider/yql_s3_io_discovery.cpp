@@ -87,8 +87,6 @@ public:
         , ListingStrategy_(MakeS3ListingStrategy(
               gateway,
               ListerFactory_,
-              State_->Configuration->MaxDiscoveryFilesPerQuery,
-              State_->Configuration->MaxDirectoriesAndFilesPerQuery,
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->AllowLocalFiles)) {
@@ -579,6 +577,11 @@ private:
         }
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
+        auto resultSetLimitPerPath = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery);
+        if (!s3ParseSettingsBase.Paths().Empty()) {
+            resultSetLimitPerPath /= s3ParseSettingsBase.Paths().Size();
+        }
+        
         for (auto path : s3ParseSettingsBase.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
@@ -602,7 +605,9 @@ private:
                         .IsPartitionedDataset = false,
                         .IsConcurrentListing =
                             State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
-                                State_->Configuration->AllowConcurrentListings)});
+                                State_->Configuration->AllowConcurrentListings),
+                        .MaxResultSet = resultSetLimitPerPath});
+            
 
                 RequestsByNode_[source.Raw()].push_back(req);
                 PendingRequests_[req] = future;
@@ -743,7 +748,10 @@ private:
             auto req = TListRequest{
                 .S3Request{.Url = url, .Token = tokenStr},
                 .FilePattern = effectiveFilePattern,
-                .Options{.IsConcurrentListing = isConcurrentListingEnabled}};
+                .Options{
+                    .IsConcurrentListing = isConcurrentListingEnabled, 
+                    .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery)
+                }};
 
             if (partitionedBy.empty()) {
                 if (path.empty()) {

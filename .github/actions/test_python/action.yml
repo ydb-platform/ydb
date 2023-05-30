@@ -30,19 +30,26 @@ runs:
       export build_root=$(pwd)/../build/
       mkdir -p ../artifacts
       rm -rf ../artifacts/*
-      source ${source_root}/ydb/tests/oss/launch/prepare.sh
 
-      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-stdout.gz" >> $GITHUB_STEP_SUMMARY
+      echo "Stdout log (gzip archive): https://storage.yandexcloud.net/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}-${{inputs.sanitizer}}-pytest-stdout.gz" >> $GITHUB_STEP_SUMMARY
       cd ${source_root}/ydb/tests/functional/
-      export suite=''
-      if [[ "${{inputs.test_label_regexp}}" != "" ]]; then
-        suite="--suite ${{inputs.test_label_regexp}}"
+      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed -e 's/ignore=//g')
+      suites=""
+      for suite in $(echo */ | sed -e 's/\///g'); do
+        if [[ $(echo "$bad_suites" | grep -F -e $suite -) == '' ]]; then
+            suites+=$suite
+            suites+=$'\n'
+        fi
+      done
+      if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
+        suites="${{inputs.test_label_regexp}}"
       fi
-      python ${source_root}/ydb/tests/oss/launch/launch.py --test-dir ${source_root}/ydb/tests/functional \
-      --xml-dir ${source_root}/ydb/tests/functional/test-results/xml $suite | \
-      sed -e 's/\x1b\[[0-9;]*m//g' | \
-      tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-pytest-stdout.gz) | \
-      tee -a $GITHUB_STEP_SUMMARY
+      source ${source_root}/ydb/tests/oss/launch/prepare.sh
+      echo -n "$suites" | parallel -j32 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
+        -v --junit-xml=${source_root}/ydb/tests/functional/test-results/xml/{}/res.xml {}" | \
+        sed -e 's/\x1b\[[0-9;]*m//g' | \
+        tee >(gzip --stdout > ${source_root}/../artifacts/${{inputs.log_suffix}}-pytest-stdout.gz) | \
+        tee -a $GITHUB_STEP_SUMMARY
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()

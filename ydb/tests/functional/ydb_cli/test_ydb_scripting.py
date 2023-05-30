@@ -54,7 +54,7 @@ class BaseTestScriptingService(object):
 
     @staticmethod
     def canonical_result(output_result):
-        output_file_name = "scripting_result.output"
+        output_file_name = "result.output"
         with open(output_file_name, "w") as f:
             f.write(output_result.decode('utf-8'))
         return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)

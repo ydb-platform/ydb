@@ -133,6 +133,7 @@ namespace NLs {
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
+    TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc RetentionPeriod(const TDuration& value);
 

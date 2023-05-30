@@ -745,6 +745,8 @@ message TCdcStreamDescription {
     repeated TUserAttribute UserAttributes = 8;
     // AwsRegion used to mark records in DynamoDB-compatible mode (FormatDynamoDBStreamsJson)
     optional string AwsRegion = 9;
+    // Set to '0' to disable resolved timestamps
+    optional uint64 ResolvedTimestampsIntervalMs = 10;
 }
 
 message TCreateCdcStream {

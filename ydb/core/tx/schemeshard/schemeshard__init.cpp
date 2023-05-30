@@ -2822,6 +2822,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto mode = rowset.GetValue<Schema::CdcStream::Mode>();
                 auto format = rowset.GetValue<Schema::CdcStream::Format>();
                 auto vt = rowset.GetValueOrDefault<Schema::CdcStream::VirtualTimestamps>(false);
+                auto rt = TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStream::ResolvedTimestampsIntervalMs>(0));
                 auto awsRegion = rowset.GetValue<Schema::CdcStream::AwsRegion>();
                 auto state = rowset.GetValue<Schema::CdcStream::State>();
 
@@ -2833,7 +2834,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
                 Y_VERIFY(!Self->CdcStreams.contains(pathId));
-                Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, awsRegion, state);
+                Self->CdcStreams[pathId] = new TCdcStreamInfo(alterVersion, mode, format, vt, rt, awsRegion, state);
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (state == NKikimrSchemeOp::ECdcStreamStateScan) {
@@ -2866,6 +2867,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto mode = rowset.GetValue<Schema::CdcStreamAlterData::Mode>();
                 auto format = rowset.GetValue<Schema::CdcStreamAlterData::Format>();
                 auto vt = rowset.GetValueOrDefault<Schema::CdcStreamAlterData::VirtualTimestamps>(false);
+                auto rt = TDuration::MilliSeconds(rowset.GetValueOrDefault<Schema::CdcStreamAlterData::ResolvedTimestampsIntervalMs>(0));
                 auto awsRegion = rowset.GetValue<Schema::CdcStreamAlterData::AwsRegion>();
                 auto state = rowset.GetValue<Schema::CdcStreamAlterData::State>();
 
@@ -2878,14 +2880,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!Self->CdcStreams.contains(pathId)) {
                     Y_VERIFY(alterVersion == 1);
-                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(mode, format, vt, awsRegion);
+                    Self->CdcStreams[pathId] = TCdcStreamInfo::New(mode, format, vt, rt, awsRegion);
                     Self->IncrementPathDbRefCount(pathId);
                 }
 
                 auto stream = Self->CdcStreams.at(pathId);
                 Y_VERIFY(stream->AlterData == nullptr);
                 Y_VERIFY(stream->AlterVersion < alterVersion);
-                stream->AlterData = new TCdcStreamInfo(alterVersion, mode, format, vt, awsRegion, state);
+                stream->AlterData = new TCdcStreamInfo(alterVersion, mode, format, vt, rt, awsRegion, state);
 
                 Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
                     << ", cdc stream pathId: " << pathId

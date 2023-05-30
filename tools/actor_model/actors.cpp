@@ -6,7 +6,6 @@
 static auto ShouldContinue = std::make_shared<TProgramShouldContinue>();
 
 /*
-Вся разработка должна находиться только в этом файле.
 Вам нужно написать реализацию TReadActor, TMaximumPrimeDevisorActor, TWriteActor
 */
 

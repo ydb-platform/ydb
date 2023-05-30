@@ -43,11 +43,12 @@ TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array
 
 TString TPortionInfo::SerializeColumnWithLimit(const std::shared_ptr<arrow::Array>& array,
     const std::shared_ptr<arrow::Field>& field,
-    const TColumnSaver saver, const NColumnShard::TIndexationCounters& counters, const ui32 limitBytes) {
+    const TColumnSaver saver, const NColumnShard::TIndexationCounters& counters, ui64& droppedSize, const ui32 limitBytes) {
     auto blob = SerializeColumn(array, field, saver);
     if (blob.size() >= limitBytes) {
         counters.TrashDataSerializationBytes->Add(blob.size());
         counters.TrashDataSerialization->Add(1);
+        droppedSize = blob.size();
         return {};
     } else {
         counters.CorrectDataSerializationBytes->Add(blob.size());

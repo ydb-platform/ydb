@@ -584,9 +584,10 @@ public:
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
         const std::shared_ptr<arrow::Field>& field,
         const TColumnSaver saver);
+
     static TString SerializeColumnWithLimit(const std::shared_ptr<arrow::Array>& array,
         const std::shared_ptr<arrow::Field>& field,
-        const TColumnSaver saver, const NColumnShard::TIndexationCounters& counters, const ui32 sizeLimit = BLOB_BYTES_LIMIT);
+        const TColumnSaver saver, const NColumnShard::TIndexationCounters& counters, ui64& droppedSize, const ui32 sizeLimit = BLOB_BYTES_LIMIT);
 
     void InsertOneChunkColumn(const ui32 idx, TColumnRecord&& record);
 

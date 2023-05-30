@@ -71,6 +71,15 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
     return true;
 }
 
+class TSplitLimiterSettings {
+public:
+    static const inline double ReduceCorrectionKff = 0.9;
+    static const inline double MaxKff = 0.5;
+    static const inline double MinKff = 0.2;
+    static const inline double DangerouseRealKff = 0.7;
+    static const inline double IncreaseCorrectionKff = 1.1;
+};
+
 std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathId,
                                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                                             const ui64 granule,
@@ -95,6 +104,7 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
     saverContext.SetTierName(tierName).SetExternalCompression(compression);
 
     std::shared_ptr<arrow::RecordBatch> portionBatch = batch;
+    double kffSplit = 0.5;
     for (i32 pos = 0; pos < batch->num_rows();) {
         Y_VERIFY(portionBatch->num_rows());
 
@@ -117,6 +127,8 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
         }
 
         ui32 fillCounter = 0;
+        double maxKffSplit = 0;
+        ui64 maxBlobSize = 0;
         for (const auto& columnSummary : sortedColumnIds) {
             const TString& columnName = resultSchema->GetIndexInfo().GetColumnName(columnSummary.GetColumnId());
             const int idx = resultSchema->GetFieldIndex(columnSummary.GetColumnId());
@@ -129,10 +141,16 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
             /// @warnign records are not valid cause of empty BlobId and zero Portion
             TColumnRecord record = TColumnRecord::Make(granule, columnSummary.GetColumnId(), snapshot, 0);
             auto columnSaver = resultSchema->GetColumnSaver(columnSummary.GetColumnId(), saverContext);
-            TString blob = TPortionInfo::SerializeColumnWithLimit(array, field, columnSaver, Counters);
+            ui64 droppedSize;
+            TString blob = TPortionInfo::SerializeColumnWithLimit(array, field, columnSaver, Counters, droppedSize);
+            const double kffNew = 1.0 * TCompactionLimits::MAX_BLOB_SIZE / droppedSize * TSplitLimiterSettings::ReduceCorrectionKff;
             if (!blob) {
+                kffSplit = std::max<double>(TSplitLimiterSettings::MinKff, std::min<double>(kffNew, TSplitLimiterSettings::MaxKff));
                 ok = false;
                 break;
+            } else {
+                maxKffSplit = std::max<double>(maxKffSplit, kffNew);
+                maxBlobSize = std::max<ui64>(maxBlobSize, blob.size());
             }
 
             portionInfo.InsertOneChunkColumn(idx, std::move(record));
@@ -150,11 +168,16 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
             }
             pos += portionBatch->num_rows();
             if (pos < batch->num_rows()) {
-                portionBatch = batch->Slice(pos);
+                const double kff = (maxKffSplit < TSplitLimiterSettings::DangerouseRealKff) ? TSplitLimiterSettings::IncreaseCorrectionKff : 1.0;
+                portionBatch = batch->Slice(pos, std::min<ui32>(portionBatch->num_rows() * kff, batch->num_rows() - pos));
             }
+            Counters.SplittedPortionsSize->Collect(maxBlobSize);
         } else {
-            const i64 halfLen = portionBatch->num_rows() / 2;
-            Y_VERIFY(halfLen);
+            i64 halfLen = portionBatch->num_rows() * kffSplit;
+            if (!halfLen) {
+                halfLen = portionBatch->num_rows() * 0.5;
+                Y_VERIFY(halfLen);
+            }
             portionBatch = batch->Slice(pos, halfLen);
         }
     }
@@ -551,6 +574,16 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
         return std::make_tuple(std::span(partitioned.begin(), l), std::span(partitioned.begin() + l, partitioned.end()));
     }();
 
+    Counters.AnalizeCompactedPortions->Add(compacted.size());
+    Counters.AnalizeInsertedPortions->Add(inserted.size());
+    for (auto&& i : portions) {
+        if (i.IsInserted()) {
+            Counters.AnalizeInsertedBytes->Add(i.BlobsBytes());
+        } else {
+            Counters.AnalizeCompactedBytes->Add(i.BlobsBytes());
+        }
+    }
+
     // Do nothing if there are less than two compacted portions.
     if (compacted.size() < 2) {
         return 0;
@@ -559,8 +592,6 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
     std::sort(compacted.begin(), compacted.end(), [](const TPortionInfo* a, const TPortionInfo* b) {
         return a->IndexKeyStart() < b->IndexKeyStart();
     });
-    Counters.AnalizeCompactedPortions->Add(compacted.size());
-    Counters.AnalizeInsertedPortions->Add(inserted.size());
     for (auto&& i : inserted) {
         Counters.RepackedInsertedPortionBytes->Add(i->BlobsBytes());
     }

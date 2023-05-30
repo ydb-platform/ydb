@@ -12,10 +12,12 @@ TIndexationCounters::TIndexationCounters(const TString& module) {
     }
     ReadBytes = SubGroup->GetCounter(module + "/Read/Bytes", true);
     AnalizeInsertedPortions = SubGroup->GetCounter(module + "/AnalizeInsertion/Portions", true);
+    AnalizeInsertedBytes = SubGroup->GetCounter(module + "/AnalizeInsertion/Bytes", true);
     RepackedInsertedPortions = SubGroup->GetCounter(module + "/RepackedInsertion/Portions", true);
     RepackedInsertedPortionBytes = SubGroup->GetCounter(module + "/RepackedInsertion/Bytes", true);
 
     AnalizeCompactedPortions = SubGroup->GetCounter(module + "/AnalizeCompaction/Portions", true);
+    AnalizeCompactedBytes = SubGroup->GetCounter(module + "/AnalizeCompaction/Bytes", true);
     SkipPortionsMoveThroughIntersection = SubGroup->GetCounter(module + "/SkipMoveThroughIntersection/Portions", true);
     SkipPortionBytesMoveThroughIntersection = SubGroup->GetCounter(module + "/SkipMoveThroughIntersection/Bytes", true);
     RepackedCompactedPortions = SubGroup->GetCounter(module + "/RepackedCompaction/Portions", true);
@@ -26,6 +28,8 @@ TIndexationCounters::TIndexationCounters(const TString& module) {
     TrashDataSerialization = SubGroup->GetCounter(module + "/TrashDataSerialization/Count", true);
     CorrectDataSerializationBytes = SubGroup->GetCounter(module + "/CorrectDataSerialization/Bytes", true);
     CorrectDataSerialization = SubGroup->GetCounter(module + "/CorrectDataSerialization/Count", true);
+
+    SplittedPortionsSize = SubGroup->GetHistogram(module + "/Histogram/SplittedPortionsSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
 }
 
 }

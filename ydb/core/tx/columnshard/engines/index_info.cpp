@@ -272,7 +272,11 @@ std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const std::vector<TString
 }
 
 std::shared_ptr<arrow::Field> TIndexInfo::ArrowColumnField(ui32 columnId) const {
-    return ArrowSchema()->GetFieldByName(GetColumnName(columnId, true));
+    auto it = ArrowColumnByColumnIdCache.find(columnId);
+    if (it == ArrowColumnByColumnIdCache.end()) {
+        it = ArrowColumnByColumnIdCache.emplace(columnId, ArrowSchema()->GetFieldByName(GetColumnName(columnId, true))).first;
+    }
+    return it->second;
 }
 
 void TIndexInfo::SetAllKeys() {

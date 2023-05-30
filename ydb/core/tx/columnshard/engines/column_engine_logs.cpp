@@ -753,7 +753,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             GranulesTable->Write(db, rec);
         }
     }
-
+    auto g = GranulesStorage->StartPackModification();
     // Update old portions (set stale snapshot)
 
     if (switchedPortions) {

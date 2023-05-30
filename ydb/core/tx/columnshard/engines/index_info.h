@@ -148,6 +148,7 @@ public:
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    mutable THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 public:

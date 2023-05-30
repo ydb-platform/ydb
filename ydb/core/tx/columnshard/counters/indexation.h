@@ -10,6 +10,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ReadBytes;
     NMonitoring::TDynamicCounters::TCounterPtr AnalizeCompactedPortions;
     NMonitoring::TDynamicCounters::TCounterPtr AnalizeInsertedPortions;
+    NMonitoring::TDynamicCounters::TCounterPtr AnalizeCompactedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr AnalizeInsertedBytes;
     NMonitoring::TDynamicCounters::TCounterPtr RepackedInsertedPortions;
     NMonitoring::TDynamicCounters::TCounterPtr RepackedInsertedPortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr SkipPortionsMoveThroughIntersection;
@@ -22,6 +24,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerialization;
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerializationBytes;
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerialization;
+
+    NMonitoring::THistogramPtr SplittedPortionsSize;
 
     TIndexationCounters(const TString& module);
 };

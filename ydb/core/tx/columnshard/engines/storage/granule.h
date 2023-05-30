@@ -119,8 +119,7 @@ private:
         if (GranuleSummary.GetActivePortionsCount() <= 1) {
             return 0;
         }
-        const ui64 weightedSize = (1.0 * GranuleSummary.GetGranuleSize() / 1024) * GranuleSummary.GetActivePortionsCount();
-        return weightedSize;
+        return GranuleSummary.GetGranuleSize() * GranuleSummary.GetActivePortionsCount() * GranuleSummary.GetActivePortionsCount();
     }
 public:
     TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleSummary& granuleSummary)

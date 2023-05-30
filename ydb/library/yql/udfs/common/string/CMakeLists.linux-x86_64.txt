@@ -14,6 +14,7 @@ target_link_libraries(string_udf INTERFACE
   yutil
   yql-public-udf
   public-udf-support
+  public-udf-arrow
   library-cpp-charset
   cpp-deprecated-split
   cpp-html-pcdata
@@ -25,7 +26,7 @@ target_link_libraries(string_udf INTERFACE
 add_global_library_for(string_udf.global string_udf)
 target_compile_options(string_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_MINOR=33
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(string_udf.global PUBLIC
@@ -34,6 +35,7 @@ target_link_libraries(string_udf.global PUBLIC
   yutil
   yql-public-udf
   public-udf-support
+  public-udf-arrow
   library-cpp-charset
   cpp-deprecated-split
   cpp-html-pcdata

@@ -3,6 +3,7 @@
 #include "key.h"
 
 #include <util/datetime/base.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
@@ -97,6 +98,7 @@ struct TClientBlob {
 
 };
 
+static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
 
 //TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
 //or packed(PackedData)
@@ -112,14 +114,17 @@ struct TBatch {
     TVector<TClientBlob> Blobs;
     TVector<ui32> InternalPartsPos;
     NKikimrPQ::TBatchHeader Header;
-    TString PackedData;
+    TBuffer PackedData;
     TBatch()
         : Packed(false)
-    {}
+    {
+        PackedData.Reserve(8_MB);
+    }
 
     TBatch(const ui64 offset, const ui16 partNo, const TVector<TClientBlob>& blobs)
         : Packed(false)
     {
+        PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
         Header.SetUnpackedSize(0);
@@ -133,6 +138,7 @@ struct TBatch {
     TBatch(const ui64 offset, const ui16 partNo, const std::deque<TClientBlob>& blobs)
         : Packed(false)
     {
+        PackedData.Reserve(8_MB);
         Header.SetOffset(offset);
         Header.SetPartNo(partNo);
         Header.SetUnpackedSize(0);
@@ -189,7 +195,7 @@ struct TBatch {
     void UnpackToType0(TVector<TClientBlob> *result);
     void UnpackToType1(TVector<TClientBlob> *result);
 
-    void SerializeTo(TString& res);
+    void SerializeTo(TString& res) const;
 
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 

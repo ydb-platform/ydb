@@ -182,11 +182,11 @@ Y_UNIT_TEST(TestBatchPacking) {
         ));
     }
     batch.Pack();
-    TString s = batch.PackedData;
+    TBuffer b = batch.PackedData;
     UNIT_ASSERT(batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     batch.Unpack();
     batch.Pack();
-    UNIT_ASSERT(batch.PackedData == s);
+    UNIT_ASSERT(batch.PackedData == b);
     TString str;
     batch.SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());

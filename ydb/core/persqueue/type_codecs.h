@@ -25,7 +25,7 @@ public:
         return TCoder::Sig();
     }
 
-    TAutoPtr<IChunkCoder> MakeChunk(TFlatBlobDataOutputStream* output) const override {
+    TAutoPtr<IChunkCoder> MakeChunk(TBuffer& output) const override {
         return new TCoder(output);
     }
 

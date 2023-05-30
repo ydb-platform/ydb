@@ -872,7 +872,10 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableK
         for (auto& [shardId, shardData] : shardsMap) {
             auto& shardInfo = shardInfoMap[shardId];
 
-            stageInfo.Meta.Tx.Params->AddShardParam(shardId, name, shardData.ItemType, std::move(shardData.UnboxedValues));
+            bool inserted = stageInfo.Meta.Tx.Params->AddShardParam(
+                shardId, name, shardData.ItemType, std::move(shardData.UnboxedValues));
+            YQL_ENSURE(inserted,"duplicate parameter for effect, shardId: "
+                << shardId << ", paramName: " << name);
 
             if (!shardInfo.KeyWriteRanges) {
                 shardInfo.KeyWriteRanges.ConstructInPlace();

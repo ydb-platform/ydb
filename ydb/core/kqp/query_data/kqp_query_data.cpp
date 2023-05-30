@@ -347,14 +347,13 @@ bool TQueryData::MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyPara
     return false;
 }
 
-void TQueryData::AddShardParam(ui64 shardId, const TString& name, NKikimr::NMiniKQL::TType* type, NKikimr::NMiniKQL::TUnboxedValueVector&& value) {
+bool TQueryData::AddShardParam(ui64 shardId, const TString& name, NKikimr::NMiniKQL::TType* type, NKikimr::NMiniKQL::TUnboxedValueVector&& value) {
     auto guard = TypeEnv().BindAllocator();
     auto [it, inserted] = PartitionedParams.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(shardId, name),
         std::forward_as_tuple(type, std::move(value)));
-    YQL_ENSURE(inserted, "duplicate parameter, shardId#: "
-        << shardId << ", paramName#: " << name);
+    return inserted;
 }
 
 void TQueryData::ClearPrunedParams() {

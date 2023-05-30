@@ -31,22 +31,22 @@ class TBacktraceSymbolizer : public IBacktraceSymbolizer {
 public:
     TBacktraceSymbolizer() : IBacktraceSymbolizer() {
     #ifdef _linux_
-        dl_iterate_phdr(DlIterCallback, &DLLs);
+        dl_iterate_phdr(DlIterCallback, &DLLs_);
     #endif
     }
     TString SymbolizeFrame(void* ptr) override {
         
         ui64 address = (ui64)ptr - 1; // last byte of the call instruction
         ui64 offset = 0;
-        TString modulePath = BinaryPath;
+        TString modulePath = BinaryPath_;
 #ifdef _linux_
         Dl_info dlInfo;
         memset(&dlInfo, 0, sizeof(dlInfo));
         auto ret = dladdr((void*)address, &dlInfo);
         if (ret) {
             auto path = dlInfo.dli_fname;
-            auto it = DLLs.find(path);
-            if (it != DLLs.end()) {
+            auto it = DLLs_.find(path);
+            if (it != DLLs_.end()) {
                 modulePath = path;
                 offset = it->second.BaseAddress;
             }
@@ -65,8 +65,8 @@ public:
         
     }
 private:
-    TString BinaryPath = "EXE";
-    THashMap<TString, TDllInfo> DLLs;
+    TString BinaryPath_ = "EXE";
+    THashMap<TString, TDllInfo> DLLs_;
 };
 
 std::unique_ptr<IBacktraceSymbolizer> BuildSymbolizer(bool) {

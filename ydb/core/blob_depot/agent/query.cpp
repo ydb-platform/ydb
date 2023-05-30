@@ -17,7 +17,8 @@ namespace NKikimr::NBlobDepot {
 
         switch (ev->GetTypeRewrite()) {
             case TEvBlobStorage::EvGet:
-                doForward = ev->Get<TEvBlobStorage::TEvGet>()->Decommission;
+                doForward = ev->Get<TEvBlobStorage::TEvGet>()->Decommission
+                    || ev->Get<TEvBlobStorage::TEvGet>()->PhantomCheck;
                 Y_VERIFY(!doForward || !ev->Get<TEvBlobStorage::TEvGet>()->MustRestoreFirst);
                 break;
 

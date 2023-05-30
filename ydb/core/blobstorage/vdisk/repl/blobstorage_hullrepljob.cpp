@@ -699,7 +699,14 @@ namespace NKikimr {
             auto *msg = ev->Get();
             for (size_t i = 0; i < msg->ResponseSz; ++i) {
                 auto& r = msg->Responses[i];
-                isPhantom.try_emplace(r.Id, r.Status == NKikimrProto::NODATA, r.LooksLikePhantom);
+                auto looksLikePhantom = r.LooksLikePhantom;
+                bool isNoData = r.Status == NKikimrProto::NODATA;
+                if (!looksLikePhantom) {
+                    Y_VERIFY_DEBUG_S(r.Status == NKikimrProto::ERROR, "LooksLikePhantom undefined r.Status# " << r.Status
+                        << " msg.Status# " << msg->Status);
+                    looksLikePhantom = isNoData = false;
+                }
+                isPhantom.try_emplace(r.Id, isNoData, *looksLikePhantom);
             }
 
             for (auto it = begin; it != end; ++it) {

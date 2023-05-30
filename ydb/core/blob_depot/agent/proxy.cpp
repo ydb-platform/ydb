@@ -36,6 +36,9 @@ namespace NKikimr::NBlobDepot {
                     auto& r = static_cast<TEvBlobStorage::TEvGetResult&>(*response);
                     for (size_t i = 0; i < r.ResponseSz; ++i) {
                         r.Responses[i].Status = NKikimrProto::NODATA;
+                        if (get.PhantomCheck) {
+                            r.Responses[i].LooksLikePhantom.emplace(true);
+                        }
                     }
                     r.ExecutionRelay = std::move(get.ExecutionRelay);
                     break;

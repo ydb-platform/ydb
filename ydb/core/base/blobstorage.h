@@ -1198,7 +1198,7 @@ struct TEvBlobStorage {
             TVector<TPartMapItem> PartMap;
             bool Keep = false;
             bool DoNotKeep = false;
-            bool LooksLikePhantom = false; // filled only when PhantomCheck is true
+            std::optional<bool> LooksLikePhantom; // filled only when PhantomCheck is true
 
             TResponse()
                 : Status(NKikimrProto::UNKNOWN)

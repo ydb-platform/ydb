@@ -130,6 +130,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , SnapshotManager(this)
     , SchemaSnapshotManager(this)
     , VolatileTxManager(this)
+    , ConflictsCache(this)
     , DisableByKeyFilter(0, 0, 1)
     , MaxTxInFly(15000, 0, 100000)
     , MaxTxLagMilliseconds(5*60*1000, 0, 30*24*3600*1000ll)
@@ -3947,14 +3948,8 @@ public:
     }
 
     void OnSkipUncommitted(ui64 txId) override {
-        if (auto* info = Self->GetVolatileTxManager().FindByCommitTxId(txId)) {
-            if (info->State != EVolatileTxState::Aborting) {
-                Y_VERIFY(VolatileDependencies);
-                VolatileDependencies->insert(txId);
-            }
-        } else {
-            Self->SysLocksTable().BreakLock(txId);
-        }
+        Y_VERIFY(VolatileDependencies);
+        Self->BreakWriteConflict(txId, *VolatileDependencies);
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
@@ -4002,10 +3997,13 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
 {
     const auto localTid = GetLocalTableId(tableId);
     Y_VERIFY(localTid);
-    const NTable::TScheme& scheme = db.GetScheme();
-    const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTid);
-    TSmallVec<TRawTypeValue> key;
-    NMiniKQL::ConvertTableKeys(scheme, tableInfo, keyCells, key, nullptr);
+
+    if (auto* cached = GetConflictsCache().GetTableCache(localTid).FindUncommittedWrites(keyCells)) {
+        for (ui64 txId : *cached) {
+            BreakWriteConflict(txId, volatileDependencies);
+        }
+        return true;
+    }
 
     if (!BreakWriteConflictsTxObserver) {
         BreakWriteConflictsTxObserver = new TBreakWriteConflictsTxObserver(this);
@@ -4018,7 +4016,7 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
     // We are not actually interested in the row version, we only need to
     // detect uncommitted transaction skips on the path to that version.
     auto res = db.SelectRowVersion(
-        localTid, key, /* readFlags */ 0,
+        localTid, keyCells, /* readFlags */ 0,
         nullptr,
         BreakWriteConflictsTxObserver);
 
@@ -4027,6 +4025,16 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
     }
 
     return true;
+}
+
+void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies) {
+    if (auto* info = GetVolatileTxManager().FindByCommitTxId(txId)) {
+        if (info->State != EVolatileTxState::Aborting) {
+            volatileDependencies.insert(txId);
+        }
+    } else {
+        SysLocksTable().BreakLock(txId);
+    }
 }
 
 class TDataShard::TTxGetOpenTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -4041,9 +4049,9 @@ public:
         auto it = pathId ? Self->GetUserTables().find(pathId.LocalPathId) : Self->GetUserTables().begin();
         Y_VERIFY(it != Self->GetUserTables().end());
 
-        auto txs = txc.DB.GetOpenTxs(it->second->LocalTid);
+        auto openTxs = txc.DB.GetOpenTxs(it->second->LocalTid);
 
-        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(txs));
+        Reply = MakeHolder<TEvDataShard::TEvGetOpenTxsResult>(pathId, std::move(openTxs));
         return true;
     }
 

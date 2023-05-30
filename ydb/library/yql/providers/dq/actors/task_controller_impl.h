@@ -516,7 +516,7 @@ public:
         for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
             auto actorId = ActorIdFromProto(actorIds[i]);
             auto& task = tasks[i];
-            Tasks.emplace_back(task, actorId);
+            Tasks.emplace_back(NDq::TDqTaskSettings(std::move(task)), actorId);
             ActorIds.emplace(task.GetId(), actorId);
             TaskIds.emplace(actorId, task.GetId());
             Yql::DqsProto::TTaskMeta taskMeta;
@@ -534,6 +534,10 @@ public:
         if (AggrPeriod) {
             Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
         }
+    }
+
+    const NDq::TDqTaskSettings GetTask(size_t idx) const {
+        return Tasks.at(idx).first;
     }
 
 private:
@@ -634,7 +638,7 @@ private:
 
 
     bool ChannelsUpdated = false;
-    TVector<std::pair<NDqProto::TDqTask, TActorId>> Tasks;
+    TVector<std::pair<NDq::TDqTaskSettings, TActorId>> Tasks;
     THashSet<ui64> FinishedTasks;
     THashMap<ui64, TInstant> Executing;
     THashMap<ui64, TActorId> ActorIds;

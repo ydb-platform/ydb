@@ -37,9 +37,11 @@ public:
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        NWilson::TTraceId traceId)
+        NWilson::TTraceId traceId,
+        const TDqTaskRunnerParameterProvider& parameterProvider)
         : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId))
         , ComputeCtx(settings.StatsMode)
+        , ParameterProvider(parameterProvider)
     {
         if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
             Meta.ConstructInPlace();
@@ -300,6 +302,7 @@ private:
     TMaybe<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta> Meta;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
     TActorId SysViewActorId;
+    const TDqTaskRunnerParameterProvider ParameterProvider;
 };
 
 } // anonymous namespace
@@ -308,10 +311,11 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId)
+    NWilson::TTraceId traceId,
+    const TDqTaskRunnerParameterProvider& parameterProvider)
 {
     return new TKqpComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, std::move(traceId));
+        functionRegistry, settings, memoryLimits, std::move(traceId), parameterProvider);
 }
 
 } // namespace NKqp

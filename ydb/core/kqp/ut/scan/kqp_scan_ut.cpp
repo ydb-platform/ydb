@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
     }
 
-    Y_UNIT_TEST(StreamExecuteScanQueryTimeoutBruteForce) {
+    Y_UNIT_TEST(StreamExecuteScanQueryClientTimeoutBruteForce) {
         TKikimrRunner kikimr;
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
@@ -137,10 +137,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         for (int i = 1; i < maxTimeoutMs; i++) {
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
                 SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
-            )",
-            TStreamExecScanQuerySettings()
-                .ClientTimeout(TDuration::MilliSeconds(i))
-            ).GetValueSync();
+            )", TStreamExecScanQuerySettings().ClientTimeout(TDuration::MilliSeconds(i))).GetValueSync();
 
             if (it.IsSuccess()) {
                 try {
@@ -156,13 +153,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             }
         }
 
-        int count = 60;
-        while (counters.GetActiveSessionActors()->Val() != 0 && count) {
-            count--;
-            Sleep(TDuration::Seconds(1));
-        }
-
-        UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+        WaitForZeroSessions(counters);
     }
 
     Y_UNIT_TEST(IsNull) {

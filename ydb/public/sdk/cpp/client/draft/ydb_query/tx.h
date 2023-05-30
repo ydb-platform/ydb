@@ -82,11 +82,19 @@ struct TTxControl {
         return TTxControl(settings);
     }
 
+    static TTxControl NoTx() {
+        return TTxControl();
+    }
+
     const TMaybe<TString> TxId_;
     const TMaybe<TTxSettings> TxSettings_;
     FLUENT_SETTING_FLAG(CommitTx);
 
+    bool HasTx() const { return TxId_.Defined() || TxSettings_.Defined(); }
+
 private:
+    TTxControl() {}
+
     TTxControl(const TString& txId)
         : TxId_(txId) {}
 

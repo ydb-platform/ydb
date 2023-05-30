@@ -1,10 +1,10 @@
-# Cluster extension
+# Expanding a cluster
 
 You can expand a {{ ydb-short-name }} cluster by adding new nodes to its configuration. Below is the list of actions for expanding a {{ ydb-short-name }} cluster installed manually on VM instances or physical servers. In the Kubernetes environment, clusters are expanded by adjusting the {{ ydb-short-name }} controller settings for Kubernetes.
 
 When expanding your {{ ydb-short-name }} cluster, you do not have to pause user access to databases. When the cluster is expanded, its components are restarted to apply the updated configurations. This means that any transactions that were in progress at the time of expansion may need to be executed again on the cluster. The transactions are rerun automatically because the applications leverage the {{ ydb-short-name }} SDK features for error control and transaction rerun.
 
-## Preparing new servers
+## Preparing new servers {#add-host}
 
 If you deploy new static or dynamic nodes of the cluster on new servers added to the expanded {{ ydb-short-name }} cluster, on each new server, you need to install the {{ ydb-short-name }} software according to the procedures described in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md). Among other things, you need to:
 
@@ -15,17 +15,17 @@ If you deploy new static or dynamic nodes of the cluster on new servers added to
 
 The TLS certificates used on the new servers must meet the [requirements for filling out the fields](../../deploy/manual/deploy-ydb-on-premises.md#tls-certificates) and be signed by the same trusted certification authority that signed the certificates for the existing servers of the expanded {{ ydb-short-name }} cluster.
 
-## Adding dynamic nodes
+## Adding dynamic nodes {#add-dynamic-node}
 
 By adding dynamic nodes, you can expand the available computing resources (CPU cores and RAM) needed for your {{ ydb-short-name }} cluster to process user queries.
 
-To add a dynamic node to the cluster, run the process that serves this node, passing to it, in the command line parameters, the name of the served database and the addresses of any three static nodes of the {{ ydb-short-name }} cluster, as shown in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md#start-dynnode).
+To add a dynamic node to the cluster, run the process that serves this node, passing to it, in the command line options, the name of the served database and the addresses of any three static nodes of the {{ ydb-short-name }} cluster, as shown in the [cluster deployment instructions](../../deploy/manual/deploy-ydb-on-premises.md#start-dynnode).
 
 Once you have added the dynamic node to the cluster, the information about it becomes available on the [cluster monitoring page in the built-in UI](../embedded_monitoring/ydb_monitoring.md).
 
 To remove a dynamic node from the cluster, stop the process on the dynamic node.
 
-## Adding static nodes
+## Adding static nodes {#add-static-node}
 
 By adding static nodes, you can increase the throughput of your I/O operations and increase the available storage capacity in your {{ ydb-short-name }} cluster.
 
@@ -35,7 +35,7 @@ To add static nodes to the cluster, perform the following steps:
 
 1. Edit the [cluster's configuration file](../../deploy/manual/deploy-ydb-on-premises.md#config):
    * Add, to the configuration, the description of the added nodes (in the `hosts` section) and disks used by them (in the `host_configs` section).
-   * Use the `storage_config_generation: K` parameter to set the ID of the configuration update at the top level, where `K` is the integer update ID (for the initial config, `K=0` or omitted; for the first expansion, `K=1`; for the second expansion, `K=2`; and so on).
+   * Use the `storage_config_generation: K` option to set the ID of the configuration update at the top level, where `K` is the integer update ID (for the initial config, `K=0` or omitted; for the first expansion, `K=1`; for the second expansion, `K=2`; and so on).
 
 1. Copy the updated cluster's configuration file to all the existing and added servers in the cluster, overwriting the old version of the configuration file.
 
@@ -54,7 +54,7 @@ To add static nodes to the cluster, perform the following steps:
        --user root auth get-token --force >token-file
    ```
 
-   The command example above uses the following parameters:
+   The command example above uses the following options:
    * `node1.ydb.tech`: The FQDN of any server hosting the cluster's static nodes.
    * `2135`: Port number of the gRPCs service for the static nodes.
    * `ca.crt`: Name of the file with the certificate authority certificate.
@@ -72,7 +72,7 @@ To add static nodes to the cluster, perform the following steps:
    echo $?
    ```
 
-   The command example above uses the following parameters:
+   The command example above uses the following options:
    * `ydbd-token-file`: File name of the previously issued authentication token.
    * `2135`: Port number of the gRPCs service for the static nodes.
    * `ca.crt`: Name of the file with the certificate authority certificate.
@@ -92,7 +92,7 @@ To add static nodes to the cluster, perform the following steps:
    echo $?
    ```
 
-   The command example above uses the following parameters:
+   The command example above uses the following options:
    * `ydbd-token-file`: File name of the previously issued authentication token.
    * `2135`: Port number of the gRPCs service for the static nodes.
    * `ca.crt`: Name of the file with the certificate authority certificate.

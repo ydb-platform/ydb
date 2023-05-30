@@ -24,23 +24,23 @@
 // TODO: limit number of messages per second
 // TODO: make TLogComponentLevelRequest/Response network messages
 
-#define IS_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component)                           \
-    (static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()) &&            \
-     static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings())->Satisfies(   \
+#define IS_LOG_PRIORITY_ENABLED(priority, component)                           \
+    (NActors::TlsActivationContext ? (static_cast<::NActors::NLog::TSettings*>((*NActors::TlsActivationContext).LoggerSettings()) &&            \
+     static_cast<::NActors::NLog::TSettings*>((*NActors::TlsActivationContext).LoggerSettings())->Satisfies(   \
              static_cast<::NActors::NLog::EPriority>(priority),                                  \
              static_cast<::NActors::NLog::EComponent>(component),                                \
              0ull)                                                                               \
-    )
+    ) : true)
 
-#define IS_EMERG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_EMERG, component)
-#define IS_ALERT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_ALERT, component)
-#define IS_CRIT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_CRIT, component)
-#define IS_ERROR_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_ERROR, component)
-#define IS_WARN_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, component)
-#define IS_NOTICE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_NOTICE, component)
-#define IS_INFO_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_INFO, component)
-#define IS_DEBUG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_DEBUG, component)
-#define IS_TRACE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_TRACE, component)
+#define IS_EMERG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_EMERG, component)
+#define IS_ALERT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_ALERT, component)
+#define IS_CRIT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_CRIT, component)
+#define IS_ERROR_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_ERROR, component)
+#define IS_WARN_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_WARN, component)
+#define IS_NOTICE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_NOTICE, component)
+#define IS_INFO_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_INFO, component)
+#define IS_DEBUG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, component)
+#define IS_TRACE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, component)
 
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \
@@ -425,13 +425,13 @@ namespace NActors {
 }
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
-    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(NActors::TActivationContext::AsActorContext(), mPriority, mComponent));\
+    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TFormattedRecordWriter(\
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
-    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(NActors::TActivationContext::AsActorContext(), mPriority, mComponent));\
+    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TRecordWriter(\
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
@@ -475,4 +475,3 @@ namespace NActors {
 #define AFL_CRIT(component) ACTORS_FORMATTED_LOG_CRIT(component)
 #define AFL_ALERT(component) ACTORS_FORMATTED_LOG_ALERT(component)
 #define AFL_EMERG(component) ACTORS_FORMATTED_LOG_EMERG(component)
-

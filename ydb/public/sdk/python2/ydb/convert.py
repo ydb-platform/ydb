@@ -124,6 +124,8 @@ _to_native_map = {
     "dict_type": _pb_to_dict,
     "struct_type": _pb_to_struct,
     "void_type": _pb_to_void,
+    "empty_list_type": _pb_to_list,
+    "empty_dict_type": _pb_to_dict,
 }
 
 

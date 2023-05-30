@@ -363,7 +363,9 @@ protected:
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal, /*pushLeftStage =*/ !KqpCtx.IsDataQuery() && AllowFuseJoinInputs(node));
+        TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
+            /*pushLeftStage =*/ !KqpCtx.IsDataQuery() && AllowFuseJoinInputs(node), KqpCtx.Config->GetHashJoinMode()
+        );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

@@ -77,12 +77,12 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     }
     Y_VERIFY(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
 
-    bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
+    bool parseResult = ParseProgram(record.GetOlapProgramType(), record.GetOlapProgram(), read,
         TIndexColumnResolver(indexInfo));
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
+        metadata = PrepareReadMetadata(read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
                                        ErrorDescription, false);
     }
 

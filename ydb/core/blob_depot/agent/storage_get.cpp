@@ -22,7 +22,7 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Request.QuerySize; ++i) {
                         const auto& q = Request.Queries[i];
                         BDEV_QUERY(BDEV19, "TEvGet_new", (U.BlobId, q.Id), (U.Shift, q.Shift), (U.Size, q.Size),
@@ -145,7 +145,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void TraceResponse(std::optional<NKikimrProto::EReplyStatus> status) {
-                if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Response->ResponseSz; ++i) {
                         const auto& r = Response->Responses[i];
                         BDEV_QUERY(BDEV20, "TEvGet_end", (BlobId, r.Id), (Shift, r.Shift),

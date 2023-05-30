@@ -2075,6 +2075,15 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                 }
             }
         }
+        if (!pushedOwnerIntoQuarantine && OwnerData[owner].HaveRequestsInFlight()) {
+            pushedOwnerIntoQuarantine = true;
+            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Add owner to quarantine, "
+                    << "HaveRequestsInFlight, OwnerId# " << owner);
+            QuarantineOwners.push_back(owner);
+            LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
+                    << " push ownerId# " << owner
+                    << " into quarantine as there are requests in flight");
+        }
         if (!pushedOwnerIntoQuarantine) {
             ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "KillOwner(), Remove owner without quarantine, OwnerId# " << owner);
             Keeper.RemoveOwner(owner);
@@ -2326,10 +2335,13 @@ void TPDisk::ClearQuarantineChunks() {
 
     {
         const auto it = std::partition(QuarantineOwners.begin(), QuarantineOwners.end(), [&] (TOwner i) {
-            return Keeper.GetOwnerUsed(i);
+            return Keeper.GetOwnerUsed(i) || OwnerData[i].HaveRequestsInFlight();
         });
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
             ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[*delIt].OperationLog, "Remove owner from quarantine, OwnerId# " << *delIt);
+            TOwnerRound ownerRound = OwnerData[*delIt].OwnerRound;
+            OwnerData[*delIt].Reset(false);
+            OwnerData[*delIt].OwnerRound = ownerRound;
             Keeper.RemoveOwner(*delIt);
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
                     << " removed ownerId# " << *delIt << " from chunks Keeper through QuarantineOwners");

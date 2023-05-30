@@ -109,14 +109,14 @@ public:
 
    virtual std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorCombineKeys>> PrepareCombineKeys(
        TTupleType* tupleType,
-       std::optional<ui32> filterColumn,
        const std::vector<ui32>& argsColumns,
        const TTypeEnvironment& env) const = 0;
 
    virtual std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareFinalizeKeys(
        TTupleType* tupleType,
        const std::vector<ui32>& argsColumns,
-       const TTypeEnvironment& env) const = 0;
+       const TTypeEnvironment& env,
+       TType* returnType) const = 0;
 };
 
 const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name);

@@ -4,6 +4,7 @@
 #include <functional>
 #include <string_view>
 #include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -165,7 +166,7 @@ TRuntimeNode BuildParseCall(
                 fields.push_back(ctx.ProgramBuilder.Member(item, name));
             }
 
-            fields.push_back(ctx.ProgramBuilder.Member(item, "_yql_block_length"));
+            fields.push_back(ctx.ProgramBuilder.Member(item, BlockLengthColumnName));
             return fields;
         });
     }

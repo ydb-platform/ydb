@@ -153,7 +153,7 @@ public:
             LOG_WARN(*as, NKikimrServices::READ_TABLE_API, "ForgetAction occurred, send TEvPoisonPill");
             as->Send(actorId, new TEvents::TEvPoisonPill());
         };
-        Request_->SetClientLostAction(std::move(clientLostCb));
+        Request_->SetFinishAction(std::move(clientLostCb));
     }
 
     void PassAway() override {

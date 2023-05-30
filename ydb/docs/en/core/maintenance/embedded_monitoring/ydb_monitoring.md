@@ -28,7 +28,7 @@ Below is the cluster summary:
 * **Storage**: The used/total storage space.
 * **Versions**: The list of {{ ydb-short-name }} versions run on the cluster nodes.
 
-Next are the lists of [tenants](#tenant_list_page) and [nodes](#node_list_page) on the Tenants and Nodes tabs, respectively.
+Next, you will find lists of [tenants](#tenant_list_page) and [nodes](#node_list_page) on the Tenants and Nodes tabs, respectively.
 
 ### Tenant list {#tenant_list_page}
 
@@ -36,13 +36,13 @@ Next are the lists of [tenants](#tenant_list_page) and [nodes](#node_list_page) 
 
 The tenants list contains the following information on each tenant:
 
-* **Tenant**: The tenant's path.
-* **Name**: The tenant's name.
-* **Type**: The tenant's type.
-* **State**: The tenant's health.
+* **Tenant**: Tenant path.
+* **Name**: Tenant name.
+* **Type**: Tenant type.
+* **State**: Tenant health.
 * **CPU**: CPU utilization by the tenant's nodes.
 * **Memory**: RAM consumption by the tenant's nodes.
-* **Storage**: The estimated amount of data stored by the tenant.
+* **Storage**: Estimated amount of data stored by the tenant.
 * **Pools usage**: CPU usage by the nodes broken down by the internal stream pools.
 * **Tablets States**: Tablets running in the given tenant.
 
@@ -54,17 +54,17 @@ If you click on the tenant's path, you can go to the [tenant page](#tenant_page)
 
 The list includes all nodes in the cluster. For each node, you can see:
 
-* **#**: The node ID.
+* **#**: Node ID.
 * **Host**: The host running the node.
 * **Endpoints**: The ports being listened to.
 * **Version**: The {{ ydb-short-name }} version being run.
 * **Uptime**: The node uptime.
 * **Memory used**: The amount of RAM used.
 * **Memory limit**: The RAM utilization limit set via cgroup.
-* **Pools usage**: CPU utilization broken down by the internal thread pools.
+* **Pools usage**: CPU utilization broken down by the internal stream pools.
 * **Load average**: The average CPU utilization on the host.
 
-By clicking the host name, you can go to the [node page](#node_page).
+To open the [node page](#node_page), click the host name.
 
 ## Node page {#node_page}
 
@@ -77,24 +77,27 @@ http://<endpoint>:8765/monitoring/node/<node-id>/
 Information about the node is presented in the following sections:
 
 * **Pools**: CPU utilization broken down by the internal stream pools, with roughly the following pool functions:
-  * **System**: The tasks of critical system components.
-  * **User**: User tasks, queries executed by tablets.
-  * **Batch**: Long-running background tasks.
-  * **IO**: Blocking I/O operations.
-  * **IC**: Networking operations.
 
-  High pool utilization might degrade performance and increase the system response time.
+   * **System**: The tasks of critical system components.
+   * **User**: User tasks, queries executed by tablets.
+   * **Batch**: Long-running background tasks.
+   * **IO**: Blocking I/O operations.
+   * **IC**: Networking operations.
+
+   High pool utilization might degrade performance and increase the system response time.
 
 * **Common info**: Basic information about the node:
-  * **Version**: The {{ ydb-short-name }} version.
-  * **Uptime**: The node uptime.
-  * **DC**: The availability zone where the node resides.
-  * **Rack**: The ID of the rack where the node resides.
+
+   * **Version**: The {{ ydb-short-name }} version.
+   * **Uptime**: The node uptime.
+   * **DC**: The availability zone where the node resides.
+   * **Rack**: The ID of the rack where the node resides.
 
 * **Load average**: Average host CPU utilization for different time intervals:
-  * 1 minute.
-  * 5 minutes.
-  * 15 minutes.
+
+   * 1 minute.
+   * 5 minutes.
+   * 15 minutes.
 
 The node page has the Storage and Tablets tabs with a [list of storage groups](#node_storage_page) and a [list of tablets](#node_tablets_page), respectively.
 
@@ -127,7 +130,7 @@ Many {{ ydb-short-name }} components are implemented as tablets. The system can 
 
 In the upper part of the list of tablets, there's a big indicator for tablets running on the given node. It shows the ratio of fully launched and running tablets.
 
-Under the indicator, you can see a list of tablets, with each tablet represented by a small [color indicator](#colored_indicator) icon. When you hover over the indicator, the tablet summary is shown:
+Under the indicator, you can see a list of tablets, where each tablet is shown as a small [color indicator](#colored_indicator) icon. When you hover over the indicator, the tablet summary is shown:
 
 * **Tablet**: The ID of the tablet.
 * **NodeID**: The ID of the node where the tablet resides.
@@ -146,7 +149,7 @@ Like the previous pages, this page includes the tenant summary, but unlike the o
 
 In the `Tenant Info` section, you can see the following information:
 
-* **Pools**: The total CPU utilization by the tenant nodes broken down by internal stream pools (for more information about pools, see the [tenant page](#tenant_page)).
+* **Pools**: Total CPU utilization by the tenant nodes broken down by internal stream pools (for more information about pools, see the [tenant page](#tenant_page)).
 
 * **Metrics**: Data about tablet utilization for this tenant:
   * **Memory**: The RAM utilized by tablets.
@@ -161,10 +164,10 @@ In the `Tenant Info` section, you can see the following information:
 The tenant page also includes the following tabs:
 
 * **HealthCheck**: The report regarding cluster issues, if any.
-* **Storage**: The [list of storage groups](#tenant_storage_page) that includes information about which VDisks reside on which nodes and block store volumes.
-* **Compute**: The [list of nodes](#tenant_compute_page), which includes the nodes and tablets running on them.
-* **Schema**: The [tenant's schema](#tenant_scheme) that lets you view tables, execute YQL queries, view a list of the slowest queries and the most loaded shards.
-* **Network**: The [health of the cluster network](#tenant_network).
+* **Storage**: [List of storage groups](#tenant_storage_page) showing the nodes and block store volumes hosting each VDisk.
+* **Compute**: [List of nodes](#tenant_compute_page) showing the nodes and tablets running on them.
+* **Schema**: [Tenant schema](#tenant_scheme) that enables you to view tables, execute YQL queries, view a list of the slowest queries and the most loaded shards.
+* **Network**: [Cluster network health](#tenant_network).
 
 ### List of storage groups in the tenant {#tenant_storage_page}
 
@@ -176,7 +179,7 @@ Here you can see a list of nodes belonging to the current tenant. If the tenant 
 
 Each node is represented by the following parameters:
 
-* **#**: The node ID.
+* **#**: Node ID.
 * **Host**: The host running the node.
 * **Uptime**: The node uptime.
 * **Endpoints**: The ports being listened to.
@@ -211,6 +214,12 @@ Whenever you select a node, the right side of the screen shows details about the
 
 Whenever you select the ID and Racks checkboxes, you can also see the IDs of nodes and their location in racks.
 
+## Monitoring static groups {#static-group}
+
+To perform a health check on a static group, go to the ![embedded-storage](../../_assets/embedded-storage.svg) **Storage** panel. By default, it shows a list of groups with issues.
+
+Enter `static` in the search bar. If the result is empty, no issues have been found for the static group. But if the panel shows a **static** group, check the VDisk health status in it. Acceptable health indicators are green (no issues) and blue (VDisk replication is in progress). Red indicator signals of an issue. Hover over the indicator to get a text description of the issue.
+
 ## Health indicators {#colored_indicator}
 
 To the left of a component name, you might see a color indicating its health status.
@@ -223,4 +232,3 @@ The indicator colors have the following meaning:
 * **Red**: There are critical problems, the component is down (or runs with limitations).
 
 If a component includes other components, then in the absence of its own issues, the state is determined by aggregating the states of its parts.
-

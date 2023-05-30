@@ -16,22 +16,23 @@ General format of the command:
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-## Parameters of the subcommand {#options}
+## Subcommand options {#options}
 
-### Required parameters {#required}
+### Required options {#required}
 
 * `-p, --path STRING`: A path to the table in the database.
 * `--input-file STRING`: A path to the imported file in the local file system.
 
-### Additional parameters {#optional}
+### Additional options {#optional}
 
 * `--skip-rows NUM`: A number of rows from the beginning of the file that will be skipped at import. The default value is `0`.
 * `--header`: Use this option if the first row (excluding the rows skipped by `--skip-rows`) includes names of data columns to be mapped to table columns. If the header row is missing, the data is mapped according to the order in the table schema.
 * `--delimiter STRING`: The data column delimiter character. You can't use the tabulation character as a delimiter in this option. For tab-delimited import, use the `import file tsv` subcommand. Default value: `,`.
 * `--null-value STRING`: The value to be imported as `NULL`. Default value: `""`.
 * `--batch-bytes VAL`: Split the imported file into batches of specified sizes. If a row fails to fit into a batch completely, it's discarded and added to the next batch. Whatever the batch size is, the batch must include at least one row. Default value: `1 MiB`.
-* `--max-in-flight VAL`: The number of data batches imported in parallel. You can increase the value of this parameter to accelerate importation of large files. The default value is `100`.
-* `--newline-delimited`: This flag guarantees that there will be no line breaks in records. If this flag is set, and the data is loaded from a file, then different upload streams will process different parts of the source file. This way, you can ensure maximum performance when uploading sorted datasets to partitioned tables, by distributing the workload across all partitions.
+* `--max-in-flight VAL`: The number of data batches imported in parallel. You can increase this option value to import large files faster. The default value is `100`.
+* `--columns`: List of data columns in the file delimited by a `comma` (for `csv` format) or by a tab character (for `tsv` format). If you use the `--header` option, the column names in it will be replaced by column names from the list. If the number of columns in the list mismatches the number of data columns, you will get an error.
+* `--newline-delimited`: This flag guarantees that there will be no line breaks in records. If this flag is set, and the data is loaded from a file, then different upload streams will process different parts of the source file. This way you can distribute the workload across all partitions, ensuring the maximum performance when uploading sorted datasets to partitioned tables.
 
 ## Examples {#examples}
 
@@ -66,7 +67,7 @@ The following data will be imported:
 ┌──────────────┬───────────┬───────────────────────────────────────────────────────────┬──────────────────┐
 | release_date | series_id | series_info                                               | title            |
 ├──────────────┼───────────┼───────────────────────────────────────────────────────────┼──────────────────┤
-| "2006-02-03" | 1         | "The IT Crowd is a British sitcom."                       | "The IT Crowd"   |
+| "2006-02-03" | 1         | "The IT Crowd is a British sitcom."                       | "IT Crowd"       |
 ├──────────────┼───────────┼───────────────────────────────────────────────────────────┼──────────────────┤
 | "2014-04-06" | 2         | "Silicon Valley is an American comedy television series." | "Silicon Valley" |
 └──────────────┴───────────┴───────────────────────────────────────────────────────────┴──────────────────┘
@@ -127,7 +128,7 @@ The following data will be imported:
 ┌──────────────┬───────────┬─────────────────────────────────────┬──────────────────┐
 | release_date | series_id | series_info                         | title            |
 ├──────────────┼───────────┼─────────────────────────────────────┼──────────────────┤
-| "2006-02-03" | 1         | "The IT Crowd is a British sitcom." | "The IT Crowd"   |
+| "2006-02-03" | 1         | "The IT Crowd is a British sitcom." | "IT Crowd"       |
 ├──────────────┼───────────┼─────────────────────────────────────┼──────────────────┤
 | null         | 2         | ""                                  | "Silicon Valley" |
 ├──────────────┼───────────┼─────────────────────────────────────┼──────────────────┤

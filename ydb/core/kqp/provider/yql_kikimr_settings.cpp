@@ -50,6 +50,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _ResultRowsLimit);
     REGISTER_SETTING(*this, EnableSystemColumns);
     REGISTER_SETTING(*this, UseLlvm);
+    REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
     REGISTER_SETTING(*this, OptDisableJoinRewrite);
     REGISTER_SETTING(*this, OptDisableJoinTableLookup);
@@ -128,6 +129,11 @@ EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {
 
 EOptionalFlag TKikimrSettings::GetUseLlvm() const {
     return GetOptionalFlagValue(UseLlvm.Get());
+}
+
+NDq::EHashJoinMode TKikimrSettings::GetHashJoinMode() const {
+    auto maybeHashJoinMode = HashJoinMode.Get();
+    return maybeHashJoinMode ? *maybeHashJoinMode : NDq::EHashJoinMode::Off;
 }
 
 TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {

@@ -335,20 +335,19 @@ namespace NKikimr::NBsController {
         const TVDiskID vdiskId(cmd.GetGroupId(), cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(),
             cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
 
-        TMaybe<TVSlotId> matchingVSlotId;
-        VSlots.ForEachInRange({}, {}, [&](const TVSlotId& vslotId, const TVSlotInfo& vslotInfo) {
-            if (!vslotInfo.IsBeingDeleted() && vslotInfo.GetVDiskId() == vdiskId) {
-                matchingVSlotId = vslotId;
-                return false;
-            }
-            return true;
-        });
-        if (!matchingVSlotId) {
-            throw TExError() << "VDisk# " << vdiskId.ToString() << " not found";
+        // validate group and generation
+        const TGroupInfo *group = Groups.Find(cmd.GetGroupId());
+        if (!group) {
+            throw TExError() << "GroupId# " << cmd.GetGroupId() << " not found";
+        } else if (group->Generation != cmd.GetGroupGeneration()) {
+            throw TExError() << "GroupId# " << cmd.GetGroupId() << " generation mismatch";
+        } else if (!group->Topology->IsValidId(vdiskId)) {
+            throw TExError() << "VDiskId# " << vdiskId << " out of range";
         }
 
-        // update group generation to mark this VSlot being destroyed
-        TVSlotInfo *vslotInfo = VSlots.FindForUpdate(*matchingVSlotId);
+        const ui32 orderNumber = group->Topology->GetOrderNumber(vdiskId);
+        const TVSlotId vslotId = group->VDisksInGroup[orderNumber]->VSlotId;
+
         TPDiskId targetPDiskId;
         if (cmd.HasTargetPDiskId()) {
             const NKikimrBlobStorage::TPDiskId& proto = cmd.GetTargetPDiskId();
@@ -358,13 +357,13 @@ namespace NKikimr::NBsController {
             }
             targetPDiskId = pdiskId;
         }
-        ExplicitReconfigureMap.emplace(vslotInfo->VSlotId, targetPDiskId);
+
+        ExplicitReconfigureMap.emplace(vslotId, targetPDiskId);
         if (cmd.GetSuppressDonorMode()) {
-            SuppressDonorMode.insert(vslotInfo->VSlotId);
+            SuppressDonorMode.insert(vslotId);
         }
 
-        Y_VERIFY(vslotInfo->Group);
-        Fit.PoolsAndGroups.emplace(vslotInfo->Group->StoragePoolId, vslotInfo->Group->ID);
+        Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& /*status*/) {

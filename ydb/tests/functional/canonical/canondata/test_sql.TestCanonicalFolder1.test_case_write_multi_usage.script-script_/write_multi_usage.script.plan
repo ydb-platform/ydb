@@ -16,11 +16,11 @@
                                 "Group",
                                 "Name"
                             ],
-                            "limit": "1001",
                             "scan_by": [
                                 "Group (-\u221e, +\u221e)",
                                 "Name (-\u221e, +\u221e)"
                             ],
+                            "limit": "1001",
                             "type": "FullScan"
                         }
                     ]
@@ -33,10 +33,10 @@
                                 "Name",
                                 "Value"
                             ],
-                            "limit": "1001",
                             "scan_by": [
                                 "Name (-\u221e, +\u221e)"
                             ],
+                            "limit": "1001",
                             "type": "FullScan"
                         }
                     ]

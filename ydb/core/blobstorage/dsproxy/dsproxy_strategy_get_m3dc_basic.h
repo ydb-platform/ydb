@@ -205,7 +205,6 @@ namespace NKikimr {
                 // we haven't requested anything, but there is no required data in buffer, so blob is lost
                 R_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
                 state.WholeSituation = TBlobState::ESituation::Absent;
-                state.LooksLikePhantom = true;
                 if (PhantomCheck || info.GetQuorumChecker().CheckQuorumForSubgroup(possiblyWritten)) {
                     // this blob is either:
                     // 1. Has full quorum of Lost & Error replies

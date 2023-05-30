@@ -561,12 +561,7 @@ TMaybe<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
 }
 
 TMaybe<TBinaryJson> SerializeToBinaryJson(const TStringBuf json) {
-    if (json.size() == 0) {
-        return SerializeToBinaryJsonImpl("{}");
-    } else {
-        return SerializeToBinaryJsonImpl(json);
-    }
-
+    return SerializeToBinaryJsonImpl(json);
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {

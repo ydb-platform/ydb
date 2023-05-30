@@ -1,6 +1,6 @@
 #include "batch.h"
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NConstruction {
 
 std::shared_ptr<arrow::RecordBatch> TRecordBatchConstructor::BuildBatch(const ui32 numRows) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;

@@ -228,4 +228,7 @@ enum EPartitionLabeledCounters {
     METRIC_MIN_SID_LIFETIME = 33                                  [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN SVName: ""}];
 
     METRIC_PARTITIONS_TOTAL = 34                                  [(LabeledCounterOpts) = {Name: "PartitionsTotal" AggrFunc : EAF_MAX SVName: "topic.partition.total_count"}];
+
+    METRIC_RESERVE_LIMIT_BYTES = 35                               [(LabeledCounterOpts) = {Name: "ReserveLimitBytes" AggrFunc : EAF_SUM SVName: "topic.reserve.limit_bytes"}];
+    METRIC_RESERVE_USED_BYTES = 36                                [(LabeledCounterOpts) = {Name: "ReserveUsedBytes" AggrFunc : EAF_SUM SVName: "topic.reserve.used_bytes"}];
 }

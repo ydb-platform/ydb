@@ -7,7 +7,7 @@ items:
     href: commands.md
   - name: Service commands
     href: commands/service.md
-  - name: Global parameters
+  - name: Global options
     href: commands/global-options.md
   - name: YDB CLI commands
     items:
@@ -115,5 +115,5 @@ items:
       href: workload-click-bench.md
     - name: Key-Value load
       href: workload-kv.md
-    # - name: Topic load
-    #   href: workload-topic.md      
+    - name: Topic load
+      href: workload-topic.md

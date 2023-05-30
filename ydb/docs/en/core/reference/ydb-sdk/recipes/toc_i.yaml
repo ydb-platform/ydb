@@ -37,6 +37,8 @@ items:
   href: upsert.md
 - name: Bulk-upserting data
   href: bulk-upsert.md
+- name: Setting up the transaction execution mode
+  href: tx-control.md
 - name: Troubleshooting
   items:
   - name: Overview

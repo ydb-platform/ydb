@@ -196,6 +196,10 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
+    if (proto.tiering().size()) {
+        tableDesc.MutableTTLSettings()->SetUseTiering(proto.tiering());
+    }
+
     return true;
 }
 

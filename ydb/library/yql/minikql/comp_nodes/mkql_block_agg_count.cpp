@@ -348,22 +348,23 @@ public:
 
     std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
         TTupleType* tupleType,
-        std::optional<ui32> filterColumn,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env) const final {
         Y_UNUSED(tupleType);
         Y_UNUSED(argsColumns);
         Y_UNUSED(env);
-        return PrepareCountAll<TCombineKeysTag>(filterColumn, 0);
+        return PrepareCountAll<TCombineKeysTag>(std::optional<ui32>(), 0);
     }
 
     std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
-        const TTypeEnvironment& env) const final {
+        const TTypeEnvironment& env,
+        TType* returnType) const final {
         Y_UNUSED(tupleType);
         Y_UNUSED(argsColumns);
         Y_UNUSED(env);
+        Y_UNUSED(returnType);
         return PrepareCountAll<TFinalizeKeysTag>(std::optional<ui32>(), argsColumns[0]);
     }
 };
@@ -382,22 +383,23 @@ public:
 
     std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
         TTupleType* tupleType,
-        std::optional<ui32> filterColumn,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env) const final {
         Y_UNUSED(tupleType);
         Y_UNUSED(argsColumns);
         Y_UNUSED(env);
-        return PrepareCount<TCombineKeysTag>(filterColumn, argsColumns[0]);
+        return PrepareCount<TCombineKeysTag>(std::optional<ui32>(), argsColumns[0]);
     }
 
     std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
-        const TTypeEnvironment& env) const final {
+        const TTypeEnvironment& env,
+        TType* returnType) const final {
         Y_UNUSED(tupleType);
         Y_UNUSED(argsColumns);
         Y_UNUSED(env);
+        Y_UNUSED(returnType);
         return PrepareCount<TFinalizeKeysTag>(std::optional<ui32>(), argsColumns[0]);
     }
 };

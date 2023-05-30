@@ -449,7 +449,8 @@ private:
         ParentId = ev->Sender;
 
         try {
-            TaskRunner = Factory->GetOld(ev->Get()->Task, TraceId);
+            NDq::TDqTaskSettings settings(std::move(ev->Get()->Task));
+            TaskRunner = Factory->GetOld(settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
             Send(replyTo, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message), 0, cookie);

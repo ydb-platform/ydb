@@ -137,7 +137,7 @@ namespace NKikimr::NBlobDepot {
             const ui64 queryId = RandomNumber<ui64>();
             CollectCmds.emplace(id, TCollectCmd{.QueryId = queryId, .GroupId = record.GroupId});
 
-            if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+            if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                 if (ev->Keep) {
                     for (const TLogoBlobID& blobId : *ev->Keep) {
                         Y_VERIFY(blobId.Channel() == record.Channel);

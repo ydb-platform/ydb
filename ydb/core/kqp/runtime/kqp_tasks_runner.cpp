@@ -73,7 +73,7 @@ TIntrusivePtr<IDqTaskRunner> CreateKqpTaskRunner(const TDqTaskRunnerContext& exe
 }
 
 
-TKqpTasksRunner::TKqpTasksRunner(const google::protobuf::RepeatedPtrField<NDqProto::TDqTask>& tasks,
+TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
     : LogFunc(logFunc)
     , Alloc(execCtx.Alloc)
@@ -88,13 +88,14 @@ TKqpTasksRunner::TKqpTasksRunner(const google::protobuf::RepeatedPtrField<NDqPro
 
     auto guard = execCtx.TypeEnv->BindAllocator();
     try {
-        for (auto& task : tasks) {
+        for (auto&& task : tasks) {
+            ui64 taskId = task.GetId();
             auto runner = CreateKqpTaskRunner(execCtx, settings, logFunc);
             if (auto* stats = runner->GetStats()) {
-                Stats.emplace(task.GetId(), stats);
+                Stats.emplace(taskId, stats);
             }
-            TaskRunners.emplace(task.GetId(), std::move(runner));
-            Tasks.emplace(task.GetId(), &task);
+            TaskRunners.emplace(taskId, std::move(runner));
+            Tasks.emplace(taskId, std::move(task));
         }
     } catch (const TMemoryLimitExceededException&) {
         TaskRunners.clear();
@@ -119,7 +120,9 @@ void TKqpTasksRunner::Prepare(const TDqTaskRunnerMemoryLimits& memoryLimits, con
 
     for (auto& [taskId, taskRunner] : TaskRunners) {
         ComputeCtx->SetCurrentTaskId(taskId);
-        taskRunner->Prepare(*Tasks[taskId], memoryLimits, execCtx);
+        auto it = Tasks.find(taskId);
+        Y_VERIFY(it != Tasks.end());
+        taskRunner->Prepare(it->second, memoryLimits, execCtx);
     }
 
     ComputeCtx->SetCurrentTaskId(std::numeric_limits<ui64>::max());
@@ -225,8 +228,8 @@ const IDqTaskRunner& TKqpTasksRunner::GetTaskRunner(ui64 taskId) const {
     return **task;
 }
 
-const NYql::NDqProto::TDqTask& TKqpTasksRunner::GetTask(ui64 taskId) const {
-    return *Tasks.at(taskId);
+const NYql::NDq::TDqTaskSettings& TKqpTasksRunner::GetTask(ui64 taskId) const {
+    return Tasks.at(taskId);
 }
 
 TGuard<NMiniKQL::TScopedAlloc> TKqpTasksRunner::BindAllocator(TMaybe<ui64> memoryLimit) {
@@ -236,10 +239,10 @@ TGuard<NMiniKQL::TScopedAlloc> TKqpTasksRunner::BindAllocator(TMaybe<ui64> memor
     return TGuard(*Alloc);
 }
 
-TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(const google::protobuf::RepeatedPtrField<NDqProto::TDqTask>& tasks,
+TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
 {
-    return new TKqpTasksRunner(tasks, execCtx, settings, logFunc);
+    return new TKqpTasksRunner(std::move(tasks), execCtx, settings, logFunc);
 }
 
 } // namespace NKqp

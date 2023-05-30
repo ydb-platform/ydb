@@ -96,7 +96,6 @@ void UnitAssertListResultEquals(
 
 Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
     auto strategy = TCollectingS3ListingStrategy{
-        10,
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -119,7 +118,7 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 10});
     auto expectedResult = NS3Lister::TListResult{NS3Lister::TListEntries{
         .Objects = std::vector<NS3Lister::TObjectListEntry>{
             NS3Lister::TObjectListEntry{
@@ -136,7 +135,6 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
 
 Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
     auto strategy = TCollectingS3ListingStrategy{
-        1,
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -159,7 +157,7 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 1});
     auto expectedResult = NS3Lister::TListResult{TIssues{MakeLimitExceededIssue()}};
     const auto& actualResult = actualResultFuture.GetValue();
     UnitAssertListResultEquals(expectedResult, actualResult);
@@ -167,7 +165,6 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
 
 Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
     auto strategy = TCollectingS3ListingStrategy{
-        1,
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -185,7 +182,7 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 1});
     auto expectedResult = NS3Lister::TListResult{TIssues{TIssue("TEST_ISSUE")}};
     const auto& actualResult = actualResultFuture.GetValue();
     UnitAssertListResultEquals(expectedResult, actualResult);
@@ -193,7 +190,6 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
 
 Y_UNIT_TEST(IfExceptionIsReturnedFromIteratorThanItShouldCovertItToIssue) {
     auto strategy = TCollectingS3ListingStrategy{
-        10,
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -204,7 +200,7 @@ Y_UNIT_TEST(IfExceptionIsReturnedFromIteratorThanItShouldCovertItToIssue) {
         "TTest"};
 
     auto actualResultFuture = strategy.List(
-        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{});
+        NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 10});
     UNIT_ASSERT(actualResultFuture.HasValue());
     auto expectedResult = NS3Lister::TListResult{TIssues{TIssue("EXCEPTION MESSAGE")}};
     const auto& actualResult = actualResultFuture.GetValue();

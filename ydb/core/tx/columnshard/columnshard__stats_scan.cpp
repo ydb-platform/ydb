@@ -20,18 +20,16 @@ NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
         .LastReadKey = std::move(lastKey)
     };
 
-    if (ReadMetadata->Program) {
-        auto status = ApplyProgram(out.ResultBatch, *ReadMetadata->Program, NArrow::GetCustomExecContext());
-        if (!status.ok()) {
-            out.ErrorString = status.message();
-        }
+    auto status = ReadMetadata->GetProgram().ApplyProgram(out.ResultBatch);
+    if (!status.ok()) {
+        out.ErrorString = status.message();
     }
     return out;
 }
 
 std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {
     ui64 numRows = 0;
-    numRows += NUM_KINDS * IndexStats.size();
+    numRows += NOlap::TColumnEngineStats::GetRecordsCount() * IndexStats.size();
 
     std::vector<ui32> allColumnIds;
     for (const auto& c : PrimaryIndexStatsSchema.Columns) {
@@ -59,55 +57,14 @@ void TStatsIterator::ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& b
 }
 
 void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64 pathId, const NOlap::TColumnEngineStats& stats) {
-    using TUInt64 = arrow::UInt64Type::c_type;
-    using TUInt32 = arrow::UInt32Type::c_type;
-
-    TUInt64 pathIds[NUM_KINDS] = { pathId, pathId, pathId, pathId, pathId };
-    /// It's in sync with TPortionMeta::EProduced
-    TUInt32 kinds[NUM_KINDS] = {
-        (ui32)NOlap::TPortionMeta::INSERTED,
-        (ui32)NOlap::TPortionMeta::COMPACTED,
-        (ui32)NOlap::TPortionMeta::SPLIT_COMPACTED,
-        (ui32)NOlap::TPortionMeta::INACTIVE,
-        (ui32)NOlap::TPortionMeta::EVICTED
-    };
-    ui64 tabletId = ReadMetadata->TabletId;
-    TUInt64 tabletIds[NUM_KINDS] = { tabletId, tabletId, tabletId, tabletId, tabletId };
-    TUInt64 rows[NUM_KINDS] = {
-        (ui64)stats.Inserted.Rows,
-        (ui64)stats.Compacted.Rows,
-        (ui64)stats.SplitCompacted.Rows,
-        (ui64)stats.Inactive.Rows,
-        (ui64)stats.Evicted.Rows
-    };
-    TUInt64 bytes[NUM_KINDS] = {
-        (ui64)stats.Inserted.Bytes,
-        (ui64)stats.Compacted.Bytes,
-        (ui64)stats.SplitCompacted.Bytes,
-        (ui64)stats.Inactive.Bytes,
-        (ui64)stats.Evicted.Bytes
-    };
-    TUInt64 rawBytes[NUM_KINDS] = {
-        (ui64)stats.Inserted.RawBytes,
-        (ui64)stats.Compacted.RawBytes,
-        (ui64)stats.SplitCompacted.RawBytes,
-        (ui64)stats.Inactive.RawBytes,
-        (ui64)stats.Evicted.RawBytes
-    };
-    TUInt64 portions[NUM_KINDS] = {
-        (ui64)stats.Inserted.Portions,
-        (ui64)stats.Compacted.Portions,
-        (ui64)stats.SplitCompacted.Portions,
-        (ui64)stats.Inactive.Portions,
-        (ui64)stats.Evicted.Portions
-    };
-    TUInt64 blobs[NUM_KINDS] = {
-        (ui64)stats.Inserted.Blobs,
-        (ui64)stats.Compacted.Blobs,
-        (ui64)stats.SplitCompacted.Blobs,
-        (ui64)stats.Inactive.Blobs,
-        (ui64)stats.Evicted.Blobs
-    };
+    auto kinds = stats.GetKinds();
+    auto pathIds = stats.GetConstValues<arrow::UInt64Type::c_type>(pathId);
+    auto tabletIds = stats.GetConstValues<arrow::UInt64Type::c_type>(ReadMetadata->TabletId);
+    auto rows = stats.GetRowsValues();
+    auto bytes = stats.GetBytesValues();
+    auto rawBytes = stats.GetRawBytesValues();
+    auto portions = stats.GetPortionsValues();
+    auto blobs = stats.GetBlobsValues();
 
     if (Reverse) {
         std::reverse(std::begin(pathIds), std::end(pathIds));
@@ -120,14 +77,14 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         std::reverse(std::begin(blobs), std::end(blobs));
     }
 
-    NArrow::Append<arrow::UInt64Type>(*builders[0], pathIds, NUM_KINDS);
-    NArrow::Append<arrow::UInt32Type>(*builders[1], kinds, NUM_KINDS);
-    NArrow::Append<arrow::UInt64Type>(*builders[2], tabletIds, NUM_KINDS);
-    NArrow::Append<arrow::UInt64Type>(*builders[3], rows, NUM_KINDS);
-    NArrow::Append<arrow::UInt64Type>(*builders[4], bytes, NUM_KINDS);
-    NArrow::Append<arrow::UInt64Type>(*builders[5], rawBytes, NUM_KINDS);
-    NArrow::Append<arrow::UInt64Type>(*builders[6], portions, NUM_KINDS);
-    NArrow::Append<arrow::UInt64Type>(*builders[7], blobs, NUM_KINDS);
+    NArrow::Append<arrow::UInt64Type>(*builders[0], pathIds);
+    NArrow::Append<arrow::UInt32Type>(*builders[1], kinds);
+    NArrow::Append<arrow::UInt64Type>(*builders[2], tabletIds);
+    NArrow::Append<arrow::UInt64Type>(*builders[3], rows);
+    NArrow::Append<arrow::UInt64Type>(*builders[4], bytes);
+    NArrow::Append<arrow::UInt64Type>(*builders[5], rawBytes);
+    NArrow::Append<arrow::UInt64Type>(*builders[6], portions);
+    NArrow::Append<arrow::UInt64Type>(*builders[7], blobs);
 }
 
 }

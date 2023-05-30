@@ -753,9 +753,23 @@ public:
                     tablet->SetIdx(ui64(p.first.GetLocalId()));
                     for (const auto& pq : pqShard->Partitions) {
                         auto info = event->Record.AddPartitions();
-                        info->SetPartition(pq.PqId);
+                        info->SetPartition(pq->PqId);
                         info->SetTabletId(ui64(tabletId));
-                        info->SetGroup(pq.GroupId);
+                        info->SetGroup(pq->GroupId);
+                        info->SetCreateVersion(pq->CreateVersion);
+
+                        if (pq->KeyRange) {
+                            pq->KeyRange->SerializeToProto(*info->MutableKeyRange());
+                        }
+                        info->SetStatus(pq->Status);
+                        info->MutableParentPartitionIds()->Reserve(pq->ParentPartitionIds.size());
+                        for (const auto parent : pq->ParentPartitionIds) {
+                            info->MutableParentPartitionIds()->AddAlreadyReserved(parent);
+                        }
+                        info->MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
+                        for (const auto children : pq->ChildPartitionIds) {
+                            info->MutableChildPartitionIds()->AddAlreadyReserved(children);
+                        }
                     }
                 }
 
@@ -805,12 +819,22 @@ private:
         }
 
         for (const auto& pq : pqShard.Partitions) {
-            config.AddPartitionIds(pq.PqId);
+            config.AddPartitionIds(pq->PqId);
 
             auto& partition = *config.AddPartitions();
-            partition.SetPartitionId(pq.PqId);
-            if (pq.KeyRange) {
-                pq.KeyRange->SerializeToProto(*partition.MutableKeyRange());
+            partition.SetPartitionId(pq->PqId);
+            partition.SetCreateVersion(pq->CreateVersion);
+            if (pq->KeyRange) {
+                pq->KeyRange->SerializeToProto(*partition.MutableKeyRange());
+            }
+            partition.SetStatus(pq->Status);
+            partition.MutableParentPartitionIds()->Reserve(pq->ParentPartitionIds.size());
+            for (const auto parent : pq->ParentPartitionIds) {
+                partition.MutableParentPartitionIds()->AddAlreadyReserved(parent);
+            }
+            partition.MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
+            for (const auto children : pq->ChildPartitionIds) {
+                partition.MutableChildPartitionIds()->AddAlreadyReserved(children);
             }
         }
     }

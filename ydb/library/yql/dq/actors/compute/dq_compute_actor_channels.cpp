@@ -38,7 +38,7 @@ TString InFlightMessagesStr(const TCollection& inFlight) {
 
 } // anonymous namespace
 
-TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& txId, const NDqProto::TDqTask& task,
+TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& txId, const TDqTaskSettings& task,
     bool retryOnUndelivery, NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType)
     : TActor(&TDqComputeActorChannels::WorkState, actorActivityType)
     , Owner(owner)

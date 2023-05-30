@@ -4197,7 +4197,7 @@ using TStructExpandMap = std::vector<std::optional<std::vector<std::string_view>
 
 using TListExpandMap = std::map<ui32, const TTypeAnnotationNode*>;
 
-template<bool LiteralOnly>
+template<ui32 WidthLimit = 0U>
 std::array<std::optional<ui32>, 2U> GetExpandMapsForLambda(const TExprNode& lambda, TTupleExpandMap& tupleExpndMap, TStructExpandMap& structExpndMap, TListExpandMap* listExpndMap = nullptr) {
     const auto original = lambda.ChildrenSize() - 1U;
     tupleExpndMap.resize(original);
@@ -4215,20 +4215,20 @@ std::array<std::optional<ui32>, 2U> GetExpandMapsForLambda(const TExprNode& lamb
                 }
                 break;
             case ETypeAnnotationKind::Tuple:
-                if (!LiteralOnly || child->IsList()) {
+                if (const auto size = child->GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
+                    !WidthLimit || child->IsList() || WidthLimit >= size) {
                     ++flatByStruct;
                     hasTuple = true;
-                    const auto size = child->GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
                     flatByTuple += size;
                     tupleExpndMap[i].emplace(size);
                     continue;
                 }
                 break;
             case ETypeAnnotationKind::Struct:
-                if (!LiteralOnly || child->IsCallable("AsStruct")) {
+                if (const auto structType = child->GetTypeAnn()->Cast<TStructExprType>();
+                    !WidthLimit || child->IsCallable("AsStruct") || WidthLimit >= structType->GetSize()) {
                     ++flatByTuple;
                     hasStruct = true;
-                    const auto structType = child->GetTypeAnn()->Cast<TStructExprType>();
                     flatByStruct += structType->GetSize();
                     structExpndMap[i].emplace(structType->GetSize());
                     const auto& items = structType->GetItems();
@@ -4516,7 +4516,7 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
     TStructExpandMap structExpandMap(originalKeySize);
 
     TListExpandMap listExpandMap;
-    const auto needKeyFlatten = GetExpandMapsForLambda<false>(*node->Child(2U), tupleExpandMap, structExpandMap, &listExpandMap);
+    const auto needKeyFlatten = GetExpandMapsForLambda(*node->Child(2U), tupleExpandMap, structExpandMap, &listExpandMap);
 
     if (const auto selector = node->Child(2); selector != selector->Tail().GetDependencyScope()->second && originalKeySize == 1) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " by constant key.";
@@ -4620,7 +4620,7 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
     tupleExpandMap.resize(originalStateSize);
     structExpandMap.resize(originalStateSize);
 
-    const auto needStateFlatten = GetExpandMapsForLambda<false>(*node->Child(3U), tupleExpandMap, structExpandMap);
+    const auto needStateFlatten = GetExpandMapsForLambda<3U>(*node->Child(3U), tupleExpandMap, structExpandMap);
 
     if (needStateFlatten.front()) {
         const auto flattenSize = *needStateFlatten.front();
@@ -4744,7 +4744,7 @@ TExprNode::TPtr OptimizeWideCondense1(const TExprNode::TPtr& node, TExprContext&
     TStructExpandMap structExpandMap(originalSize);
 
     const auto inputWidth = node->Child(1U)->Head().ChildrenSize();
-    const auto needFlatten = GetExpandMapsForLambda<false>(node->Tail(), tupleExpandMap, structExpandMap);
+    const auto needFlatten = GetExpandMapsForLambda<3U>(node->Tail(), tupleExpandMap, structExpandMap);
 
     if (needFlatten.front()) {
         const auto flattenSize = *needFlatten.front();
@@ -4798,7 +4798,7 @@ TExprNode::TPtr OptimizeWideChopper(const TExprNode::TPtr& node, TExprContext& c
     TTupleExpandMap tupleExpandMap(originalSize);
     TStructExpandMap structExpandMap(originalSize);
 
-    const auto needFlatten = GetExpandMapsForLambda<false>(*node->Child(1U), tupleExpandMap, structExpandMap);
+    const auto needFlatten = GetExpandMapsForLambda(*node->Child(1U), tupleExpandMap, structExpandMap);
 
     if (needFlatten.front()) {
         const auto flattenSize = *needFlatten.front();

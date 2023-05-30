@@ -8,6 +8,7 @@
 
 add_subdirectory(benchmark)
 add_subdirectory(common)
+add_subdirectory(gbenchmark_main)
 add_subdirectory(gmock_in_unittest)
 add_subdirectory(gtest)
 add_subdirectory(gtest_extensions)

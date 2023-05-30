@@ -202,25 +202,6 @@ public:
             YQL_ENSURE(resultChannel.DstTask == 0);
         }
 
-        TQueryData::TPtr params = stageInfo.Meta.Tx.Params;
-        auto parameterProvider = [&params, &task, &stageInfo](std::string_view name, NMiniKQL::TType* type,
-            const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-            NUdf::TUnboxedValue& value)
-        {
-            Y_UNUSED(typeEnv);
-            if (auto* data = task.Meta.Params.FindPtr(name)) {
-                TDqDataSerializer::DeserializeParam(*data, type, holderFactory, value);
-                return true;
-            }
-
-            if (auto* param = params->GetParameterType(TString(name))) {
-                std::tie(type, value) = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(TString(name));
-                return true;
-            }
-
-            return false;
-        };
-
         auto log = [as = TlsActivationContext->ActorSystem(), txId = TxId, taskId = task.Id](const TString& message) {
             LOG_DEBUG_S(*as, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId << ", task: " << taskId << ". "
                 << message);
@@ -229,8 +210,9 @@ public:
         auto taskRunner = CreateKqpTaskRunner(context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
-        taskRunner->Prepare(protoTask, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext(),
-            parameterProvider);
+        auto taskSettings = NDq::TDqTaskSettings(std::move(protoTask));
+        taskSettings.SetParamsProvider(std::move(TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params)));
+        taskRunner->Prepare(taskSettings, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext());
 
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);

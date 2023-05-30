@@ -1578,6 +1578,60 @@ void SetNonZero(NJson::TJsonValue& node, const TStringBuf& name, T value) {
     }
 }
 
+TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString commonPlanInfo = "") {
+    NJsonWriter::TBuf writer;
+    writer.SetIndentSpaces(2);
+
+    writer.BeginObject();
+    writer.WriteKey("meta");
+    writer.BeginObject();
+    writer.WriteKey("version").WriteString("0.2");
+    writer.WriteKey("type").WriteString("query");
+    writer.EndObject();
+
+    if (!commonPlanInfo.Empty()) {
+        NJson::TJsonValue commonPlanJson;
+        NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
+
+        writer.WriteKey("tables");
+        writer.WriteJsonValue(&commonPlanJson);
+    }
+
+    writer.WriteKey("Plan");
+    writer.BeginObject();
+    writer.WriteKey("Node Type").WriteString("Query");
+    writer.WriteKey("PlanNodeType").WriteString("Query");
+    writer.WriteKey("Plans");
+    writer.BeginList();
+
+    auto removeStageGuid = [](NJson::TJsonValue& node) {
+        auto& map = node.GetMapSafe();
+        if (map.contains("StageGuid")) {
+            map.erase("StageGuid");
+        }
+    };
+
+    for (auto txPlanIt = txPlans.rbegin(); txPlanIt != txPlans.rend(); ++txPlanIt) {
+        if (txPlanIt->empty()) {
+            continue;
+        }
+
+        NJson::TJsonValue txPlanJson;
+        NJson::ReadJsonTree(*txPlanIt, &txPlanJson, true);
+
+        for (auto& subplan : txPlanJson.GetMapSafe().at("Plans").GetArraySafe()) {
+            ModifyPlan(subplan, removeStageGuid);
+            writer.WriteJsonValue(&subplan, true);
+        }
+    }
+
+    writer.EndList();
+    writer.EndObject();
+    writer.EndObject();
+
+    return writer.Str();
+}
+
 } // namespace
 
 // TODO(sk): check prepared statements params in read ranges
@@ -1627,10 +1681,17 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
         setPlan(id++, query.Transactions().Item(txId), (*queryProto.MutableTransactions())[txId]);
     }
 
+    TVector<const TString> txPlans;
+    txPlans.reserve(queryProto.GetTransactions().size());
+    for (const auto& phyTx: queryProto.GetTransactions()) {
+        txPlans.emplace_back(phyTx.GetPlan());
+    }
+
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
     WriteCommonTablesInfo(writer, serializerCtx.Tables);
-    queryProto.SetQueryPlan(writer.Str());
+
+    queryProto.SetQueryPlan(SerializeTxPlans(txPlans, writer.Str()));
 }
 
 TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats) {
@@ -1753,66 +1814,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true);
     return txWriter.Str();
-}
-
-TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString commonPlanInfo = "") {
-    NJsonWriter::TBuf writer;
-    writer.SetIndentSpaces(2);
-
-    writer.BeginObject();
-    writer.WriteKey("meta");
-    writer.BeginObject();
-    writer.WriteKey("version").WriteString("0.2");
-    writer.WriteKey("type").WriteString("query");
-    writer.EndObject();
-
-    if (!commonPlanInfo.Empty()) {
-        writer.WriteKey("tables");
-        writer.UnsafeWriteValue(commonPlanInfo);
-    }
-
-    writer.WriteKey("Plan");
-    writer.BeginObject();
-    writer.WriteKey("Node Type").WriteString("Query");
-    writer.WriteKey("PlanNodeType").WriteString("Query");
-    writer.WriteKey("Plans");
-    writer.BeginList();
-
-    auto removeStageGuid = [](NJson::TJsonValue& node) {
-        auto& map = node.GetMapSafe();
-        if (map.contains("StageGuid")) {
-            map.erase("StageGuid");
-        }
-    };
-
-    for (auto txPlanIt = txPlans.rbegin(); txPlanIt != txPlans.rend(); ++txPlanIt) {
-        if (txPlanIt->empty()) {
-            continue;
-        }
-
-        NJson::TJsonValue txPlanJson;
-        NJson::ReadJsonTree(*txPlanIt, &txPlanJson, true);
-
-        for (auto& subplan : txPlanJson.GetMapSafe().at("Plans").GetArraySafe()) {
-            ModifyPlan(subplan, removeStageGuid);
-            writer.WriteJsonValue(&subplan, true);
-        }
-    }
-
-    writer.EndList();
-    writer.EndObject();
-    writer.EndObject();
-
-    return writer.Str();
-}
-
-TString SerializeExplainPlan(const NKqpProto::TKqpPhyQuery& phyQuery) {
-    TVector<const TString> txPlans;
-    txPlans.reserve(phyQuery.GetTransactions().size());
-    for (const auto& phyTx: phyQuery.GetTransactions()) {
-        txPlans.emplace_back(phyTx.GetPlan());
-    }
-    return SerializeTxPlans(txPlans, phyQuery.GetQueryPlan());
 }
 
 TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats) {

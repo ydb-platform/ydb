@@ -8,11 +8,17 @@
 
 
 add_library(ydb-core-local_pgwire)
+target_compile_options(ydb-core-local_pgwire PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(ydb-core-local_pgwire PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  yql-public-udf
+  core-kqp-common
+  core-kqp-executer_actor
   ydb-core-grpc_services
   core-grpc_services-local_rpc
   ydb-core-protos
@@ -23,4 +29,5 @@ target_link_libraries(ydb-core-local_pgwire PUBLIC
 target_sources(ydb-core-local_pgwire PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_connection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/pgwire_kqp_proxy.cpp
 )

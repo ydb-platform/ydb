@@ -292,10 +292,9 @@ struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage:
     TEvReplicaBoardLookup()
     {}
 
-    TEvReplicaBoardLookup(const TString &path, TActorId owner, bool sub)
+    TEvReplicaBoardLookup(const TString &path, bool sub)
     {
         Record.SetPath(path);
-        ActorIdToProto(owner, Record.MutableOwner());
         Record.SetSubscribe(sub);
     }
 };
@@ -305,12 +304,18 @@ struct TEvStateStorage::TEvReplicaBoardCleanup : public TEventPB<TEvStateStorage
     {}
 };
 
+struct TEvStateStorage::TEvReplicaBoardUnsubscribe : public TEventPB<TEvStateStorage::TEvReplicaBoardUnsubscribe, NKikimrStateStorage::TEvReplicaBoardUnsubscribe, TEvStateStorage::EvReplicaBoardUnsubscribe> {
+    TEvReplicaBoardUnsubscribe()
+    {}
+};
+
 struct TEvStateStorage::TEvReplicaBoardPublishAck : public TEventPB<TEvStateStorage::TEvReplicaBoardPublishAck, NKikimrStateStorage::TEvReplicaBoardPublishAck, TEvStateStorage::EvReplicaBoardPublishAck> {
     TEvReplicaBoardPublishAck()
     {}
 };
 
 struct TEvStateStorage::TEvReplicaBoardInfo : public TEventPB<TEvStateStorage::TEvReplicaBoardInfo, NKikimrStateStorage::TEvReplicaBoardInfo, TEvStateStorage::EvReplicaBoardInfo> {
+
     TEvReplicaBoardInfo()
     {}
 
@@ -318,6 +323,17 @@ struct TEvStateStorage::TEvReplicaBoardInfo : public TEventPB<TEvStateStorage::T
     {
         Record.SetPath(path);
         Record.SetDropped(dropped);
+    }
+};
+
+struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStorage::TEvReplicaBoardInfoUpdate, NKikimrStateStorage::TEvReplicaBoardInfoUpdate, TEvStateStorage::EvReplicaBoardInfoUpdate> {
+
+    TEvReplicaBoardInfoUpdate()
+    {}
+
+    TEvReplicaBoardInfoUpdate(const TString &path)
+    {
+        Record.SetPath(path);
     }
 };
 

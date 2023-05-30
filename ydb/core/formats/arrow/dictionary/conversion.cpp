@@ -30,9 +30,15 @@ std::shared_ptr<arrow::Array> DictionaryToArray(const arrow::DictionaryArray& da
                     constexpr bool indicesIntegral = std::is_integral<typename TWrapIndices::T::c_type>::value;
                     if constexpr (indicesIntegral && hasCType) {
                         using TIndices = typename arrow::TypeTraits<typename TWrapIndices::T>::ArrayType;
-                        using TDictionaryAccessor = TDictionaryArrayAccessor<TDictionaryValue, TIndices>;
                         auto& columnIndices = static_cast<const TIndices&>(*data.indices());
-                        result = TSimpleArrayConstructor<TDictionaryAccessor>("absent", TDictionaryAccessor(columnDictionary, columnIndices)).BuildArray(data.length());
+                        constexpr bool hasStrView = arrow::has_string_view<TDictionaryValue>::value;
+                        if constexpr (hasStrView) {
+                            using TBinaryDictionaryAccessor = NConstruction::TBinaryDictionaryArrayAccessor<TDictionaryValue, TIndices>;
+                            result = NConstruction::TBinaryArrayConstructor("absent", TBinaryDictionaryAccessor(columnDictionary, columnIndices)).BuildArray(data.length());
+                        } else {
+                            using TDictionaryAccessor = NConstruction::TDictionaryArrayAccessor<TDictionaryValue, TIndices>;
+                            result = NConstruction::TSimpleArrayConstructor("absent", TDictionaryAccessor(columnDictionary, columnIndices)).BuildArray(data.length());
+                        }
                         return true;
                     }
                 }
@@ -80,7 +86,7 @@ std::shared_ptr<arrow::DictionaryArray> ArrayToDictionary(const std::shared_ptr<
     SwitchType(data->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         if constexpr (arrow::has_string_view<typename TWrap::T>::value && arrow::TypeTraits<typename TWrap::T>::is_parameter_free) {
-            auto resultArray = TDictionaryArrayConstructor<TLinearArrayAccessor<typename TWrap::T>>("absent", *data).BuildArray(data->length());
+            auto resultArray = NConstruction::TDictionaryArrayConstructor<NConstruction::TLinearArrayAccessor<typename TWrap::T>>("absent", *data).BuildArray(data->length());
             Y_VERIFY(resultArray->type()->id() == arrow::Type::DICTIONARY);
             result = static_pointer_cast<arrow::DictionaryArray>(resultArray);
         } else {

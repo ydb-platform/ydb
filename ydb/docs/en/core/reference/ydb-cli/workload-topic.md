@@ -1,290 +1,252 @@
-# Topic workload
+# Topic load
 
-The workload simulates the publish-subscribe architectural pattern using [YDB topics](../../concepts/topic.md).
+Applies load to your {{ ydb-short-name }} [topics](../../concepts/topic.md), using them as message queues. You can use a variety of input parameters to simulate production load: message number, message size, target write rate, and number of consumers and producers.
 
-The workload allow us to generate and consume high volumes of data through your YDB cluster in order to measure it's performance characteristics such as throughout and latency.
+As you apply load to your topic, the console displays the results (the number of written messages, message write rate, and others).
 
-The tests can be configured to match your real workloads. The number of messages, message sizes, target throughput, the number of producers and consumers can be adjusted.
+To generate load against your topic:
 
-Test outputs include the number of messages and the amount of data transferred including latencies in order to understand the real world performance characteristics of your cluster.
+1. [Initialize the load](#init).
+1. Run one of the available load types:
+   * [write](#run-write): Generate messages and write them to the topic asynchronously.
+   * [read](#run-read): Read messages from the topic asynchronously.
+   * [full](#run-full): Read and write messages asynchronously in parallel.
 
-## Types of load{#workload-types}
+{% include [ydb-cli-profile.md](../../_includes/ydb-cli-profile.md) %}
 
-The load test runs 3 types of load:
+## Initializing a load test {#init}
 
-* [write](#run-write) — generate messages and write them to a topic asynchronously;
-* [read](#run-read) — read messages from a topic asynchronously;
-* [full](#run-full) — simultaneously read and write messages.
-
-## Load initialization {#init}
-
-To get started, create a topic:
+Before executing the load, you need to initialize it. During initialization, you will create a topic named `workload-topic` with the specified options. To initialize the load, run the command:
 
 ```bash
-{{ ydb-cli }} workload topic init [init options...]
+{{ ydb-cli }}  ydb [global options...] workload topic init [options...]
 ```
 
-* `init options` — [Initialization options](#init-options).
+* `global options`: [Global options](commands/global-options.md).
+* `options`: Subcommand options.
 
-See the description of the command to init the data load:
+Subcommand options:
+
+| Option name | Option description |
+---|---
+| `--partitions`, `-p` | Number of topic partitions.<br>Default value: `128`. |
+| `--consumers`, `-c` | Number of topic consumers.<br>Default value: `1`. |
+
+> To create a topic with `256` partitions and `2` consumers, run this command:
+>
+> ```bash
+> {{ ydb-cli }} --profile quickstart workload topic init --partitions 256 --consumers 2
+> ```
+
+## Write load {#run-write}
+
+This load type generates and writes messages to the topic asynchronously.
+
+General format of the command that generates the write load:
 
 ```bash
-{{ ydb-cli }} workload topic init --help
+{{ ydb-cli }} [global options...] workload topic run write [options...]
 ```
 
-### Available parameters {#init-options}
+* `global options`: [Global options](commands/global-options.md).
+* `options`: Subcommand options.
 
-Parameter name | Short name | Parameter description
----|---|---
-`--partitions <value>` | `-p <value>` | Number of partitions in the topic. Default: 128.
-`--consumers <value>` | `-c <value>` | Number of consumers in the topic. Default: 1.
-
-The `workload-topic` topic will be created with the specified numbers of partitions and consumers.
-
-### Load initialization example{#init-topic-examples}
-
-Creating a topic with 256 partitions and 2 consumers:
-
-```bash
-{{ ydb-cli }} workload topic init --partitions 256 --consumers 2
-```
-
-## Clean {#clean}
-
-When the workload is complete, you can delete the `workload-topic` topic:
-
-```bash
-{{ ydb-cli }} workload topic clean
-```
-
-### Clean example {#clean-topic-examples}
-
-```bash
-{{ ydb-cli }} workload topic clean
-```
-
-## Running a load test {#run}
-
-To run the load, execute the command:
-
-```bash
-{{ ydb-cli }} workload topic run [workload type...] [specific workload options...]
-```
-
-* `workload type` — [The types of workload](#workload-types).
-* `global workload options` — [The global options for all types of load.](#global-workload-options).
-* `specific workload options` — Options of a specific load type.
-
-See the description of the command to run the workload:
-
-```bash
-{{ ydb-cli }} workload topic run --help
-```
-
-### The global options for all types of load {#global-workload-options}
-
-Parameter name | Short name | Parameter description
----|---|---
-`--seconds <value>` | `-s <value>` | Duration of the test (seconds). Default: 10.
-`--window <value>` | `-w <value>` | Statistics collection window (seconds). Default: 1.
-`--quiet` | `-q` | Outputs only the total result.
-`--print-timestamp` | - | Print the time together with the statistics of each time window.
-
-## Write workload {#run-write}
-
-This load type generate messages and send them into a topic asynchronously.
-
-To run this type of load, execute the command:
-
-```bash
-{{ ydb-cli }} workload topic run write [global workload options...] [specific workload options...]
-```
-
-See the description of the command to run the write workload:
+View the description of the command that generates the write load:
 
 ```bash
 {{ ydb-cli }} workload topic run write --help
 ```
 
-### Write workload options {#run-write-options}
+Subcommand options:
 
-Parameter name | Short name | Parameter description
----|---|---
-`--threads <value>` | `-t <value>` | Number of producer threads. Default: `1`.
-`--message-size <value>` | `-m <value>` | Message size (bytes). It can be specified in KB, MB, GB using one of suffixes: `K`, `M`, `G`. Default: `10K`.
-`--message-rate <value>` | - | Total message rate for all producer threads (messages per second). 0 - no limit. Default: `0`.
-`--byte-rate <value>` | - | Total message rate for all producer threads (bytes per second). 0 - no limit. It can be specified in KB/s, MB/s, GB/s using one of suffixes: `K`, `M`, `G`. Default: `0`.
-`--codec <value>` | - | Codec used for message compression on the client before sending them to the server. Possible values: `RAW` (no compression), `GZIP`, and `ZSTD`. Compression causes higher CPU utilization on the client when reading and writing messages, but usually lets you reduce the volume of data transferred over the network and stored. When consumers read messages, they're automatically decompressed with the codec used when writing them, without specifying any special options. Default: `RAW`.
-
-Note: The options `--byte-rate` и `--message-rate` are mutually exclusive.
-
-### Write workload example{#run-write-examples}
-
-Example of a command to create 100 producer threads with a target speed of 80 MB/s and a duration of 300 seconds:
-
-```bash
-{{ ydb-cli }} workload topic run write --threads 100 --seconds 300 --byte-rate 80M
-```
-
-### Write workload output {#run-write-output}
-
-During the process of work, both intermediate and total statistics are printed. Example output:
-
-```text
-Window  Write speed     Write time      Inflight
-#       msg/s   MB/s    P99(ms)         max msg
-1       20      0       1079            72
-2       8025    78      1415            78
-3       7987    78      1431            79
-4       7888    77      1471            101
-5       8126    79      1815            116
-6       7018    68      1447            79
-7       8938    87      2511            159
-8       7055    68      1463            78
-9       7062    69      1455            79
-10      9912    96      3679            250
-Window  Write speed     Write time      Inflight
-#       msg/s   MB/s    P99(ms)         max msg
-Total   7203    70      3023            250
-```
-
-Column name | Column description
+| Option name | Option description |
 ---|---
-`Window`|The time window counter.
-`Write speed`|Write speed (messages/s and Mb/s).
-`Write time`|99 percentile of message write time (ms).
-`Inflight`|The maximum count of inflight messages.
+| `--seconds`, `-s` | Test duration in seconds.<br>Default value: `10`. |
+| `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
+| `--quiet`, `-q` | Output only the final test result. |
+| `--print-timestamp` | Print the time together with the statistics of each time window. |
+| `--threads`, `-t` | Number of producer threads.<br>Default value: `1`. |
+| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br>Default value: `10K`. |
+| `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--byte-rate` option.<br>Default value: `0` (no limit). |
+| `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--message-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br>Default value: `0` (no limit). |
+| `--codec` | Codec used to compress messages on the client before sending them to the server.<br>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
 
-## Read workload {#run-read}
+> To write data to `100` producer threads at the target rate of `80` MB/s for `10` seconds, run this command:
+>
+> ```bash
+> {{ ydb-cli }} --profile quickstart workload topic run write --threads 100 --byte-rate 80M
+> ```
+>
+> You will see statistics for in-progress time windows and final statistics when the test is complete:
+>
+> ```text
+> Window  Write speed     Write time      Inflight
+> #       msg/s   MB/s    P99(ms)         max msg
+> 1       20      0       1079            72
+> 2       8025    78      1415            78
+> 3       7987    78      1431            79
+> 4       7888    77      1471            101
+> 5       8126    79      1815            116
+> 6       7018    68      1447            79
+> 7       8938    87      2511            159
+> 8       7055    68      1463            78
+> 9       7062    69      1455            79
+> 10      9912    96      3679            250
+> Window  Write speed     Write time      Inflight
+> #       msg/s   MB/s    P99(ms)         max msg
+> Total   7203    70      3023            250
+> ```
+>
+> * `Window`: Sequence number of the statistics window.
+> * `Write speed`: Message write rate in messages per second and MB/s.
+> * `Write time`: 99th percentile of the message write time, in milliseconds.
+> * `Inflight`: Maximum number of messages awaiting commit across all partitions.
 
-This load type read messages from a topic asynchronously.
+## Read load {#run-read}
 
-To run this type of load, execute the command:
+This type of load reads messages from the topic asynchronously. To make sure that the topic includes messages, run the [write load](#run-write) before you start reading.
+
+General format of the command to generate the read load:
 
 ```bash
-{{ ydb-cli }} workload topic run read [global workload options...] [specific workload options...]
+{{ ydb-cli }} [global options...] workload topic run read [options...]
 ```
 
-See the description of the command to run the read workload:
+* `global options`: [Global options](commands/global-options.md).
+* `options`: Subcommand options.
+
+View the description of the command to generate the read load:
 
 ```bash
 {{ ydb-cli }} workload topic run read --help
 ```
 
-### Read workload options {#run-read-options}
+Subcommand options:
 
-Parameter name | Short name | Parameter description
----|---|---
-`--consumers <value>` | `-c <value>` | Number of consumers in the topic. Default: `1`.
-`--threads <value>` | `-t <value>` | Number of consumer threads. Default: `1`.
-
-### Read workload example {#run-read-examples}
-
-Example of a command to create 2 consumers with 100 threads each:
-
-```bash
-{{ ydb-cli }} workload topic run read --consumers 2 --threads 100
-```
-
-### Read workload output {#run-read-output}
-
-During the process of work, both intermediate and total statistics are printed. Example output:
-
-```text
-Window  Lag     Lag time        Read speed      Full time
-#       max msg P99(ms)         msg/s   MB/s    P99(ms)
-1       0       0               48193   471     0
-2       30176   0               66578   650     0
-3       30176   0               68999   674     0
-4       30176   0               66907   653     0
-5       27835   0               67628   661     0
-6       30176   0               67938   664     0
-7       30176   0               71628   700     0
-8       20338   0               61367   599     0
-9       30176   0               61770   603     0
-10      30176   0               58291   569     0
-Window  Lag     Lag time        Read speed      Full time
-#       max msg P99(ms)         msg/s   MB/s    P99(ms)
-Total   30176   0               80267   784     0
-```
-
-Column name | Column description
+| Option name | Option description |
 ---|---
-`Window`|The time window counter.
-`Lag`|The maximum lag between producers and consumers across all the partitions (messages).
-`Lag time`|99 percentile of message delay time (ms).
-`Read`|Read speed (messages/s and MB/s).
-`Full time`|99 percentile of the end-to-end message time, from writing by the producer to reading by the reader.
+| `--seconds`, `-s` | Test duration in seconds.<br>Default value: `10`. |
+| `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
+| `--quiet`, `-q` | Output only the final test result. |
+| `--print-timestamp` | Print the time together with the statistics of each time window. |
+| `--consumers`, `-c` | Number of consumers.<br>Default value: `1`. |
+| `--threads`, `-t` | Number of consumer threads.<br>Default value: `1`. |
 
-## Full workload {#run-full}
+> To use `2` consumers to read data from the topic, with `100` threads per consumer, run the following command:
+>
+> ```bash
+> {{ ydb-cli }} --profile quickstart workload topic run read --consumers 2 --threads 100
+> ```
+>
+> You will see statistics for in-progress time windows and final statistics when the test is complete:
+>
+> ```text
+> Window  Lag     Lag time        Read speed      Full time
+> #       max msg P99(ms)         msg/s   MB/s    P99(ms)
+> 1       0       0               48193   471     0
+> 2       30176   0               66578   650     0
+> 3       30176   0               68999   674     0
+> 4       30176   0               66907   653     0
+> 5       27835   0               67628   661     0
+> 6       30176   0               67938   664     0
+> 7       30176   0               71628   700     0
+> 8       20338   0               61367   599     0
+> 9       30176   0               61770   603     0
+> 10      30176   0               58291   569     0
+> Window  Lag     Lag time        Read speed      Full time
+> #       max msg P99(ms)         msg/s   MB/s    P99(ms)
+> Total   30176   0               80267   784     0
+> ```
+>
+> * `Window`: Sequence number of the statistics window.
+> * `Lag`: Maximum consumer lag in the statistics window. Messages across all partitions are included.
+> * `Lag time`: 99th percentile of the message lag time in milliseconds.
+> * `Read`: Message read rate for the consumer (in messages per second and MB/s).
+> * `Full time`: 99th percentile of the full message processing time (from writing by the producer to reading by the consumer), in milliseconds.
 
-This load type both write and read messages asynchronously.
+## Read and write load {#run-full}
 
-To run this type of load, execute the command:
+This type of load both reads messages from the topic and writes them to the topic asynchronously. This command is equivalent to running both read and write loads in parallel.
+
+General format of the command to generate the read and write load:
 
 ```bash
-{{ ydb-cli }} workload topic run full [global workload options...] [specific workload options...]
+{{ ydb-cli }} [global options...] workload topic run full [options...]
 ```
 
-This command is equivalent to running both read and write load workloads simultaneously.
+* `global options`: [Global options](commands/global-options.md).
+* `options`: Subcommand options.
 
-See the description of the command to run the full workload:
+View the description of the command to run the read and write load:
 
 ```bash
 {{ ydb-cli }} workload topic run full --help
 ```
 
-### Full workload options {#run-full-options}
+Subcommand options:
 
-Parameter name | Short name | Parameter description
----|---|---
-`--producer-threads <value>` | `-p <value>` | Number of producer threads. Default: `1`.
-`--message-size <value>` | `-m <value>` | Message size (bytes). It can be specified in KB, MB, GB using one of suffixes: `K`, `M`, `G`. Default: `10K`.
-`--message-rate <value>` | - | Total message rate for all producer threads (messages per second). 0 - no limit. Default: `0`.
-`--byte-rate <value>` | - | Total message rate for all producer threads (bytes per second). 0 - no limit. It can be specified in KB/s, MB/s, GB/s using one of suffixes: `K`, `M`, `G`. Default: `0`.
-`--codec <value>` | - | Codec used for message compression on the client before sending them to the server. Possible values: `RAW` (no compression), `GZIP`, and `ZSTD`. Compression causes higher CPU utilization on the client when reading and writing messages, but usually lets you reduce the volume of data transferred over the network and stored. When consumers read messages, they're automatically decompressed with the codec used when writing them, without specifying any special options. Default: `RAW`.
-`--consumers <value>` | `-c <value>` | Number of consumers in the topic. Default: `1`.
-`--threads <value>` | `-t <value>` | Number of consumer threads. Default: `1`.
+| Option name | Option description |
+---|---
+| `--seconds`, `-s` | Test duration in seconds.<br>Default value: `10`. |
+| `--window`, `-w` | Statistics window in seconds.<br>Default value: `1`. |
+| `--quiet`, `-q` | Output only the final test result. |
+| `--print-timestamp` | Print the time together with the statistics of each time window. |
+| `--producer-threads`, `-p` | Number of producer threads.<br>Default value: `1`. |
+| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br>Default value: `10K`. |
+| `--message-rate` | Total target write rate in messages per second. Can't be used together with the `--message-rate` option.<br>Default value: `0` (no limit). |
+| `--byte-rate` | Total target write rate in bytes per second. Can't be used together with the `--byte-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br>Default value: `0` (no limit). |
+| `--codec` | Codec used to compress messages on the client before sending them to the server.<br>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
+| `--consumers`, `-c` | Number of consumers.<br>Default value: `1`. |
+| `--threads`, `-t` | Number of consumer threads.<br>Default value: `1`. |
 
-Note: The options `--byte-rate` и `--message-rate` are mutually exclusive.
+> Example of a command that reads `50` threads by `2` consumers and writes data to `100` producer threads at the target rate of `80` MB/s and duration of `10` seconds:
+>
+> ```bash
+> {{ ydb-cli }} --profile quickstart workload topic run full --producer-threads 100 --consumers 2 --consumer-threads 50 --byte-rate 80M
+> ```
+>
+> You will see statistics for in-progress time windows and final statistics when the test is complete:
+>
+> ```text
+> Window  Write speed     Write time      Inflight        Lag     Lag time        Read speed      Full time
+> #       msg/s   MB/s    P99(ms)         max msg         max msg P99(ms)         msg/s   MB/s    P99(ms)
+> 1       39      0       1215            4               0       0               30703   300     29716
+> 2       1091    10      2143            8               2076    20607           40156   392     30941
+> 3       1552    15      2991            12              7224    21887           41040   401     31886
+> 4       1733    16      3711            15              10036   22783           38488   376     32577
+> 5       1900    18      4319            15              10668   23551           34784   340     33372
+> 6       2793    27      5247            21              9461    24575           33267   325     34893
+> 7       2904    28      6015            22              12150   25727           34423   336     35507
+> 8       2191    21      5087            21              12150   26623           29393   287     36407
+> 9       1952    19      2543            10              7627    27391           33284   325     37814
+> 10      1992    19      2655            9               10104   28671           29101   284     38797
+> Window  Write speed     Write time      Inflight        Lag     Lag time        Read speed      Full time
+> #       msg/s   MB/s    P99(ms)         max msg         max msg P99(ms)         msg/s   MB/s    P99(ms)
+> Total   1814    17      5247            22              12150   28671           44827   438     40252
+> ```
+>
+> * `Window`: Sequence number of the statistics window.
+> * `Write speed`: Message write rate in messages per second and MB/s.
+> * `Write time`: 99th percentile of the message write time in milliseconds.
+> * `Inflight`: Maximum number of messages awaiting commit across all partitions.
+> * `Lag`: Maximum number of messages awaiting reading, in the statistics window. Messages across all partitions are included.
+> * `Lag time`: 99th percentile of the message lag time in milliseconds.
+> * `Read`: Message read rate for the consumer (in messages per second and MB/s).
+> * `Full time`: 99th percentile of the full message processing time, from writing by the producer to reading by the consumer, in milliseconds.
 
-### Full workload example {#run-full-examples}
+## Deleting a topic {#clean}
 
-Example of a command to create 100 producer threads, 2 consumers the 50 consumer thread,a target speed of 80 MB/s and a duration of 300 seconds:
+When the work is complete, you can delete the test topic: General format of the topic deletion command:
 
 ```bash
-{{ ydb-cli }}  workload topic run full --producer-threads 100 --consumers 2 --consumer-threads 50 --byte-rate 80M --seconds 300
+{{ ydb-cli }} [global options...] workload topic clean [options...]
 ```
 
-### Ful workload output {#run-full-output}
+* `global options`: [Global options](commands/global-options.md).
+* `options`: Subcommand options.
 
-During the process of work, both intermediate and total statistics are printed. Example output:
-
-```text
-Window  Write speed     Write time      Inflight        Lag     Lag time        Read speed      Full time
-#       msg/s   MB/s    P99(ms)         max msg         max msg P99(ms)         msg/s   MB/s    P99(ms)
-1       39      0       1215            4               0       0               30703   300     29716
-2       1091    10      2143            8               2076    20607           40156   392     30941
-3       1552    15      2991            12              7224    21887           41040   401     31886
-4       1733    16      3711            15              10036   22783           38488   376     32577
-5       1900    18      4319            15              10668   23551           34784   340     33372
-6       2793    27      5247            21              9461    24575           33267   325     34893
-7       2904    28      6015            22              12150   25727           34423   336     35507
-8       2191    21      5087            21              12150   26623           29393   287     36407
-9       1952    19      2543            10              7627    27391           33284   325     37814
-10      1992    19      2655            9               10104   28671           29101   284     38797
-Window  Write speed     Write time      Inflight        Lag     Lag time        Read speed      Full time
-#       msg/s   MB/s    P99(ms)         max msg         max msg P99(ms)         msg/s   MB/s    P99(ms)
-Total   1814    17      5247            22              12150   28671           44827   438     40252
-```
-
-Column name | Column description
----|---
-`Window`|The time window counter.
-`Write speed`|Write speed (messages/s and Mb/s).
-`Write time`|99 percentile of message write time (ms).
-`Inflight`|The maximum count of inflight messages.
-`Lag`|The maximum lag between producers and consumers across all the partitions (messages).
-`Lag time`|99 percentile of message delay time (ms).
-`Read`|Read speed (messages/s and MB/s).
-`Full time`|99 percentile of the end-to-end message time, from writing by the producer to reading by the reader.
+> To delete the `workload-topic` test topic, run the following command:
+>
+> ```bash
+> {{ ydb-cli }} --profile quickstart workload topic clean
+> ```

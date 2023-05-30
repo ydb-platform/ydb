@@ -40,8 +40,7 @@ public:
         , Callback(std::move(callback)) {}
 
     void Bootstrap() {
-        auto boardLookup = CreateBoardLookupActor(BoardPath, SelfId(), StateStorageGroupId, EBoardLookupMode::Majority,
-                                                  false, false);
+        auto boardLookup = CreateBoardLookupActor(BoardPath, SelfId(), StateStorageGroupId, EBoardLookupMode::Majority);
         BoardLookupId = Register(boardLookup);
 
         Become(&TTakeResourcesSnapshotActor::WorkState);

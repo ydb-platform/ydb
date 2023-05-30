@@ -6,6 +6,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/formats/arrow/compression/object.h>
 #include <ydb/core/formats/arrow/compression/diff.h>
+#include <ydb/core/formats/arrow/dictionary/object.h>
+#include <ydb/core/formats/arrow/dictionary/diff.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -41,7 +43,7 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
         YDB_FLAG_ACCESSOR(NotNull, false);
         YDB_READONLY_DEF(std::optional<NArrow::TCompression>, Compression);
-        YDB_READONLY_DEF(std::optional<bool>, LowCardinality);
+        YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     public:
         TOlapColumnAdd(const std::optional<ui32>& keyOrder)
             : KeyOrder(keyOrder)
@@ -78,7 +80,7 @@ namespace NKikimr::NSchemeShard {
     class TOlapColumnDiff {
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY_DEF(NArrow::TCompressionDiff, Compression);
-        YDB_READONLY_DEF(std::optional<bool>, LowCardinality);
+        YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
     public:
         bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
             Name = columnSchema.GetName();
@@ -90,8 +92,9 @@ namespace NKikimr::NSchemeShard {
                 errors.AddError("cannot parse compression diff from proto");
                 return false;
             }
-            if (columnSchema.HasLowCardinality()) {
-                LowCardinality = columnSchema.GetLowCardinality();
+            if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
+                errors.AddError("cannot parse dictionary encoding diff from proto");
+                return false;
             }
             return true;
         }

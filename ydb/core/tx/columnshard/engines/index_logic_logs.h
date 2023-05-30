@@ -3,24 +3,28 @@
 #include "defs.h"
 #include "portion_info.h"
 #include "column_engine_logs.h"
+#include <ydb/core/tx/columnshard/counters.h>
 
 namespace NKikimr::NOlap {
 
 class TIndexLogicBase {
 protected:
-    const TVersionedIndex& IndexInfo;
+    const TVersionedIndex& SchemaVersions;
+    const NColumnShard::TIndexationCounters Counters;
 private:
     const THashMap<ui64, NKikimr::NOlap::TTiering>* TieringMap = nullptr;
-
 public:
-    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap)
-        : IndexInfo(indexInfo)
+    TIndexLogicBase(const TVersionedIndex& indexInfo, const THashMap<ui64, NKikimr::NOlap::TTiering>& tieringMap,
+        const NColumnShard::TIndexationCounters& counters)
+        : SchemaVersions(indexInfo)
+        , Counters(counters)
         , TieringMap(&tieringMap)
     {
     }
 
-    TIndexLogicBase(const TVersionedIndex& indexInfo)
-        : IndexInfo(indexInfo)
+    TIndexLogicBase(const TVersionedIndex& indexInfo, const NColumnShard::TIndexationCounters& counters)
+        : SchemaVersions(indexInfo)
+        , Counters(counters)
     {
     }
 
@@ -37,7 +41,7 @@ protected:
                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                             const ui64 granule,
                                             const TSnapshot& minSnapshot,
-                                            std::vector<TString>& blobs) const;
+                                            std::vector<TString>& blobs, const TGranuleMeta* granuleMeta) const;
 
     static std::shared_ptr<arrow::RecordBatch> GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                             const TIndexInfo& indexInfo);
@@ -68,11 +72,12 @@ public:
     using TIndexLogicBase::TIndexLogicBase;
 
     std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
+    static bool IsSplit(std::shared_ptr<TColumnEngineChanges> changes);
 
 private:
     std::vector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;
     std::vector<TString> CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const;
-    std::shared_ptr<arrow::RecordBatch> CompactInOneGranule(ui64 granule, const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
+    std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> CompactInOneGranule(ui64 granule, const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
 
     /// @return vec({ts, batch}). ts0 <= ts1 <= ... <= tsN
     /// @note We use ts from PK for split but there could be lots PK with the same ts.
@@ -90,7 +95,7 @@ private:
                         std::vector<std::pair<TMark, ui64>>& tsIds,
                         std::vector<std::pair<TPortionInfo, ui64>>& toMove) const;
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> PortionsToBatches(const std::vector<TPortionInfo>& portions,
+    std::pair<std::vector<std::shared_ptr<arrow::RecordBatch>>, TSnapshot> PortionsToBatches(const std::vector<TPortionInfo>& portions,
                                                                     const THashMap<TBlobRange, TString>& blobs,
                                                                     bool insertedOnly = false) const;
 };

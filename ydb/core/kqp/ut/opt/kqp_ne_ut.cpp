@@ -3669,7 +3669,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
-        appConfig.MutableTableServiceConfig()->SetEnableSequentialHints(true);
+        appConfig.MutableTableServiceConfig()->SetEnableSequentialReads(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 

@@ -61,6 +61,7 @@ std::unique_ptr<TEvBlobStorage::TEvGetResult> TEvBlobStorage::TEvGet::MakeErrorR
         to.Id = from.Id;
         to.Shift = from.Shift;
         to.RequestedSize = from.Size;
+        to.LooksLikePhantom = PhantomCheck ? std::make_optional(false) : std::nullopt;
     }
     res->ErrorReason = errorReason;
     return res;

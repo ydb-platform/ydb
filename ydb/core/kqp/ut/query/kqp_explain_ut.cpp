@@ -61,20 +61,6 @@ void CreateSampleTables(TKikimrRunner& kikimr) {
     session.Close();
 }
 
-bool ValidatePlanNodeIds(const NJson::TJsonValue& plan) {
-    ui32 planNodeId = 0;
-    ui32 count = 0;
-
-    do {
-        count = CountPlanNodesByKv(plan, "PlanNodeId", std::to_string(++planNodeId));
-        if (count > 1) {
-            return false;
-        }
-    } while (count > 0);
-
-    return true;
-}
-
 }
 
 Y_UNIT_TEST_SUITE(KqpExplain) {

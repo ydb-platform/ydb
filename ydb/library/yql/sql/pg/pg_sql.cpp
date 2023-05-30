@@ -1,3 +1,4 @@
+#include "util/charset/utf8.h"
 #include "utils.h"
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
@@ -1104,6 +1105,22 @@ private:
         return inserted;
     }
 
+    const TString& FindColumnTypeAlias(const TString& colType) {
+        const static std::unordered_map<TString, TString> aliasMap {
+            {"smallserial", "int2"},
+            {"serial2", "int2"},
+            {"serial", "int4"},
+            {"serial4", "int4"},
+            {"bigserial", "int8"},
+            {"serial8", "int8"},
+        };
+        const auto aliasIt = aliasMap.find(ToLowerUTF8(colType));
+        if (aliasIt == aliasMap.end()) {
+            return colType;
+        }
+        return aliasIt->second;
+    }
+
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
         auto success = true;
 
@@ -1143,9 +1160,10 @@ private:
             return success;
 
         // for now we pass just the last part of the type name
-        auto colType = StrVal( ListNodeNth(node->typeName->names,
+        auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
                                            ListLength(node->typeName->names) - 1));
-
+        const auto colType = FindColumnTypeAlias(colTypeVal);
+        
         ctx.Columns.push_back(
                 QL(QA(node->colname), L(A("PgType"), QA(colType)))
                 );

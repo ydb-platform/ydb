@@ -122,6 +122,7 @@ message TConfigItem {
         YamlConfigEnabledItem = 64;
         ConveyorConfigItem = 65;
         ColumnShardConfigItem = 66;
+        AwsCompatibilityConfigItem = 70;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

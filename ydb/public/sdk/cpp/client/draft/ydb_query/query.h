@@ -2,6 +2,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_query_v1.grpc.pb.h>
 
+#include <ydb/public/sdk/cpp/client/draft/ydb_query/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
@@ -25,7 +26,7 @@ enum class EExecMode {
     Parse = 10,
     Validate = 20,
     Explain = 30,
-    Execute = 3,
+    Execute = 50,
 };
 
 enum class EExecStatus {
@@ -44,19 +45,24 @@ public:
     const TResultSet& GetResultSet() const { return *ResultSet_; }
     TResultSet ExtractResultSet() { return std::move(*ResultSet_); }
 
-    TExecuteQueryPart(TStatus&& status)
+    const TMaybe<TExecStats>& GetStats() const { return Stats_; }
+
+    TExecuteQueryPart(TStatus&& status, TMaybe<TExecStats>&& queryStats)
         : TStreamPartStatus(std::move(status))
+        , Stats_(std::move(queryStats))
     {}
 
-    TExecuteQueryPart(TStatus&& status, TResultSet&& resultSet, i64 resultSetIndex)
+    TExecuteQueryPart(TStatus&& status, TResultSet&& resultSet, i64 resultSetIndex, TMaybe<TExecStats>&& queryStats)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , ResultSetIndex_(resultSetIndex)
+        , Stats_(std::move(queryStats))
     {}
 
 private:
     TMaybe<TResultSet> ResultSet_;
     i64 ResultSetIndex_ = 0;
+    TMaybe<TExecStats> Stats_;
 };
 
 using TAsyncExecuteQueryPart = NThreading::TFuture<TExecuteQueryPart>;
@@ -81,30 +87,33 @@ private:
 using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
+    FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
 };
 
 class TExecuteQueryResult : public TStatus {
 public:
     const TVector<TResultSet>& GetResultSets() const;
     TResultSet GetResultSet(size_t resultIndex) const;
-
     TResultSetParser GetResultSetParser(size_t resultIndex) const;
+
+    const TMaybe<TExecStats>& GetStats() const { return Stats_; }
 
     TExecuteQueryResult(TStatus&& status)
         : TStatus(std::move(status))
     {}
 
-    TExecuteQueryResult(TStatus&& status, TVector<TResultSet>&& resultSets)
+    TExecuteQueryResult(TStatus&& status, TVector<TResultSet>&& resultSets, TMaybe<TExecStats>&& stats)
         : TStatus(std::move(status))
         , ResultSets_(std::move(resultSets))
+        , Stats_(std::move(stats))
     {}
 
 private:
     TVector<TResultSet> ResultSets_;
+    TMaybe<TExecStats> Stats_;
 };
 
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
-
 
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
 };

@@ -21,6 +21,7 @@
 #include <util/stream/file.h>
 #include <util/stream/length.h>
 #include <util/string/builder.h>
+#include <util/system/thread.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
@@ -34,6 +35,7 @@
 
 #if defined(_win32_)
 #include <windows.h>
+#include <io.h>
 #elif defined(_unix_)
 #include <unistd.h>
 #endif
@@ -82,9 +84,18 @@ FHANDLE GetStdinFileno() {
 #endif
 }
 
+bool IsStdoutInteractive() {
+#if defined(_win32_)
+    return _isatty(_fileno(stdout));
+#elif defined(_unix_)
+    return isatty(fileno(stdout));
+#endif
+    return true;
+}
+
 class TMaxInflightGetter {
 public:
-    TMaxInflightGetter(ui64 totalMaxInFlight, std::atomic<ui64>& filesCount) 
+    TMaxInflightGetter(ui64 totalMaxInFlight, std::atomic<ui64>& filesCount)
         : TotalMaxInFlight(totalMaxInFlight)
         , FilesCount(filesCount) {
     }
@@ -134,7 +145,7 @@ private:
     };
 
 public:
-    TCsvFileReader(const TString& filePath, const TImportFileSettings& settings, TString& headerRow, 
+    TCsvFileReader(const TString& filePath, const TImportFileSettings& settings, TString& headerRow,
                    TMaxInflightGetter& inFlightGetter) {
         TFile file;
         if (filePath) {
@@ -221,9 +232,6 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
     , SchemeClient(std::make_shared<NScheme::TSchemeClient>(driver))
     , TableClient(std::make_shared<NTable::TTableClient>(driver))
 {
-    UpsertSettings
-        .OperationTimeout(TDuration::Seconds(TImportFileSettings::OperationTimeoutSec))
-        .ClientTimeout(TDuration::Seconds(TImportFileSettings::ClientTimeoutSec));
     RetrySettings
         .MaxRetries(TImportFileSettings::MaxRetries)
         .Idempotent(true)
@@ -232,8 +240,22 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
 
 TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath, const TImportFileSettings& settings) {
     FilesCount = filePaths.size();
-    auto pool = CreateThreadPool(FilesCount);
-    TVector<NThreading::TFuture<TStatus>> asyncResults;
+    if (settings.Format_ == EOutputFormat::Tsv && settings.Delimiter_ != "\t") {
+        return MakeStatus(EStatus::BAD_REQUEST,
+            TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
+    }
+
+    auto result = NDump::DescribePath(*SchemeClient, dbPath);
+    auto resultStatus = result.GetStatus();
+    if (resultStatus != EStatus::SUCCESS) {
+        return MakeStatus(EStatus::SCHEME_ERROR,
+            TStringBuilder() <<  result.GetIssues().ToString() << dbPath);
+    }
+
+    UpsertSettings
+        .OperationTimeout(settings.OperationTimeout_)
+        .ClientTimeout(settings.ClientTimeout_);
+
     switch (settings.Format_) {
         case EOutputFormat::Default:
         case EOutputFormat::Csv:
@@ -245,43 +267,73 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
         case EOutputFormat::JsonBase64:
         case EOutputFormat::Parquet:
             break;
-        default: 
+        default:
             return MakeStatus(EStatus::BAD_REQUEST,
                         TStringBuilder() << "Unsupported format #" << (int) settings.Format_);
     }
 
+    bool isStdoutInteractive = IsStdoutInteractive();
+    size_t filePathsSize = filePaths.size();
+    std::mutex progressWriteLock;
+    std::atomic<ui64> globalProgress{0};
+
+    auto writeProgress = [&]() {
+        ui64 globalProgressValue = globalProgress.load();
+        std::lock_guard<std::mutex> lock(progressWriteLock);
+        Cout << "Progress " << (globalProgressValue / filePathsSize) << '%' << "\r";
+        Cout.Flush();
+    };
+
+    auto start = TInstant::Now();
+
+    auto pool = CreateThreadPool(filePathsSize);
+    TVector<NThreading::TFuture<TStatus>> asyncResults;
+
+    // If the single empty filename passed, read from stdin, else from the file
+
     for (const auto& filePath : filePaths) {
-        auto func = [this, &filePath, &dbPath, &settings] {
+        auto func = [&, this] {
+            std::unique_ptr<TFileInput> fileInput;
+            std::optional<ui64> fileSizeHint;
+
             if (!filePath.empty()) {
                 const TFsPath dataFile(filePath);
+
                 if (!dataFile.Exists()) {
                     return MakeStatus(EStatus::BAD_REQUEST,
                         TStringBuilder() << "File does not exist: " << filePath);
                 }
+
                 if (!dataFile.IsFile()) {
                     return MakeStatus(EStatus::BAD_REQUEST,
                         TStringBuilder() << "Not a file: " << filePath);
                 }
-            }
 
-            if (settings.Format_ == EOutputFormat::Tsv) {
-                if (settings.Delimiter_ != "\t") {
-                    return MakeStatus(EStatus::BAD_REQUEST,
-                        TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
+                TFile file(filePath, OpenExisting | RdOnly | Seq);
+                i64 fileLength = file.GetLength();
+                if (fileLength && fileLength >= 0) {
+                    fileSizeHint = fileLength;
                 }
+
+                fileInput = std::make_unique<TFileInput>(file, settings.FileBufferSize_);
             }
 
-            auto result = NDump::DescribePath(*SchemeClient, dbPath);
-            auto resultStatus = result.GetStatus();
+            ProgressCallbackFunc progressCallback;
 
-            if (resultStatus != EStatus::SUCCESS) {
-                return MakeStatus(EStatus::SCHEME_ERROR,
-                    TStringBuilder() <<  result.GetIssues().ToString() << dbPath);
+            if (isStdoutInteractive)
+            {
+                ui64 oldProgress = 0;
+                progressCallback = [&, oldProgress](ui64 current, ui64 total) mutable {
+                    ui64 progress = static_cast<ui64>((static_cast<double>(current) / total) * 100.0);
+                    ui64 progressDiff = progress - oldProgress;
+                    globalProgress.fetch_add(progressDiff);
+                    oldProgress = progress;
+                    writeProgress();
+                };
             }
 
-            std::unique_ptr<TFileInput> fileInput = filePath.empty() ? nullptr
-                : std::make_unique<TFileInput>(filePath, settings.FileBufferSize_);
             IInputStream& input = fileInput ? *fileInput : Cin;
+
             switch (settings.Format_) {
                 case EOutputFormat::Default:
                 case EOutputFormat::Csv:
@@ -289,16 +341,17 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
                     if (settings.NewlineDelimited_) {
                         return UpsertCsvByBlocks(filePath, dbPath, settings);
                     } else {
-                        return UpsertCsv(input, dbPath, settings);
+                        return UpsertCsv(input, dbPath, settings, fileSizeHint, progressCallback);
                     }
                 case EOutputFormat::Json:
                 case EOutputFormat::JsonUnicode:
                 case EOutputFormat::JsonBase64:
-                    return UpsertJson(input, dbPath, settings);
+                    return UpsertJson(input, dbPath, settings, fileSizeHint, progressCallback);
                 case EOutputFormat::Parquet:
-                    return UpsertParquet(filePath, dbPath, settings);
+                    return UpsertParquet(filePath, dbPath, settings, progressCallback);
                 default: ;
             }
+
             return MakeStatus(EStatus::BAD_REQUEST,
                         TStringBuilder() << "Unsupported format #" << (int) settings.Format_);
         };
@@ -313,6 +366,11 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
             return result;
         }
     }
+
+    auto finish = TInstant::Now();
+    auto duration = finish - start;
+    Cout << "Elapsed: " << duration.SecondsFloat() << " sec\n";
+
     return MakeStatus(EStatus::SUCCESS);
 }
 
@@ -353,12 +411,12 @@ void TImportFileClient::SetupUpsertSettingsCsv(const TImportFileSettings& settin
     }
 }
 
-TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
-                                     const TImportFileSettings& settings) {
+TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
+                                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
     TString buffer;
 
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
-    
+
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
     TString headerRow;
@@ -383,35 +441,58 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         splitter.ConsumeLine();
     }
 
+    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
+
+    ui32 row = settings.SkipRows_;
+    ui64 nextBorder = VerboseModeReadSize;
+    ui64 batchBytes = 0;
+    ui64 readBytes = 0;
+
+    TString line;
     std::vector<TAsyncStatus> inFlightRequests;
 
-    ui32 idx = settings.SkipRows_;
-    ui64 readSize = 0;
-    ui64 nextBorder = VerboseModeReadSize;
     while (TString line = splitter.ConsumeLine()) {
-        readSize += line.size();
+        ++row;
+        readBytes += line.Size();
+        batchBytes += line.Size();
+
         if (RemoveLastDelimiter) {
             if (!line.EndsWith(settings.Delimiter_)) {
-                return MakeStatus(EStatus::BAD_REQUEST, 
+                return MakeStatus(EStatus::BAD_REQUEST,
                         "According to the header, lines should end with a delimiter");
             }
             line.erase(line.Size() - settings.Delimiter_.Size());
         }
+
         buffer += line;
         buffer += '\n';
-        ++idx;
-        if (readSize >= nextBorder && RetrySettings.Verbose_) {
-            nextBorder += VerboseModeReadSize;
-            Cerr << "Processed " << 1.0 * readSize / (1 << 20) << "Mb and " << idx << " records" << Endl;
-        }
-        if (buffer.Size() >= settings.BytesPerRequest_) {
-            auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
-            if (!status.IsSuccess()) {
-                return status;
-            }
 
-            inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer));
-            buffer = headerRow;
+        if (readBytes >= nextBorder && RetrySettings.Verbose_) {
+            nextBorder += VerboseModeReadSize;
+            Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row << " records" << Endl;
+        }
+
+        if (batchBytes < settings.BytesPerRequest_) {
+            continue;
+        }
+
+        if (inputSizeHint && progressCallback) {
+            progressCallback(readBytes, *inputSizeHint);
+        }
+
+        auto asyncUpsertCSV = [&, buffer = std::move(buffer)]() {
+            auto value = UpsertCsvBuffer(dbPath, buffer);
+            return value.ExtractValueSync();
+        };
+
+        batchBytes = 0;
+        buffer = {};
+
+        inFlightRequests.push_back(NThreading::Async(asyncUpsertCSV, *pool));
+
+        auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
+        if (!status.IsSuccess()) {
+            return status;
         }
     }
 
@@ -455,7 +536,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
                 readSize += line.size();
                 if (RemoveLastDelimiter) {
                     if (!line.EndsWith(settings.Delimiter_)) {
-                        return MakeStatus(EStatus::BAD_REQUEST, 
+                        return MakeStatus(EStatus::BAD_REQUEST,
                                 "According to the header, lines should end with a delimiter");
                     }
                     line.erase(line.Size() - settings.Delimiter_.Size());
@@ -500,9 +581,8 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
 inline
 TAsyncStatus TImportFileClient::UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder) {
     auto upsert = [this, dbPath, rows = builder.Build()]
-            (NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
-        NYdb::TValue r = rows;
-        return tableClient.BulkUpsert(dbPath, std::move(r), UpsertSettings)
+            (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
+        return tableClient.BulkUpsert(dbPath, std::move(rows), UpsertSettings)
             .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                 NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                 return NThreading::MakeFuture(status);
@@ -511,54 +591,76 @@ TAsyncStatus TImportFileClient::UpsertJsonBuffer(const TString& dbPath, TValueBu
     return TableClient->RetryOperation(upsert, RetrySettings);
 }
 
-TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath,
-                                      const TImportFileSettings& settings) {
+
+TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
+                                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
     NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
-    if (! sessionResult.IsSuccess())
+    if (!sessionResult.IsSuccess())
         return sessionResult;
     NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(dbPath).GetValueSync();
-    if (! tableResult.IsSuccess())
+    if (!tableResult.IsSuccess())
         return tableResult;
 
     const TType tableType = GetTableType(tableResult.GetTableDescription());
     const NYdb::EBinaryStringEncoding stringEncoding =
-        (settings.Format_==EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
+        (settings.Format_ == EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
             NYdb::EBinaryStringEncoding::Unicode;
 
-    std::vector<TAsyncStatus> inFlightRequests;
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
+    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
 
-    size_t currentSize = 0;
-    size_t currentRows = 0;
-    auto currentBatch = std::make_unique<TValueBuilder>();
-    currentBatch->BeginList();
+    ui64 readBytes = 0;
+    ui64 batchBytes = 0;
 
     TString line;
-    while (size_t sz = input.ReadLine(line)) {
-        currentBatch->AddListItem(JsonToYdbValue(line, tableType, stringEncoding));
-        currentSize += line.Size();
-        currentRows += 1;
+    std::vector<TString> batchLines;
+    std::vector<TAsyncStatus> inFlightRequests;
 
-        if (currentSize >= settings.BytesPerRequest_) {
-            currentBatch->EndList();
+    auto upsertJson = [&](std::vector<TString> batchLines) {
+        TValueBuilder batch;
+        batch.BeginList();
 
-            auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
-            if (!status.IsSuccess()) {
-                return status;
-            }
+        for (auto &line : batchLines) {
+            batch.AddListItem(JsonToYdbValue(line, tableType, stringEncoding));
+        }
 
-            inFlightRequests.push_back(UpsertJsonBuffer(dbPath, *currentBatch));
+        batch.EndList();
 
-            currentBatch = std::make_unique<TValueBuilder>();
-            currentBatch->BeginList();
-            currentSize = 0;
-            currentRows = 0;
+        auto value = UpsertJsonBuffer(dbPath, batch);
+        return value.ExtractValueSync();
+    };
+
+    while (size_t size = input.ReadLine(line)) {
+        batchLines.push_back(line);
+        batchBytes += size;
+        readBytes += size;
+
+        if (inputSizeHint && progressCallback) {
+            progressCallback(readBytes, *inputSizeHint);
+        }
+
+        if (batchBytes < settings.BytesPerRequest_) {
+            continue;
+        }
+
+        batchBytes = 0;
+
+        auto asyncUpsertJson = [&, batchLines = std::move(batchLines)]() {
+            return upsertJson(batchLines);
+        };
+
+        batchLines.clear();
+
+        inFlightRequests.push_back(NThreading::Async(asyncUpsertJson, *pool));
+
+        auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
+        if (!status.IsSuccess()) {
+            return status;
         }
     }
 
-    if (currentRows > 0) {
-        currentBatch->EndList();
-        inFlightRequests.push_back(UpsertJsonBuffer(dbPath, *currentBatch));
+    if (!batchLines.empty()) {
+        upsertJson(std::move(batchLines));
     }
 
     return WaitForQueue(0, inFlightRequests);
@@ -566,7 +668,8 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
 
 TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filename,
                                          [[maybe_unused]] const TString& dbPath,
-                                         [[maybe_unused]] const TImportFileSettings& settings) {
+                                         [[maybe_unused]] const TImportFileSettings& settings,
+                                         [[maybe_unused]] ProgressCallbackFunc & progressCallback) {
 #if defined(_WIN64) || defined(_WIN32) || defined(__WIN32__)
     return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
 #else
@@ -575,7 +678,7 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
     if (!fileResult.ok()) {
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Unable to open parquet file:" << fileResult.status().ToString());
     }
-    std::shared_ptr<arrow::io::ReadableFile> readableFile = fileResult.ValueOrDie();
+    std::shared_ptr<arrow::io::ReadableFile> readableFile = *fileResult;
 
     std::unique_ptr<parquet::arrow::FileReader> fileReader;
 
@@ -585,7 +688,9 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while initializing arrow FileReader: " << st.ToString());
     }
 
-    const i64 numRowGroups = parquet::ReadMetaData(readableFile)->num_row_groups();
+    auto metadata = parquet::ReadMetaData(readableFile);
+    const i64 numRows = metadata->num_rows();
+    const i64 numRowGroups = metadata->num_row_groups();
 
     std::vector<int> row_group_indices(numRowGroups);
     for (i64 i = 0; i < numRowGroups; i++) {
@@ -599,8 +704,18 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while getting RecordBatchReader: " << st.ToString());
     }
 
+    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
+
+    std::atomic<ui64> uploadedRows = 0;
+    auto uploadedRowsCallback = [&](ui64 rows) {
+        ui64 uploadedRowsValue = uploadedRows.fetch_add(rows);
+
+        if (progressCallback) {
+            progressCallback(uploadedRowsValue + rows, numRows);
+        }
+    };
+
     std::vector<TAsyncStatus> inFlightRequests;
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
 
     while (true) {
         std::shared_ptr<arrow::RecordBatch> batch;
@@ -609,49 +724,63 @@ TStatus TImportFileClient::UpsertParquet([[maybe_unused]] const TString& filenam
         if (!st.ok()) {
             return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while reading next RecordBatch" << st.ToString());
         }
+
         // The read function will return null at the end of data stream.
         if (!batch) {
             break;
         }
 
-        const TString strSchema = NYdb_cli::NArrow::SerializeSchema(*batch->schema());
-        const size_t totalSize = NYdb_cli::NArrow::GetBatchDataSize(batch);
-        const size_t sliceCount =
-            (totalSize / (size_t)settings.BytesPerRequest_) + (totalSize % settings.BytesPerRequest_ != 0 ? 1 : 0);
-        const i64 rowsInSlice = batch->num_rows() / sliceCount;
+        auto upsertParquetBatch = [&, batch = std::move(batch)]() {
+            const TString strSchema = NYdb_cli::NArrow::SerializeSchema(*batch->schema());
+            const size_t totalSize = NYdb_cli::NArrow::GetBatchDataSize(batch);
+            const size_t sliceCount =
+                (totalSize / (size_t)settings.BytesPerRequest_) + (totalSize % settings.BytesPerRequest_ != 0 ? 1 : 0);
+            const i64 rowsInSlice = batch->num_rows() / sliceCount;
 
-        for (i64 currentRow = 0; currentRow < batch->num_rows(); currentRow += rowsInSlice) {
-            std::stack<std::shared_ptr<arrow::RecordBatch>> rowsToSend;
+            for (i64 currentRow = 0; currentRow < batch->num_rows(); currentRow += rowsInSlice) {
+                std::stack<std::shared_ptr<arrow::RecordBatch>> rowsToSendBatches;
 
-            if (currentRow + rowsInSlice < batch->num_rows()) {
-                rowsToSend.push(batch->Slice(currentRow, rowsInSlice));
-            } else {
-                rowsToSend.push(batch->Slice(currentRow));
-            }
-
-            do {
-                const auto rows = rowsToSend.top();
-
-                rowsToSend.pop();
-                // Nothing to send. Continue.
-                if (rows->num_rows() == 0) {
-                    continue;
+                if (currentRow + rowsInSlice < batch->num_rows()) {
+                    rowsToSendBatches.push(batch->Slice(currentRow, rowsInSlice));
+                } else {
+                    rowsToSendBatches.push(batch->Slice(currentRow));
                 }
-                // Logarithmic approach to find number of rows fit into the byte limit.
-                if (rows->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rows) < settings.BytesPerRequest_) {
-                    // Single row or fits into the byte limit.
-                    auto status = WaitForQueue(inFlightGetter.GetCurrentMaxInflight(), inFlightRequests);
-                    if (!status.IsSuccess()) {
-                        return status;
+
+                do {
+                    auto rowsBatch = std::move(rowsToSendBatches.top());
+                    rowsToSendBatches.pop();
+
+                    // Nothing to send. Continue.
+                    if (rowsBatch->num_rows() == 0) {
+                        continue;
                     }
 
-                    inFlightRequests.push_back(UpsertParquetBuffer(dbPath, NYdb_cli::NArrow::SerializeBatchNoCompression(rows), strSchema));
-                } else {
-                    // Split current slice.
-                    rowsToSend.push(rows->Slice(rows->num_rows() / 2));
-                    rowsToSend.push(rows->Slice(0, rows->num_rows() / 2));
-                }
-            } while (!rowsToSend.empty());
+                    // Logarithmic approach to find number of rows fit into the byte limit.
+                    if (rowsBatch->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rowsBatch) < settings.BytesPerRequest_) {
+                        // Single row or fits into the byte limit.
+                        auto value = UpsertParquetBuffer(dbPath, NYdb_cli::NArrow::SerializeBatchNoCompression(rowsBatch), strSchema);
+                        auto status = value.ExtractValueSync();
+                        if (!status.IsSuccess())
+                            return status;
+
+                        uploadedRowsCallback(rowsBatch->num_rows());
+                    } else {
+                        // Split current slice.
+                        i64 halfLen = rowsBatch->num_rows() / 2;
+                        rowsToSendBatches.push(rowsBatch->Slice(halfLen));
+                        rowsToSendBatches.push(rowsBatch->Slice(0, halfLen));
+                    }
+                } while (!rowsToSendBatches.empty());
+            };
+
+            return MakeStatus();
+        };
+
+        inFlightRequests.push_back(NThreading::Async(upsertParquetBatch, *pool));
+
+        auto status = WaitForQueue(settings.MaxInFlightRequests_, inFlightRequests);
+        if (!status.IsSuccess()) {
+            return status;
         }
     }
 

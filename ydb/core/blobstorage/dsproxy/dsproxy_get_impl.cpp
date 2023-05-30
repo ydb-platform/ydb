@@ -24,6 +24,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
     outGetResult->ErrorReason = errorReason;
 
     if (status != NKikimrProto::OK) {
+        Y_VERIFY(status != NKikimrProto::NODATA);
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
             const TEvBlobStorage::TEvGet::TQuery &query = Queries[i];
             TEvBlobStorage::TEvGetResult::TResponse &outResponse = outGetResult->Responses[i];
@@ -31,6 +32,9 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.Id = query.Id;
             outResponse.Shift = query.Shift;
             outResponse.RequestedSize = query.Size;
+            outResponse.LooksLikePhantom = PhantomCheck
+                ? std::make_optional(false)
+                : std::nullopt;
         }
     } else {
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
@@ -42,15 +46,15 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.PartMap = blobState.PartMap;
             outResponse.Keep = blobState.Keep;
             outResponse.DoNotKeep = blobState.DoNotKeep;
-            outResponse.LooksLikePhantom = blobState.LooksLikePhantom;
+            outResponse.LooksLikePhantom = PhantomCheck
+                ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
+                : std::nullopt;
 
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;
 
                 // extra validation code for phantom logic
                 if (PhantomCheck) {
-                    outResponse.LooksLikePhantom = true;
-
                     TSubgroupPartLayout possiblyWritten;
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {

@@ -187,7 +187,7 @@ NSQLTranslation::TTranslationSettings GetSettingsWithS3Binding(const TString& na
                             ]
     ]])__";
     bindSettings.Settings["partitioned_by"] = "[\"key\", \"subkey\"]";
-    settings.PrivateBindings[name] = bindSettings;
+    settings.Bindings[name] = bindSettings;
     return settings;
 }
 

@@ -7,13 +7,16 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 class TIndexingActor : public TActorBootstrapped<TIndexingActor> {
+private:
+    const TIndexationCounters Counters;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_INDEXING_ACTOR;
     }
 
-    TIndexingActor(ui64 tabletId, const TActorId& parent)
-        : TabletId(tabletId)
+    TIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
         , Parent(parent)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     {}
@@ -39,6 +42,7 @@ public:
             auto res = BlobsToRead.emplace(blobId, i);
             Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str());
             SendReadRequest(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
+            Counters.ReadBytes->Add(blobId.BlobSize());
         }
 
         if (BlobsToRead.empty()) {
@@ -125,7 +129,7 @@ private:
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
 
             TCpuGuard guard(TxEvent->ResourceUsage);
-            NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering);
+            NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
             TxEvent->Blobs = indexationLogic.Apply(TxEvent->IndexChanges);
             LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
         } else {
@@ -140,8 +144,8 @@ private:
 
 } // namespace
 
-IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent) {
-    return new TIndexingActor(tabletId, parent);
+IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters) {
+    return new TIndexingActor(tabletId, parent, counters);
 }
 
 }

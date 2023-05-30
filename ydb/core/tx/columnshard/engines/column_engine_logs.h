@@ -3,6 +3,9 @@
 #include "defs.h"
 #include "column_engine.h"
 #include "scalars.h"
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include "storage/granule.h"
+#include "storage/storage.h"
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -21,6 +24,9 @@ class TCountersTable;
 ///
 /// @note One instance per tablet.
 class TColumnEngineForLogs : public IColumnEngine {
+private:
+    const NColumnShard::TEngineLogsCounters SignalCounters;
+    std::shared_ptr<TGranulesStorage> GranulesStorage;
 public:
     class TMarksGranules {
     public:
@@ -49,7 +55,18 @@ public:
     };
 
     class TChanges : public TColumnEngineChanges {
+        struct TPrivateTag {
+        };
+
     public:
+        const TGranuleMeta* GetGranuleMeta() const {
+            if (CompactionInfo) {
+                return &CompactionInfo->GetObject<TGranuleMeta>();
+            } else {
+                return nullptr;
+            }
+        }
+
         struct TSrcGranule {
             ui64 PathId{0};
             ui64 Granule{0};
@@ -60,40 +77,39 @@ public:
             {}
         };
 
-        TChanges(const TMark& defaultMark,
-                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TCompactionLimits& limits)
-            : TColumnEngineChanges(TColumnEngineChanges::INSERT)
+        TChanges(TColumnEngineChanges::EType type, const TMark& defaultMark, const TCompactionLimits& limits, const TPrivateTag&)
+            : TColumnEngineChanges(type, limits)
             , DefaultMark(defaultMark)
         {
-            Limits = limits;
-            DataToIndex = std::move(blobsToIndex);
         }
 
-        TChanges(const TMark& defaultMark,
-                 std::unique_ptr<TCompactionInfo>&& info, const TCompactionLimits& limits, const TSnapshot& snapshot)
-            : TColumnEngineChanges(TColumnEngineChanges::COMPACTION)
-            , DefaultMark(defaultMark)
-        {
-            Limits = limits;
-            CompactionInfo = std::move(info);
-            InitSnapshot = snapshot;
+        static std::shared_ptr<TChanges> BuildInsertChanges(const TMark& defaultMark,
+                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot,
+                 const TCompactionLimits& limits) {
+            auto changes = std::make_shared<TChanges>(TColumnEngineChanges::INSERT, defaultMark, limits, TPrivateTag());
+            changes->DataToIndex = std::move(blobsToIndex);
+            changes->InitSnapshot = initSnapshot;
+            return changes;
         }
 
-        TChanges(const TMark& defaultMark,
-                 const TSnapshot& snapshot, const TCompactionLimits& limits)
-            : TColumnEngineChanges(TColumnEngineChanges::CLEANUP)
-            , DefaultMark(defaultMark)
-        {
-            Limits = limits;
-            InitSnapshot = snapshot;
+        static std::shared_ptr<TChanges> BuildCompactionChanges(const TMark& defaultMark,
+                 std::unique_ptr<TCompactionInfo>&& info,
+                 const TCompactionLimits& limits,
+                 const TSnapshot& initSnapshot) {
+            auto changes = std::make_shared<TChanges>(TColumnEngineChanges::COMPACTION, defaultMark, limits, TPrivateTag());
+            changes->CompactionInfo = std::move(info);
+            changes->InitSnapshot = initSnapshot;
+            return changes;
         }
 
-        TChanges(const TMark& defaultMark,
-                 TColumnEngineChanges::EType type, const TSnapshot& applySnapshot)
-            : TColumnEngineChanges(type)
-            , DefaultMark(defaultMark)
-        {
-            ApplySnapshot = applySnapshot;
+        static std::shared_ptr<TChanges> BuildClenupChanges(const TMark& defaultMark, const TSnapshot& initSnapshot, const TCompactionLimits& limits) {
+            auto changes = std::make_shared<TChanges>(TColumnEngineChanges::CLEANUP, defaultMark, limits, TPrivateTag());
+            changes->InitSnapshot = initSnapshot;
+            return changes;
+        }
+
+        static std::shared_ptr<TChanges> BuildTtlChanges(const TMark& defaultMark) {
+            return std::make_shared<TChanges>(TColumnEngineChanges::TTL, defaultMark, TCompactionLimits(), TPrivateTag());
         }
 
         bool AddPathIfNotExists(ui64 pathId) {
@@ -182,13 +198,10 @@ public:
     }
 
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
-        if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
-            return &pi->second;
-        }
-        return nullptr;
+        return GranulesStorage->GetOverloaded(pathId);
     }
 
-    bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
+    bool HasOverloadedGranules() const override { return GranulesStorage->HasOverloadedGranules(); }
 
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
         if (UseCompositeMarks()) {
@@ -214,10 +227,10 @@ public:
 public:
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
 
-    std::shared_ptr<TColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) override;
+    std::shared_ptr<TColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                          const TSnapshot& outdatedSnapshot) override;
-    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                          const TSnapshot& outdatedSnapshot, const TCompactionLimits& limits) override;
+    std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
                                                        ui32 maxRecords) override;
     std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
@@ -228,32 +241,38 @@ public:
     void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) override;
 
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void UpdateCompactionLimits(const TCompactionLimits& limits) override { Limits = limits; }
 
 
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
                                         const TPKRangesFilter& pkRangesFilter) const override;
-    std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) override;
+    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits) override;
 
 private:
     using TMarksMap = std::map<TMark, ui64, TMark::TCompare>;
 
-    struct TGranuleMeta {
-        const TGranuleRecord Record;
-        THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
+    const TGranuleMeta& GetGranuleVerified(const ui64 granuleId) const {
+        auto it = Granules.find(granuleId);
+        Y_VERIFY(it != Granules.end());
+        return *it->second;
+    }
 
-        explicit TGranuleMeta(const TGranuleRecord& rec)
-            : Record(rec)
-        {}
+    std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const ui64 granuleId) const {
+        auto result = GetGranuleOptional(granuleId);
+        Y_VERIFY(result);
+        return result;
+    }
 
-        ui64 PathId() const noexcept { return Record.PathId; }
-        bool Empty() const noexcept { return Portions.empty(); }
-    };
+    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const ui64 granuleId) const {
+        auto it = Granules.find(granuleId);
+        if (it == Granules.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
 
     TVersionedIndex VersionedIndex;
-    TCompactionLimits Limits;
     ui64 TabletId;
     std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
@@ -261,12 +280,9 @@ private:
     THashMap<ui64, std::shared_ptr<TGranuleMeta>> Granules; // granule -> meta
     THashMap<ui64, TMarksMap> PathGranules; // path_id -> {mark, granule}
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
-    THashSet<ui64> GranulesInSplit;
     /// Set of empty granules.
     /// Just for providing count of empty granules.
     THashSet<ui64> EmptyGranules;
-    THashMap<ui64, THashSet<ui64>> PathsGranulesOverloaded;
-    TSet<ui64> CompactionGranules;
     THashSet<ui64> CleanupGranules;
     TColumnEngineStats Counters;
     ui64 LastPortion;
@@ -294,10 +310,7 @@ private:
         Granules.clear();
         PathGranules.clear();
         PathStats.clear();
-        GranulesInSplit.clear();
         EmptyGranules.clear();
-        PathsGranulesOverloaded.clear();
-        CompactionGranules.clear();
         CleanupGranules.clear();
         Counters.Clear();
 
@@ -322,7 +335,6 @@ private:
                             EStatsUpdateType updateType) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
-    void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules);
 
     /// Return lists of adjacent empty granules for the path.
     std::vector<std::vector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;

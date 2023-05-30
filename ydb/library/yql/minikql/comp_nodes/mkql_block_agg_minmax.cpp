@@ -968,18 +968,19 @@ public:
 
     std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
         TTupleType* tupleType,
-        std::optional<ui32> filterColumn,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env) const final {
         Y_UNUSED(env);
-        return PrepareMinMax<TCombineKeysTag, IsMin>(tupleType, filterColumn, argsColumns[0]);
+        return PrepareMinMax<TCombineKeysTag, IsMin>(tupleType, std::optional<ui32>(), argsColumns[0]);
     }
 
     std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
-        const TTypeEnvironment& env) const final {
+        const TTypeEnvironment& env,
+        TType* returnType) const final {
         Y_UNUSED(env);
+        Y_UNUSED(returnType);
         return PrepareMinMax<TFinalizeKeysTag, IsMin>(tupleType, std::optional<ui32>(), argsColumns[0]);
     }
 };

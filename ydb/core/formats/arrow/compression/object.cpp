@@ -19,22 +19,6 @@ TConclusionStatus NKikimr::NArrow::TCompression::Validate() const {
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus NKikimr::NArrow::TCompression::ApplyDiff(const TCompressionDiff& diff) {
-    TCompression merged = *this;
-    if (diff.GetCodec()) {
-        merged.Codec = *diff.GetCodec();
-    }
-    if (diff.GetLevel()) {
-        merged.Level = *diff.GetLevel();
-    }
-    auto validation = merged.Validate();
-    if (!validation) {
-        return validation;
-    }
-    std::swap(*this, merged);
-    return TConclusionStatus::Success();
-}
-
 TConclusionStatus TCompression::DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& compression) {
     if (compression.HasCompressionCodec()) {
         auto codecOpt = NArrow::CompressionFromProto(compression.GetCompressionCodec());
@@ -68,6 +52,19 @@ std::unique_ptr<arrow::util::Codec> TCompression::BuildArrowCodec() const {
     return NArrow::TStatusValidator::GetValid(
         arrow::util::Codec::Create(
             Codec, Level.value_or(arrow::util::kUseDefaultCompressionLevel)));
+}
+
+NKikimr::TConclusion<NKikimr::NArrow::TCompression> TCompression::BuildFromProto(const NKikimrSchemeOp::TCompressionOptions& compression) {
+    TCompression result;
+    auto resultStatus = result.DeserializeFromProto(compression);
+    if (!resultStatus) {
+        return resultStatus;
+    }
+    return result;
+}
+
+std::unique_ptr<arrow::util::Codec> TCompression::BuildDefaultCodec() {
+    return *arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
 }
 
 }

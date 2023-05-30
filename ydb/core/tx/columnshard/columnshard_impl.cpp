@@ -681,6 +681,11 @@ bool TColumnShard::SetupIndexation() {
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     THashMap<ui64, ui64> overloadedPathGranules;
     for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
+        auto* pMap = TablesManager.GetPrimaryIndexSafe().GetOverloadedGranules(pathId);
+        if (pMap) {
+            overloadedPathGranules[pathId] = pMap->size();
+        }
+        InsertTable->SetOverloaded(pathId, !!pMap);
         for (auto& data : committed) {
             ui32 dataSize = data.BlobSize();
             Y_VERIFY(dataSize);
@@ -689,13 +694,9 @@ bool TColumnShard::SetupIndexation() {
             if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
                 continue;
             }
-            if (auto* pMap = TablesManager.GetPrimaryIndexSafe().GetOverloadedGranules(data.PathId)) {
-                overloadedPathGranules[pathId] = pMap->size();
-                InsertTable->SetOverloaded(data.PathId, true);
+            if (pMap) {
                 ++ignored;
                 continue;
-            } else {
-                InsertTable->SetOverloaded(data.PathId, false);
             }
             ++blobs;
             bytesToIndex += dataSize;
@@ -713,7 +714,7 @@ bool TColumnShard::SetupIndexation() {
         LOG_S_DEBUG("Few data for indexation (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
             << ignored << ") at tablet " << TabletID());
 
-        // Force small indexations simetimes to keep BatchCache smaller
+        // Force small indexations sometimes to keep BatchCache smaller
         if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
             ++SkippedIndexations;
             return false;
@@ -737,7 +738,7 @@ bool TColumnShard::SetupIndexation() {
     }
 
     Y_VERIFY(data.size());
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(std::move(data));
+    auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(CompactionLimits.Get(), std::move(data));
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare indexing at tablet " << TabletID());
         return false;
@@ -759,21 +760,19 @@ bool TColumnShard::SetupCompaction() {
     std::vector<std::unique_ptr<TEvPrivate::TEvCompaction>> events;
 
     while (ActiveCompaction < TSettings::MAX_ACTIVE_COMPACTIONS) {
-        TablesManager.MutablePrimaryIndex().UpdateCompactionLimits(CompactionLimits.Get());
-        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(LastCompactedGranule);
-        if (!compactionInfo || compactionInfo->Empty()) {
+        auto limits = CompactionLimits.Get();
+        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits);
+        if (!compactionInfo) {
             if (events.empty()) {
                 LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
             }
             break;
         }
 
-        Y_VERIFY(compactionInfo->Good());
-
         LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
 
         ui64 outdatedStep = GetOutdatedStep();
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(outdatedStep, 0));
+        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(outdatedStep, 0), limits);
         if (!indexChanges) {
             if (events.empty()) {
                 LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
@@ -859,7 +858,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
 
-    auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, TLimits::MAX_TX_RECORDS);
+    auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, CompactionLimits.Get(), TLimits::MAX_TX_RECORDS);
     if (!changes) {
         LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
         return {};

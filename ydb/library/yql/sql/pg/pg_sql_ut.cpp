@@ -185,4 +185,19 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         auto issue = *(res.Issues.begin());
         UNIT_ASSERT(issue.GetMessage().find("PK column does not belong to table") != TString::npos);
     }
+    
+    Y_UNIT_TEST(CreateTableStmt_AliasSerialToIntType) {
+        auto res = PgSqlToYql("CREATE TABLE t (a SerIAL)");
+        UNIT_ASSERT(res.Root);
+        
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4))))))) 
+                (let world (CommitAll! world)) 
+                (return world))
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
 }

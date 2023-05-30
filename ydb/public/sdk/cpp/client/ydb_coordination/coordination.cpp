@@ -2,7 +2,7 @@
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>

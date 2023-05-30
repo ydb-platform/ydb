@@ -111,9 +111,7 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
         if (NotIndexedBatch) {
             RecordBatches.emplace_back(NotIndexedBatch);
         }
-        if (Owner->GetReadMetadata()->Program) {
-            NotIndexedBatchFutureFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Owner->GetReadMetadata()->Program));
-        }
+        NotIndexedBatchFutureFilter = Owner->GetReadMetadata()->GetProgram().BuildEarlyFilter(batch);
         DuplicationsAvailableFlag = true;
     }
     CheckReady();

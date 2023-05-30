@@ -1,8 +1,5 @@
 #include "symbolizer.h"
-
-#include <llvm/DebugInfo/Symbolize/Symbolize.h>
-#include <llvm/DebugInfo/Symbolize/DIPrinter.h>
-#include <llvm/Support/raw_ostream.h>
+#include "fake_llvm_symbolizer/fake_llvm_symbolizer.h"
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -38,73 +35,37 @@ int DlIterCallback(struct dl_phdr_info *info, size_t size, void *data)
     return 0;
 }
 
-class TRawOStreamProxy: public llvm::raw_ostream {
-public:
-    TRawOStreamProxy(std::ostream& out)
-        : llvm::raw_ostream(true) // unbuffered
-        , Slave_(out)
-    {
-    }
-    void write_impl(const char* ptr, size_t size) override {
-        Slave_.write(ptr, size);
-    }
-    uint64_t current_pos() const override {
-        return 0;
-    }
-    size_t preferred_buffer_size() const override {
-        return 0;
-    }
-private:
-    std::ostream& Slave_;
-};
-
 class TBacktraceSymbolizer : public IBacktraceSymbolizer {
 public:
-    TBacktraceSymbolizer(bool kikimrFormat) : IBacktraceSymbolizer(), Symbolyzer(Opts), KikimrFormat(kikimrFormat) {
-        dl_iterate_phdr(DlIterCallback, &DLLs);
+    TBacktraceSymbolizer(bool kikimrFormat) : IBacktraceSymbolizer(), KikimrFormat_(kikimrFormat) {
+        dl_iterate_phdr(DlIterCallback, &DLLs_);
         
     }
 
     TString SymbolizeFrame(void* ptr) override {
         ui64 address = (ui64)ptr - 1;
         ui64 offset = 0;
-        TString modulePath = BinaryPath;
+        TString modulePath = BinaryPath_;
 #ifdef _linux_
         Dl_info dlInfo;
         memset(&dlInfo, 0, sizeof(dlInfo));
         auto ret = dladdr((void*)address, &dlInfo);
         if (ret) {
             auto path = dlInfo.dli_fname;
-            auto it = DLLs.find(path);
-            if (it != DLLs.end()) {
+            auto it = DLLs_.find(path);
+            if (it != DLLs_.end()) {
                 modulePath = path;
                 offset = it->second.BaseAddress;
             }
         }
 #endif
-        if (!KikimrFormat) {
+        if (!KikimrFormat_) {
             return "StackFrame: " + modulePath + " " + address + " " + offset + "\n";
         }
 
-        llvm::symbolize::SectionedAddress secAddr;
+        llvm::object::SectionedAddress secAddr;
         secAddr.Address = address - offset;
-        auto resOrErr = Symbolyzer.symbolizeCode(modulePath, secAddr);
-        if (resOrErr) {
-            auto value = resOrErr.get();
-            if (value.FileName == "<invalid>" && offset > 0) {
-                value.FileName = modulePath;
-            }
-
-            std::stringstream ss;
-            TRawOStreamProxy stream_proxy(ss);
-            llvm::symbolize::DIPrinter printer(stream_proxy, true, true, false);
-            printer << value;
-            ss.flush();
-
-            return ss.str();
-        } else {
-            return "LLVMSymbolizer: error reading file...";
-        }
+        return NYql::NBacktrace::SymbolizeAndDumpToString(modulePath, secAddr, offset);
     }
 
     ~TBacktraceSymbolizer() override {
@@ -112,11 +73,9 @@ public:
     }
     
 private:
-    THashMap<TString, TDllInfo> DLLs;
-    llvm::symbolize::LLVMSymbolizer::Options Opts;
-    llvm::symbolize::LLVMSymbolizer Symbolyzer;
-    TString BinaryPath = GetPersistentExecPath();
-    bool KikimrFormat;
+    THashMap<TString, TDllInfo> DLLs_;
+    TString BinaryPath_ = GetPersistentExecPath();
+    bool KikimrFormat_;
 };
 
 std::unique_ptr<IBacktraceSymbolizer> BuildSymbolizer(bool format) {

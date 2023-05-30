@@ -5,14 +5,23 @@
 #include <util/system/types.h>
 #include <util/generic/string.h>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NConstruction {
 
 template <class TArrowInt>
 class TIntSeqFiller {
 public:
     using TValue = TArrowInt;
-    typename TArrowInt::c_type GetValue(const ui32 idx) const {
-        return idx;
+private:
+    using CType = typename TArrowInt::c_type;
+    const CType Delta;
+public:
+    CType GetValue(const CType idx) const {
+        return Delta + idx;
+    }
+    TIntSeqFiller(const CType delta = 0)
+        : Delta(delta)
+    {
+
     }
 };
 
@@ -42,6 +51,22 @@ public:
     }
 };
 
+template <class TValueExt>
+class TBinaryArrayAccessor {
+private:
+    using TArray = typename arrow::TypeTraits<TValueExt>::ArrayType;
+    const TArray& Data;
+public:
+    using TValue = TValueExt;
+    const char* GetValueView(const ui32 idx) const {
+        return Data.GetView(idx).data();
+    }
+
+    TBinaryArrayAccessor(const arrow::Array& data)
+        : Data(static_cast<const TArray&>(data)) {
+    }
+};
+
 template <class TDictionaryValue, class TIndices>
 class TDictionaryArrayAccessor {
 private:
@@ -56,8 +81,32 @@ public:
 
     TDictionaryArrayAccessor(const TDictionary& dictionary, const TIndices& indices)
         : Dictionary(dictionary)
+        , Indices(indices) {
+    }
+};
+
+template <class TDictionaryValue, class TIndices>
+class TBinaryDictionaryArrayAccessor {
+private:
+    using TDictionary = typename arrow::TypeTraits<TDictionaryValue>::ArrayType;
+    const TDictionary& Dictionary;
+    const TIndices& Indices;
+    std::vector<TString> DictionaryStrings;
+public:
+    using TValue = TDictionaryValue;
+    const char* GetValueView(const ui32 idx) const {
+        return DictionaryStrings[Indices.Value(idx)].data();
+    }
+
+    TBinaryDictionaryArrayAccessor(const TDictionary& dictionary, const TIndices& indices)
+        : Dictionary(dictionary)
         , Indices(indices)
     {
+        DictionaryStrings.reserve(Dictionary.length());
+        for (i64 idx = 0; idx < Dictionary.length(); ++idx) {
+            auto sView = Dictionary.Value(idx);
+            DictionaryStrings.emplace_back(TString(sView.data(), sView.size()));
+        }
     }
 };
 

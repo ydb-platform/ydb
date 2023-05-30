@@ -1,6 +1,11 @@
 #include "log_impl.h"
+#include "local_pgwire_util.h"
+
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
@@ -10,249 +15,43 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-// temporary borrowed from postgresql/src/backend/catalog/pg_type_d.h
-
-#define BOOLOID 16
-#define BYTEAOID 17
-#define CHAROID 18
-#define NAMEOID 19
-#define INT8OID 20
-#define INT2OID 21
-#define INT2VECTOROID 22
-#define INT4OID 23
-#define REGPROCOID 24
-#define TEXTOID 25
-
-//
-
 namespace NLocalPgWire {
 
 using namespace NActors;
 using namespace NKikimr;
 
-class TPgYdbConnection : public TActorBootstrapped<TPgYdbConnection> {
-    using TBase = TActorBootstrapped<TPgYdbConnection>;
+extern NActors::IActor* CreatePgwireKqpProxy(
+    std::unordered_map<TString, TString> params
+);
 
-    struct TParsedStatement {
-        NPG::TPGParse::TQueryData QueryData;
-        NPG::TPGBind::TBindData BindData;
-    };
+NActors::IActor* CreatePgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
+
+class TPgYdbConnection : public TActor<TPgYdbConnection> {
+    using TBase = TActor<TPgYdbConnection>;
 
     std::unordered_map<TString, TString> ConnectionParams;
     std::unordered_map<TString, TParsedStatement> ParsedStatements;
     TString CurrentStatement;
+    Ydb::StatusIds QueryStatus;
+    std::unordered_map<ui32, NYdb::TResultSet> ResultSets;
 
 public:
     TPgYdbConnection(std::unordered_map<TString, TString> params)
-        : ConnectionParams(std::move(params))
+        : TActor<TPgYdbConnection>(&TPgYdbConnection::StateWork)
+        , ConnectionParams(std::move(params))
     {}
-
-    void Bootstrap() {
-        Become(&TPgYdbConnection::StateWork);
-    }
-
-    static TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {
-        switch (valueParser.GetPrimitiveType()) {
-            case NYdb::EPrimitiveType::Bool:
-                return TStringBuilder() << valueParser.GetBool();
-            case NYdb::EPrimitiveType::Int8:
-                return TStringBuilder() << valueParser.GetInt8();
-            case NYdb::EPrimitiveType::Uint8:
-                return TStringBuilder() << valueParser.GetUint8();
-            case NYdb::EPrimitiveType::Int16:
-                return TStringBuilder() << valueParser.GetInt16();
-            case NYdb::EPrimitiveType::Uint16:
-                return TStringBuilder() << valueParser.GetUint16();
-            case NYdb::EPrimitiveType::Int32:
-                return TStringBuilder() << valueParser.GetInt32();
-            case NYdb::EPrimitiveType::Uint32:
-                return TStringBuilder() << valueParser.GetUint32();
-            case NYdb::EPrimitiveType::Int64:
-                return TStringBuilder() << valueParser.GetInt64();
-            case NYdb::EPrimitiveType::Uint64:
-                return TStringBuilder() << valueParser.GetUint64();
-            case NYdb::EPrimitiveType::Float:
-                return TStringBuilder() << valueParser.GetFloat();
-            case NYdb::EPrimitiveType::Double:
-                return TStringBuilder() << valueParser.GetDouble();
-            case NYdb::EPrimitiveType::Utf8:
-                return TStringBuilder() << valueParser.GetUtf8();
-            case NYdb::EPrimitiveType::Date:
-                return valueParser.GetDate().ToString();
-            case NYdb::EPrimitiveType::Datetime:
-                return valueParser.GetDatetime().ToString();
-            case NYdb::EPrimitiveType::Timestamp:
-                return valueParser.GetTimestamp().ToString();
-            case NYdb::EPrimitiveType::Interval:
-                return TStringBuilder() << valueParser.GetInterval();
-            case NYdb::EPrimitiveType::TzDate:
-                return valueParser.GetTzDate();
-            case NYdb::EPrimitiveType::TzDatetime:
-                return valueParser.GetTzDatetime();
-            case NYdb::EPrimitiveType::TzTimestamp:
-                return valueParser.GetTzTimestamp();
-            case NYdb::EPrimitiveType::String:
-                return Base64Encode(valueParser.GetString());
-            case NYdb::EPrimitiveType::Yson:
-                return valueParser.GetYson();
-            case NYdb::EPrimitiveType::Json:
-                return valueParser.GetJson();
-            case NYdb::EPrimitiveType::JsonDocument:
-                return valueParser.GetJsonDocument();
-            case NYdb::EPrimitiveType::DyNumber:
-                return valueParser.GetDyNumber();
-            case NYdb::EPrimitiveType::Uuid:
-                return {};
-        }
-        return {};
-    }
-
-    static TString ColumnValueToString(NYdb::TValueParser& valueParser) {
-        switch (valueParser.GetKind()) {
-        case NYdb::TTypeParser::ETypeKind::Primitive:
-            return ColumnPrimitiveValueToString(valueParser);
-        case NYdb::TTypeParser::ETypeKind::Optional: {
-            TString value;
-            valueParser.OpenOptional();
-            if (valueParser.IsNull()) {
-                value = "NULL";
-            } else {
-                value = ColumnValueToString(valueParser);
-            }
-            valueParser.CloseOptional();
-            return value;
-        }
-        case NYdb::TTypeParser::ETypeKind::Tuple: {
-            TString value;
-            valueParser.OpenTuple();
-            while (valueParser.TryNextElement()) {
-                if (!value.empty()) {
-                    value += ',';
-                }
-                value += ColumnValueToString(valueParser);
-            }
-            valueParser.CloseTuple();
-            return value;
-        }
-        case NYdb::TTypeParser::ETypeKind::Pg: {
-            return valueParser.GetPg().Content_;
-        }
-        default:
-            return {};
-        }
-    }
-
-    TString ToPgSyntax(TStringBuf query) {
-        auto itOptions = ConnectionParams.find("options");
-        if (itOptions == ConnectionParams.end()) {
-            return TStringBuilder() << "--!syntax_pg\n" << query; // default
-        }
-        return TStringBuilder() << "--!" << itOptions->second << "\n" << query;
-    }
-
-    static NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::Scripting::ExecuteYqlResponse&& proto) {
-        TVector<NYdb::TResultSet> res;
-        TMaybe<NYdb::NTable::TQueryStats> queryStats;
-        {
-            Ydb::Scripting::ExecuteYqlResult result;
-            proto.mutable_operation()->mutable_result()->UnpackTo(&result);
-            for (int i = 0; i < result.result_sets_size(); i++) {
-                res.emplace_back(std::move(*result.mutable_result_sets(i)));
-            }
-            if (result.has_query_stats()) {
-                queryStats = NYdb::NTable::TQueryStats(std::move(*result.mutable_query_stats()));
-            }
-        }
-        NYdb::TPlainStatus alwaysSuccess;
-        return {NYdb::TStatus(std::move(alwaysSuccess)), std::move(res), queryStats};
-    }
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
         BLOG_D("TEvQuery " << ev->Sender);
-        auto query(ev->Get()->Message->GetQuery());
-        if (IsQueryEmpty(query)) {
+        if (IsQueryEmpty(ev->Get()->Message->GetQuery())) {
             auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
             response->EmptyQuery = true;
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             return;
         }
-        Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(query));
-        TString database;
-        if (ConnectionParams.count("database")) {
-            database = ConnectionParams["database"];
-        }
-        TString token;
-        if (ConnectionParams.count("ydb-serialized-token")) {
-            token = ConnectionParams["ydb-serialized-token"];
-        }
-        using TRpcEv = NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
-        TActorSystem* actorSystem = TActivationContext::ActorSystem();
-        auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, token, actorSystem);
-        rpcFuture.Subscribe([actorSystem, ev](NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse> future) {
-            auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
-            // HACK
-            if (ev->Get()->Message->GetQuery().starts_with("BEGIN")) {
-                response->Tag = "BEGIN";
-            }
-            // HACK
-            try {
-                Ydb::Scripting::ExecuteYqlResponse yqlResponse(future.ExtractValueSync());
-                if (yqlResponse.has_operation()) {
-                    if (yqlResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
-                        if (yqlResponse.operation().has_result()) {
-                            NYdb::NScripting::TExecuteYqlResult result(ConvertProtoResponseToSdkResult(std::move(yqlResponse)));
-                            if (result.IsSuccess()) {
-                                const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
-                                if (!resultSets.empty()) {
-                                    NYdb::TResultSet resultSet = resultSets[0];
 
-                                    {
-                                        for (const NYdb::TColumn& column : resultSet.GetColumnsMeta()) {
-                                            // TODO: fill data types and sizes
-                                            response->DataFields.push_back({
-                                                .Name = column.Name,
-                                            });
-                                        }
-                                    }
-
-                                    {
-                                        NYdb::TResultSetParser parser(std::move(resultSet));
-                                        while (parser.TryNextRow()) {
-                                            response->DataRows.emplace_back();
-                                            auto& row = response->DataRows.back();
-                                            row.resize(parser.ColumnsCount());
-                                            for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                                                row[index] = ColumnValueToString(parser.ColumnParser(index));
-                                            }
-                                        }
-                                    }
-
-                                    // HACK
-                                    response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
-                                    // HACK
-                                }
-                            }
-                        }
-                    } else {
-                        NYql::TIssues issues;
-                        NYql::IssuesFromMessage(yqlResponse.operation().issues(), issues);
-                        NYdb::TStatus status(NYdb::EStatus(yqlResponse.operation().status()), std::move(issues));
-                        response->ErrorFields.push_back({'E', "ERROR"});
-                        response->ErrorFields.push_back({'M', TStringBuilder() << status});
-                    }
-                } else {
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', "No result received"});
-                }
-            }
-            catch (const std::exception& e) {
-                response->ErrorFields.push_back({'E', "ERROR"});
-                response->ErrorFields.push_back({'M', e.what()});
-            }
-
-            actorSystem->Send(ev->Sender, response.release(), 0, ev->Cookie);
-        });
+        TActorId actorId = Register(CreatePgwireKqpProxyQuery(ConnectionParams, std::move(ev)));
+        BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
     }
 
     void Handle(NPG::TEvPGEvents::TEvParse::TPtr& ev) {
@@ -285,55 +84,6 @@ public:
         Send(ev->Sender, closeComplete.release());
     }
 
-    struct TConvertedQuery {
-        TString Query;
-        NYdb::TParams Params;
-    };
-
-    TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
-        auto& bindData = statement.BindData;
-        const auto& queryData = statement.QueryData;
-        NYdb::TParamsBuilder paramsBuilder;
-        TStringBuilder injectedQuery;
-
-        for (size_t idxParam = 0; idxParam < queryData.ParametersTypes.size(); ++idxParam) {
-            int32_t paramType = queryData.ParametersTypes[idxParam];
-            TString paramValue;
-            if (idxParam < bindData.ParametersValue.size()) {
-                std::vector<uint8_t> paramVal = bindData.ParametersValue[idxParam];
-                paramValue = TString(reinterpret_cast<char*>(paramVal.data()), paramVal.size());
-            }
-            switch (paramType) {
-                case INT2OID:
-                    paramsBuilder.AddParam(TStringBuilder() << ":_" << idxParam + 1).Int16(atoi(paramValue.data())).Build();
-                    break;
-
-            }
-        }
-        return {
-            .Query = injectedQuery + queryData.Query,
-            .Params = paramsBuilder.Build(),
-        };
-    }
-
-    inline static bool IsWhitespaceASCII(char c)
-    {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
-    }
-
-    static bool IsWhitespace(TStringBuf query) {
-        for (char c : query) {
-            if (!IsWhitespaceASCII(c)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    static bool IsQueryEmpty(TStringBuf query) {
-        return IsWhitespace(query);
-    }
-
     void Handle(NPG::TEvPGEvents::TEvDescribe::TPtr& ev) {
         BLOG_D("TEvDescribe " << ev->Sender);
 
@@ -354,7 +104,7 @@ public:
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         auto query = ConvertQuery(it->second);
         Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(query.Query));
+        request.set_script(ToPgSyntax(query.Query, ConnectionParams));
         // TODO:
         //request.set_parameters(query.Params);
         TString database;
@@ -386,6 +136,7 @@ public:
                                             // TODO: fill data types and sizes
                                             response->DataFields.push_back({
                                                 .Name = column.Name,
+                                                .DataType = GetPgOidFromYdbType(column.Type),
                                             });
                                         }
                                     }
@@ -443,7 +194,7 @@ public:
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         auto query = ConvertQuery(it->second);
         Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(query.Query));
+        request.set_script(ToPgSyntax(query.Query, ConnectionParams));
         // TODO:
         //request.set_parameters(query.Params);
         TString database;

@@ -4,6 +4,7 @@
 #include "tx.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -25,8 +26,14 @@ public:
     TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
+    TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
+        const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
+
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
+
+    TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
+        const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());

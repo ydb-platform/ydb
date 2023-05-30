@@ -1143,15 +1143,17 @@ ui64 TPipeline::GetInactiveTxSize() const {
     return res;
 }
 
-void TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
+bool TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
     Y_VERIFY(tx && tx->TxId());
     if (DataTxCache.size() <= Config.LimitDataTxCache) {
         ui64 quota = tx->GetTxSize() + tx->GetMemoryAllocated();
         if (Self->TryCaptureTxCache(quota)) {
             tx->SetTxCacheUsage(quota);
             DataTxCache[tx->TxId()] = tx;
+            return true;
         }
     }
+    return false;
 }
 
 void TPipeline::SetProposed(ui64 txId, const TActorId& actorId) {
@@ -1393,7 +1395,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
             badRequest("Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction");
             return tx;
-        } else if (tx->IsKqpScanTransaction() && dataTx->GetKqpTransaction().HasSnapshot()) {
+        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
             badRequest("Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction");
             return tx;
         }
@@ -1421,9 +1423,9 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 
         if (!tx->IsImmediate() || !Self->IsMvccEnabled()) {
             // No op
-        } else if (tx->IsKqpScanTransaction() && dataTx->GetKqpTransaction().HasSnapshot()) {
+        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
             // to be consistent while dependencies calculation
-            auto snapshot = dataTx->GetKqpTransaction().GetSnapshot();
+            auto snapshot = dataTx->GetKqpSnapshot();
             tx->SetMvccSnapshot(TRowVersion(snapshot.GetStep(), snapshot.GetTxId()));
         }
     }
@@ -1439,6 +1441,31 @@ void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, co
     // for restarted immediate tx.
     if (dataTx->ProgramSize() || dataTx->IsKqpDataTx())
         dataTx->ExtractKeys(false);
+}
+
+void TPipeline::RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db)
+{
+    if (op->HasFlag(TTxFlags::DistributedWritesRegistered)) {
+        return;
+    }
+
+    // Try to cache write keys if possible
+    if (!op->IsImmediate() && op->HasKeysInfo()) {
+        auto& keysInfo = op->GetKeysInfo();
+        if (keysInfo.WritesCount > 0) {
+            TConflictsCache::TPendingWrites writes;
+            for (const auto& vk : keysInfo.Keys) {
+                const auto& k = *vk.Key;
+                if (vk.IsWrite && k.Range.Point && Self->IsUserTable(k.TableId)) {
+                    writes.emplace_back(Self->GetLocalTableId(k.TableId), k.Range.GetOwnedFrom());
+                }
+            }
+            if (!writes.empty()) {
+                Self->GetConflictsCache().RegisterDistributedWrites(op->GetTxId(), std::move(writes), db);
+            }
+            op->SetFlag(TTxFlags::DistributedWritesRegistered);
+        }
+    }
 }
 
 EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx)

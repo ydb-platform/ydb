@@ -187,6 +187,11 @@ namespace NTest {
             return *this;
         }
 
+        TChecker& StopAfter(TArrayRef<const TCell> key) {
+            Wrap.StopAfter(key);
+            return *this;
+        }
+
         TChecker& Next()
         {
             while (true) {

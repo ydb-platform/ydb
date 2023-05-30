@@ -371,7 +371,7 @@ private:
         bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
         bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
 
-        bool enableSequentialHints = Config.GetEnableSequentialHints();
+        bool enableSequentialReads = Config.GetEnableSequentialReads();
         bool defaultSyntaxVersion = Config.GetSqlVersion();
 
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -388,7 +388,7 @@ private:
             Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
             Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
             Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
-            Config.GetEnableSequentialHints() != enableSequentialHints) {
+            Config.GetEnableSequentialReads() != enableSequentialReads) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<

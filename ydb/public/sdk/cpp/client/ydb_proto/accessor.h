@@ -25,7 +25,6 @@ class TType;
 class TParams;
 
 namespace NTable {
-class TQueryStats;
 class TTableDescription;
 class TIndexDescription;
 }

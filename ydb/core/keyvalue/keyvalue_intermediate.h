@@ -61,7 +61,7 @@ struct TIntermediate {
     struct TWrite {
         TVector<TLogoBlobID> LogoBlobIds;
         TString Key;
-        TString Data;
+        TRcBuf Data;
         TEvBlobStorage::TEvPut::ETactic Tactic;
         NKikimrBlobStorage::EPutHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;

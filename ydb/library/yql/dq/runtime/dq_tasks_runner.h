@@ -282,15 +282,127 @@ using TDqTaskRunnerParameterProvider = std::function<
          const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
 >;
 
+class TDqTaskSettings {
+public:
+    explicit TDqTaskSettings(NDqProto::TDqTask&& task)
+        : Task_(std::move(task))
+    {}
+
+    explicit TDqTaskSettings(const NDqProto::TDqTask& task)
+        : Task_(task)
+    {}
+
+    ui64 GetId() const {
+        return Task_.GetId();
+    }
+
+    bool GetCreateSuspended() const {
+        return Task_.GetCreateSuspended();
+    }
+
+    const NDqProto::TDqTask& GetSerializedTask() const {
+        Y_VERIFY(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
+        return Task_;
+    }
+
+    const ::NYql::NDqProto::TTaskInput& GetInputs(size_t index) const {
+        return Task_.GetInputs(index);
+    }
+
+    const ::NYql::NDqProto::TTaskOutput& GetOutputs(size_t index) const {
+        return Task_.GetOutputs(index);
+    }
+
+    const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TTaskInput> GetInputs() const {
+        return Task_.GetInputs();
+    }
+
+    size_t InputsSize() const {
+        return Task_.InputsSize();
+    }
+
+    size_t OutputsSize() const {
+        return Task_.OutputsSize();
+    }
+
+    void SetParamsProvider(TDqTaskRunnerParameterProvider&& provider) {
+        ParamProvider = std::move(provider);
+    }
+
+    void GetParameterValue(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::TUnboxedValue& value) const
+    {
+        if (ParamProvider && ParamProvider(name, type, typeEnv, holderFactory, value)) {
+#ifndef NDEBUG
+            YQL_ENSURE(!Task_.GetParameters().contains(name), "param: " << name);
+#endif
+        } else {
+            auto it = Task_.GetParameters().find(name);
+            YQL_ENSURE(it != Task_.GetParameters().end());
+
+            auto guard = typeEnv.BindAllocator();
+            TDqDataSerializer::DeserializeParam(it->second, type, holderFactory, value);
+        }
+    }
+
+    ui64 GetStageId() const {
+        return Task_.GetStageId();
+    }
+
+    const ::NYql::NDqProto::TProgram& GetProgram() const {
+        return Task_.GetProgram();
+    }
+
+    const TProtoStringType & GetRateLimiterResource() const {
+        return Task_.GetRateLimiterResource();
+    }
+
+    const TProtoStringType& GetRateLimiter() const {
+        return Task_.GetRateLimiter();
+    }
+
+    const ::google::protobuf::Map<TProtoStringType, ::NYql::NDqProto::TData>& GetParameters() const {
+        return Task_.GetParameters();
+    }
+
+    const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& GetTaskParams() const {
+        return Task_.GetTaskParams();
+    }
+
+    const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& GetSecureParams() const {
+        return Task_.GetSecureParams();
+    }
+
+    const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TTaskOutput>& GetOutputs() const {
+        return Task_.GetOutputs();
+    }
+
+    const ::google::protobuf::Any& GetMeta() const {
+        return Task_.GetMeta();
+    }
+
+    bool GetUseLlvm() const {
+        return Task_.GetUseLlvm();
+    }
+
+    bool HasUseLlvm() const {
+        return Task_.HasUseLlvm();
+    }
+
+private:
+    // external callback to retrieve parameter value.
+    TDqTaskRunnerParameterProvider ParamProvider;
+    NDqProto::TDqTask Task_;
+};
+
 class IDqTaskRunner : public TSimpleRefCount<IDqTaskRunner>, private TNonCopyable {
 public:
     virtual ~IDqTaskRunner() = default;
 
     virtual ui64 GetTaskId() const = 0;
 
-    virtual void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext(),
-        const TDqTaskRunnerParameterProvider& parameterProvider = {}) = 0;
+    virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
+        const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;

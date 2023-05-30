@@ -157,7 +157,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithSuccess() {
-                if (IS_LOG_PRIORITY_ENABLED(*TlsActivationContext, NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
+                if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (const auto& r : Response->Responses) {
                         BDEV_QUERY(BDEV22, "TEvRange_item", (BlobId, r.Id), (Buffer.size, r.Buffer.size()));
                     }

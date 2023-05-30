@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -2634,38 +2635,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         return pqConfig;
     }
 
-    static const char* ModeToString(EChangefeedMode mode) {
-        switch (mode) {
-        case EChangefeedMode::KeysOnly:
-            return "KEYS_ONLY";
-        case EChangefeedMode::Updates:
-            return "UPDATES";
-        case EChangefeedMode::NewImage:
-            return "NEW_IMAGE";
-        case EChangefeedMode::OldImage:
-            return "OLD_IMAGE";
-        case EChangefeedMode::NewAndOldImages:
-            return "NEW_AND_OLD_IMAGES";
-        case EChangefeedMode::Unknown:
-            UNIT_ASSERT(false);
-            return "";
-        }
-    }
-
-    static const char* FormatToString(EChangefeedFormat format) {
-        switch (format) {
-        case EChangefeedFormat::Json:
-            return "JSON";
-        case EChangefeedFormat::DynamoDBStreamsJson:
-            return "DYNAMODB_STREAMS_JSON";
-        case EChangefeedFormat::Unknown:
-            UNIT_ASSERT(false);
-            return "";
-        }
-    }
-
     void AddChangefeed(EChangefeedMode mode, EChangefeedFormat format) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedDynamoDBStreamsFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2694,7 +2667,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
                     MODE = '%s', FORMAT = '%s'
                 );
-            )", ModeToString(mode), FormatToString(format));
+            )", ToString(mode).c_str(), ToString(format).c_str());
 
             const auto result = session.ExecuteSchemeQuery(query, execOpts).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2778,7 +2751,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AddChangefeedNegative) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedDynamoDBStreamsFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2869,7 +2844,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ChangefeedAwsRegion) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedDynamoDBStreamsFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2888,7 +2865,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
-                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'DOCUMENT_TABLE_JSON', AWS_REGION = 'aws:region'
+                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'DYNAMODB_STREAMS_JSON', AWS_REGION = 'aws:region'
                 );
             )";
 
@@ -3545,12 +3522,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+#if 0 // TODO
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(tiering);
+            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+        }
+#endif
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` SET(TIERING = 'tiering2');)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(tiering);
+            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering2");
+        }
 
         auto query3 = TStringBuilder() << R"(
             --!syntax_v1
@@ -3558,11 +3553,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(!tiering);
+        }
+
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` SET (TIERING = 'tiering1');)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(tiering);
+            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+        }
 
         auto query5 = TStringBuilder() << R"(
             --!syntax_v1
@@ -4171,64 +4183,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TString BuildQuery() const {
                 auto str = TStringBuilder() << Name << " " << NScheme::GetTypeName(Type);
                 if (!NullableFlag) {
-                    str << " NOT NULL"; 
+                    str << " NOT NULL";
                 }
                 return str;
             }
         };
 
-        class TUpdatesBuilder {
-            std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-            std::shared_ptr<arrow::Schema> Schema;
-            ui32 RowsCount = 0;
-        public:
-            class TRowBuilder {
-                TUpdatesBuilder& Owner;
-                YDB_READONLY(ui32, Index, 0);
-            public:
-                TRowBuilder(ui32 index, TUpdatesBuilder& owner)
-                    : Owner(owner)
-                    , Index(index)
-                {}
-
-                template <class T>
-                TRowBuilder Add(const T& data) {
-                    Y_VERIFY(Index < Owner.Builders.size());
-                    auto dataScalar = arrow::MakeScalar(data);
-                    auto res = Owner.Builders[Index]->AppendScalar(*dataScalar);
-                    return TRowBuilder(Index + 1, Owner);
-                }
-
-                TRowBuilder AddNull() {
-                    Y_VERIFY(Index < Owner.Builders.size());
-                    auto res = Owner.Builders[Index]->AppendNull();
-                    return TRowBuilder(Index + 1, Owner);
-                }
-            };
-
-            TUpdatesBuilder(std::shared_ptr<arrow::Schema> schema)
-                : Schema(schema)
-            {
-                Builders = NArrow::MakeBuilders(schema);
-                Y_VERIFY(Builders.size() == schema->fields().size());
-            }
-
-            TRowBuilder AddRow() {
-                ++RowsCount;
-                return TRowBuilder(0, *this);
-            }
-
-            std::shared_ptr<arrow::RecordBatch> BuildArrow() {
-                TVector<std::shared_ptr<arrow::Array>> columns;
-                columns.reserve(Builders.size());
-                for (auto&& builder : Builders) {
-                    auto arrayDataRes = builder->Finish();
-                    Y_VERIFY(arrayDataRes.ok());
-                    columns.push_back(*arrayDataRes);
-                }
-                return arrow::RecordBatch::Make(Schema, RowsCount, columns);
-            }
-        };
+        using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
 
         class TColumnTableBase {
             YDB_ACCESSOR_DEF(TString, Name);
@@ -4298,15 +4259,15 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 case NScheme::NTypeIds::Yson:
                     return arrow::field(name, arrow::binary());
                 case NScheme::NTypeIds::Date:
-                    return arrow::field(name, arrow::uint16()); 
+                    return arrow::field(name, arrow::uint16());
                 case NScheme::NTypeIds::Datetime:
                     return arrow::field(name, arrow::uint32());
                 case NScheme::NTypeIds::Timestamp:
                     return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO));
                 case NScheme::NTypeIds::Interval:
-                    return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)); 
+                    return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO));
                 case NScheme::NTypeIds::JsonDocument:
-                    return arrow::field(name, arrow::binary());  
+                    return arrow::field(name, arrow::binary());
                 }
                 return nullptr;
             }
@@ -4350,7 +4311,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        void InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates) {
+        void InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit = {}, const EStatus opStatus = EStatus::SUCCESS) {
             NLongTx::TLongTxBeginResult resBeginTx = LongTxClient.BeginWriteTx().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
 
@@ -4360,7 +4321,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             NLongTx::TLongTxWriteResult resWrite =
                     LongTxClient.Write(txId, table.GetName(), txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), opStatus, resWrite.Status().GetIssues().ToString());
+
+            if (onBeforeCommit) {
+                onBeforeCommit();
+            }
 
             NLongTx::TLongTxCommitResult resCommitTx = LongTxClient.CommitTx(txId).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
@@ -4399,12 +4364,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
-        
+
         TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
-        
+
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
@@ -4430,7 +4395,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto columns = description.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
         }
-      
+
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
         testHelper.ReadData("SELECT new_column FROM `/Root/ColumnTableTest` WHERE id=1", "[[#]]");
         testHelper.ReadData("SELECT resource_id FROM `/Root/ColumnTableTest` WHERE id=1", "[[[\"test_res_1\"]]]");
@@ -4447,6 +4412,60 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT new_column FROM `/Root/ColumnTableTest`", "[[#];[#];[[200u]]]");
     }
 
+    Y_UNIT_TEST(AddColumnOldScheme) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.InsertData(testTable, tableInserter, {}, EStatus::SCHEME_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(AddColumnOnSchemeChange) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.InsertData(testTable, tableInserter, [&testTable, &testHelper]() {
+                auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
+                auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            });
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
+    }
+
     Y_UNIT_TEST(AddColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -4457,7 +4476,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
-        
+
         TTestHelper::TColumnTableStore testTableStore;
 
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
@@ -4465,7 +4484,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
-        
+
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
@@ -4478,7 +4497,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
             auto alterQuery = TStringBuilder() << "ALTER OBJECT `" << testTableStore.GetName() << "` (TYPE TABLESTORE) SET (ACTION=NEW_COLUMN, NAME=new_column, TYPE=Uint64);";
-            
+
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -4492,7 +4511,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto columns = description.GetTableColumns();
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
         }
-      
+
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
         testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[#]]");
         testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[[\"test_res_1\"]]]");
@@ -4516,7 +4535,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
-        
+
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),

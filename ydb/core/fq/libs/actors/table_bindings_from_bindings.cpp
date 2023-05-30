@@ -84,8 +84,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Feder
         bindSettings.Settings["partitioned_by"] = partitionedBy.ToJsonPretty();
     }
 
-    // todo: use visibility to fill either PrivateBindings or ScopedBindings
-    sqlSettings.PrivateBindings[binding.content().name()] = std::move(bindSettings);
+    sqlSettings.Bindings[binding.content().name()] = std::move(bindSettings);
 }
 
 } //namespace

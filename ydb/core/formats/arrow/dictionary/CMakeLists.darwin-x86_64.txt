@@ -12,9 +12,12 @@ target_link_libraries(formats-arrow-dictionary PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
+  ydb-core-protos
   formats-arrow-simple_builder
   formats-arrow-switch
 )
 target_sources(formats-arrow-dictionary PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/conversion.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/object.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/dictionary/diff.cpp
 )

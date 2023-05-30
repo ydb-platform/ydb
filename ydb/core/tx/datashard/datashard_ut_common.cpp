@@ -1640,6 +1640,9 @@ ui64 AsyncAlterAddStream(
     if (streamDesc.InitialState) {
         desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
     }
+    if (streamDesc.AwsRegion) {
+        desc.MutableStreamDescription()->SetAwsRegion(*streamDesc.AwsRegion);
+    }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

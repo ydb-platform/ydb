@@ -686,11 +686,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "RangeEnd",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -719,19 +714,48 @@
                 "ColumnId": 6,
                 "ColumnName": "RangeBegin",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "RangeEnd",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "CreateVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "Parent",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "AdjacentParent",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

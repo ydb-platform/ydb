@@ -2115,6 +2115,71 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
+    Y_UNIT_TEST(ForceImmediateEffectsExecution) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetEnableForceImmediateEffectsExecution(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        TMaybe<TTransaction> tx;
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            // compute phase + effect phase
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+
+            const auto& literalPhase = stats.query_phases(0);
+            const auto& effectPhase = stats.query_phases(1);
+
+            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
+            UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).updates().rows(), 1);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                DELETE FROM TestImmediateEffects WHERE Key = 1;
+            )", TTxControl::Tx(*tx), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            // compute phase + effect phase
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+
+            const auto& literalPhase = stats.query_phases(0);
+            const auto& effectPhase = stats.query_phases(1);
+
+            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
+            UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).deletes().rows(), 1);
+        }
+
+        {
+            auto result = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
 }
 
 } // namespace NKqp

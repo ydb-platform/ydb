@@ -806,8 +806,9 @@ message TFeatureFlags {
     optional bool EnableScriptExecutionOperations = 92 [default = false];
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
+    optional bool EnableTopicSplitMerge = 95 [default = false];
+    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
 }
-
 
 message THttpProxyConfig {
     optional bool Enabled = 1;
@@ -1285,7 +1286,7 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
-    optional bool EnableSequentialHints = 38 [default = false];
+    optional bool EnableSequentialReads = 38 [default = false];
     optional bool EnableKqpImmediateEffects = 39 [default = true];
 };
 
@@ -1780,6 +1781,10 @@ message TLocalPgWireConfig {
     optional string SslCertificate = 5;
 }
 
+message TAwsCompatibilityConfig {
+    optional string AwsRegion = 1;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1848,6 +1853,7 @@ message TAppConfig {
     optional TConveyorConfig ConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
     optional TLocalPgWireConfig LocalPgWireConfig = 69;
+    optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

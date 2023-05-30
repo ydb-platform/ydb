@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
 
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>

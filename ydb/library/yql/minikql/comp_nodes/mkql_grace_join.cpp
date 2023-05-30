@@ -55,7 +55,6 @@ struct TGraceJoinPacker {
     std::vector<ui64> TupleIntVals; // Packed value of all fixed length values of table tuple.  Keys columns should be packed first.
     std::vector<ui32> TupleStrSizes; // Sizes of all packed strings
     std::vector<char*> TupleStrings; // All values of tuple strings
-    std::vector<ui32> Offsets; // Offsets of table column values in bytes
     std::vector<TType*>  ColumnTypes; // Types of all columns
     std::vector<std::shared_ptr<TValuePacker>> Packers; // Packers for composite data types
     const THolderFactory& HolderFactory; // To use during unpacking
@@ -491,7 +490,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         });
 
 
-    Offsets.resize(nColumns);
     TupleHolder.resize(nColumns);
     TupleStringHolder.resize(nColumns);
     IColumnsHolder.resize(nColumns);
@@ -508,28 +506,29 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
     bool prevKeyColumn = false;
 
+    ui32 paddedKeyIntOffset = currIntOffset;
     for( auto & p: ColumnsPackInfo ) {
         if ( !p.IsString && !p.IsIType ) {
             if (prevKeyColumn && !p.IsKeyColumn) {
                 currIntOffset = ( (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) ) * sizeof(ui64);
+                KeyIntColumnsNum = (currIntOffset - NullsBitmapSize * sizeof(ui64)) / sizeof(ui64);
             }
             prevKeyColumn = p.IsKeyColumn;
             p.Offset = currIntOffset;
-            Offsets[p.ColumnIdx] = currIntOffset;
             currIntOffset += p.Bytes;
         } else if ( p.IsString ) {
             p.Offset = currStrOffset;
-            Offsets[p.ColumnIdx] = currStrOffset;
             currStrOffset++;
         } else if (p.IsIType) {
             p.Offset = currIOffset;
-            Offsets[p.ColumnIdx] = currIOffset;
             currIOffset++;
             GraceJoin::TColTypeInterface cti{ MakeHashImpl(p.MKQLType), MakeEquateImpl(p.MKQLType), std::make_shared<TValuePacker>(true, p.MKQLType) , HolderFactory  };
             ColumnInterfaces.push_back(cti);
         }
         currIdx++;
     }
+
+    DataIntColumnsNum = (currIntOffset - NullsBitmapSize * sizeof(ui64)) / sizeof(ui64);
 
     GraceJoin::TColTypeInterface * cti_p = nullptr;
 

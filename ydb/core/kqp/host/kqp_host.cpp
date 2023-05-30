@@ -26,8 +26,6 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-#include <util/system/env.h>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -297,7 +295,7 @@ public:
     void FillResult(TResult& queryResult) const override {
         YQL_ENSURE(ExecuteCtx.QueryResults.size() == 1);
         queryResult = std::move(ExecuteCtx.QueryResults[0]);
-        queryResult.QueryPlan = SerializeExplainPlan(queryResult.PreparingQuery->GetPhysicalQuery());
+        queryResult.QueryPlan = queryResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
     }
 
 private:
@@ -329,7 +327,7 @@ public:
         prepareResult.SqlVersion = SqlVersion;
 
         YQL_ENSURE(prepareResult.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
-        prepareResult.QueryPlan = SerializeExplainPlan(prepareResult.PreparingQuery->GetPhysicalQuery());
+        prepareResult.QueryPlan = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
         prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
     }
 
@@ -967,14 +965,14 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr PrepareQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    IAsyncQueryResultPtr PrepareGenericQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, settings] (TExprContext& ctx) mutable {
                 return PrepareQueryInternal(query, EKikimrQueryType::Query, settings, ctx);
             });
     }
 
-    IAsyncQueryResultPtr PrepareFederatedQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    IAsyncQueryResultPtr PrepareGenericScript(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
             [this, &query, settings] (TExprContext& ctx) mutable {
                 return PrepareQueryInternal(query, EKikimrQueryType::Script, settings, ctx);
@@ -1057,19 +1055,6 @@ private:
         TAstParseResult astRes;
         if (isSql) {
             NSQLTranslation::TTranslationSettings settings{};
-
-            // TODO: remove this test crutch when dynamic bindings discovery will be implemented // YQ-1964
-            if (SessionCtx->Query().Type == EKikimrQueryType::Script && GetEnv("TEST_S3_CONNECTION")) {
-                NSQLTranslation::TTableBindingSettings binding;
-                binding.ClusterType = "s3";
-                binding.Settings["cluster"] = GetEnv("TEST_S3_CONNECTION");
-                binding.Settings["path"] = GetEnv("TEST_S3_OBJECT");
-                binding.Settings["format"] = GetEnv("TEST_S3_FORMAT");
-                binding.Settings["schema"] = GetEnv("TEST_S3_SCHEMA");
-
-                settings.PrivateBindings[GetEnv("TEST_S3_BINDING")] = binding;
-            }
-
             if (sqlVersion) {
                 settings.SyntaxVersion = *sqlVersion;
 
@@ -1483,14 +1468,7 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = nullptr; // TODO
 
-        // TODO: remove this test crutch after dynamic connections resolving implementation // YQ-1964
         NYql::TS3GatewayConfig cfg;
-        if (GetEnv("TEST_S3_CONNECTION")) {
-            auto* mapping = cfg.AddClusterMapping();
-            mapping->SetName(GetEnv("TEST_S3_CONNECTION"));
-            mapping->SetUrl(TStringBuilder() << GetEnv("S3_ENDPOINT") << "/" << GetEnv("TEST_S3_BUCKET") << "/");
-        }
-
         state->Configuration->Init(cfg, TypesCtx);
 
         auto dataSource = NYql::CreateS3DataSource(state, HttpGateway);
@@ -1501,7 +1479,7 @@ private:
     }
 
     void Init(EKikimrQueryType queryType) {
-        if (queryType == EKikimrQueryType::Script) {
+        if (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) {
             InitS3Provider();
         }
 

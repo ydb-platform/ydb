@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
+#include <ydb/core/tx/columnshard/counters/indexation.h>
 
 namespace NKikimr::NOlap {
 
@@ -33,10 +34,21 @@ public:
 
     virtual ui32 GetColumnId(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
-    virtual std::shared_ptr<arrow::Field> GetField(const int index) const = 0;
+    std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const {
+        auto schema = GetSchema();
+        if (!schema || index < 0 || index >= schema->num_fields()) {
+            return nullptr;
+        }
+        return schema->field(index);
+    }
+    std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const {
+        return GetFieldByIndex(GetFieldIndex(columnId));
+    }
     virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;
+
+    std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
 };
 
 class TSnapshotSchema: public ISnapshotSchema {
@@ -65,13 +77,12 @@ public:
     }
 
     virtual int GetFieldIndex(const ui32 columnId) const override {
-        TString columnName = IndexInfo.GetColumnName(columnId);
+        const TString& columnName = IndexInfo.GetColumnName(columnId, false);
+        if (!columnName) {
+            return -1;
+        }
         std::string name(columnName.data(), columnName.size());
         return Schema->GetFieldIndex(name);
-    }
-
-    std::shared_ptr<arrow::Field> GetField(const int index) const override {
-        return Schema->field(index);
     }
 
     const std::shared_ptr<arrow::Schema>& GetSchema() const override {
@@ -128,13 +139,12 @@ public:
         if (!ColumnIds.contains(columnId)) {
             return -1;
         }
-        TString columnName = OriginalSnapshot->GetIndexInfo().GetColumnName(columnId);
+        TString columnName = OriginalSnapshot->GetIndexInfo().GetColumnName(columnId, false);
+        if (!columnName) {
+            return -1;
+        }
         std::string name(columnName.data(), columnName.size());
         return Schema->GetFieldIndex(name);
-    }
-
-    std::shared_ptr<arrow::Field> GetField(const int index) const override {
-        return Schema->field(index);
     }
 
     const std::shared_ptr<arrow::Schema>& GetSchema() const override {
@@ -289,12 +299,9 @@ struct TPortionInfo {
         return sum;
     }
 
-    void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap, const TSnapshot& snapshot) {
+    void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap) {
         for (auto& rec : Records) {
             rec.Portion = portion;
-            if (!rec.ValidSnapshot()) {
-                rec.SetSnapshot(snapshot);
-            }
         }
         if (!granuleRemap.empty()) {
             for (auto& rec : Records) {
@@ -544,8 +551,8 @@ public:
         for (auto& [pos, orderedChunks] : columnChunks) {
             Y_VERIFY(positionsMap.contains(pos));
             size_t dataPos = positionsMap[pos];
-            auto portionField = dataSchema.GetField(dataPos);
-            auto resultField = resultSchema.GetField(pos);
+            auto portionField = dataSchema.GetFieldByIndex(dataPos);
+            auto resultField = resultSchema.GetFieldByIndex(pos);
 
             Y_VERIFY(portionField->IsCompatibleWith(*resultField));
 
@@ -575,14 +582,10 @@ public:
     }
 
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
-                                   const std::shared_ptr<arrow::Field>& field,
-                                   const TColumnSaver saver);
+        const std::shared_ptr<arrow::Field>& field,
+        const TColumnSaver saver);
 
-    TString AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
-                              const std::shared_ptr<arrow::Field>& field,
-                              TColumnRecord&& record,
-                              const TColumnSaver saver,
-                              ui32 limitBytes = BLOB_BYTES_LIMIT);
+    void AppendOneChunkColumn(TColumnRecord&& record);
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
         for (auto& rec : info.Records) {
@@ -590,6 +593,7 @@ public:
             out << " (1 of " << info.Records.size() << " blobs shown)";
             break;
         }
+        out << ";activity=" << info.IsActive() << ";";
         if (!info.TierName.empty()) {
             out << " tier: " << info.TierName;
         }

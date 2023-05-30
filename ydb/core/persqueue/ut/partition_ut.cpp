@@ -257,6 +257,7 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
 
     Config = MakeConfig(config.Version,
                         config.Consumers);
+    Config.SetLocalDC(true);
 
     NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
     TopicConverter = factory.MakeTopicConverter(Config);
@@ -266,7 +267,6 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
                                      Ctx->Edge,
                                      Ctx->Edge,
                                      TopicConverter,
-                                     true,
                                      "dcId",
                                      false,
                                      Config,

@@ -187,7 +187,7 @@ private:
     TString TopicPath;
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     NPersQueue::TTopicConverterPtr TopicConverter;
-    bool IsLocalDC;
+    bool IsLocalDC = false;
     TString DCId;
     bool IsServerless = false;
     TVector<NScheme::TTypeInfo> KeySchema;

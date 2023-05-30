@@ -76,7 +76,8 @@ class BasePostgresTest(object):
                 'LOCAL_PGWIRE': LogLevels.DEBUG,
                 'KQP_YQL': LogLevels.DEBUG,
                 'KQP_COMPILE_ACTOR': LogLevels.DEBUG,
-                'KQP_COMPILE_REQUEST': LogLevels.DEBUG
+                'KQP_COMPILE_REQUEST': LogLevels.DEBUG,
+                'KQP_PROXY': LogLevels.DEBUG
             }
         ))
         cls.cluster.start()

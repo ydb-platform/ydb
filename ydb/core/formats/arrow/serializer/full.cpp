@@ -34,16 +34,10 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TFullDataDeserializer::DoDese
 }
 
 TString TFullDataSerializer::DoSerialize(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    arrow::io::MockOutputStream mock;
-    {
-        auto writer = TStatusValidator::GetValid(arrow::ipc::MakeStreamWriter(&mock, batch->schema(), Options));
-        TStatusValidator::Validate(writer->WriteRecordBatch(*batch));
-        TStatusValidator::Validate(writer->Close());
-    }
     TString result;
-    result.resize(mock.GetExtentBytesWritten());
+    result.reserve(64u << 10);
     {
-        TFixedStringOutputStream stream(&result);
+        TStringOutputStream stream(&result);
         auto writer = TStatusValidator::GetValid(arrow::ipc::MakeStreamWriter(&stream, batch->schema(), Options));
         TStatusValidator::Validate(writer->WriteRecordBatch(*batch));
         TStatusValidator::Validate(writer->Close());

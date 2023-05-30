@@ -1,6 +1,7 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -575,7 +576,7 @@ void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& write
 }
 
 bool IsTimeoutError(NYdb::EStatus status) {
-    return status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED || status == NYdb::EStatus::TIMEOUT;
+    return status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED || status == NYdb::EStatus::TIMEOUT || status == NYdb::EStatus::CANCELLED;
 }
 
 template<typename TIterator>
@@ -757,6 +758,20 @@ TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table
         UNIT_ASSERT_C(false, "Status: " << streamPart.GetStatus());
     }
     return NYdb::FormatResultSetYson(streamPart.ExtractPart());
+}
+
+bool ValidatePlanNodeIds(const NJson::TJsonValue& plan) {
+    ui32 planNodeId = 0;
+    ui32 count = 0;
+
+    do {
+        count = CountPlanNodesByKv(plan, "PlanNodeId", std::to_string(++planNodeId));
+        if (count > 1) {
+            return false;
+        }
+    } while (count > 0);
+
+    return true;
 }
 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
@@ -1045,6 +1060,16 @@ TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                                 const TString &path) {
     return GetTableShards(server.Get(), sender, path);
  }
+
+void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
+    int count = 60;
+    while (counters.GetActiveSessionActors()->Val() != 0 && count) {
+        count--;
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
+}
 
 } // namspace NKqp
 } // namespace NKikimr

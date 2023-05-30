@@ -199,9 +199,10 @@ struct TOwnerData {
         WriteThroughput = NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond>();
         VDiskSlotId = 0;
 
-        LogReader.Reset();
-        InFlight.Reset(TIntrusivePtr<TOwnerInflight>(new TOwnerInflight));
-
+        if (!quarantine) {
+            LogReader.Reset();
+            InFlight.Reset(TIntrusivePtr<TOwnerInflight>(new TOwnerInflight));
+        }
         OnQuarantine = quarantine;
     }
 };

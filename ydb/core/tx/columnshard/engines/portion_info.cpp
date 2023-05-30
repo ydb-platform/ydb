@@ -4,6 +4,33 @@
 
 namespace NKikimr::NOlap {
 
+std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const {
+    if (dataSchema.GetSnapshot() == GetSnapshot()) {    
+        return batch;
+    }
+    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
+    Y_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
+    std::vector<std::shared_ptr<arrow::Array>> newColumns;
+    newColumns.reserve(resultArrowSchema->num_fields());
+
+    for (size_t i = 0; i < resultArrowSchema->fields().size(); ++i) {
+        auto& resultField = resultArrowSchema->fields()[i];
+        auto columnId = GetIndexInfo().GetColumnId(resultField->name());
+        auto oldColumnIndex = dataSchema.GetFieldIndex(columnId);
+        if (oldColumnIndex >= 0) { // ClumnExists
+            auto oldColumnInfo = dataSchema.GetFieldByIndex(oldColumnIndex);
+            Y_VERIFY(oldColumnInfo);
+            auto columnData = batch->GetColumnByName(oldColumnInfo->name());
+            Y_VERIFY(columnData);
+            newColumns.push_back(columnData);
+        } else { // AddNullColumn
+            auto nullColumn = NArrow::MakeEmptyBatch(arrow::schema({resultField}), batch->num_rows());
+            newColumns.push_back(nullColumn->column(0));
+        }
+    }
+    return arrow::RecordBatch::Make(resultArrowSchema, batch->num_rows(), newColumns);
+}
+
 TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array,
     const std::shared_ptr<arrow::Field>& field,
     const TColumnSaver saver) {
@@ -14,19 +41,9 @@ TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array
     return saver.Apply(batch);
 }
 
-TString TPortionInfo::AddOneChunkColumn(const std::shared_ptr<arrow::Array>& array,
-                                        const std::shared_ptr<arrow::Field>& field,
-                                        TColumnRecord&& record,
-                                        const TColumnSaver saver,
-                                        const ui32 limitBytes) {
-    auto blob = SerializeColumn(array, field, saver);
-    if (blob.size() >= limitBytes) {
-        return {};
-    }
-
+void TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) {
     record.Chunk = 0;
     Records.emplace_back(std::move(record));
-    return blob;
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {

@@ -194,9 +194,7 @@ protected:
         TBase::RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                               TBase::SelfId(),
                                                             domainInfo->DefaultStateStorageGroup,
-                                                               EBoardLookupMode::Second,
-                                                                false,
-                                               false));
+                                                               EBoardLookupMode::Second));
         ++Requests;
     }
 

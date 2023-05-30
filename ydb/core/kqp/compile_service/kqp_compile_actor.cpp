@@ -127,11 +127,11 @@ public:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
-                AsyncCompileResult = KqpHost->PrepareQuery(QueryRef, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings);
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                AsyncCompileResult = KqpHost->PrepareFederatedQuery(QueryRef, prepareSettings);
+                AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings);
                 break;
 
             default:
@@ -367,7 +367,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnablePredicateExtractForDataQuery = serviceConfig.GetEnablePredicateExtractForDataQueries();
     kqpConfig.EnablePredicateExtractForScanQuery = serviceConfig.GetEnablePredicateExtractForScanQueries();
-    kqpConfig.EnableSequentialHints = serviceConfig.GetEnableSequentialHints();
+    kqpConfig.EnableSequentialReads = serviceConfig.GetEnableSequentialReads();
     kqpConfig.EnableKqpImmediateEffects = serviceConfig.GetEnableKqpImmediateEffects();
 }
 

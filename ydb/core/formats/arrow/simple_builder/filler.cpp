@@ -1,7 +1,7 @@
 #include "filler.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow::NConstruction {
 
 TStringPoolFiller::TStringPoolFiller(const ui32 poolSize, const ui32 strLen) {
     for (ui32 i = 0; i < poolSize; ++i) {

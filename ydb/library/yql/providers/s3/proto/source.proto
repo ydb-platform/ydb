@@ -16,7 +16,7 @@ message TSource {
     optional string Format = 5;
     map<string, string> Settings = 6;
     bool Arrow = 7;
-    bool ThreadPool = 8;
+    bool ThreadPool = 8; // deprecated
     uint64 ParallelRowGroupCount = 9;
     bool RowGroupReordering = 10;
     uint64 ParallelDownloadCount = 11;

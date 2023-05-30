@@ -9,13 +9,16 @@ namespace {
 using NOlap::TBlobRange;
 
 class TEvictionActor : public TActorBootstrapped<TEvictionActor> {
+private:
+    const TIndexationCounters Counters;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_EVICTION_ACTOR;
     }
 
-    TEvictionActor(ui64 tabletId, const TActorId& parent)
-        : TabletId(tabletId)
+    TEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters)
+        : Counters(counters)
+        , TabletId(tabletId)
         , Parent(parent)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     {}
@@ -36,6 +39,7 @@ public:
 
             for (const auto& blobRange : ranges) {
                 Y_VERIFY(blobId == blobRange.BlobId);
+                Counters.ReadBytes->Add(blobRange.Size);
                 Blobs[blobRange] = {};
             }
             SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
@@ -128,7 +132,7 @@ private:
             TCpuGuard guard(TxEvent->ResourceUsage);
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-            NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering);
+            NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
             TxEvent->Blobs = evictionLogic.Apply(TxEvent->IndexChanges);
 
             if (TxEvent->Blobs.empty()) {
@@ -145,8 +149,8 @@ private:
 
 } // namespace
 
-IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent) {
-    return new TEvictionActor(tabletId, parent);
+IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters) {
+    return new TEvictionActor(tabletId, parent, counters);
 }
 
 }

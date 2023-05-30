@@ -76,7 +76,8 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
     }
 
     try {
-        const auto& kqpTx = dataTx->GetKqpTransaction();
+        bool useGenericReadSets = dataTx->GetUseGenericReadSets();
+        const auto& kqpLocks = dataTx->GetKqpLocks();
         auto& tasksRunner = dataTx->GetKqpTasksRunner();
 
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
@@ -84,7 +85,8 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         NKqp::NRm::TKqpResourcesRequest req;
         req.MemoryPool = NKqp::NRm::EKqpMemoryPool::DataQuery;
         req.Memory = txc.GetMemoryLimit();
-        ui64 taskId = kqpTx.GetTasks().empty() ? std::numeric_limits<ui64>::max() : kqpTx.GetTasks()[0].GetId();
+        ui64 taskId = dataTx->GetFirstKqpTaskId();
+
         NKqp::GetKqpResourceManager()->NotifyExternalResourcesAllocated(tx->GetTxId(), taskId, req);
 
         Y_DEFER {
@@ -97,7 +99,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         dataTx->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
 
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-            auto result = KqpRunTransaction(ctx, op->GetTxId(), kqpTx, tasksRunner);
+            auto result = KqpRunTransaction(ctx, op->GetTxId(), kqpLocks, useGenericReadSets, tasksRunner);
 
             Y_VERIFY_S(!dataTx->GetKqpComputeCtx().HadInconsistentReads(),
                 "Unexpected inconsistent reads in operation " << *op << " when preparing persistent channels");
@@ -108,7 +110,8 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             }
         }
 
-        KqpFillOutReadSets(op->OutReadSets(), kqpTx, tasksRunner, DataShard.SysLocksTable(), tabletId);
+        KqpFillOutReadSets(op->OutReadSets(), kqpLocks,
+            dataTx->HasKqpLocks(), useGenericReadSets, tasksRunner, DataShard.SysLocksTable(), tabletId);
     } catch (const TMemoryLimitExceededException&) {
         LOG_T("Operation " << *op << " at " << tabletId
             << " exceeded memory limit " << txc.GetMemoryLimit()

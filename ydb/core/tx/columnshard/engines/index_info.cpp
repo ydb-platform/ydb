@@ -104,6 +104,16 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
     }
 }
 
+std::vector<ui32> TIndexInfo::GetColumnIds() const {
+    std::vector<ui32> result;
+    for (auto&& i : Columns) {
+        result.emplace_back(i.first);
+    }
+    result.emplace_back((ui32)ESpecialColumn::PLAN_STEP);
+    result.emplace_back((ui32)ESpecialColumn::TX_ID);
+    return result;
+}
+
 std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) const {
     std::vector<TString> out;
     out.reserve(ids.size());
@@ -181,19 +191,18 @@ std::shared_ptr<arrow::RecordBatch> TIndexInfo::PrepareForInsert(const TString& 
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema() const {
-    if (Schema) {
-        return Schema;
+    if (!Schema) {
+        std::vector<ui32> ids;
+        ids.reserve(Columns.size());
+        for (const auto& [id, _] : Columns) {
+            ids.push_back(id);
+        }
+
+        // The ids had a set type before so we keep them sorted.
+        std::sort(ids.begin(), ids.end());
+        Schema = MakeArrowSchema(Columns, ids);
     }
 
-    std::vector<ui32> ids;
-    ids.reserve(Columns.size());
-    for (const auto& [id, _] : Columns) {
-        ids.push_back(id);
-    }
-
-    // The ids had a set type before so we keep them sorted.
-    std::sort(ids.begin(), ids.end());
-    Schema = MakeArrowSchema(Columns, ids);
     return Schema;
 }
 
@@ -263,7 +272,11 @@ std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const std::vector<TString
 }
 
 std::shared_ptr<arrow::Field> TIndexInfo::ArrowColumnField(ui32 columnId) const {
-    return ArrowSchema()->GetFieldByName(GetColumnName(columnId, true));
+    auto it = ArrowColumnByColumnIdCache.find(columnId);
+    if (it == ArrowColumnByColumnIdCache.end()) {
+        it = ArrowColumnByColumnIdCache.emplace(columnId, ArrowSchema()->GetFieldByName(GetColumnName(columnId, true))).first;
+    }
+    return it->second;
 }
 
 void TIndexInfo::SetAllKeys() {
@@ -336,21 +349,28 @@ bool TIndexInfo::AllowTtlOverColumn(const TString& name) const {
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
     arrow::ipc::IpcWriteOptions options;
-    if (context.GetExternalCompression()) {
-        options.codec = context.GetExternalCompression()->BuildArrowCodec();
-    } else {
-        options.codec = DefaultCompression.BuildArrowCodec();
-    }
     options.use_threads = false;
-    auto it = ColumnFeatures.find(columnId);
+
     NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (it != ColumnFeatures.end()) {
-        transformer = it->second.GetSaveTransformer();
-        auto codec = it->second.GetCompressionCodec();
-        if (!!codec) {
-            options.codec = std::move(codec);
+    std::unique_ptr<arrow::util::Codec> columnCodec;
+    {
+        auto it = ColumnFeatures.find(columnId);
+        if (it != ColumnFeatures.end()) {
+            transformer = it->second.GetSaveTransformer();
+            columnCodec = it->second.GetCompressionCodec();
         }
     }
+
+    if (context.GetExternalCompression()) {
+        options.codec = context.GetExternalCompression()->BuildArrowCodec();
+    } else if (columnCodec) {
+        options.codec = std::move(columnCodec);
+    } else if (DefaultCompression) {
+        options.codec = DefaultCompression->BuildArrowCodec();
+    } else {
+        options.codec = NArrow::TCompression::BuildDefaultCodec();
+    }
+
     if (!transformer) {
         return TColumnSaver(transformer, std::make_shared<NArrow::NSerialization::TBatchPayloadSerializer>(options));
     } else {
@@ -413,7 +433,12 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     if (schema.HasDefaultCompression()) {
-        Y_VERIFY(DefaultCompression.DeserializeFromProto(schema.GetDefaultCompression()));
+        auto result = NArrow::TCompression::BuildFromProto(schema.GetDefaultCompression());
+        if (!result) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", result.GetErrorMessage());
+            return false;
+        }
+        DefaultCompression = *result;
     }
     return true;
 }
@@ -455,16 +480,16 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 
 NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetSaveTransformer() const {
     NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (LowCardinality.value_or(false)) {
-        transformer = std::make_shared<NArrow::NTransformation::TDictionaryPackTransformer>();
+    if (DictionaryEncoding) {
+        transformer = DictionaryEncoding->BuildEncoder();
     }
     return transformer;
 }
 
 NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetLoadTransformer() const {
     NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (LowCardinality.value_or(false)) {
-        transformer = std::make_shared<NArrow::NTransformation::TDictionaryUnpackTransformer>();
+    if (DictionaryEncoding) {
+        transformer = DictionaryEncoding->BuildDecoder();
     }
     return transformer;
 }

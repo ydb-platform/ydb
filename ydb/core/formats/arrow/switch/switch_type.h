@@ -217,6 +217,14 @@ bool Append(arrow::ArrayBuilder& builder, const typename T::c_type* values, size
 }
 
 template <typename T>
+bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>& values) {
+    using TBuilder = typename arrow::NumericBuilder<T>;
+
+    auto status = static_cast<TBuilder&>(builder).AppendValues(values.data(), values.size());
+    return status.ok();
+}
+
+template <typename T>
 bool Append(T& builder, const arrow::Array& array, int position) {
     return SwitchType(array.type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;

@@ -530,7 +530,7 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             return false;
         }
 
-        if (agg->ChildrenSize() != agg->Head().ChildrenSize()) {
+        if (agg->ChildrenSize() + (overState ? 1 : 0) != agg->Head().ChildrenSize()) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Different amount of input arguments"));
             return false;
         }
@@ -548,7 +548,7 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
                 return false;
             }
 
-            auto applyArgType = agg->Head().Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto applyArgType = agg->Head().Child(i + (overState ? 1 : 0))->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             auto expectedType = many ? ctx.MakeType<TOptionalExprType>(applyArgType) : applyArgType;
             if (!IsSameAnnotation(*inputItems[argColumnIndex], *expectedType)) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<

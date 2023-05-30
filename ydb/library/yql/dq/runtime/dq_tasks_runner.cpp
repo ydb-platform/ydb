@@ -309,7 +309,7 @@ public:
         return opts;
     }
 
-    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const NDqProto::TDqTask& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
+    std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
         canBeCached = true;
         auto entry = TComputationPatternLRUCache::CreateCacheEntry(UseSeparatePatternAlloc());
         auto& patternAlloc = UseSeparatePatternAlloc() ? entry->Alloc : Alloc();
@@ -417,7 +417,7 @@ public:
         return entry;
     }
 
-    std::shared_ptr<TPatternCacheEntry> BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider) {
+    std::shared_ptr<TPatternCacheEntry> BuildTask(const TDqTaskSettings& task) {
         LOG(TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
 
@@ -469,17 +469,7 @@ public:
                 std::string_view name = entry->ParamsStruct->GetMemberName(i);
                 TType* type = entry->ParamsStruct->GetMemberType(i);
 
-                if (parameterProvider && parameterProvider(name, type, TypeEnv(), graphHolderFactory, structMembers[i])) {
-#ifndef NDEBUG
-                    YQL_ENSURE(!task.GetParameters().contains(name), "param: " << name);
-#endif
-                } else {
-                    auto it = task.GetParameters().find(name);
-                    YQL_ENSURE(it != task.GetParameters().end());
-
-                    auto guard = TypeEnv().BindAllocator();
-                    TDqDataSerializer::DeserializeParam(it->second, type, graphHolderFactory, structMembers[i]);
-                }
+                task.GetParameterValue(name, type, TypeEnv(), graphHolderFactory, structMembers[i]);
 
                 {
                     auto guard = TypeEnv().BindAllocator();
@@ -504,11 +494,11 @@ public:
         return entry;
     }
 
-    void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider& parameterProvider) override
+    void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
+        const IDqTaskRunnerExecutionContext& execCtx) override
     {
         TaskId = task.GetId();
-        auto entry = BuildTask(task, parameterProvider);
+        auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -647,8 +637,7 @@ public:
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);
                     }
 
-                    auto outputChannel = CreateDqOutputChannel(channelId, *taskOutputType, typeEnv,
-                        holderFactory, settings, LogFunc);
+                    auto outputChannel = CreateDqOutputChannel(channelId, *taskOutputType, holderFactory, settings, LogFunc);
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);

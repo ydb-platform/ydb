@@ -1318,19 +1318,11 @@ private:
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
                         auto& task = getShardTask(shardId);
-                        for (auto& [name, value] : shardInfo.Params) {
-                            task.Meta.Params.emplace(name, std::move(value));
-                        }
-
                         FillGeneralReadInfo(task.Meta, readSettings.ItemsLimit, readSettings.Reverse);
 
                         TTaskMeta::TShardReadInfo readInfo;
                         readInfo.Ranges = std::move(*shardInfo.KeyReadRanges);
                         readInfo.Columns = columns;
-
-                        if (readSettings.ItemsLimitParamName) {
-                            task.Meta.Params.emplace(readSettings.ItemsLimitParamName, readSettings.ItemsLimitBytes);
-                        }
 
                         if (!task.Meta.Reads) {
                             task.Meta.Reads.ConstructInPlace();
@@ -1379,7 +1371,6 @@ private:
                             YQL_ENSURE(shardInfo.KeyWriteRanges);
 
                             auto& task = getShardTask(shardId);
-                            task.Meta.Params = std::move(shardInfo.Params);
 
                             if (!task.Meta.Writes) {
                                 task.Meta.Writes.ConstructInPlace();
@@ -1601,15 +1592,12 @@ private:
         limits.MkqlLightProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(500_MB, Request.MkqlMemoryLimit) : 500_MB;
         limits.MkqlHeavyProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(2_GB, Request.MkqlMemoryLimit) : 2_GB;
 
-        auto id = SelfId();
-        limits.AllocateMemoryFn = [TxId = TxId, actorId = id](auto /* txId */, ui64 taskId, ui64 memory) {
-            auto SelfId = [actorId] () {
-                return actorId;
-            };
-            LOG_E("Data query task cannot allocate additional memory during executing."
-                      << " Task: " << taskId << ", memory: " << memory);
-            return false;
-        };
+        auto& taskOpts = taskDesc.GetProgram().GetSettings();
+        auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
+            ? limits.MkqlHeavyProgramMemoryLimit
+            : limits.MkqlLightProgramMemoryLimit;
+
+        limits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(limit, limit);
 
         auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), AsyncIoFactory,
             AppData()->FunctionRegistry, settings, limits);
@@ -1991,9 +1979,7 @@ private:
 
             auto locksOp = needCommit
                 ? NKikimrTxDataShard::TKqpLocks::Commit
-                : (Request.ValidateLocks
-                        ? NKikimrTxDataShard::TKqpLocks::Validate
-                        : NKikimrTxDataShard::TKqpLocks::Rollback);
+                : NKikimrTxDataShard::TKqpLocks::Rollback;
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
@@ -2065,9 +2051,6 @@ private:
                     switch (locksOp) {
                     case NKikimrTxDataShard::TKqpLocks::Commit:
                         tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
-                        break;
-                    case NKikimrTxDataShard::TKqpLocks::Validate:
-                        tx.SetOp(NKikimrPQ::TDataTransaction::Validate);
                         break;
                     case NKikimrTxDataShard::TKqpLocks::Rollback:
                         tx.SetOp(NKikimrPQ::TDataTransaction::Rollback);

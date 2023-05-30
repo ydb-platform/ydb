@@ -281,7 +281,7 @@ message TKqpReadRangesSource {
     }
 
     repeated string SkipNullKeys = 8;
-    uint64 SequentialAccessHint = 9;
+    uint64 SequentialInFlightShards = 9;
 }
 
 message TKqpExternalSource {
@@ -370,7 +370,7 @@ message TKqpPhyQuery {
         TYPE_DATA = 1;
         TYPE_SCAN = 2;
         TYPE_QUERY = 3;
-        TYPE_FEDERATED_QUERY = 4;
+        TYPE_SCRIPT = 4;
     };
 
     EType Type = 1;

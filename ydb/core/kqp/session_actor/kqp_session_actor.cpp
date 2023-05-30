@@ -216,6 +216,19 @@ public:
         Cleanup();
     }
 
+    void ForwardResponse(TEvKqp::TEvProcessResponse::TPtr& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record.GetRef();
+        record.SetYdbStatus(ev->Get()->Record.GetYdbStatus());
+
+        if (ev->Get()->Record.HasError()) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ev->Get()->Record.GetError());
+            IssueToMessage(issue, record.MutableResponse()->AddQueryIssues());
+        }
+
+        Cleanup();
+    }
+
     void ReplyTransactionNotFound(const TString& txId) {
         std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
             TStringBuilder() << "Transaction not found: " << txId)};
@@ -384,8 +397,19 @@ public:
             }
             case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
                 return CommitTx();
+
+            case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
+                auto type = QueryState->GetType();
+                if (type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
+                    type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT)
+                {
+                    return ForwardRequest(ev);
+                }
+
+                break;
+            }
+
             // not supported yet
-            case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             case NKikimrKqp::QUERY_ACTION_VALIDATE:
             case NKikimrKqp::QUERY_ACTION_PARSE:
                 return ForwardRequest(ev);
@@ -473,7 +497,9 @@ public:
     }
 
     void OnSuccessCompileRequest() {
-        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
+            QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
+        {
             return ReplyPrepareResult();
         }
 
@@ -949,7 +975,7 @@ public:
         } else if (QueryState->ShouldAcquireLocks()) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
-            if (txCtx.HasUncommittedChangesRead) {
+            if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
                 YQL_ENSURE(txCtx.EnableImmediateEffects);
                 request.UseImmediateEffects = true;
             }
@@ -1084,6 +1110,7 @@ public:
 
         YQL_ENSURE(QueryState);
         LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, ev->ResultRowsCount);
+        QueryState->QueryData->ClearPrunedParams();
 
         if (!ev->GetTxResults().empty()) {
             QueryState->QueryData->AddTxResults(QueryState->CurrentTx - 1, std::move(ev->GetTxResults()));
@@ -1109,6 +1136,7 @@ public:
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
+        LOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId);
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 
@@ -1443,6 +1471,9 @@ public:
 
             auto& preparedQuery = compileResult->PreparedQuery;
             response.MutableQueryParameters()->CopyFrom(preparedQuery->GetParameters());
+
+            response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
+            response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
         }
     }
 
@@ -1768,6 +1799,7 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
+                hFunc(TEvKqp::TEvProcessResponse, ForwardResponse);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
@@ -1797,6 +1829,7 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
+                hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

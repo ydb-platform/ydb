@@ -115,10 +115,10 @@ TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, 
 {
 }
 
-NKikimr::NOlap::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
-    NOlap::TCompression out = NOlap::TCompression::Default();
-    Y_VERIFY(out.DeserializeFromProto(compression));
-    return out;
+NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression) {
+    auto out = NArrow::TCompression::BuildFromProto(compression);
+    Y_VERIFY(out, "%s", out.GetErrorMessage().data());
+    return *out;
 }
 }
 

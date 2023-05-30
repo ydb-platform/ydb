@@ -103,8 +103,8 @@ description: "В статье приведены примеры кода под�
   import ydb
 
   with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
-      driver.wait(timeout=5, fail_fast=True)
-      ...
+    driver.wait(timeout=5)
+    ...
   ```
 
 - Python (asyncio)
@@ -114,9 +114,9 @@ description: "В статье приведены примеры кода под�
   import asyncio
 
   async def ydb_init():
-        async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-            await driver.wait(fail_fast=True)
-            ...
+    async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+      await driver.wait()
+      ...
 
   asyncio.run(ydb_init())
   ```

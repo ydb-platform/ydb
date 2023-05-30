@@ -146,16 +146,16 @@ enum ExecMode {
     EXEC_MODE_PARSE = 10;
     EXEC_MODE_VALIDATE = 20;
     EXEC_MODE_EXPLAIN = 30;
-    reserved 4;
-    EXEC_MODE_EXECUTE = 3;
+    reserved 40;
+    EXEC_MODE_EXECUTE = 50;
 }
 
 enum StatsMode {
     STATS_MODE_UNSPECIFIED = 0;
-    STATS_MODE_NONE = 1;       // Stats collection is disabled
-    STATS_MODE_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table
-    STATS_MODE_FULL = 3;       // Add execution stats and plan on top of STATS_MODE_BASIC
-    STATS_MODE_PROFILE = 4;    // Detailed execution stats including stats for individual tasks and channels
+    STATS_MODE_NONE = 10;       // Stats collection is disabled
+    STATS_MODE_BASIC = 20;      // Aggregated stats of reads, updates and deletes per table
+    STATS_MODE_FULL = 30;       // Add execution stats and plan on top of STATS_MODE_BASIC
+    STATS_MODE_PROFILE = 40;    // Detailed execution stats including stats for individual tasks and channels
 }
 
 message ExecuteQueryRequest {
@@ -172,9 +172,9 @@ message ExecuteQueryRequest {
     reserved 7; // idempotency_key
     StatsMode stats_mode = 8;
 
-    // For queries with multiple result sets, some of them may be computed in parallel.
+    // For queries with multiple result sets, some of them may be computed concurrently.
     // If true, parts of different results sets may be interleaved in response stream.
-    bool parallel_result_sets = 9;
+    bool concurrent_result_sets = 9;
 }
 
 message ResultSetMeta {

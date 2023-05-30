@@ -662,18 +662,19 @@ public:
 
     std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
         TTupleType* tupleType,
-        std::optional<ui32> filterColumn,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env) const final
     {
-        return PrepareSum<TCombineKeysTag>(tupleType, filterColumn, argsColumns[0], env);
+        return PrepareSum<TCombineKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0], env);
     }
 
     std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
-        const TTypeEnvironment& env) const final
+        const TTypeEnvironment& env,
+        TType* returnType) const final
     {
+        Y_UNUSED(returnType);
         return PrepareSum<TFinalizeKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0], env);
     }
 };
@@ -787,16 +788,17 @@ public:
 
     std::unique_ptr<TCombineKeysTag::TPreparedAggregator> PrepareCombineKeys(
         TTupleType* tupleType,
-        std::optional<ui32> filterColumn,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env) const final {
-        return PrepareAvg<TCombineKeysTag>(tupleType, filterColumn, argsColumns[0], env);
+        return PrepareAvg<TCombineKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0], env);
     }
 
     std::unique_ptr<TFinalizeKeysTag::TPreparedAggregator> PrepareFinalizeKeys(
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
-        const TTypeEnvironment& env) const final {
+        const TTypeEnvironment& env,
+        TType* returnType) const final {
+        Y_UNUSED(returnType);
         return PrepareAvg<TFinalizeKeysTag>(tupleType, std::optional<ui32>(), argsColumns[0], env);
     }
 };

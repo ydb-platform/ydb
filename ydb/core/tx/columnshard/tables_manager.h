@@ -60,7 +60,7 @@ public:
     bool IsStandaloneTable() const {
         return Id == 0;
     }
-    
+
     const TString& GetName() const {
         return Name;
     }
@@ -180,17 +180,17 @@ public:
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {
         return PrimaryIndex;
     }
-    
+
     const NOlap::IColumnEngine& GetPrimaryIndexSafe() const {
         Y_VERIFY(!!PrimaryIndex);
         return *PrimaryIndex;
     }
-    
+
     bool InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId);
     bool LoadIndex(NOlap::TDbWrapper& db, THashSet<NOlap::TUnifiedBlobId>& lostEvictions);
 
     void Clear();
-    
+
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;
 
@@ -206,10 +206,10 @@ public:
 
     void AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db);
     void AddTableVersion(const ui64 pathId, const TRowVersion& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db);
-    
+
     void OnTtlUpdate();
 
-    std::shared_ptr<NOlap::TColumnEngineChanges>  StartIndexCleanup(const NOlap::TSnapshot& snapshot, ui32 maxRecords);
+    std::shared_ptr<NOlap::TColumnEngineChanges> StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords);
 
 private:
     void IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema);

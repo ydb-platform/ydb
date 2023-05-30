@@ -39,7 +39,7 @@ public:
     };
 
 public:
-    TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const NYql::NDqProto::TDqTask& task, bool retryOnUndelivery,
+    TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const TDqTaskSettings& task, bool retryOnUndelivery,
         NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType);
 
 private:

@@ -584,7 +584,10 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     Y_UNIT_TEST_TWIN(LogNonExistingUserId, NotNull) {
+        // Should be fixed after Arrow kernel implementation for JSON_VALUE
+        // https://st.yandex-team.ru/KIKIMR-17903
         TString query(R"(
+            PRAGMA Kikimr.OptEnableOlapPushdown = "false";
             $user_id = '111';
 
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`, `json_payload`
@@ -600,7 +603,10 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     Y_UNIT_TEST_TWIN(LogExistingUserId, NotNull) {
+        // Should be fixed after Arrow kernel implementation for JSON_VALUE
+        // https://st.yandex-team.ru/KIKIMR-17903
         TString query(R"(
+            PRAGMA Kikimr.OptEnableOlapPushdown = "false";
             $user_id = '1000042';
 
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`, `json_payload`
@@ -771,10 +777,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     Y_UNIT_TEST_TWIN(LogTsRangeDescending, NotNull) {
-        if (NotNull) {
-            // Wait for fix https://st.yandex-team.ru/KIKIMR-16920
-            return;
-        }
         TString query(R"(
                 --PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 

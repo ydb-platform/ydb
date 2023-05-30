@@ -24,6 +24,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
     const bool IsInternal;
+    const bool PhantomCheck;
     TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
 
     const TInstant StartTime;
@@ -56,6 +57,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
         Y_VERIFY(res.ResponseSz == info.EndIdx - info.BeginIdx);
 
         for (ui64 offset = 0; offset < res.ResponseSz; ++offset) {
+            Y_VERIFY_DEBUG(!PhantomCheck || res.Responses[offset].LooksLikePhantom.has_value());
             Responses[info.BeginIdx + offset] = res.Responses[offset];
         }
 
@@ -65,11 +67,13 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest>;
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         std::unique_ptr<TEvBlobStorage::TEvGetResult> ev(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
+        Y_VERIFY(status != NKikimrProto::NODATA);
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
             const TEvBlobStorage::TEvGet::TQuery &query = Queries[i];
             TEvBlobStorage::TEvGetResult::TResponse &x = ev->Responses[i];
-            x.Status = NKikimrProto::UNKNOWN;
+            x.Status = status;
             x.Id = query.Id;
+            x.LooksLikePhantom = PhantomCheck ? std::make_optional(false) : std::nullopt;
         }
         ev->ErrorReason = ErrorReason;
         Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
@@ -102,6 +106,7 @@ public:
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
         , IsInternal(ev->IsInternal)
+        , PhantomCheck(ev->PhantomCheck)
         , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
         , StartTime(now)
         , MustRestoreFirst(ev->MustRestoreFirst)
@@ -121,6 +126,7 @@ public:
             MustRestoreFirst, false, ForceBlockTabletData);
         ev->IsInternal = IsInternal;
         ev->ReaderTabletData = ReaderTabletData;
+        ev->PhantomCheck = PhantomCheck;
         PendingGets.emplace_back(std::move(ev), cookie);
     }
 
@@ -130,6 +136,9 @@ public:
             SendToProxy(std::move(ev), cookie, Span.GetTraceId());
         }
         if (!RequestsInFlight && PendingGets.empty()) {
+            for (size_t i = 0; PhantomCheck && i < QuerySize; ++i) {
+                Y_VERIFY_DEBUG(Responses[i].LooksLikePhantom.has_value());
+            }
             auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);
             ev->ResponseSz = QuerySize;
             ev->Responses = std::move(Responses);

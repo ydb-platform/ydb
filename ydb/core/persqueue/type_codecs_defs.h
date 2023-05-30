@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/scheme/scheme_type_id.h>
-#include <ydb/core/util/blob_data_stream.h>
 
+#include <util/generic/buffer.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/singleton.h>
@@ -182,7 +182,7 @@ public:
 
     virtual TCodecSig Signature() const = 0;
 
-    virtual TAutoPtr<IChunkCoder> MakeChunk(TFlatBlobDataOutputStream*) const = 0;
+    virtual TAutoPtr<IChunkCoder> MakeChunk(TBuffer&) const = 0;
     virtual IChunkDecoder::TPtr ReadChunk(const TDataRef&) const = 0;
 
     /// Read the chunk using 'this' codec (if the codec signature matches),
@@ -191,7 +191,7 @@ public:
 };
 
 /***************************************************************************//**
- * TDataRef can either share the data (TString) or keep a reference (TStringBuf).
+ * TDataRef can either share the data (TString, TBuffer) or keep a reference (TStringBuf).
  * It uses short string optimization (SSO) to store small data (<= 16b).
  * TODO: Move to ydb/core/util
  ******************************************************************************/
@@ -217,7 +217,12 @@ public:
         : TDataRef(data.data(), data.size())
     { }
 
-    /// Copy and take ownership of a small piece of data (<= 16b).
+    TDataRef(const TBuffer& data)
+        : TDataRef(data.data(), data.size())
+    {
+    }
+    
+     /// Copy and take ownership of a small piece of data (<= 16b).
     TDataRef(const char* data, size_t size, bool)
         : ShortSize_(size)
         , IsNull_(0)

@@ -77,8 +77,9 @@ struct TChangeNotification {
     ui64 TxId;
 };
 
-static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTabletConfig::TPartition& proto) {
-    if (!proto.HasKeyRange()) {
+static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTabletConfig& config,
+                                                       const NKikimrPQ::TPQTabletConfig::TPartition& proto) {
+    if (!proto.HasKeyRange() || config.GetPartitionKeySchema().empty()) {
         return Nothing();
     }
     return TPartitionKeyRange::Parse(proto.GetKeyRange());
@@ -636,9 +637,9 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     for (const auto& partition : Config.GetPartitions()) {
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
-            Partitions.emplace(partitionId, TPartitionInfo(
-                ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
-                GetPartitionKeyRange(partition),
+            Partitions.emplace(partitionId,
+                TPartitionInfo(ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
+                GetPartitionKeyRange(Config, partition),
                 true,
                 *Counters
             ));
@@ -857,7 +858,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, false, ctx)),
-            GetPartitionKeyRange(partition),
+            GetPartitionKeyRange(Config, partition),
             false,
             *Counters
         ));
@@ -3275,7 +3276,6 @@ TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
                           ctx.SelfID,
                           CacheActor,
                           topicConverter,
-                          IsLocalDC,
                           DCId,
                           IsServerless,
                           config,
@@ -3309,7 +3309,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
         Partitions.emplace(std::piecewise_construct,
                            std::forward_as_tuple(partitionId),
                            std::forward_as_tuple(actorId,
-                                                 GetPartitionKeyRange(partition),
+                                                 GetPartitionKeyRange(config, partition),
                                                  true,
                                                  *Counters));
 

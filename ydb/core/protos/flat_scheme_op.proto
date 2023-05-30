@@ -380,6 +380,10 @@ message TTableDescription {
     optional TTableReplicationConfig ReplicationConfig = 40;
 }
 
+message TDictionaryEncodingSettings {
+   optional bool Enabled = 1;
+}
+
 message TCompressionOptions {
     optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
     optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
@@ -388,7 +392,7 @@ message TCompressionOptions {
 message TOlapColumnDiff {
     optional string Name = 1;
     optional TCompressionOptions Compression = 2;
-    optional bool LowCardinality = 3;
+    optional TDictionaryEncodingSettings DictionaryEncoding = 4;
 }
 
 message TOlapColumnDescription {
@@ -404,7 +408,7 @@ message TOlapColumnDescription {
     optional bool NotNull = 7;
 
     optional TCompressionOptions Compression = 8;
-    optional bool LowCardinality = 9;
+    optional TDictionaryEncodingSettings DictionaryEncoding = 9;
 }
 
 enum EColumnTableEngine {
@@ -979,6 +983,10 @@ message TPersQueueGroupAllocate {
 
         optional uint64 OwnerId = 4;
         optional uint64 ShardId = 5;
+
+        optional NKikimrPQ.ETopicPartitionStatus Status = 6;
+        repeated uint32 ParentPartitionIds = 7;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
     }
 
     optional string Name = 1;
@@ -1001,10 +1009,14 @@ message TPersQueueGroupDeallocate {
 }
 
 message TPersQueueGroupDescription {
+
     message TPartition {
         optional uint32 PartitionId = 1;
         optional uint64 TabletId = 2;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 3;
+        optional NKikimrPQ.ETopicPartitionStatus Status = 4;
+        repeated uint32 ParentPartitionIds = 5;
+        repeated uint32 ChildPartitionIds = 6;
     }
 
     optional string Name = 1; // mandatory
@@ -1032,6 +1044,18 @@ message TPersQueueGroupDescription {
     optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
 
     optional TPersQueueGroupAllocate Allocate = 14;
+
+    message TPartitionSplit {
+        required uint32 Partition = 1;
+        required bytes SplitBoundary = 2;
+    }
+    repeated TPartitionSplit Split = 15;
+
+    message TPartitionMerge {
+        required uint32 Partition = 1;
+        required uint32 AdjacentPartition = 2;
+    }
+    repeated TPartitionMerge Merge = 16;
 }
 
 message TRtmrVolumeDescription {

@@ -156,6 +156,11 @@ class SessionPoolEmpty(Error, queue.Empty):
     status = StatusCode.SESSION_POOL_EMPTY
 
 
+class UnexpectedGrpcMessage(Error):
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 def _format_issues(issues):
     if not issues:
         return ""

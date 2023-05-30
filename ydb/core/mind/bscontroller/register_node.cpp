@@ -519,6 +519,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
         if (const TGroupInfo *group = it->second->Group) {
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
+                sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), false);
             }
             it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false);
             timingQ.emplace_back(*it->second);

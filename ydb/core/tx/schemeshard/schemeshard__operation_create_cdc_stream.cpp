@@ -196,11 +196,16 @@ public:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
             if (!streamDesc.GetAwsRegion().empty()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "AwsRegion option incompatible with specified stream format");
+                    "AWS_REGION option incompatible with specified stream format");
                 return result;
             }
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+            if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "DYNAMODB_STREAMS_JSON format is not supported yet");
+                return result;
+            }
             if (tablePath.Base()->DocumentApiVersion < 1) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                     "DYNAMODB_STREAMS_JSON format incompatible with non-document table");

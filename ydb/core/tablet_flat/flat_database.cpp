@@ -241,6 +241,14 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
 
+TSelectRowVersionResult TDatabase::SelectRowVersion(
+        ui32 table, TArrayRef<const TCell> key, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
+}
+
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                                   EDirection direction, TRowVersion snapshot)
@@ -374,9 +382,14 @@ bool TDatabase::HasRemovedTx(ui32 table, ui64 txId) const
     return Require(table)->HasRemovedTx(txId);
 }
 
-TVector<ui64> TDatabase::GetOpenTxs(ui32 table) const
+const absl::flat_hash_set<ui64>& TDatabase::GetOpenTxs(ui32 table) const
 {
     return Require(table)->GetOpenTxs();
+}
+
+size_t TDatabase::GetOpenTxCount(ui32 table) const
+{
+    return Require(table)->GetOpenTxCount();
 }
 
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)

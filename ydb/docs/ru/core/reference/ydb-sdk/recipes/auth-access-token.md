@@ -14,7 +14,7 @@
   import (
     "context"
     "os"
-      
+
     "github.com/ydb-platform/ydb-go-sdk/v3"
   )
 
@@ -44,7 +44,7 @@
       "context"
       "database/sql"
       "os"
-      
+
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
@@ -58,7 +58,7 @@
       if err != nil {
         panic(err)
       }
-      defer nativeDriver.Close(ctx) 
+      defer nativeDriver.Close(ctx)
       connector, err := ydb.Connector(nativeDriver)
       if err != nil {
         panic(err)
@@ -80,7 +80,7 @@
       "context"
       "database/sql"
       "os"
-      
+
       _ "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
@@ -95,7 +95,7 @@
     ```
 
   {% endcut %}
-    
+
 
 - Java
 
@@ -106,7 +106,7 @@
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)
               .build());
-      
+
       TableClient tableClient = TableClient.newClient(transport).build();
 
       doWork(tableClient);
@@ -119,5 +119,13 @@
 - Node.js
 
   {% include [auth-access-token](../../../../_includes/nodejs/auth-access-token.md) %}
+
+- Python
+
+  {% include [auth-access-token](../../../../_includes/python/auth-access-token.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-access-token](../../../../_includes/python/async/auth-access-token.md) %}
 
 {% endlist %}

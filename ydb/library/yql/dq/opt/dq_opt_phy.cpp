@@ -2841,7 +2841,7 @@ NNodes::TExprBase DqBuildStageWithSourceWrap(NNodes::TExprBase node, TExprContex
     }
 
     bool supportsBlocks = inputType->GetKind() == ETypeAnnotationKind::Struct &&
-        inputType->Cast<TStructExprType>()->FindItem("_yql_block_length").Defined();
+        inputType->Cast<TStructExprType>()->FindItem(BlockLengthColumnName).Defined();
 
     auto wideWrap = ctx.Builder(node.Pos())
         .Callable(supportsBlocks ? TDqSourceWideBlockWrap::CallableName() : TDqSourceWideWrap::CallableName())

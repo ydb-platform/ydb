@@ -78,7 +78,7 @@ public:
             actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
         };
 
-        Request_->SetClientLostAction(std::move(clientLostCb));
+        Request_->SetFinishAction(std::move(clientLostCb));
     }
 
     bool HasCancelOperation() {

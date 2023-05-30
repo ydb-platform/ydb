@@ -52,7 +52,7 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
     return TStringBuilder() << checkpoint.GetGeneration() << "." << checkpoint.GetId();
 }
 
-bool IsIngressTask(const NDqProto::TDqTask& task) {
+bool IsIngressTask(const TDqTaskSettings& task) {
     for (const auto& input : task.GetInputs()) {
         if (!input.HasSource()) {
             return false;
@@ -125,7 +125,7 @@ NDqProto::TComputeActorState CombineForeignState(
 
 } // namespace
 
-TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor)
+TDqComputeActorCheckpoints::TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor)
     : TActor(&TDqComputeActorCheckpoints::StateFunc)
     , Owner(owner)
     , TxId(txId)
@@ -543,7 +543,7 @@ void TDqComputeActorCheckpoints::TPendingCheckpoint::Clear() {
     ComputeActorState.Clear();
 }
 
-size_t TDqComputeActorCheckpoints::TPendingCheckpoint::GetSinksCount(const NDqProto::TDqTask& task) {
+size_t TDqComputeActorCheckpoints::TPendingCheckpoint::GetSinksCount(const TDqTaskSettings& task) {
     size_t sinksCount = 0;
     for (int outputIndex = 0, outputsCount = task.OutputsSize(); outputIndex < outputsCount; ++outputIndex) {
         if (task.GetOutputs(outputIndex).HasSink()) {
@@ -562,7 +562,7 @@ static bool IsInfiniteSourceType(const TString& sourceType) {
     return sourceType == "PqSource";
 }
 
-NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task) {
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {
     for (const auto& input : task.GetInputs()) {
         if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
             return NDqProto::CHECKPOINTING_MODE_DEFAULT;

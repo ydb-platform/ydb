@@ -263,7 +263,7 @@ static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value
     }
 }
 
-void TChangeRecord::SerializeToDocApiJson(NJson::TJsonValue& json, const TDocApiJsonOptions& opts) const {
+void TChangeRecord::SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, const TAwsJsonOptions& opts) const {
     Y_VERIFY(Kind == EKind::CdcDataChange);
     Y_VERIFY(Schema);
 

@@ -34,11 +34,11 @@ public:
                 break;
             }
             case EKikimrQueryType::Query: {
-                querySettings.Type = EPhysicalQueryType::Query;
+                querySettings.Type = EPhysicalQueryType::GenericQuery;
                 break;
             }
             case EKikimrQueryType::Script: {
-                querySettings.Type = EPhysicalQueryType::FederatedQuery;
+                querySettings.Type = EPhysicalQueryType::GenericScript;
                 break;
             }
             default: {

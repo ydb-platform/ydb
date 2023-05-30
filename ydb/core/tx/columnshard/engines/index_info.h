@@ -6,6 +6,7 @@
 
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+#include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -29,12 +30,12 @@ using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 class TSaverContext {
 private:
     TString TierName;
-    std::optional<TCompression> ExternalCompression;
+    std::optional<NArrow::TCompression> ExternalCompression;
 public:
-    const std::optional<TCompression>& GetExternalCompression() const {
+    const std::optional<NArrow::TCompression>& GetExternalCompression() const {
         return ExternalCompression;
     }
-    TSaverContext& SetExternalCompression(const std::optional<TCompression>& value) {
+    TSaverContext& SetExternalCompression(const std::optional<NArrow::TCompression>& value) {
         ExternalCompression = value;
         return *this;
     }
@@ -112,17 +113,19 @@ public:
 class TColumnFeatures {
 private:
     std::optional<NArrow::TCompression> Compression;
-    std::optional<bool> LowCardinality;
+    std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
 public:
     static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
         TColumnFeatures result;
         if (columnInfo.HasCompression()) {
-            NArrow::TCompression compression = NArrow::TCompression::Default();
-            Y_VERIFY(compression.DeserializeFromProto(columnInfo.GetCompression()));
-            result.Compression = compression;
+            auto settings = NArrow::TCompression::BuildFromProto(columnInfo.GetCompression());
+            Y_VERIFY(settings.IsSuccess());
+            result.Compression = *settings;
         }
-        if (columnInfo.HasLowCardinality()) {
-            result.LowCardinality = columnInfo.GetLowCardinality();
+        if (columnInfo.HasDictionaryEncoding()) {
+            auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());
+            Y_VERIFY(settings.IsSuccess());
+            result.DictionaryEncoding =  *settings;
         }
         return result;
     }
@@ -145,6 +148,9 @@ public:
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    mutable THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
+    TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
+    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
@@ -177,9 +183,12 @@ public:
         }
         return true;
     }
-    TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
-    bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 public:
+
+    static TIndexInfo BuildDefault() {
+        TIndexInfo result("dummy", 0, false);
+        return result;
+    }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
         TIndexInfo result("", 0, schema.GetCompositeMarks());
@@ -207,6 +216,7 @@ public:
 
     /// Returns names of columns defined by the specific ids.
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
+    std::vector<ui32> GetColumnIds() const;
 
     /// Returns info of columns defined by specific ids.
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
@@ -292,7 +302,7 @@ private:
     std::shared_ptr<arrow::Schema> IndexKey;
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
-    TCompression DefaultCompression = TCompression::Default();
+    std::optional<NArrow::TCompression> DefaultCompression;
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials = false);

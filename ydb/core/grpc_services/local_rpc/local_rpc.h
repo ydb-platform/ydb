@@ -162,7 +162,7 @@ public:
         return &Request;
     }
 
-    void SetClientLostAction(std::function<void()>&&) override {}
+    void SetFinishAction(std::function<void()>&&) override {}
 
     bool IsClientLost() const override { return false; }
 

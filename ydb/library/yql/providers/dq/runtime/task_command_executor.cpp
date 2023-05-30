@@ -515,9 +515,12 @@ public:
                     request.Load(&input);
                 });
 
-                request.GetTask().GetMeta().UnpackTo(&taskMeta);
+                NDqProto::TDqTask task;
+                request.MutableTask()->Swap(&task);
+                task.GetMeta().UnpackTo(&taskMeta);
+                NDq::TDqTaskSettings settings(std::move(task));
                 try {
-                    Prepare(request.GetTask(), taskMeta, output);
+                    Prepare(settings, taskMeta, output);
                 } catch (const NKikimr::TMemoryLimitExceededException& ex) {
                     throw yexception() << "DQ computation exceeds the memory limit " << DqConfiguration->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit";
                 }
@@ -699,7 +702,7 @@ public:
     }
 
     template<typename T>
-    void Prepare(const NDqProto::TDqTask& task, const T& taskMeta, TPipedOutput& output) {
+    void Prepare(const NDq::TDqTaskSettings& task, const T& taskMeta, TPipedOutput& output) {
         NYql::NDqProto::TPrepareResponse result;
         result.SetResult(true); // COMPAT(aozeritsky) YQL-14268
 

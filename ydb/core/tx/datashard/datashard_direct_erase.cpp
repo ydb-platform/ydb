@@ -175,6 +175,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
                 throw TNeedGlobalTxId();
             }
             params.Txc->DB.UpdateTx(localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId);
+            self->GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
             if (!commitAdded && userDb) {
                 // Make sure we see our own changes on further iterations
                 userDb->AddCommitTxId(params.GlobalTxId, params.WriteVersion);
@@ -182,6 +183,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         } else {
             params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
+            self->GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
         }
     }
 

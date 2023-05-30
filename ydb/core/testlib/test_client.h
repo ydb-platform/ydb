@@ -132,6 +132,7 @@ namespace Tests {
         std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
         bool EnableMetering = false;
         TString MeteringFilePath;
+        TString AwsRegion;
 
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -170,6 +171,7 @@ namespace Tests {
         TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
         TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }
         TServerSettings& SetMeteringFilePath(const TString& path) { EnableMetering = true; MeteringFilePath = path; return *this; }
+        TServerSettings& SetAwsRegion(const TString& value) { AwsRegion = value; return *this; }
         TServerSettings& SetPersQueueGetReadSessionsInfoWorkerFactory(
             std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> factory
         ) {

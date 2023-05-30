@@ -46,8 +46,8 @@ NKqpProto::TKqpPhyQuery::EType GetPhyQueryType(const EPhysicalQueryType& type) {
     switch (type) {
         case EPhysicalQueryType::Data: return NKqpProto::TKqpPhyQuery::TYPE_DATA;
         case EPhysicalQueryType::Scan: return NKqpProto::TKqpPhyQuery::TYPE_SCAN;
-        case EPhysicalQueryType::Query: return NKqpProto::TKqpPhyQuery::TYPE_QUERY;
-        case EPhysicalQueryType::FederatedQuery: return NKqpProto::TKqpPhyQuery::TYPE_FEDERATED_QUERY;
+        case EPhysicalQueryType::GenericQuery: return NKqpProto::TKqpPhyQuery::TYPE_QUERY;
+        case EPhysicalQueryType::GenericScript: return NKqpProto::TKqpPhyQuery::TYPE_SCRIPT;
 
         case EPhysicalQueryType::Unspecified:
             break;
@@ -847,8 +847,8 @@ private:
             readProto.SetSorted(readSettings.Sorted);
             YQL_ENSURE(readSettings.SkipNullKeys.empty());
 
-            if (readSettings.SequentialHint) {
-                readProto.SetSequentialAccessHint(*readSettings.SequentialHint);
+            if (readSettings.SequentialInFlight) {
+                readProto.SetSequentialInFlightShards(*readSettings.SequentialInFlight);
             }
 
             auto ranges = settings.RangesExpr().template Maybe<TCoParameter>();

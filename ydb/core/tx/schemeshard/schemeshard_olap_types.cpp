@@ -23,15 +23,20 @@ namespace NKikimr::NSchemeShard {
         NotNullFlag = columnSchema.GetNotNull();
         TypeName = columnSchema.GetType();
         if (columnSchema.HasCompression()) {
-            NArrow::TCompression compression = NArrow::TCompression::Default();
-            if (!compression.DeserializeFromProto(columnSchema.GetCompression())) {
-                errors.AddError("Cannot parse compression info");
+            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
+            if (!compression) {
+                errors.AddError("Cannot parse compression info: " + compression.GetErrorMessage());
                 return false;
             }
-            Compression = compression;
+            Compression = *compression;
         }
-        if (columnSchema.HasLowCardinality()) {
-            LowCardinality = columnSchema.GetLowCardinality();
+        if (columnSchema.HasDictionaryEncoding()) {
+            auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
+            if (!settings) {
+                errors.AddError("Cannot parse dictionary compression info: " + settings.GetErrorMessage());
+                return false;
+            }
+            DictionaryEncoding = *settings;
         }
 
         if (columnSchema.HasTypeId()) {
@@ -78,12 +83,14 @@ namespace NKikimr::NSchemeShard {
                 .TypeInfo;
         }
         if (columnSchema.HasCompression()) {
-            NArrow::TCompression compression = NArrow::TCompression::Default();
-            Y_VERIFY(compression.DeserializeFromProto(columnSchema.GetCompression()));
-            Compression = compression;
+            auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
+            Y_VERIFY(compression.IsSuccess(), "%s", compression.GetErrorMessage().data());
+            Compression = *compression;
         }
-        if (columnSchema.HasLowCardinality()) {
-            LowCardinality = columnSchema.GetLowCardinality();
+        if (columnSchema.HasDictionaryEncoding()) {
+            auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
+            Y_VERIFY(settings.IsSuccess());
+            DictionaryEncoding = *settings;
         }
         NotNullFlag = columnSchema.GetNotNull();
     }
@@ -95,8 +102,8 @@ namespace NKikimr::NSchemeShard {
         if (Compression) {
             *columnSchema.MutableCompression() = Compression->SerializeToProto();
         }
-        if (LowCardinality && *LowCardinality) {
-            columnSchema.SetLowCardinality(*LowCardinality);
+        if (DictionaryEncoding) {
+            *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
         }
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
@@ -108,19 +115,19 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
         Y_VERIFY(GetName() == diffColumn.GetName());
-        if (!diffColumn.GetCompression().IsEmpty()) {
-            if (!Compression) {
-                Compression = NArrow::TCompression::Default();
-            }
-            auto applyDiffResult = Compression->ApplyDiff(diffColumn.GetCompression());
-            if (!applyDiffResult) {
-                errors.AddError("Cannot merge compression info: " + applyDiffResult.GetErrorMessage());
+        {
+            auto result = diffColumn.GetCompression().Apply(Compression);
+            if (!result) {
+                errors.AddError("Cannot merge compression info: " + result.GetErrorMessage());
                 return false;
             }
         }
-
-        if (diffColumn.GetLowCardinality()) {
-            LowCardinality = diffColumn.GetLowCardinality();
+        {
+            auto result = diffColumn.GetDictionaryEncoding().Apply(DictionaryEncoding);
+            if (!result) {
+                errors.AddError("Cannot merge dictionary encoding info: " + result.GetErrorMessage());
+                return false;
+            }
         }
         return true;
     }

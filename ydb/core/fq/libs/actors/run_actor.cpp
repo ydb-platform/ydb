@@ -1,6 +1,5 @@
 #include "proxy.h"
 #include "clusters_from_connections.h"
-#include "system_clusters.h"
 #include "table_bindings_from_bindings.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -1781,17 +1780,12 @@ private:
         *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
-        auto* attr = gatewaysConfig.MutableS3()->MutableDefaultSettings()->Add();
-        attr->SetName("ArrowThreadPool");
-        attr->SetValue("false");
-
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
         AddClustersFromConnections(YqConnections,
             Params.Config.GetCommon().GetUseBearerForYdb(),
             Params.Config.GetCommon().GetObjectStorageEndpoint(),

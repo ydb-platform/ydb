@@ -15,9 +15,9 @@ static EPhysicalQueryType GetPhysicalQueryType(const TStringBuf& value) {
     } else if (value == "scan_query") {
         return EPhysicalQueryType::Scan;
     } else if (value == "query") {
-        return EPhysicalQueryType::Query;
-    } else if (value == "federated_query") {
-        return EPhysicalQueryType::FederatedQuery;
+        return EPhysicalQueryType::GenericQuery;
+    } else if (value == "script") {
+        return EPhysicalQueryType::GenericScript;
     } else {
         YQL_ENSURE(false, "Unknown physical query type: " << value);
     }
@@ -31,10 +31,10 @@ static TStringBuf PhysicalQueryTypeToString(EPhysicalQueryType type) {
             return "data_query";
         case EPhysicalQueryType::Scan:
             return "scan_query";
-        case EPhysicalQueryType::Query:
+        case EPhysicalQueryType::GenericQuery:
             return "query";
-        case EPhysicalQueryType::FederatedQuery:
-            return "federated_query";
+        case EPhysicalQueryType::GenericScript:
+            return "script";
     }
 
     YQL_ENSURE(false, "Unexpected physical query type: " << type);
@@ -162,7 +162,7 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             settings.Sorted = true;
         } else if (name == TKqpReadTableSettings::SequentialSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
-            settings.SequentialHint = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+            settings.SequentialInFlight = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -231,13 +231,13 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (SequentialHint) {
+    if (SequentialInFlight) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
                     .Build(SequentialSettingName)
                 .Value<TCoAtom>()
-                    .Value(ToString(*SequentialHint))
+                    .Value(ToString(*SequentialInFlight))
                     .Build()
                 .Done());
     }

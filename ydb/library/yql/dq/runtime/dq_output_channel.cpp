@@ -48,13 +48,13 @@ using namespace NKikimr;
 template<bool FastPack>
 class TDqOutputChannel : public IDqOutputChannel {
 public:
-    TDqOutputChannel(ui64 channelId, NMiniKQL::TType* outputType, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TDqOutputChannel(ui64 channelId, NMiniKQL::TType* outputType,
         const NMiniKQL::THolderFactory& holderFactory, const TDqOutputChannelSettings& settings, const TLogFunc& logFunc)
         : ChannelId(channelId)
         , OutputType(outputType)
         , BasicStats(ChannelId)
         , ProfileStats(settings.CollectProfileStats ? &BasicStats : nullptr)
-        , Packer(false, NMiniKQL::TListType::Create(OutputType, typeEnv))
+        , Packer(OutputType)
         , Storage(settings.ChannelStorage)
         , HolderFactory(holderFactory)
         , TransportVersion(settings.TransportVersion)
@@ -176,8 +176,13 @@ public:
         data.ClearRaw();
         if (FirstStoredId < NextStoredId) {
             YQL_ENSURE(Storage);
+            LOG("Loading spilled blob. BlobId: " << FirstStoredId);
             TBuffer blob;
-            YQL_ENSURE(Storage->Get(FirstStoredId++, blob), "Lost block in storage");
+            if (!Storage->Get(FirstStoredId, blob)) {
+                LOG("BlobId " << FirstStoredId << " not ready yet");
+                return false;
+            }
+            ++FirstStoredId;
             ui64 rows;
             YQL_ENSURE(blob.size() >= sizeof(rows));
             std::memcpy((char*)&rows, blob.data(), sizeof(rows));
@@ -358,17 +363,17 @@ private:
 
 
 IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TDqOutputChannelSettings& settings, const TLogFunc& logFunc)
 {
     if (settings.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0 ||
         settings.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED)
     {
-        return new TDqOutputChannel<false>(channelId, outputType, typeEnv, holderFactory, settings, logFunc);
+        return new TDqOutputChannel<false>(channelId, outputType, holderFactory, settings, logFunc);
     } else {
         YQL_ENSURE(settings.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0,
             "Unsupported transport version " << (ui32)settings.TransportVersion);
-        return new TDqOutputChannel<true>(channelId, outputType, typeEnv, holderFactory, settings, logFunc);
+        return new TDqOutputChannel<true>(channelId, outputType, holderFactory, settings, logFunc);
     }
 }
 

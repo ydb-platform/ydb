@@ -23,7 +23,7 @@ public:
     template <typename TFunc>
     TCtorLogger(const NActors::TActivationContext& ctx, NActors::NLog::EPriority priority, TFunc logFunc)
     {
-        if (IS_LOG_PRIORITY_ENABLED(ctx, priority, Component)) {
+        if (IS_LOG_PRIORITY_ENABLED(priority, Component)) {
             TStringBuilder strStream;
             logFunc(strStream);
             ::NActors::MemLogAdapter(ctx, priority, Component, "%s", strStream.data());

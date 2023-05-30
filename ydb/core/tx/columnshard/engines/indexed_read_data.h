@@ -65,16 +65,16 @@ public:
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddNotIndexed(ui32 batchNo, TString blob, const TSnapshot& snapshot) {
-        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(snapshot));
-        AddNotIndexed(batchNo, batch, snapshot);
+    void AddNotIndexed(ui32 batchNo, TString blob, const TCommittedBlob& commitedBlob) {
+        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(commitedBlob.GetSchemaSnapshot()));
+        AddNotIndexed(batchNo, batch, commitedBlob);
     }
 
-    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
+    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, const TCommittedBlob& commitedBlob) {
         Y_VERIFY(batchNo < NotIndexed.size());
         Y_VERIFY(!NotIndexed[batchNo]);
         ++ReadyNotIndexed;
-        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, snapshot);
+        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, commitedBlob.GetSchemaSnapshot());
     }
 
     void AddIndexed(const TBlobRange& blobRange, const TString& column);

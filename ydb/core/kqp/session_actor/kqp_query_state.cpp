@@ -141,6 +141,11 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
             keepInCache = GetQueryKeepInCache();
             break;
 
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
+            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
+            keepInCache = false;
+            break;
+
         default:
             YQL_ENSURE(false);
     }

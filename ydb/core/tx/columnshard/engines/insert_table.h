@@ -7,6 +7,7 @@
 namespace NKikimr::NOlap {
 
 struct TInsertedData {
+public:
     ui64 ShardOrPlan = 0;
     ui64 WriteTxId = 0;
     ui64 PathId = 0;
@@ -18,15 +19,19 @@ struct TInsertedData {
     TInsertedData() = delete; // avoid invalid TInsertedData anywhere
 
     TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
-                  const TString& meta, const TInstant& writeTime)
+                  const TString& meta, const TInstant& writeTime, const std::optional<TSnapshot>& schemaVersion)
         : ShardOrPlan(shardOrPlan)
         , WriteTxId(writeTxId)
         , PathId(pathId)
         , DedupId(dedupId)
         , BlobId(blobId)
         , Metadata(meta)
-        , DirtyTime(writeTime)
-    {}
+        , DirtyTime(writeTime)    {
+        if (schemaVersion) {
+            SchemaVersion = *schemaVersion;
+            Y_VERIFY(SchemaVersion.Valid());
+        }
+    }
 
     bool operator < (const TInsertedData& key) const {
         if (ShardOrPlan < key.ShardOrPlan) {
@@ -84,29 +89,46 @@ struct TInsertedData {
         return TSnapshot(ShardOrPlan, WriteTxId);
     }
 
+    const TSnapshot& GetSchemaSnapshot() const {
+        return SchemaVersion;
+    }
+
     ui32 BlobSize() const { return BlobId.BlobSize(); }
+
+private:
+    TSnapshot SchemaVersion = TSnapshot::Zero();
 };
 
 class TCommittedBlob {
 private:
     TUnifiedBlobId BlobId;
-    TSnapshot Snapshot;
+    TSnapshot CommitSnapshot;
+    TSnapshot SchemaSnapshot;
 public:
-    TCommittedBlob(const TUnifiedBlobId& blobId, const TSnapshot& snapshot)
+    TCommittedBlob(const TUnifiedBlobId& blobId, const TSnapshot& snapshot, const TSnapshot& schemaSnapshot)
         : BlobId(blobId)
-        , Snapshot(snapshot)
+        , CommitSnapshot(snapshot)
+        , SchemaSnapshot(schemaSnapshot)
     {}
+
+    static TCommittedBlob BuildKeyBlob(const TUnifiedBlobId& blobId) {
+        return TCommittedBlob(blobId, TSnapshot::Zero(), TSnapshot::Zero());
+    }
 
     /// It uses trick then we place key wtih planStep:txId in container and find them later by BlobId only.
     /// So hash() and equality should depend on BlobId only.
     bool operator == (const TCommittedBlob& key) const { return BlobId == key.BlobId; }
     ui64 Hash() const noexcept { return BlobId.Hash(); }
     TString DebugString() const {
-        return TStringBuilder() << BlobId << ";ps=" << Snapshot.GetPlanStep() << ";ti=" << Snapshot.GetTxId();
+        return TStringBuilder() << BlobId << ";ps=" << CommitSnapshot.GetPlanStep() << ";ti=" << CommitSnapshot.GetTxId();
     }
 
     const TSnapshot& GetSnapshot() const {
-        return Snapshot;
+        return CommitSnapshot;
+    }
+
+    const TSnapshot& GetSchemaSnapshot() const {
+        return SchemaSnapshot;
     }
 
     const TUnifiedBlobId& GetBlobId() const {

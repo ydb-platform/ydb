@@ -47,7 +47,10 @@ EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     Y_VERIFY(tx->GetDataTx());
 
-    Pipeline.SaveForPropose(tx->GetDataTx());
+    bool cached = Pipeline.SaveForPropose(tx->GetDataTx());
+    if (cached) {
+        Pipeline.RegisterDistributedWrites(op, txc.DB);
+    }
     Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
 
     if (!op->HasVolatilePrepareFlag()) {

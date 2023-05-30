@@ -188,6 +188,7 @@ public:
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);
+                DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
                 if (!commitAdded && userDb) {
                     // Make sure we see our own changes on further iterations
                     userDb->AddCommitTxId(globalTxId, writeVersion);
@@ -195,6 +196,7 @@ public:
                 }
             } else {
                 txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
+                DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
             }
         }
 

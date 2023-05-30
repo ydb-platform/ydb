@@ -721,12 +721,6 @@ protected:
 
         auto columns = BuildKqpColumns(source, table);
 
-        ui64 itemsLimit = 0;
-
-        TString itemsLimitParamName;
-        NYql::NDqProto::TData itemsLimitBytes;
-        NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
-
         const auto& snapshot = GetSnapshot();
 
         auto addPartiton = [&](TMaybe<ui64> shardId, const TShardInfo& shardInfo, TMaybe<ui64> maxInFlightShards = Nothing()) {
@@ -740,11 +734,6 @@ protected:
                 } else {
                     task.Meta.ShardId = *shardId;
                 }
-            }
-
-            for (auto& [name, value] : shardInfo.Params) {
-                auto ret = task.Meta.Params.emplace(name, std::move(value));
-                YQL_ENSURE(ret.second);
             }
 
             NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
@@ -797,8 +786,8 @@ protected:
                 }
             }
 
-            ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
-                Request.TxAlloc->TypeEnv, itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+            ui64 itemsLimit = ExtractItemsLimit(stageInfo, source.GetItemsLimit(), Request.TxAlloc->HolderFactory,
+                Request.TxAlloc->TypeEnv);
             settings.SetItemsLimit(itemsLimit);
 
             auto self = static_cast<TDerived*>(this)->SelfId();
@@ -816,10 +805,10 @@ protected:
             input.SourceType = NYql::KqpReadRangesSourceName;
         };
 
-        if (source.GetSequentialAccessHint()) {
-            auto shardInfo = MakeFakePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+        if (source.GetSequentialInFlightShards()) {
+            auto shardInfo = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
             if (shardInfo.KeyReadRanges) {
-                addPartiton({}, shardInfo, source.GetSequentialAccessHint());
+                addPartiton({}, shardInfo, source.GetSequentialInFlightShards());
                 return {};
             } else {
                 return 0;

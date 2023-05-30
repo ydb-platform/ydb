@@ -8,7 +8,9 @@ description = 'Create virtual group backed by BlobDepot'
 
 def add_options(p):
     p.add_argument('--name', type=str, required=True, nargs='+', help='cluster-unique name(s) of newly created virtual groups')
-    p.add_argument('--hive-id', type=int, required=True, help='tablet id of containing hive')
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument('--hive-id', type=int, help='tablet id of containing hive')
+    g.add_argument('--database', type=str, help='database path of containing hive')
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument('--storage-pool-name', type=str, metavar='POOL_NAME', help='name of the containing storage pool')
     g.add_argument('--storage-pool-id', type=str, metavar='BOX:POOL', help='id of the cotaining storage pool')
@@ -24,7 +26,10 @@ def do(args):
         cmd = request.Command.add().AllocateVirtualGroup
 
         cmd.Name = name
-        cmd.HiveId = args.hive_id
+        if args.hive_id is not None:
+            cmd.HiveId = args.hive_id
+        if args.database is not None:
+            cmd.Database = args.database
 
         if args.storage_pool_name is not None:
             cmd.StoragePoolName = args.storage_pool_name

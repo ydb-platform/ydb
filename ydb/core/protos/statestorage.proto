@@ -96,23 +96,32 @@ message TEvReplicaBoardPublishAck {
 
 message TEvReplicaBoardLookup {
     optional string Path = 1;
-    optional NActorsProto.TActorId Owner = 2;
+    reserved 2;
     optional bool Subscribe = 3;
 };
 
 message TEvReplicaBoardCleanup {
 };
 
+message TEvReplicaBoardUnsubscribe {
+};
+
 message TBoardEntryInfo {
     optional NActorsProto.TActorId Owner = 1;
     optional bytes Payload = 2;
+    optional bool Dropped = 3 [default = false];
 };
 
 message TEvReplicaBoardInfo {
     optional string Path = 1;
     optional bool Dropped = 2;
     repeated TBoardEntryInfo Info = 3;
-}
+};
+
+message TEvReplicaBoardInfoUpdate {
+    optional string Path = 1;
+    optional TBoardEntryInfo Info = 3;
+};
 
 message TEndpointBoardEntry {
     optional string Address = 1;

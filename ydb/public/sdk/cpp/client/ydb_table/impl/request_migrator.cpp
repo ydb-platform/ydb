@@ -40,7 +40,7 @@ void TRequestMigrator::SetHost(ui64 nodeId) {
     CurHost_ = nodeId;
 }
 
-bool TRequestMigrator::IsOurSession(const TSession::TImpl* session) const {
+bool TRequestMigrator::IsOurSession(TSession::TImpl* session) const {
     if (!CurHost_)
         return false;
 
@@ -65,7 +65,7 @@ bool TRequestMigrator::Reset() {
     }
 }
 
-bool TRequestMigrator::DoCheckAndMigrate(const TSession::TImpl* session) {
+bool TRequestMigrator::DoCheckAndMigrate(TSession::TImpl* session) {
     if (session->GetEndpoint().empty())
         return false;
 

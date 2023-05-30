@@ -26,16 +26,15 @@ public:
 
     template <class TForwardIterator>
     NDqProto::TData Serialize(TForwardIterator first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType) const {
-        const auto listType = NKikimr::NMiniKQL::TListType::Create(const_cast<NKikimr::NMiniKQL::TType*>(itemType), TypeEnv);
         if (TransportVersion == NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED ||
             TransportVersion == NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0)
         {
-            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(listType);
+            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(itemType);
             return SerializeBatch(packer, first, last);
         }
         
         if (TransportVersion == NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0) {
-            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(listType);
+            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(itemType);
             return SerializeBatch(packer, first, last);
         }
         YQL_ENSURE(false, "Unsupported TransportVersion");

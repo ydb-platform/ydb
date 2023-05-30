@@ -1,4 +1,5 @@
 #include "diff.h"
+#include "object.h"
 #include "parsing.h"
 #include <util/string/cast.h>
 
@@ -49,6 +50,28 @@ bool TCompressionDiff::DeserializeFromProto(const NKikimrSchemeOp::TCompressionO
         }
     }
     return true;
+}
+
+NKikimr::TConclusionStatus TCompressionDiff::Apply(std::optional<TCompression>& settings) const {
+    if (IsEmpty()) {
+        return TConclusionStatus::Success();
+    }
+    TCompression merged;
+    if (!!settings) {
+        merged = *settings;
+    }
+    if (Codec) {
+        merged.Codec = *Codec;
+    }
+    if (Level) {
+        merged.Level = *Level;
+    }
+    auto validation = merged.Validate();
+    if (!validation) {
+        return validation;
+    }
+    settings = merged;
+    return TConclusionStatus::Success();
 }
 
 }

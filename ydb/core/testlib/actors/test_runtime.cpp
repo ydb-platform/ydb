@@ -145,6 +145,7 @@ namespace NActors {
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->ColumnShardConfig = app0->ColumnShardConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
+            nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             if (KeyConfigGenerator) {

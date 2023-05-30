@@ -132,8 +132,14 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         }
     }
 
-    if (in.HasTTLSettings() && in.GetTTLSettings().HasEnabled()) {
-        AddTtl(out, in.GetTTLSettings().GetEnabled());
+    if (in.HasTTLSettings()) {
+        if (in.GetTTLSettings().HasEnabled()) {
+            AddTtl(out, in.GetTTLSettings().GetEnabled());
+        }
+
+        if (in.GetTTLSettings().HasUseTiering()) {
+            out.set_tiering(in.GetTTLSettings().GetUseTiering());
+        }
     }
 }
 
@@ -170,8 +176,14 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
         }
     }
 
-    if (in.HasTtlSettings() && in.GetTtlSettings().HasEnabled()) {
-        AddTtl(out, in.GetTtlSettings().GetEnabled());
+    if (in.HasTtlSettings()) {
+        if (in.GetTtlSettings().HasEnabled()) {
+            AddTtl(out, in.GetTtlSettings().GetEnabled());
+        }
+
+        if (in.GetTtlSettings().HasUseTiering()) {
+            out.set_tiering(in.GetTtlSettings().GetUseTiering());
+        }
     }
 }
 

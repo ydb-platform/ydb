@@ -61,6 +61,18 @@ class TStreamExecuteYqlScriptRPC
 private:
     typedef TRpcRequestWithOperationParamsActor<TStreamExecuteYqlScriptRPC, TEvStreamExecuteYqlScriptRequest, false> TBase;
 
+    static std::function<TEvStreamExecuteYqlScriptRequest::TFinishWrapper(std::function<void()>&&)>
+    GetFinishWrapper(std::shared_ptr<std::atomic_bool> flag) {
+        return [flag](std::function<void()>&& cb) {
+            return [cb = std::move(cb), flag](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
+                Y_ASSERT(future.HasValue());
+                if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL || flag->load()) {
+                    cb();
+                }
+            };
+        };
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_STREAM_REQ;
@@ -69,7 +81,17 @@ public:
     TStreamExecuteYqlScriptRPC(IRequestNoOpCtx* request, ui64 rpcBufferSize)
         : TBase(request)
         , RpcBufferSize_(rpcBufferSize)
-    {}
+        , CancelationFlag(std::make_shared<std::atomic_bool>(false))
+    {
+        // StreamExecuteYqlScript allows write in to table.
+        // But CanselAfter should not trigger cancelation if we chage table
+        // This logic is broken - just disable CancelAfter_ for a while
+        CancelAfter_ = TDuration();
+
+        auto call = dynamic_cast<TEvStreamExecuteYqlScriptRequest*>(request);
+        Y_VERIFY(call);
+        call->SetCustomFinishWrapper(GetFinishWrapper(CancelationFlag));
+    }
 
     using TBase::Request_;
 
@@ -89,7 +111,7 @@ public:
         auto selfId = this->SelfId();
         auto as = TActivationContext::ActorSystem();
 
-        RequestPtr()->SetClientLostAction([selfId, as]() {
+        RequestPtr()->SetFinishAction([selfId, as]() {
             as->Send(selfId, new TEvents::TEvWakeup(EStreamRpcWakeupTag::ClientLostTag));
         });
 
@@ -127,7 +149,7 @@ private:
             return ReplyFinishStream("StreamExecuteYqlScript request is not supported");
         }
 
-        const auto req = GetProtoRequest();
+        auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
         auto script = req->script();
@@ -136,6 +158,8 @@ private:
         if (!CheckQuery(script, issues)) {
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, issues);
         }
+
+        ::Ydb::Operations::OperationParams operationParams;
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
@@ -149,7 +173,9 @@ private:
             &req->parameters(),
             req->collect_stats(),
             nullptr, // query_cache_policy
-            req->has_operation_params() ? &req->operation_params() : nullptr
+            req->has_operation_params() ? &req->operation_params() : nullptr,
+            false, // keep session
+            false // use cancelAfter
         );
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
@@ -361,11 +387,7 @@ private:
                    << " which exceeds client timeout " << InactiveClientTimeout_;
                 LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, message);
 
-                if (GatewayRequestHandlerActorId_) {
-                    auto timeoutEv = MakeHolder<NKqp::TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");
-                    ctx.Send(GatewayRequestHandlerActorId_, timeoutEv.Release());
-                }
-
+                CancelationFlag->store(true);
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
                 return ReplyFinishStream(StatusIds::TIMEOUT, issue);
             }
@@ -381,11 +403,7 @@ private:
     void HandleOperationTimeout(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << this->SelfId() << " Operation timeout.");
 
-        if (GatewayRequestHandlerActorId_) {
-            auto timeoutEv = MakeHolder<NKqp::TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Operation timeout");
-            ctx.Send(GatewayRequestHandlerActorId_, timeoutEv.Release());
-        }
-
+        CancelationFlag->store(true);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Operation timeout");
         return ReplyFinishStream(StatusIds::TIMEOUT, issue);
     }
@@ -455,6 +473,7 @@ private:
     ui64 ResultsReceived_ = 0;
     // DataQuery
     THolder<TDataQueryStreamContext> DataQueryStreamContext;
+    std::shared_ptr<std::atomic_bool> CancelationFlag;
 };
 
 } // namespace

@@ -167,10 +167,20 @@ TString TLoginCredentialsProvider::GetToken() const {
 }
 
 TString TLoginCredentialsProvider::GetError() const {
-    if (Response_.operation().issues_size() > 0) {
-        return Response_.operation().issues(0).message();
+    if (Status_.Ok()) {
+        if (Response_.operation().issues_size() > 0) {
+            return Response_.operation().issues(0).message();
+        } else {
+            return Ydb::StatusIds_StatusCode_Name(Response_.operation().status());
+        }
     } else {
-        return Ydb::StatusIds_StatusCode_Name(Response_.operation().status());
+        TStringBuilder str;
+        str << "Couldn't get token for provided credentials from " << Status_.Endpoint
+            << " with status " << Status_.Status << ".";
+        for (const auto& issue : Status_.Issues) {
+            str << Endl << "Issue: " << issue;
+        }
+        return str;
     }
 }
 

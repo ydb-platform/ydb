@@ -120,7 +120,7 @@ message TKqpLocks {
 
     enum ELocksOp {
         Unspecified = 0;
-        Validate = 1;
+        reserved 1; // Validate op is deprecated
         Commit = 2; // Validate locks, commit buffered changes and erase locks
         Rollback = 3; // Rollback buffered changes and erase locks
     }

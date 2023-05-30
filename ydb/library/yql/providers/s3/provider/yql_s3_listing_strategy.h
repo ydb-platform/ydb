@@ -14,6 +14,7 @@ namespace NYql {
 struct TS3ListingOptions {
     bool IsPartitionedDataset = false;
     bool IsConcurrentListing = false;
+    ui64 MaxResultSet = std::numeric_limits<ui64>::max();
 };
 
 IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& options);
@@ -31,8 +32,6 @@ public:
 IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     const IHTTPGateway::TPtr& httpGateway,
     const NS3Lister::IS3ListerFactory::TPtr& listerFactory,
-    ui64 maxFilesPerQueryFiles,
-    ui64 maxFilesPerQueryDirectory,
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     size_t maxParallelOps,
     bool allowLocalFiles);

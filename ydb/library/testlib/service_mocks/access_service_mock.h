@@ -76,29 +76,39 @@ public:
     THashSet<TString> AllowedUserTokens = {"user1"};
     THashMap<TString, TString> AllowedServiceTokens = {{"service1", "root1/folder1"}};
 
+    bool ShouldGenerateRetryableError = false;
+
     grpc::Status Authenticate(
             grpc::ServerContext*,
             const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override {
 
         ++AuthenticateCount;
-        TString token = request->iam_token();
-        if (InvalidTokens.count(token) > 0) {
-            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid Token");
-        }
-        if (UnavailableTokens.count(token) > 0) {
-            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
-        }
-        if (AllowedUserTokens.count(token) > 0) {
-            response->mutable_subject()->mutable_user_account()->set_id(token);
+        if (request->has_signature()) {
+            if (ShouldGenerateRetryableError) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            response->mutable_subject()->mutable_user_account()->set_id("user1");
             return grpc::Status::OK;
+        } else {
+            TString token = request->iam_token();
+            if (InvalidTokens.count(token) > 0) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid Token");
+            }
+            if (UnavailableTokens.count(token) > 0) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            if (AllowedUserTokens.count(token) > 0) {
+                response->mutable_subject()->mutable_user_account()->set_id(token);
+                return grpc::Status::OK;
+            }
+            if (AllowedServiceTokens.count(token) > 0) {
+                response->mutable_subject()->mutable_service_account()->set_id(token);
+                response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServiceTokens[token]);
+                return grpc::Status::OK;
+            }
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
         }
-        if (AllowedServiceTokens.count(token) > 0) {
-            response->mutable_subject()->mutable_service_account()->set_id(token);
-            response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServiceTokens[token]);
-            return grpc::Status::OK;
-        }
-        return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
     }
 
     THashSet<TString> AllowedUserPermissions = {"user1-something.read"};
@@ -111,30 +121,38 @@ public:
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
         ++AuthorizeCount;
-        TString token = request->iam_token();
-        if (UnavailableUserPermissions.count(token + '-' + request->permission()) > 0) {
-            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
-        }
-        bool allowedResource = true;
-        if (!AllowedResourceIds.empty()) {
-            allowedResource = false;
-            for (const auto& resourcePath : request->resource_path()) {
-                if (AllowedResourceIds.count(resourcePath.id()) > 0) {
-                    allowedResource = true;
+        if (request->has_signature()) {
+            if (ShouldGenerateRetryableError) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            response->mutable_subject()->mutable_user_account()->set_id("user1");
+            return grpc::Status::OK;
+        } else {
+            TString token = request->iam_token();
+            if (UnavailableUserPermissions.count(token + '-' + request->permission()) > 0) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            bool allowedResource = true;
+            if (!AllowedResourceIds.empty()) {
+                allowedResource = false;
+                for (const auto& resourcePath : request->resource_path()) {
+                    if (AllowedResourceIds.count(resourcePath.id()) > 0) {
+                        allowedResource = true;
+                    }
                 }
             }
-        }
-        if (allowedResource) {
-            if (AllowedUserPermissions.count(token + '-' + request->permission()) > 0) {
-                response->mutable_subject()->mutable_user_account()->set_id(token);
-                return grpc::Status::OK;
+            if (allowedResource) {
+                if (AllowedUserPermissions.count(token + '-' + request->permission()) > 0) {
+                    response->mutable_subject()->mutable_user_account()->set_id(token);
+                    return grpc::Status::OK;
+                }
+                if (AllowedServicePermissions.count(token + '-' + request->permission()) > 0) {
+                    response->mutable_subject()->mutable_service_account()->set_id(token);
+                    response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServicePermissions[token + '-' + request->permission()]);
+                    return grpc::Status::OK;
+                }
             }
-            if (AllowedServicePermissions.count(token + '-' + request->permission()) > 0) {
-                response->mutable_subject()->mutable_service_account()->set_id(token);
-                response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServicePermissions[token + '-' + request->permission()]);
-                return grpc::Status::OK;
-            }
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
         }
-        return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
     }
 };

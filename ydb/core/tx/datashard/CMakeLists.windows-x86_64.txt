@@ -177,6 +177,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_snapshot_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/complete_data_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/completed_operations_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/conflicts_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_cdc_stream_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_persistent_snapshot_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/create_table_unit.cpp

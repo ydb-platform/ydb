@@ -436,6 +436,7 @@ struct TShardedTableOptions {
         EFormat Format;
         TMaybe<EState> InitialState;
         bool VirtualTimestamps = false;
+        TMaybe<TString> AwsRegion;
     };
 
     using TAttributes = THashMap<TString, TString>;

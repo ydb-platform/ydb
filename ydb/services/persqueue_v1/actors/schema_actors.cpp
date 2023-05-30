@@ -563,11 +563,10 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
     tablet.Pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tablet.TabletId, NTabletPipe::TClientConfig(NTabletPipe::TClientRetryPolicy::WithRetries())));
 
     if (tablet.TabletId == BalancerTabletId) {
-        THolder<NKikimr::TEvPersQueue::TEvGetReadSessionsInfo> ev(new NKikimr::TEvPersQueue::TEvGetReadSessionsInfo(Consumer));
+        THolder<NKikimr::TEvPersQueue::TEvGetReadSessionsInfo> ev(new NKikimr::TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Consumer, ctx)));
         NTabletPipe::SendData(ctx, tablet.Pipe, ev.Release());
-
     } else {
-        THolder<NKikimr::TEvPersQueue::TEvStatus> ev(new NKikimr::TEvPersQueue::TEvStatus(Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Consumer), Consumer.empty()));
+        THolder<NKikimr::TEvPersQueue::TEvStatus> ev(new NKikimr::TEvPersQueue::TEvStatus(Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Consumer, ctx), Consumer.empty()));
         NTabletPipe::SendData(ctx, tablet.Pipe, ev.Release());
     }
     ++RequestsInfly;

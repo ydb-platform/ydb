@@ -65,6 +65,7 @@ TString MakeQuery(const TString& tmpl) {
 namespace NKikimr {
 namespace NKqp {
 
+class TKqpCounters;
 const TString KikimrDefaultUtDomainRoot = "Root";
 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
@@ -247,6 +248,7 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwO
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTImeout = false);
 TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTImeout = false);
 
+bool ValidatePlanNodeIds(const NJson::TJsonValue& plan);
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, const TString& key);
@@ -276,6 +278,8 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer* server, TAc
 TVector<ui64> GetTableShards(Tests::TServer* server, TActorId sender, const TString &path);
 
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server, TActorId sender, const TString &path);
+
+void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 
 } // namespace NKqp
 } // namespace NKikimr

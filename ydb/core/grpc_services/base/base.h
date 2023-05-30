@@ -1,5 +1,7 @@
 #pragma once
 
+#include "iface.h"
+
 #include <grpc++/support/byte_buffer.h>
 #include <grpc++/support/slice.h>
 
@@ -246,22 +248,6 @@ public:
     }
 };
 
-class IRequestCtxBaseMtSafe {
-public:
-    virtual TMaybe<TString> GetTraceId() const = 0;
-    // Returns client provided database name
-    virtual const TMaybe<TString> GetDatabaseName() const = 0;
-    // Returns "internal" token (result of ticket parser authentication)
-    virtual const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const = 0;
-    // Returns internal token as a serialized message.
-    virtual const TString& GetSerializedToken() const = 0;
-    virtual bool IsClientLost() const = 0;
-    // Is this call made from inside YDB?
-    virtual bool IsInternalCall() const {
-        return false;
-    }
-};
-
 class IRequestCtxBase : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual ~IRequestCtxBase() = default;
@@ -387,19 +373,6 @@ public:
 
     // Pass request for next processing
     virtual void Pass(const IFacilityProvider& facility) = 0;
-};
-
-// Provide methods which can be safely passed though actor system
-// as part of event
-class IRequestCtxMtSafe : public virtual IRequestCtxBaseMtSafe {
-public:
-    virtual ~IRequestCtxMtSafe() = default;
-    virtual const google::protobuf::Message* GetRequest() const = 0;
-    virtual const TMaybe<TString> GetRequestType() const = 0;
-    // Implementation must be thread safe
-    virtual void SetClientLostAction(std::function<void()>&& cb) = 0;
-    // Allocation is thread safe. https://protobuf.dev/reference/cpp/arenas/#thread-safety
-    virtual google::protobuf::Arena* GetArena() = 0;
 };
 
 // Request context
@@ -626,7 +599,7 @@ private:
     const TActorId From_;
     NGrpc::TAuthState State_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
-    const TString EmptySerializedTokenMessage_;
+    inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
 };
 
@@ -848,7 +821,7 @@ public:
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
-    const TString EmptySerializedTokenMessage_;
+    inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
     TMaybe<NRpcService::TRlPath> RlPath_;
     bool RlAllowed_;
@@ -963,6 +936,8 @@ class TGRpcRequestWrapperImpl
 public:
     using TRequest = TReq;
     using TResponse = TResp;
+
+    using TFinishWrapper = std::function<void(const NGrpc::IRequestContextBase::TAsyncFinishResult&)>;
 
     TGRpcRequestWrapperImpl(NGrpc::IRequestContextBase* ctx)
         : Ctx_(ctx)
@@ -1155,14 +1130,13 @@ public:
         Ctx_->SetNextReplyCallback(std::move(cb));
     }
 
-    void SetClientLostAction(std::function<void()>&& cb) override {
-        auto shutdown = [cb = std::move(cb)](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
-            Y_ASSERT(future.HasValue());
-            if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
-                cb();
-            }
-        };
+    void SetFinishAction(std::function<void()>&& cb) override {
+        auto shutdown = FinishWrapper(std::move(cb));
         Ctx_->GetFinishFuture().Subscribe(std::move(shutdown));
+    }
+
+    void SetCustomFinishWrapper(std::function<TFinishWrapper(std::function<void()>&&)> wrapper) {
+        FinishWrapper = wrapper;
     }
 
     bool IsClientLost() const override {
@@ -1222,10 +1196,19 @@ private:
         return google::protobuf::Arena::CreateMessage<TResponse>(Ctx_->GetArena());
     }
 
+    static TFinishWrapper GetStdFinishWrapper(std::function<void()>&& cb) {
+        return [cb = std::move(cb)](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
+            Y_ASSERT(future.HasValue());
+            if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
+                cb();
+            }
+        };
+    }
+
 private:
     TIntrusivePtr<NGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
-    const TString EmptySerializedTokenMessage_;
+    inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;
     Ydb::CostInfo* CostInfo = nullptr;
     Ydb::QuotaExceeded* QuotaExceeded = nullptr;
@@ -1233,6 +1216,7 @@ private:
     TRespHook RespHook;
     TMaybe<NRpcService::TRlPath> RlPath;
     IGRpcProxyCounters::TPtr Counters;
+    std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>

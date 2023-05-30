@@ -217,7 +217,7 @@ public:
     TChangefeedDescription& AddAttribute(const TString& key, const TString& value);
     TChangefeedDescription& SetAttributes(const THashMap<TString, TString>& attrs);
     TChangefeedDescription& SetAttributes(THashMap<TString, TString>&& attrs);
-    // Value that will be emitted in the `awsRegion` field of the record in DocumentTableJson format
+    // Value that will be emitted in the `awsRegion` field of the record in DynamoDBStreamsJson format
     TChangefeedDescription& WithAwsRegion(const TString& value);
 
     const TString& GetName() const;
@@ -465,6 +465,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    TMaybe<TString> GetTiering() const;
 
     // Deprecated. Use GetEntry() of TDescribeTableResult instead
     const TString& GetOwner() const;

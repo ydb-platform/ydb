@@ -81,10 +81,12 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
    * `OLD_IMAGE`: Any column values before updates are written.
    * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
 * `FORMAT`: Data write format.
-   * `JSON`: The record structure is given on the [changefeed description](../../../../concepts/cdc#record-structure) page.
+   * `JSON`: Write data in [JSON](../../../../concepts/cdc#json-record-structure) format.
+   * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure).
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
 * `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc#initial-scan). Disabled by default.
+* `AWS_REGION`: Value to be written to the `awsRegion` field. Used only with the `DYNAMODB_STREAMS_JSON` format.
 
 The code below adds a changefeed named `updates_feed`, where the values of updated table columns will be exported in JSON format:
 

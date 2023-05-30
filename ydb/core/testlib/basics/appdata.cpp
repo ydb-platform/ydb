@@ -57,6 +57,7 @@ namespace NKikimr {
         app->ColumnShardConfig = ColumnShardConfig;
         app->SchemeShardConfig = SchemeShardConfig;
         app->MeteringConfig = MeteringConfig;
+        app->AwsCompatibilityConfig = AwsCompatibilityConfig;
         app->FeatureFlags = FeatureFlags;
 
         // This is a special setting active in test runtime only
@@ -192,5 +193,10 @@ namespace NKikimr {
     void TAppPrepare::SetEnableDbCounters(bool value)
     {
         FeatureFlags.SetEnableDbCounters(value);
+    }
+
+    void TAppPrepare::SetAwsRegion(const TString& value)
+    {
+        AwsCompatibilityConfig.SetAwsRegion(value);
     }
 }

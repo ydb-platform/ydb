@@ -576,6 +576,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
     app.SetEnablePQConfigTransactionsAtSchemeShard(opts.EnablePQConfigTransactionsAtSchemeShard_);
+    app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
+    app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);

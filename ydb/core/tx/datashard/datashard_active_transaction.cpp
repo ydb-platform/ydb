@@ -27,6 +27,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , TxSize(0)
     , TxCacheUsage(0)
     , IsReleased(false)
+    , BuiltTaskRunner(false)
     , IsReadOnly(true)
     , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets())
     , Cancelled(false)
@@ -82,7 +83,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
         try {
             bool hasPersistentChannels = false;
-            if (!KqpValidateTransaction(GetKqpTransaction(), Immediate(), StepTxId_.TxId, ctx, hasPersistentChannels)) {
+            if (!KqpValidateTransaction(GetTasks(), Immediate(), StepTxId_.TxId, ctx, hasPersistentChannels)) {
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed, datashard: "
                     << TabletId() << ", txid: " << StepTxId_.TxId);
                 ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
@@ -91,7 +92,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             }
             computeCtx.SetHasPersistentChannels(hasPersistentChannels);
 
-            for (auto& task : GetKqpTransaction().GetTasks()) {
+            for (auto& task : GetTasks()) {
                 NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
                 if (!task.GetMeta().UnpackTo(&meta)) {
                     LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed"
@@ -154,7 +155,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
-            KqpSetTxLocksKeys(GetKqpTransaction().GetLocks(), self->SysLocksTable(), EngineBay);
+            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay);
             EngineBay.MarkTxLoaded();
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
@@ -201,11 +202,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
 TValidatedDataTx::~TValidatedDataTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
-}
-
-const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& TValidatedDataTx::GetKqpTasks() const {
-    Y_VERIFY(IsKqpTx());
-    return Tx.GetKqpTransaction().GetTasks();
 }
 
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)

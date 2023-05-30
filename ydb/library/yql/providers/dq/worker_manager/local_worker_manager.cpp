@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/dq/actors/compute_actor.h>
 #include <ydb/library/yql/providers/dq/actors/worker_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/yql/dq/common/dq_resource_quoter.h>
 
@@ -37,6 +38,32 @@ union TDqLocalResourceId {
 
 static_assert(sizeof(TDqLocalResourceId) == 8);
 
+struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+
+    TMemoryQuotaManager(std::shared_ptr<NDq::TResourceQuoter> nodeQuoter, const NDq::TTxId& txId, ui64 limit) 
+        : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
+        , NodeQuoter(nodeQuoter)
+        , TxId(txId) {
+    }
+
+    ~TMemoryQuotaManager() override {
+        if (Limit) {
+            NodeQuoter->Free(TxId, 0, Limit);
+        }
+    }
+
+    bool AllocateExtraQuota(ui64 extraSize) override {
+        return NodeQuoter->Allocate(TxId, 0, extraSize);
+    }
+
+    void FreeExtraQuota(ui64 extraSize) override {
+        NodeQuoter->Free(TxId, 0, extraSize);
+    }
+
+    std::shared_ptr<NDq::TResourceQuoter> NodeQuoter;
+    NDq::TTxId TxId;
+};
+
 class TLocalWorkerManager: public TWorkerManagerCommon<TLocalWorkerManager> {
 
 public:
@@ -54,16 +81,6 @@ public:
             limitCounter->Set(limit);
             allocatedCounter->Set(allocated);
         });
-
-        AllocateMemoryFn = [quoter = MemoryQuoter](const auto& txId, ui64, ui64 size) {
-            // mem per task is not tracked yet
-            return quoter->Allocate(txId, 0, size);
-        };
-
-        FreeMemoryFn = [quoter = MemoryQuoter](const auto& txId, ui64, ui64 size) {
-            // mem per task is not tracked yet
-            quoter->Free(txId, 0, size);
-        };
     }
 
 private:
@@ -218,13 +235,16 @@ private:
         auto& tasks = *ev->Get()->Record.MutableTask();
 
         ui64 totalInitialTaskMemoryLimit = 0;
+        std::vector<ui64> quotas;
         if (createComputeActor) {
             Y_VERIFY(static_cast<int>(tasks.size()) == static_cast<int>(count));
+            quotas.reserve(count);
             for (auto& task : tasks) {
                 auto taskLimit = task.GetInitialTaskMemoryLimit();
                 if (taskLimit == 0) {
                     taskLimit = Options.MkqlInitialMemoryLimit;
                 }
+                quotas.push_back(taskLimit);
                 totalInitialTaskMemoryLimit += taskLimit;
             }
         } else {
@@ -268,8 +288,7 @@ private:
 
                     actor.Reset(NYql::CreateComputeActor(
                         Options,
-                        Options.MkqlTotalMemoryLimit ? AllocateMemoryFn : nullptr,
-                        Options.MkqlTotalMemoryLimit ? FreeMemoryFn : nullptr,
+                        std::make_shared<TMemoryQuotaManager>(MemoryQuoter, allocationInfo.TxId, quotas[i]), 
                         resultId,
                         traceId,
                         std::move(tasks[i]),
@@ -322,8 +341,6 @@ private:
                 YQL_CLOG(ERROR, ProviderDq) << "Free Group " << id << " mismatched alloc-free senders: " << it->second.Sender << " and " << sender << " TxId: " << it->second.TxId;
             }
 
-            MemoryQuoter->Free(it->second.TxId, 0);
-
             auto traceId = std::get<TString>(it->second.TxId);
             auto itt = TaskCountersMap.find(traceId);
             if (itt != TaskCountersMap.end()) {
@@ -369,8 +386,6 @@ private:
 
     TRusage Rusage;
 
-    NDq::TAllocateMemoryCallback AllocateMemoryFn;
-    NDq::TFreeMemoryCallback FreeMemoryFn;
     std::shared_ptr<NDq::TResourceQuoter> MemoryQuoter;
 
     struct TCountersInfo {

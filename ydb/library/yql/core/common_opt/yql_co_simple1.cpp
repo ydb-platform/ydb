@@ -167,7 +167,7 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
     TExprNode::TListType settingsChildren;
     bool hasFlatten = false;
     for (auto& child : settings->Children()) {
-        if (child->ChildrenSize() > 0 && child->Head().Content() == "flatten") {
+        if (child->ChildrenSize() > 0 && child->Head().IsAtom("flatten")) {
             hasFlatten = true;
             continue;
         }
@@ -3334,6 +3334,14 @@ TExprNode::TPtr OptimizeExtend(const TExprNode::TPtr& node, TExprContext& ctx, T
     return node;
 }
 
+TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (!node->GetConstraint<TSortedConstraintNode>()) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << " with unordered output.";
+        return ctx.RenameNode(*node, "Extend");
+    }
+    return OptimizeExtend<true>(node, ctx, optCtx);
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -3842,7 +3850,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["SkipWhileInclusive"] = std::bind(&OptimizeWhile<false, true>, _1, _2);
 
     map[TCoExtend::CallableName()] = std::bind(&OptimizeExtend<false>, _1, _2, _3);
-    map[TCoOrderedExtend::CallableName()] = map[TCoMerge::CallableName()] = std::bind(&OptimizeExtend<true>, _1, _2, _3);
+    map[TCoOrderedExtend::CallableName()] = std::bind(&OptimizeExtend<true>, _1, _2, _3);
+    map[TCoMerge::CallableName()] = std::bind(&OptimizeMerge, _1, _2, _3);
 
     map["ForwardList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Iterator")) {

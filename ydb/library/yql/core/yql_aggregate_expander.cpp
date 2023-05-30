@@ -570,20 +570,22 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         auto trait = AggregatedColumns->Child(index)->ChildPtr(1);
         TVector<const TTypeAnnotationNode*> allTypes;
 
-        if (!overState && trait->Child(0)->Content() == "count_all") {
-            // 0 columns
-            aggs.push_back(Ctx.Builder(Node->Pos())
-                .List()
-                    .Callable(0, "AggBlockApply")
-                        .Atom(0, trait->Child(0)->Content())
-                    .Seal()
-                .Seal()
-                .Build());
+        const TTypeAnnotationNode* originalType = nullptr;
+        if (overState && !trait->Child(3)->IsCallable("Void")) {
+            auto originalExtractorType = trait->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            originalType = GetOriginalResultType(trait->Pos(), many, originalExtractorType, Ctx);
+            YQL_ENSURE(originalType);
         }
-        else {
-            // 1 column
-            auto root = trait->Child(2)->TailPtr();
-            auto rowArg = &trait->Child(2)->Head().Head();
+
+        ui32 argsCount = trait->Child(2)->ChildrenSize() - 1;
+        if (!overState && trait->Child(0)->Content() == "count_all") {
+            argsCount = 0;
+        }
+
+        auto rowArg = &trait->Child(2)->Head().Head();
+        TVector<TExprNode::TPtr> roots;
+        for (ui32 i = 1; i < argsCount + 1; ++i) {
+            auto root = trait->Child(2)->ChildPtr(i);
             allTypes.push_back(root->GetTypeAnn());            
 
             auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -598,17 +600,45 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
             }, Ctx, TOptimizeExprSettings(&TypesCtx));
 
             YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
+            roots.push_back(root);
+        }
 
-            aggs.push_back(Ctx.Builder(Node->Pos())
-                .List()
-                    .Callable(0, TString("AggBlockApply") + (overState ? "State" : ""))
-                        .Atom(0, trait->Child(0)->Content())
-                        .Add(1, ExpandType(Node->Pos(), *trait->Child(2)->GetTypeAnn(), Ctx))
-                    .Seal()
-                    .Atom(1, ToString(extractorRoots.size()))
+        aggs.push_back(Ctx.Builder(Node->Pos())
+            .List()
+                .Callable(0, TString("AggBlockApply") + (overState ? "State" : ""))
+                    .Atom(0, trait->Child(0)->Content())
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if (overState) {
+                            if (originalType) {
+                                parent.Add(1, ExpandType(Node->Pos(), *originalType, Ctx));
+                            } else {
+                                parent
+                                    .Callable(1, "Null")
+                                    .Seal();
+                            }
+                        }
+
+                        return parent;
+                    })
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        for (ui32 i = 1; i < argsCount + 1; ++i) {
+                            parent.Add(i + (overState ? 1 : 0), ExpandType(Node->Pos(), *trait->Child(2)->Child(i)->GetTypeAnn(), Ctx));
+                        }
+
+                        return parent;
+                    })
                 .Seal()
-                .Build());
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 1; i < argsCount + 1; ++i) {
+                        parent.Atom(i, ToString(extractorRoots.size() + i - 1));
+                    }
 
+                    return parent;
+                })
+            .Seal()
+            .Build());
+
+        for (auto root : roots) {
             if (many) {
                 if (root->IsCallable("Unwrap")) {
                     root = root->HeadPtr();
@@ -696,7 +726,16 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
         return Ctx.Builder(Node->Pos())
             .Callable("LMap")
                 .Add(0, AggList)
-                .Add(1, lambdaStream)
+                .Lambda(1)
+                    .Param("stream")
+                    .Apply(GetContextLambda())
+                        .With(0)
+                            .Apply(lambdaStream)
+                                .With(0, "stream")
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
             .Seal()
             .Build();
     } else {

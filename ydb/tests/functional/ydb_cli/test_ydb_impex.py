@@ -238,7 +238,7 @@ class TestImpex(BaseTestTableService):
 
     def run_export(self, format):
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
-        output_file_name = "impex_result.output"
+        output_file_name = "result.output"
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format], stdout=output_file_name)
         return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
 

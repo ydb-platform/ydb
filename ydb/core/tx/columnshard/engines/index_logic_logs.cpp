@@ -71,19 +71,13 @@ bool TEvictionLogic::UpdateEvictedPortion(TPortionInfo& portionInfo,
     return true;
 }
 
-class TSplitLimiterSettings {
-public:
+class TSplitLimiter {
+private:
     static const inline double ReduceCorrectionKff = 0.9;
-    static const inline double MaxKff = 0.5;
-    static const inline double MinKff = 0.2;
-    static const inline double DangerouseRealKff = 0.7;
     static const inline double IncreaseCorrectionKff = 1.1;
     static const inline ui64 ExpectedBlobSize = 6 * 1024 * 1024;
     static const inline ui64 MinBlobSize = 1 * 1024 * 1024;
-};
 
-class TSplitLimiter {
-private:
     const NColumnShard::TIndexationCounters Counters;
     ui32 BaseStepRecordsCount = 0;
     ui32 CurrentStepRecordsCount = 0;
@@ -103,7 +97,7 @@ public:
             const auto biggestColumn = SortedColumnIds.front();
             Y_VERIFY(biggestColumn.GetPackedBlobsSize());
             const double expectedPackedRecordSize = 1.0 * biggestColumn.GetPackedBlobsSize() / granuleMeta->GetSummary().GetOther().GetRecordsCount();
-            BaseStepRecordsCount = TSplitLimiterSettings::ExpectedBlobSize / expectedPackedRecordSize;
+            BaseStepRecordsCount = ExpectedBlobSize / expectedPackedRecordSize;
             for (ui32 i = 1; i < SortedColumnIds.size(); ++i) {
                 Y_VERIFY(SortedColumnIds[i - 1].GetPackedBlobsSize() >= SortedColumnIds[i].GetPackedBlobsSize());
             }
@@ -112,7 +106,7 @@ public:
             } else {
                 BaseStepRecordsCount = batch->num_rows() / (ui32)(batch->num_rows() / BaseStepRecordsCount);
                 if (BaseStepRecordsCount * expectedPackedRecordSize > TCompactionLimits::MAX_BLOB_SIZE) {
-                    BaseStepRecordsCount = TSplitLimiterSettings::ExpectedBlobSize / expectedPackedRecordSize;
+                    BaseStepRecordsCount = ExpectedBlobSize / expectedPackedRecordSize;
                 }
             }
         } else {
@@ -156,7 +150,7 @@ public:
                     Counters.TrashDataSerializationBytes->Add(blob.size());
                     Counters.TrashDataSerialization->Add(1);
                     Counters.TrashDataSerializationHistogramBytes->Collect(blob.size());
-                    const double kffNew = 1.0 * TSplitLimiterSettings::ExpectedBlobSize / blob.size() * TSplitLimiterSettings::ReduceCorrectionKff;
+                    const double kffNew = 1.0 * ExpectedBlobSize / blob.size() * ReduceCorrectionKff;
                     CurrentStepRecordsCount = currentBatch->num_rows() * kffNew;
                     Y_VERIFY(CurrentStepRecordsCount);
                     break;
@@ -178,17 +172,23 @@ public:
                     Counters.SplittedPortionColumnSize->Collect(i.size());
                     maxBlobSize = std::max<ui64>(maxBlobSize, i.size());
                 }
-                Counters.SplittedPortionLargestColumnSize->Collect(maxBlobSize);
                 batch = currentBatch;
-                if (maxBlobSize < TSplitLimiterSettings::MinBlobSize && (Position != currentBatch->num_rows() || Position != Batch->num_rows())) {
-                    Counters.TooSmallBlob->Add(1);
-                    if (Position == Batch->num_rows()) {
-                        Counters.TooSmallBlobFinish->Add(1);
+                if (maxBlobSize < MinBlobSize) {
+                    if ((Position != currentBatch->num_rows() || Position != Batch->num_rows())) {
+                        Counters.SplittedPortionLargestColumnSize->Collect(maxBlobSize);
+                        Counters.TooSmallBlob->Add(1);
+                        if (Position == Batch->num_rows()) {
+                            Counters.TooSmallBlobFinish->Add(1);
+                        }
+                        if (Position == currentBatch->num_rows()) {
+                            Counters.TooSmallBlobStart->Add(1);
+                        }
+                    } else {
+                        Counters.SimpleSplitPortionLargestColumnSize->Collect(maxBlobSize);
                     }
-                    if (Position == currentBatch->num_rows()) {
-                        Counters.TooSmallBlobStart->Add(1);
-                    }
-                    CurrentStepRecordsCount = currentBatch->num_rows() * TSplitLimiterSettings::IncreaseCorrectionKff;
+                    CurrentStepRecordsCount = currentBatch->num_rows() * IncreaseCorrectionKff;
+                } else {
+                    Counters.SplittedPortionLargestColumnSize->Collect(maxBlobSize);
                 }
                 return true;
             }
@@ -305,7 +305,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TIndexLogicBase::SliceIntoGr
     return out;
 }
 
-std::vector<TString> TIndexationLogic::Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const {
+TConclusion<std::vector<TString>> TIndexationLogic::DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept {
     auto changes = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(indexChanges);
     Y_VERIFY(!changes->DataToIndex.empty());
     Y_VERIFY(changes->AppendedPortions.empty());
@@ -824,7 +824,7 @@ bool TCompactionLogic::IsSplit(std::shared_ptr<TColumnEngineChanges> changes) {
     return !castedChanges->CompactionInfo->InGranule();
 }
 
-std::vector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
+TConclusion<std::vector<TString>> TCompactionLogic::DoApply(std::shared_ptr<TColumnEngineChanges> changes) const noexcept {
     Y_VERIFY(changes);
     Y_VERIFY(changes->CompactionInfo);
     Y_VERIFY(changes->DataToIndex.empty());       // not used
@@ -840,7 +840,7 @@ std::vector<TString> TCompactionLogic::Apply(std::shared_ptr<TColumnEngineChange
     }
 }
 
-std::vector<TString> TEvictionLogic::Apply(std::shared_ptr<TColumnEngineChanges> changes) const {
+TConclusion<std::vector<TString>> TEvictionLogic::DoApply(std::shared_ptr<TColumnEngineChanges> changes) const noexcept {
     Y_VERIFY(changes);
     Y_VERIFY(!changes->Blobs.empty());           // src data
     Y_VERIFY(!changes->PortionsToEvict.empty()); // src meta

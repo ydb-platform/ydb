@@ -130,7 +130,7 @@ private:
 
             TCpuGuard guard(TxEvent->ResourceUsage);
             NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = indexationLogic.Apply(TxEvent->IndexChanges);
+            TxEvent->Blobs = std::move(indexationLogic.Apply(TxEvent->IndexChanges).DetachResult());
             LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
         } else {
             LOG_S_ERROR("Indexing failed at tablet " << TabletId);

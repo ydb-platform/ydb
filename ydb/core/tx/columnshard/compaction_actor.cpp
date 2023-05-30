@@ -146,9 +146,10 @@ private:
             TCpuGuard guard(TxEvent->ResourceUsage);
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-
-            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, GetCurrentCounters());
-            TxEvent->Blobs = compactionLogic.Apply(TxEvent->IndexChanges);
+            {
+                NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, GetCurrentCounters());
+                TxEvent->Blobs = std::move(compactionLogic.Apply(TxEvent->IndexChanges).DetachResult());
+            }
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
             }

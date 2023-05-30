@@ -11,6 +11,7 @@ class TIndexLogicBase {
 protected:
     const TVersionedIndex& SchemaVersions;
     const NColumnShard::TIndexationCounters Counters;
+    virtual TConclusion<std::vector<TString>> DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept = 0;
 private:
     const THashMap<ui64, NKikimr::NOlap::TTiering>* TieringMap = nullptr;
 public:
@@ -30,7 +31,23 @@ public:
 
     virtual ~TIndexLogicBase() {
     }
-    virtual std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const = 0;
+    TConclusion<std::vector<TString>> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept {
+        {
+            ui64 readBytes = 0;
+            for (auto&& i : indexChanges->Blobs) {
+                readBytes += i.first.Size;
+            }
+            Counters.CompactionInputSize->Collect(readBytes);
+        }
+        const TInstant start = TInstant::Now();
+        TConclusion<std::vector<TString>> result = DoApply(indexChanges);
+        if (result.IsSuccess()) {
+            Counters.CompactionDuration->Collect((TInstant::Now() - start).MilliSeconds());
+        } else {
+            Counters.CompactionFails->Add(1);
+        }
+        return result;
+    }
 
     static THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                                                 const std::vector<std::pair<TMark, ui64>>& granules,
@@ -57,9 +74,8 @@ protected:
 class TIndexationLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
-
-    std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
-
+protected:
+    virtual TConclusion<std::vector<TString>> DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept override;
 private:
     // Although source batches are ordered only by PK (sorting key) resulting pathBatches are ordered by extended key.
     // They have const snapshot columns that do not break sorting inside batch.
@@ -71,9 +87,10 @@ class TCompactionLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
 
-    std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
     static bool IsSplit(std::shared_ptr<TColumnEngineChanges> changes);
 
+protected:
+    virtual TConclusion<std::vector<TString>> DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept override;
 private:
     std::vector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;
     std::vector<TString> CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const;
@@ -104,8 +121,8 @@ class TEvictionLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
 
-    std::vector<TString> Apply(std::shared_ptr<TColumnEngineChanges> indexChanges) const override;
-
+protected:
+    virtual TConclusion<std::vector<TString>> DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept override;
 private:
     bool UpdateEvictedPortion(TPortionInfo& portionInfo,
                             TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,

@@ -133,8 +133,7 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
             NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = evictionLogic.Apply(TxEvent->IndexChanges);
-
+            TxEvent->Blobs = std::move(evictionLogic.Apply(TxEvent->IndexChanges).DetachResult());
             if (TxEvent->Blobs.empty()) {
                 TxEvent->PutStatus = NKikimrProto::OK;
             }

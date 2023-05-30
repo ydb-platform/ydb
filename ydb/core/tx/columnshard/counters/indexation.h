@@ -27,10 +27,16 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerialization;
 
     NMonitoring::THistogramPtr SplittedPortionLargestColumnSize;
+    NMonitoring::THistogramPtr SimpleSplitPortionLargestColumnSize;
     NMonitoring::THistogramPtr SplittedPortionColumnSize;
     NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlob;
     NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlobFinish;
     NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlobStart;
+
+    NMonitoring::THistogramPtr CompactionInputSize;
+    NMonitoring::THistogramPtr CompactionDuration;
+    NMonitoring::TDynamicCounters::TCounterPtr CompactionExceptions;
+    NMonitoring::TDynamicCounters::TCounterPtr CompactionFails;
 
     TIndexationCounters(const TString& module);
 };

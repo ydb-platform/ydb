@@ -1,413 +1,413 @@
 {
     "test_ydb_impex.TestImpex.test_format_csv": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_from_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_from_stdin/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_from_stdin/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files_and_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_and_stdin/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_and_stdin/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_big_data/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_big_data/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_columns/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_columns/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_and_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_and_columns/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_and_columns/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_big_data/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_big_data/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_json": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_json/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_json_from_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_from_stdin/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_json_from_stdin/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_json_multiple_files": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_json_multiple_files_and_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files_and_stdin/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files_and_stdin/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_json_multiple_files_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files_big_data/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files_big_data/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_from_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_from_stdin/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_from_stdin/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_and_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_and_stdin/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_and_stdin/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_big_data/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_big_data/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_columns/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_columns/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_and_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_and_columns/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_and_columns/impex_result.output"
     },
     "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_big_data/result.output"
+        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_big_data/impex_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64_array": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64_array/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64_array/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_unicode": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_unicode/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_unicode/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_unicode_array": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_unicode_array/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_unicode_array/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_pretty": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_pretty/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_pretty/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_base64": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_base64/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_base64/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_base64_array": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_base64_array/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_base64_array/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_unicode": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_unicode/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_unicode/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_unicode_array": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_unicode_array/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_json_unicode_array/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_pretty": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_pretty/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_yql_script_pretty/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParams.test_list": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_list/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_list/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParams.test_struct": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_struct/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_struct/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParams.test_uint32": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_uint32/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_uint32/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParams.test_uint64_and_string": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_uint64_and_string/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParams.test_uint64_and_string/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_ignore_excess_parameters": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_ignore_excess_parameters/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_list": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_list/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_list/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_multiple_files": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_multiple_files/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_multiple_files/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_script_from_file": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_script_from_file/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_script_from_file/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_ignore_excess_parameters": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_ignore_excess_parameters/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_list": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_list/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_list/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_multiple_files": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_multiple_files/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_multiple_files/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_script_from_file": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_script_from_file/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_script_from_file/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_struct": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_struct/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_struct/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_uint32": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_uint32/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_uint32/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_uint64_and_string": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_uint64_and_string/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_stream_uint64_and_string/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_struct": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_struct/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_struct/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_uint32": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_uint32/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_uint32/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_uint64_and_string": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_uint64_and_string/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromJson.test_uint64_and_string/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_batching_adaptive": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_batching_adaptive/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_batching_adaptive/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_batching_full": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_batching_full/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_batching_full/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_different_sources": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_different_sources/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_different_sources/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_framing_newline_delimited": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_framing_newline_delimited/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_framing_newline_delimited/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_ignore_excess_parameters": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_ignore_excess_parameters/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_mix_json_and_binary": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_mix_json_and_binary/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_mix_json_and_binary/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_simple_json": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_simple_json/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_simple_json/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_batching_adaptive": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_batching_adaptive/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_batching_adaptive/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_batching_full": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_batching_full/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_batching_full/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_different_sources": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_different_sources/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_different_sources/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_framing_newline_delimited": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_framing_newline_delimited/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_framing_newline_delimited/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_ignore_excess_parameters": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_ignore_excess_parameters/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_mix_json_and_binary": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_mix_json_and_binary/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_mix_json_and_binary/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_simple_json": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_simple_json/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_simple_json/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_text_data": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_text_data/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_text_data/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_text_data_framing": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_text_data_framing/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_text_data_framing/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_unnamed_json": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_unnamed_json/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_stream_unnamed_json/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_text_data": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_text_data/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_text_data/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_text_data_framing": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_text_data_framing/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_text_data_framing/scripting_result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_unnamed_json": {
-        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_unnamed_json/result.output"
+        "uri": "file://test_ydb_scripting.TestExecuteScriptWithParamsFromStdin.test_unnamed_json/scripting_result.output"
     },
     "test_ydb_scripting.TestScriptingServiceHelp.test_help": {
-        "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help/result.output"
+        "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help/scripting_result.output"
     },
     "test_ydb_scripting.TestScriptingServiceHelp.test_help_ex": {
-        "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help_ex/result.output"
+        "uri": "file://test_ydb_scripting.TestScriptingServiceHelp.test_help_ex/scripting_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64_array": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64_array/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_base64_array/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_unicode": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_unicode/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_unicode/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_unicode_array": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_unicode_array/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_json_unicode_array/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_pretty": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_pretty/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_pretty/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_tsv": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_tsv/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_tsv/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_csv": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_csv/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_csv/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64_array": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64_array/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_base64_array/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_unicode": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_unicode/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_unicode/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_unicode_array": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_unicode_array/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_json_unicode_array/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_pretty": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_pretty/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_pretty/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_read_table_tsv": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_tsv/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_read_table_tsv/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_csv": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_csv/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_csv/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64_array": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64_array/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_base64_array/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_unicode": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_unicode/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_unicode/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_unicode_array": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_unicode_array/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_json_unicode_array/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_pretty": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_pretty/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_pretty/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_tsv": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_tsv/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_scan_query_tsv/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParams.test_list": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_list/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_list/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParams.test_scan_query_with_parameters": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_scan_query_with_parameters/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_scan_query_with_parameters/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParams.test_struct": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_struct/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_struct/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParams.test_uint32": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_uint32/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_uint32/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParams.test_uint64_and_string": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_uint64_and_string/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParams.test_uint64_and_string/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_ignore_excess_parameters": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_ignore_excess_parameters/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_list": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_list/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_list/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_multiple_files": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_multiple_files/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_multiple_files/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_script_from_file": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_script_from_file/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_script_from_file/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_struct": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_struct/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_struct/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_uint32": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_uint32/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_uint32/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_uint64_and_string": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_uint64_and_string/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_data_query_uint64_and_string/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_ignore_excess_parameters": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_ignore_excess_parameters/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_list": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_list/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_list/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_multiple_files": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_multiple_files/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_multiple_files/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_script_from_file": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_script_from_file/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_script_from_file/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_struct": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_struct/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_struct/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_uint32": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_uint32/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_uint32/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_uint64_and_string": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_uint64_and_string/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromJson.test_scan_query_uint64_and_string/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_ignore_excess_parameters": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_ignore_excess_parameters/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_batching_adaptive": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_batching_adaptive/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_batching_adaptive/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_batching_full": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_batching_full/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_batching_full/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_different_sources": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_different_sources/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_different_sources/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_framing_newline_delimited": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_framing_newline_delimited/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_framing_newline_delimited/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_mix_json_and_binary": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_mix_json_and_binary/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_mix_json_and_binary/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_simple_json": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_simple_json/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_simple_json/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_text_data": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_text_data/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_text_data/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_text_data_framing": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_text_data_framing/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_text_data_framing/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_unnamed_json": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_unnamed_json/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_data_query_unnamed_json/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_ignore_excess_parameters": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_ignore_excess_parameters/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_ignore_excess_parameters/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_batching_adaptive": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_batching_adaptive/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_batching_adaptive/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_batching_full": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_batching_full/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_batching_full/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_different_sources": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_different_sources/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_different_sources/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_framing_newline_delimited": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_framing_newline_delimited/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_framing_newline_delimited/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_mix_json_and_binary": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_mix_json_and_binary/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_mix_json_and_binary/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_simple_json": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_simple_json/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_simple_json/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_text_data": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_text_data/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_text_data/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_text_data_framing": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_text_data_framing/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_text_data_framing/table_result.output"
     },
     "test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_unnamed_json": {
-        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_unnamed_json/result.output"
+        "uri": "file://test_ydb_table.TestExecuteQueryWithParamsFromStdin.test_scan_query_unnamed_json/table_result.output"
     }
 }

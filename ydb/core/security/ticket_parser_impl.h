@@ -1167,10 +1167,19 @@ protected:
     }
 
     template <typename TTokenRecord>
+    bool CanRefreshAccessServiceTicket(const TTokenRecord& record) {
+        if (!AccessServiceValidator) {
+            return false;
+        }
+        if (record.TokenType == TDerived::ETokenType::AccessService) {
+            return (record.Error && record.Error.Retryable) || !record.Signature.AccessKeyId;
+        }
+        return record.TokenType == TDerived::ETokenType::Unknown;
+    }
+
+    template <typename TTokenRecord>
     bool CanRefreshTicket(const TString& key, TTokenRecord& record) {
-        if (AccessServiceValidator
-            && ((record.TokenType == TDerived::ETokenType::AccessService && !record.Signature.AccessKeyId)
-                || record.TokenType == TDerived::ETokenType::Unknown)) {
+        if (CanRefreshAccessServiceTicket(record)) {
             GetDerived()->ResetTokenRecord(record);
             if (record.Permissions) {
                 RequestAccessServiceAuthorization(key, record);

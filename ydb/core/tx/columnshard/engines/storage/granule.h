@@ -35,10 +35,14 @@ private:
     ui64 PortionsSize = 0;
     ui64 MaxColumnsSize = 0;
     ui64 PortionsCount = 0;
+    ui64 RecordsCount = 0;
     friend class TGranuleMeta;
 public:
     ui64 GetPortionsSize() const {
         return PortionsSize;
+    }
+    ui64 GetRecordsCount() const {
+        return RecordsCount;
     }
     ui64 GetMaxColumnsSize() const {
         return MaxColumnsSize;
@@ -52,6 +56,7 @@ public:
         result.PortionsSize = PortionsSize + item.PortionsSize;
         result.MaxColumnsSize = MaxColumnsSize + item.MaxColumnsSize;
         result.PortionsCount = PortionsCount + item.PortionsCount;
+        result.RecordsCount = RecordsCount + item.RecordsCount;
         return result;
     }
 };
@@ -59,11 +64,23 @@ public:
 class TColumnSummary {
 private:
     ui32 ColumnId;
-    ui64 BlobsSize;
+    ui64 PackedBlobsSize = 0;
+    ui64 PackedRecordsCount = 0;
+    ui64 InsertedBlobsSize = 0;
+    ui64 InsertedRecordsCount = 0;
 public:
-    TColumnSummary(const ui32 columnId, const ui64 blobsSize)
+    void AddData(const bool isInserted, const ui64 bytes, const ui64 records) {
+        if (isInserted) {
+            InsertedRecordsCount += records;
+            InsertedBlobsSize += bytes;
+        } else {
+            PackedRecordsCount += records;
+            PackedBlobsSize += bytes;
+        }
+    }
+
+    TColumnSummary(const ui32 columnId)
         : ColumnId(columnId)
-        , BlobsSize(blobsSize)
     {
 
     }
@@ -72,8 +89,20 @@ public:
         return ColumnId;
     }
 
+    ui32 GetRecordsCount() const {
+        return PackedRecordsCount + InsertedRecordsCount;
+    }
+
     ui64 GetBlobsSize() const {
-        return BlobsSize;
+        return PackedBlobsSize + InsertedBlobsSize;
+    }
+
+    ui32 GetPackedRecordsCount() const {
+        return PackedRecordsCount;
+    }
+
+    ui64 GetPackedBlobsSize() const {
+        return PackedBlobsSize;
     }
 };
 

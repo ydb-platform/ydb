@@ -78,6 +78,122 @@ public:
     static const inline double MinKff = 0.2;
     static const inline double DangerouseRealKff = 0.7;
     static const inline double IncreaseCorrectionKff = 1.1;
+    static const inline ui64 ExpectedBlobSize = 6 * 1024 * 1024;
+    static const inline ui64 MinBlobSize = 1 * 1024 * 1024;
+};
+
+class TSplitLimiter {
+private:
+    const NColumnShard::TIndexationCounters Counters;
+    ui32 BaseStepRecordsCount = 0;
+    ui32 CurrentStepRecordsCount = 0;
+    std::shared_ptr<arrow::RecordBatch> Batch;
+    std::vector<TColumnSummary> SortedColumnIds;
+    ui32 Position = 0;
+    ISnapshotSchema::TPtr Schema;
+public:
+    TSplitLimiter(const TGranuleMeta* granuleMeta, const NColumnShard::TIndexationCounters& counters,
+        ISnapshotSchema::TPtr schema, const std::shared_ptr<arrow::RecordBatch> batch)
+        : Counters(counters)
+        , Batch(batch)
+        , Schema(schema)
+    {
+        if (granuleMeta && granuleMeta->GetSummary().GetOther().GetRecordsCount()) {
+            SortedColumnIds = granuleMeta->GetSummary().GetColumnIdsSortedBySizeDescending();
+            const auto biggestColumn = SortedColumnIds.front();
+            Y_VERIFY(biggestColumn.GetPackedBlobsSize());
+            const double expectedPackedRecordSize = 1.0 * biggestColumn.GetPackedBlobsSize() / granuleMeta->GetSummary().GetOther().GetRecordsCount();
+            BaseStepRecordsCount = TSplitLimiterSettings::ExpectedBlobSize / expectedPackedRecordSize;
+            for (ui32 i = 1; i < SortedColumnIds.size(); ++i) {
+                Y_VERIFY(SortedColumnIds[i - 1].GetPackedBlobsSize() >= SortedColumnIds[i].GetPackedBlobsSize());
+            }
+            if (BaseStepRecordsCount > batch->num_rows()) {
+                BaseStepRecordsCount = batch->num_rows();
+            } else {
+                BaseStepRecordsCount = batch->num_rows() / (ui32)(batch->num_rows() / BaseStepRecordsCount);
+                if (BaseStepRecordsCount * expectedPackedRecordSize > TCompactionLimits::MAX_BLOB_SIZE) {
+                    BaseStepRecordsCount = TSplitLimiterSettings::ExpectedBlobSize / expectedPackedRecordSize;
+                }
+            }
+        } else {
+            for (auto&& i : Schema->GetIndexInfo().GetColumnIds()) {
+                SortedColumnIds.emplace_back(TColumnSummary(i));
+            }
+            BaseStepRecordsCount = batch->num_rows();
+        }
+        BaseStepRecordsCount = std::min<ui32>(BaseStepRecordsCount, Batch->num_rows());
+        Y_VERIFY(BaseStepRecordsCount);
+        CurrentStepRecordsCount = BaseStepRecordsCount;
+    }
+
+    bool Next(std::vector<TString>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch, const TSaverContext& saverContext) {
+        if (Position == Batch->num_rows()) {
+            return false;
+        }
+
+        portionBlobs.resize(Schema->GetSchema()->num_fields());
+        while (true) {
+            Y_VERIFY(Position < Batch->num_rows());
+            std::shared_ptr<arrow::RecordBatch> currentBatch;
+            if (Batch->num_rows() - Position < CurrentStepRecordsCount * 1.1) {
+                currentBatch = Batch->Slice(Position, Batch->num_rows() - Position);
+            } else {
+                currentBatch = Batch->Slice(Position, CurrentStepRecordsCount);
+            }
+
+            ui32 fillCounter = 0;
+            for (const auto& columnSummary : SortedColumnIds) {
+                const TString& columnName = Schema->GetIndexInfo().GetColumnName(columnSummary.GetColumnId());
+                const int idx = Schema->GetFieldIndex(columnSummary.GetColumnId());
+                Y_VERIFY(idx >= 0);
+                auto field = Schema->GetFieldByIndex(idx);
+                Y_VERIFY(field);
+                auto array = currentBatch->GetColumnByName(columnName);
+                Y_VERIFY(array);
+                auto columnSaver = Schema->GetColumnSaver(columnSummary.GetColumnId(), saverContext);
+                TString blob = TPortionInfo::SerializeColumn(array, field, columnSaver);
+                if (blob.size() >= TCompactionLimits::MAX_BLOB_SIZE) {
+                    Counters.TrashDataSerializationBytes->Add(blob.size());
+                    Counters.TrashDataSerialization->Add(1);
+                    Counters.TrashDataSerializationHistogramBytes->Collect(blob.size());
+                    const double kffNew = 1.0 * TSplitLimiterSettings::ExpectedBlobSize / blob.size() * TSplitLimiterSettings::ReduceCorrectionKff;
+                    CurrentStepRecordsCount = currentBatch->num_rows() * kffNew;
+                    Y_VERIFY(CurrentStepRecordsCount);
+                    break;
+                } else {
+                    Counters.CorrectDataSerializationBytes->Add(blob.size());
+                    Counters.CorrectDataSerialization->Add(1);
+                }
+
+                portionBlobs[idx] = std::move(blob);
+                ++fillCounter;
+            }
+
+            if (fillCounter == portionBlobs.size()) {
+                Y_VERIFY(fillCounter == portionBlobs.size());
+                Position += currentBatch->num_rows();
+                Y_VERIFY(Position <= Batch->num_rows());
+                ui64 maxBlobSize = 0;
+                for (auto&& i : portionBlobs) {
+                    Counters.SplittedPortionColumnSize->Collect(i.size());
+                    maxBlobSize = std::max<ui64>(maxBlobSize, i.size());
+                }
+                Counters.SplittedPortionLargestColumnSize->Collect(maxBlobSize);
+                batch = currentBatch;
+                if (maxBlobSize < TSplitLimiterSettings::MinBlobSize && (Position != currentBatch->num_rows() || Position != Batch->num_rows())) {
+                    Counters.TooSmallBlob->Add(1);
+                    if (Position == Batch->num_rows()) {
+                        Counters.TooSmallBlobFinish->Add(1);
+                    }
+                    if (Position == currentBatch->num_rows()) {
+                        Counters.TooSmallBlobStart->Add(1);
+                    }
+                    CurrentStepRecordsCount = currentBatch->num_rows() * TSplitLimiterSettings::IncreaseCorrectionKff;
+                }
+                return true;
+            }
+        }
+    }
 };
 
 std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathId,
@@ -103,83 +219,23 @@ std::vector<TPortionInfo> TIndexLogicBase::MakeAppendedPortions(const ui64 pathI
     TSaverContext saverContext;
     saverContext.SetTierName(tierName).SetExternalCompression(compression);
 
-    std::shared_ptr<arrow::RecordBatch> portionBatch = batch;
-    double kffSplit = 0.5;
-    for (i32 pos = 0; pos < batch->num_rows();) {
-        Y_VERIFY(portionBatch->num_rows());
+    TSplitLimiter limiter(granuleMeta, Counters, resultSchema, batch);
 
+    std::vector<TString> portionBlobs;
+    std::shared_ptr<arrow::RecordBatch> portionBatch;
+    while (limiter.Next(portionBlobs, portionBatch, saverContext)) {
         TPortionInfo portionInfo;
         portionInfo.Records.reserve(resultSchema->GetSchema()->num_fields());
-        std::vector<TString> portionBlobs;
-        portionBlobs.resize(resultSchema->GetSchema()->num_fields());
-
-        // Serialize portion's columns into blobs
-
-        bool ok = true;
-
-        std::vector<TColumnSummary> sortedColumnIds;
-        if (granuleMeta) {
-            sortedColumnIds = granuleMeta->GetSummary().GetColumnIdsSortedBySizeDescending();
-        } else {
-            for (auto&& i : resultSchema->GetIndexInfo().GetColumnIds()) {
-                sortedColumnIds.emplace_back(TColumnSummary(i, 0));
-            }
+        for (auto&& f : resultSchema->GetSchema()->fields()) {
+            const ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(f->name());
+            TColumnRecord record = TColumnRecord::Make(granule, columnId, snapshot, 0);
+            portionInfo.AppendOneChunkColumn(std::move(record));
         }
-
-        ui32 fillCounter = 0;
-        double maxKffSplit = 0;
-        ui64 maxBlobSize = 0;
-        for (const auto& columnSummary : sortedColumnIds) {
-            const TString& columnName = resultSchema->GetIndexInfo().GetColumnName(columnSummary.GetColumnId());
-            const int idx = resultSchema->GetFieldIndex(columnSummary.GetColumnId());
-            Y_VERIFY(idx >= 0);
-            auto field = resultSchema->GetFieldByIndex(idx);
-            Y_VERIFY(field);
-            auto array = portionBatch->GetColumnByName(columnName);
-            Y_VERIFY(array);
-
-            /// @warnign records are not valid cause of empty BlobId and zero Portion
-            TColumnRecord record = TColumnRecord::Make(granule, columnSummary.GetColumnId(), snapshot, 0);
-            auto columnSaver = resultSchema->GetColumnSaver(columnSummary.GetColumnId(), saverContext);
-            ui64 droppedSize;
-            TString blob = TPortionInfo::SerializeColumnWithLimit(array, field, columnSaver, Counters, droppedSize);
-            const double kffNew = 1.0 * TCompactionLimits::MAX_BLOB_SIZE / droppedSize * TSplitLimiterSettings::ReduceCorrectionKff;
-            if (!blob) {
-                kffSplit = std::max<double>(TSplitLimiterSettings::MinKff, std::min<double>(kffNew, TSplitLimiterSettings::MaxKff));
-                ok = false;
-                break;
-            } else {
-                maxKffSplit = std::max<double>(maxKffSplit, kffNew);
-                maxBlobSize = std::max<ui64>(maxBlobSize, blob.size());
-            }
-
-            portionInfo.InsertOneChunkColumn(idx, std::move(record));
-
-            portionBlobs[idx] = std::move(blob);
-            ++fillCounter;
+        for (auto&& i : portionBlobs) {
+            blobs.emplace_back(i);
         }
-
-        if (ok) {
-            Y_VERIFY(fillCounter == portionBlobs.size());
-            portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
-            out.emplace_back(std::move(portionInfo));
-            for (auto& blob : portionBlobs) {
-                blobs.push_back(blob);
-            }
-            pos += portionBatch->num_rows();
-            if (pos < batch->num_rows()) {
-                const double kff = (maxKffSplit < TSplitLimiterSettings::DangerouseRealKff) ? TSplitLimiterSettings::IncreaseCorrectionKff : 1.0;
-                portionBatch = batch->Slice(pos, std::min<ui32>(portionBatch->num_rows() * kff, batch->num_rows() - pos));
-            }
-            Counters.SplittedPortionsSize->Collect(maxBlobSize);
-        } else {
-            i64 halfLen = portionBatch->num_rows() * kffSplit;
-            if (!halfLen) {
-                halfLen = portionBatch->num_rows() * 0.5;
-                Y_VERIFY(halfLen);
-            }
-            portionBatch = batch->Slice(pos, halfLen);
-        }
+        portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
+        out.emplace_back(std::move(portionInfo));
     }
 
     return out;

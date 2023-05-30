@@ -41,28 +41,9 @@ TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array
     return saver.Apply(batch);
 }
 
-TString TPortionInfo::SerializeColumnWithLimit(const std::shared_ptr<arrow::Array>& array,
-    const std::shared_ptr<arrow::Field>& field,
-    const TColumnSaver saver, const NColumnShard::TIndexationCounters& counters, ui64& droppedSize, const ui32 limitBytes) {
-    auto blob = SerializeColumn(array, field, saver);
-    if (blob.size() >= limitBytes) {
-        counters.TrashDataSerializationBytes->Add(blob.size());
-        counters.TrashDataSerialization->Add(1);
-        droppedSize = blob.size();
-        return {};
-    } else {
-        counters.CorrectDataSerializationBytes->Add(blob.size());
-        counters.CorrectDataSerialization->Add(1);
-    }
-    return blob;
-}
-
-void TPortionInfo::InsertOneChunkColumn(const ui32 idx, TColumnRecord&& record) {
+void TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) {
     record.Chunk = 0;
-    if (Records.size() <= idx) {
-        Records.resize(idx + 1);
-    }
-    Records[idx] = std::move(record);
+    Records.emplace_back(std::move(record));
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {

@@ -79,7 +79,7 @@ void TGranuleMeta::OnCompactionStarted(const bool inGranule) {
 
 void TGranuleMeta::RebuildMetrics() const {
     TGranuleSummary result;
-    std::map<ui32, ui64> sizeByColumns;
+    std::map<ui32, TColumnSummary> packedSizeByColumns;
     bool differentBorders = false;
     THashSet<NArrow::TReplaceKey> borders;
 
@@ -90,33 +90,40 @@ void TGranuleMeta::RebuildMetrics() const {
                 borders.insert(i.second.IndexKeyEnd());
                 differentBorders = (borders.size() > 1);
             }
-            for (auto&& c : i.second.Records) {
-                sizeByColumns[c.ColumnId] += c.BlobRange.Size;
-            }
             auto sizes = i.second.BlobsSizes();
+            for (auto&& c : i.second.Records) {
+                auto it = packedSizeByColumns.find(c.ColumnId);
+                if (it == packedSizeByColumns.end()) {
+                    it = packedSizeByColumns.emplace(c.ColumnId, TColumnSummary(c.ColumnId)).first;
+                }
+                it->second.AddData(i.second.IsInserted(), c.BlobRange.Size, i.second.NumRows());
+            }
             if (i.second.IsInserted()) {
                 result.Inserted.PortionsSize += sizes.first;
                 result.Inserted.MaxColumnsSize += sizes.second;
+                result.Inserted.RecordsCount += i.second.NumRows();
                 ++result.Inserted.PortionsCount;
             } else {
                 result.Other.PortionsSize += sizes.first;
                 result.Other.MaxColumnsSize += sizes.second;
+                result.Other.RecordsCount += i.second.NumRows();
                 ++result.Other.PortionsCount;
             }
         }
     }
-    std::map<ui64, std::vector<ui32>> transpSorted;
-    for (auto&& i : sizeByColumns) {
-        transpSorted[i.second].emplace_back(i.first);
-    }
-    result.ColumnIdsSortedBySizeDescending.reserve(sizeByColumns.size());
-    for (auto it = transpSorted.rbegin(); it != transpSorted.rend(); ++it) {
-        for (auto&& v : it->second) {
-            result.ColumnIdsSortedBySizeDescending.emplace_back(TColumnSummary(v, it->first));
+    {
+        std::vector<TColumnSummary> transpSorted;
+        transpSorted.reserve(packedSizeByColumns.size());
+        for (auto&& i : packedSizeByColumns) {
+            transpSorted.emplace_back(i.second);
         }
+        const auto pred = [](const TColumnSummary& l, const TColumnSummary& r) {
+            return l.GetPackedBlobsSize() > r.GetPackedBlobsSize();
+        };
+        std::sort(transpSorted.begin(), transpSorted.end(), pred);
+        std::swap(result.ColumnIdsSortedBySizeDescending, transpSorted);
     }
     result.DifferentBorders = differentBorders;
-
     SummaryCache = result;
 }
 

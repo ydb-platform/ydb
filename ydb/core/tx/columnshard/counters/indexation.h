@@ -22,10 +22,15 @@ public:
 
     NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerializationBytes;
     NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerialization;
+    NMonitoring::THistogramPtr TrashDataSerializationHistogramBytes;
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerializationBytes;
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerialization;
 
-    NMonitoring::THistogramPtr SplittedPortionsSize;
+    NMonitoring::THistogramPtr SplittedPortionLargestColumnSize;
+    NMonitoring::THistogramPtr SplittedPortionColumnSize;
+    NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlob;
+    NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlobFinish;
+    NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlobStart;
 
     TIndexationCounters(const TString& module);
 };

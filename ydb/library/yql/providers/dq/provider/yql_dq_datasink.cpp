@@ -130,8 +130,8 @@ public:
         {
             writer.OnBeginMap();
             for (const auto& [stageId, stat] : taskRunnerStage) {
-                auto& inputStat = taskRunnerInput[stageId];
-                auto& outputStat = taskRunnerInput[stageId];
+                const auto& inputStat = taskRunnerInput[stageId];
+                const auto& outputStat = taskRunnerOutput[stageId];
 
                 writer.OnKeyedItem("Stage=" + stageId);
                 {

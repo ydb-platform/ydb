@@ -160,7 +160,7 @@ private:
 
     void Finish(Ydb::StatusIds::StatusCode status) {
         Status = status;
-        Register(CreateScriptExecutionFinisher(SelfId().ToString() /*executionId*/, Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
+        Register(CreateScriptExecutionFinisher(ActorIdToScriptExecutionId(SelfId()), Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
     }
 
     bool IsFinished() const {

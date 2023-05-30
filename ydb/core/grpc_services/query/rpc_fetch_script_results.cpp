@@ -41,7 +41,7 @@ public:
 
         const TString& executionId = req->execution_id();
         NActors::TActorId runScriptActor;
-        if (!runScriptActor.Parse(executionId.data(), executionId.size())) {
+        if (!NKqp::ScriptExecutionIdToActorId(executionId, runScriptActor)) {
             Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect execution id");
             return;
         }

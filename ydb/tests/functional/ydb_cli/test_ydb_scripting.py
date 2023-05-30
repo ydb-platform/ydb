@@ -209,7 +209,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
         create_table_with_data(session, cls.table_path)
 
     @staticmethod
-    def write_data(data, filename="scripting_params.json"):
+    def write_data(data, filename="params.json"):
         with open(filename, "w") as file:
             file.write(data)
 
@@ -219,7 +219,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
             '}'
         script = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "scripting_params.json", "-s", script])
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
         return self.canonical_result(output)
 
     def uint64_and_string(self, command):
@@ -231,7 +231,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "DECLARE $value AS String; "\
                  "SELECT * FROM `{}` WHERE id = $id OR value = $value;".format(self.table_path)
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "scripting_params.json", "-s", script])
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
         return self.canonical_result(output)
 
     def list(self, command):
@@ -240,7 +240,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
             '}'
         script = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "scripting_params.json", "-s", script])
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
         return self.canonical_result(output)
 
     def struct(self, command):
@@ -262,7 +262,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "Table.value AS value "\
                  "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "scripting_params.json", "-s", script])
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
         return self.canonical_result(output)
 
     def multiple_files(self, command):
@@ -279,11 +279,11 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "DECLARE $num AS Uint64; "\
                  "DECLARE $date AS Date; "\
                  "SELECT $str AS str, $num as num, $date as date; "
-        self.write_data(param_data1, "scripting_param1.json")
-        self.write_data(param_data2, "scripting_param2.json")
-        self.write_data(param_data3, "scripting_param3.json")
+        self.write_data(param_data1, "params1.json")
+        self.write_data(param_data2, "params2.json")
+        self.write_data(param_data3, "params3.json")
         output = self.execute_ydb_cli_command_with_db(
-            command + ["--param-file", "scripting_param1.json", "--param-file", "scripting_param2.json", "--param-file", "scripting_param3.json", "-s", script]
+            command + ["--param-file", "params1.json", "--param-file", "params2.json", "--param-file", "params3.json", "-s", script]
         )
         return self.canonical_result(output)
 
@@ -296,7 +296,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "SELECT $a AS a; "
         self.write_data(param_data)
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--param-file", "scripting_params.json"]
+            command + ["-s", script, "--param-file", "params.json"]
         )
         return self.canonical_result(output)
 
@@ -362,13 +362,13 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         create_table_with_data(session, cls.table_path)
 
     @staticmethod
-    def write_data(data, filename="scripting_stdin.txt"):
+    def write_data(data, filename="stdin.txt"):
         with open(filename, "w") as file:
             file.write(data)
 
     @classmethod
     def get_stdin(cls):
-        cls.stdin = open("scripting_stdin.txt", "r")
+        cls.stdin = open("stdin.txt", "r")
         return cls.stdin
 
     @classmethod
@@ -427,9 +427,9 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $date AS date, $val AS val; "
         self.write_data(param_data1)
-        self.write_data(param_data2, "scripting_params.json")
+        self.write_data(param_data2, "params.json")
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-par", "s", "--stdin-format", "raw", "--param-file", "scripting_params.json"],
+            command + ["-s", script, "--stdin-par", "s", "--stdin-format", "raw", "--param-file", "params.json"],
             self.get_stdin()
         )
         self.close_stdin()
@@ -447,9 +447,9 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $date AS date, $val AS val; "
         self.write_data(param_data1)
-        self.write_data(param_data2, "scripting_params.json")
+        self.write_data(param_data2, "params.json")
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--param-file", "scripting_params.json", "--param", "$val=100"],
+            command + ["-s", script, "--param-file", "params.json", "--param", "$val=100"],
             self.get_stdin()
         )
         self.close_stdin()

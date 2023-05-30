@@ -240,7 +240,7 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
         create_table_with_data(session, cls.table_path)
 
     @staticmethod
-    def write_data(data, filename="table_params.json"):
+    def write_data(data, filename="params.json"):
         with open(filename, "w") as file:
             file.write(data)
 
@@ -251,7 +251,7 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
         query = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
         self.write_data(param_data)
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "--param-file", "table_params.json", "-q", query]
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
         )
         return self.canonical_result(output)
 
@@ -265,7 +265,7 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
                 "SELECT * FROM `{}` WHERE id = $id OR value = $value;".format(self.table_path)
         self.write_data(param_data)
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "--param-file", "table_params.json", "-q", query]
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
         )
         return self.canonical_result(output)
 
@@ -276,7 +276,7 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
         query = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
         self.write_data(param_data)
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "--param-file", "table_params.json", "-q", query]
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
         )
         return self.canonical_result(output)
 
@@ -300,7 +300,7 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
                 "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
         self.write_data(param_data)
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "--param-file", "table_params.json", "-q", query]
+            ["table", "query", "execute", "-t", query_type, "--param-file", "params.json", "-q", query]
         )
         return self.canonical_result(output)
 
@@ -318,12 +318,12 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
                 "DECLARE $num AS Uint64; "\
                 "DECLARE $date AS Date; "\
                 "SELECT $str AS str, $num as num, $date as date; "
-        self.write_data(param_data1, "table_param1.json")
-        self.write_data(param_data2, "table_param2.json")
-        self.write_data(param_data3, "table_param3.json")
+        self.write_data(param_data1, "param1.json")
+        self.write_data(param_data2, "param2.json")
+        self.write_data(param_data3, "param3.json")
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "--param-file", "table_param1.json", "--param-file",
-             "table_param2.json", "--param-file", "table_param3.json", "-q", query]
+            ["table", "query", "execute", "-t", query_type, "--param-file", "param1.json", "--param-file",
+             "param2.json", "--param-file", "param3.json", "-q", query]
         )
         return self.canonical_result(output)
 
@@ -336,7 +336,7 @@ class TestExecuteQueryWithParamsFromJson(BaseTestTableService):
                 "SELECT $a AS a; "
         self.write_data(param_data)
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "-q", query, "--param-file", "table_params.json"]
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--param-file", "params.json"]
         )
         return self.canonical_result(output)
 
@@ -402,13 +402,13 @@ class TestExecuteQueryWithParamsFromStdin(BaseTestTableService):
         create_table_with_data(session, cls.table_path)
 
     @staticmethod
-    def write_data(data, filename="table_stdin.txt"):
+    def write_data(data, filename="stdin.txt"):
         with open(filename, "w") as file:
             file.write(data)
 
     @classmethod
     def get_stdin(cls):
-        cls.stdin = open("table_stdin.txt", "r")
+        cls.stdin = open("stdin.txt", "r")
         return cls.stdin
 
     @classmethod
@@ -467,10 +467,10 @@ class TestExecuteQueryWithParamsFromStdin(BaseTestTableService):
                 "DECLARE $val AS Uint64; " \
                 "SELECT $s AS s, $date AS date, $val AS val; "
         self.write_data(param_data1)
-        self.write_data(param_data2, "table_params.json")
+        self.write_data(param_data2, "params.json")
         output = self.execute_ydb_cli_command(
             ["table", "query", "execute", "-t", query_type, "-q", query, "--stdin-par", "s",
-             "--stdin-format", "raw", "--param-file", "table_params.json"],
+             "--stdin-format", "raw", "--param-file", "params.json"],
             self.get_stdin()
         )
         self.close_stdin()
@@ -488,9 +488,9 @@ class TestExecuteQueryWithParamsFromStdin(BaseTestTableService):
                 "DECLARE $val AS Uint64; " \
                 "SELECT $s AS s, $date AS date, $val AS val; "
         self.write_data(param_data1)
-        self.write_data(param_data2, "table_params.json")
+        self.write_data(param_data2, "params.json")
         output = self.execute_ydb_cli_command(
-            ["table", "query", "execute", "-t", query_type, "-q", query, "--param-file", "table_params.json", "--param", "$val=100"],
+            ["table", "query", "execute", "-t", query_type, "-q", query, "--param-file", "params.json", "--param", "$val=100"],
             self.get_stdin()
         )
         self.close_stdin()

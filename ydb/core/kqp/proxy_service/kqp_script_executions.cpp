@@ -249,6 +249,11 @@ public:
             case NTxProxy::TResultStatus::ExecError:
                 if (ssStatus == NKikimrScheme::EStatus::StatusMultipleModifications) {
                     SubscribeOnTransaction(ev);
+                // In the process of creating a database, errors of the form may occur -
+                // database doesn't have storage pools at all to create tablet
+                // channels to storage pool binding by profile id
+                } else if (ssStatus == NKikimrScheme::EStatus::StatusInvalidParameter) {
+                    Retry();
                 } else {
                     Fail(ev);
                 }
@@ -538,7 +543,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
 
         // Start request
         RunScriptActorId = Register(CreateRunScriptActor(Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1));
-        TString executionId = RunScriptActorId.ToString();
+        TString executionId = ActorIdToScriptExecutionId(RunScriptActorId);
         Register(new TCreateScriptOperationQuery(executionId, Event->Get()->Record));
     }
 

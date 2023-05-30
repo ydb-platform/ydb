@@ -1136,6 +1136,7 @@ public:
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
+        LOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId);
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 

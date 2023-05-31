@@ -28,5 +28,6 @@ NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
     bool useBlocks = false);
 
 TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParser(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx, bool useBlocks = false);
+TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx);
 
 }

@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package NYql.Generic;
+
+// FIXME: this is legacy left from the ClickHouse connector,
+// it's not used directly now, but left for the further research.
+message TRange {
+    string Range = 1;
+}

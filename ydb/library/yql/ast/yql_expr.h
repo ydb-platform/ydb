@@ -555,6 +555,20 @@ public:
         return true;
     }
 
+
+    TString ToString() const {
+        TStringBuilder sb;
+
+        for (std::size_t i = 0; i < Items.size(); i++) {
+            sb << i << ": " << Items[i]->GetName() << "(" << FormatType(Items[i]->GetItemType()) << ")";
+            if (i != Items.size() - 1) {
+                sb << ", ";
+            }
+        }
+
+        return sb;
+    }
+
 private:
     TVector<const TItemExprType*> Items;
 };

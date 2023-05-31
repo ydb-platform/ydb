@@ -101,6 +101,7 @@ NYql::NLog::EComponent ConvertComponent(NYql::NProto::TLoggingConfig::EComponent
     case TLoggingConfig::PROVIDER_S3: return EComponent::ProviderS3;
     case TLoggingConfig::CORE_DQ: return EComponent::CoreDq;
     case TLoggingConfig::HTTP_GATEWAY: return EComponent::HttpGateway;
+    case TLoggingConfig::PROVIDER_GENERIC: return EComponent::ProviderGeneric;
     }
 
     ythrow yexception() << "unknown log component: "

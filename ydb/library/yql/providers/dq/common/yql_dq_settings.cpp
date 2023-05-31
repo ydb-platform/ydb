@@ -61,6 +61,8 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, UseWideChannels);
     REGISTER_SETTING(*this, UseFastPickleTransport);
+
+    REGISTER_SETTING(*this, AggregateStatsByStage);
 }
 
 } // namespace NYql

@@ -3,6 +3,7 @@
 #include "yql_dq_datasink_constraints.h"
 #include "yql_dq_datasink_type_ann.h"
 #include "yql_dq_recapture.h"
+#include "yql_dq_statistics_json.h"
 
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
 #include <ydb/library/yql/providers/dq/opt/physical_optimize.h>
@@ -91,66 +92,13 @@ public:
         writer.OnKeyedItem("All");
         NCommon::WriteStatistics(writer, totalOnly, statistics);
 
-        THashMap<TString, TOperationStatistics> taskRunnerStage;
-        THashMap<TString, TOperationStatistics> taskRunnerInput;
-        THashMap<TString, TOperationStatistics> taskRunnerOutput;
-
-        for (const auto& entry : taskRunner.Entries) {
-            TString prefix, name;
-            std::map<TString, TString> labels;
-            if (!NCommon::ParseCounterName(&prefix, &labels, &name, entry.Name)) {
-                continue;
-            }
-            auto maybeInput = labels.find("Input");
-            auto maybeOutput = labels.find("Output");
-            auto maybeStage = labels.find("Stage");
-            if (maybeStage == labels.end()) {
-                maybeStage = labels.find("Task");
-            }
-            if (maybeStage == labels.end()) {
-                continue;
-            }
-
-            if (maybeInput != labels.end()) {
-                auto newEntry = entry; newEntry.Name = name;
-                taskRunnerInput[maybeStage->second].Entries.push_back(newEntry);
-            }
-            if (maybeOutput != labels.end()) {
-                auto newEntry = entry; newEntry.Name = name;
-                taskRunnerOutput[maybeStage->second].Entries.push_back(newEntry);
-            }
-            if (maybeInput == labels.end() && maybeOutput == labels.end()) {
-                auto newEntry = entry; newEntry.Name = name;
-                taskRunnerStage[maybeStage->second].Entries.push_back(newEntry);
-            }
-        }
-
         writer.OnKeyedItem("TaskRunner");
 
+        if (State->Settings->AggregateStatsByStage.Get().GetOrElse(TDqSettings::TDefault::AggregateStatsByStage))
         {
-            writer.OnBeginMap();
-            for (const auto& [stageId, stat] : taskRunnerStage) {
-                const auto& inputStat = taskRunnerInput[stageId];
-                const auto& outputStat = taskRunnerOutput[stageId];
-
-                writer.OnKeyedItem("Stage=" + stageId);
-                {
-                    writer.OnBeginMap();
-
-                    writer.OnKeyedItem("Input");
-                    NCommon::WriteStatistics(writer, totalOnly, {{0, inputStat}});
-
-                    writer.OnKeyedItem("Output");
-                    NCommon::WriteStatistics(writer, totalOnly, {{0, outputStat}});
-
-                    writer.OnKeyedItem("Task");
-                    NCommon::WriteStatistics(writer, totalOnly, {{0, stat}});
-
-                    writer.OnEndMap();
-                }
-            }
-
-            writer.OnEndMap();
+            CollectTaskRunnerStatisticsByStage(writer, taskRunner, totalOnly);
+        } else {
+            CollectTaskRunnerStatisticsByTask(writer, taskRunner);
         }
 
         writer.OnEndMap();

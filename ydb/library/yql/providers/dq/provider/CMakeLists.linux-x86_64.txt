@@ -7,6 +7,7 @@
 
 
 add_subdirectory(exec)
+add_subdirectory(ut)
 
 add_library(providers-dq-provider)
 target_compile_options(providers-dq-provider PRIVATE
@@ -54,5 +55,6 @@ target_sources(providers-dq-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_recapture.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics_json.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_validate.cpp
 )

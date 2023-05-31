@@ -158,6 +158,170 @@ namespace NKikimr::NTxCoordinator::NTest {
             }
         }
 
+        class TEventSinkActor : public TActor<TEventSinkActor> {
+        public:
+            TEventSinkActor(std::deque<std::unique_ptr<IEventHandle>>& events)
+                : TActor(&TThis::Handle)
+                , Events(events)
+            { }
+
+            template<class TEvent>
+            static typename TEvent::TPtr Wait(TTestActorRuntimeBase& runtime, std::deque<std::unique_ptr<IEventHandle>>& events, int attempts = 1) {
+                for (int i = 0; i < attempts && events.empty(); ++i) {
+                    TDispatchOptions options;
+                    options.CustomFinalCondition = [&]() {
+                        return !events.empty();
+                    };
+                    runtime.DispatchEvents(options);
+                }
+
+                UNIT_ASSERT_C(!events.empty(), "Expected event " << TypeName<TEvent>() << " was not delivered");
+                UNIT_ASSERT_C(events.front()->GetTypeRewrite() == TEvent::EventType,
+                    "Expected event " << TypeName<TEvent>()
+                    << " but received " << events.front()->ToString());
+
+                auto ev = std::move(events.front());
+                events.pop_front();
+                return typename TEvent::TPtr(static_cast<TEventHandle<TEvent>*>(ev.release()));
+            }
+
+        private:
+            void Handle(TAutoPtr<IEventHandle>& ev) {
+                Events.emplace_back(ev.Release());
+            }
+
+        private:
+            std::deque<std::unique_ptr<IEventHandle>>& Events;
+        };
+
+        Y_UNIT_TEST(LastStepSubscribe) {
+            std::deque<std::unique_ptr<IEventHandle>> events1;
+            std::deque<std::unique_ptr<IEventHandle>> events2;
+
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root")
+                .SetNodeCount(2)
+                .SetUseRealThreads(false);
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+
+            auto &runtime = *server->GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
+
+            ui64 coordinatorId = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+            auto sender1 = runtime.Register(new TEventSinkActor(events1), 1);
+            auto sender2 = runtime.Register(new TEventSinkActor(events2), 1);
+            auto pipe1 = runtime.ConnectToPipe(coordinatorId, {}, 1, {});
+            auto pipe2 = runtime.ConnectToPipe(coordinatorId, {}, 1, {});
+
+            // Subscribe the first client
+            runtime.SendToPipe(pipe1, sender1, new TEvTxProxy::TEvSubscribeLastStep(coordinatorId, 123), 1, 234);
+
+            ui64 lastStep;
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events1);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetCoordinatorID(), coordinatorId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetSeqNo(), 123u);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
+                lastStep = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_C(lastStep > 0, lastStep);
+            }
+
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events1);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetCoordinatorID(), coordinatorId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetSeqNo(), 123u);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 234u);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_C(step > lastStep, "step: " << step << " lastStep: " << lastStep);
+                lastStep = step;
+            }
+
+            UNIT_ASSERT(events2.empty());
+
+            // Subscribe the second client
+            runtime.SendToPipe(pipe2, sender2, new TEvTxProxy::TEvSubscribeLastStep(coordinatorId, 234), 1, 345);
+
+            // We expect new subscriptions to see the same step
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events2);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetCoordinatorID(), coordinatorId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetSeqNo(), 234u);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 345u);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_VALUES_EQUAL(step, lastStep);
+            }
+
+            UNIT_ASSERT(events1.empty());
+
+            // Both subscribers should receive the next step
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events1);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_C(step > lastStep, "step: " << step << " lastStep: " << lastStep);
+                lastStep = step;
+            }
+
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events2);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_VALUES_EQUAL(step, lastStep);
+            }
+
+            // Resubscribe the first client using a greater seqno
+            runtime.SendToPipe(pipe1, sender1, new TEvTxProxy::TEvSubscribeLastStep(coordinatorId, 124), 1, 245);
+            runtime.SimulateSleep(TDuration::MicroSeconds(1));
+            UNIT_ASSERT(events1.size() == 1);
+            UNIT_ASSERT(events2.size() == 0);
+
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events1);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_VALUES_EQUAL(step, lastStep);
+            }
+
+            // Subscriptions using a lower seqno must be ignored
+            runtime.SendToPipe(pipe1, sender1, new TEvTxProxy::TEvSubscribeLastStep(coordinatorId, 123), 1, 234);
+            runtime.SimulateSleep(TDuration::MicroSeconds(1));
+            UNIT_ASSERT(events1.size() == 0);
+            UNIT_ASSERT(events2.size() == 0);
+
+            // Unsubscribe using a lower seqno must be ignored
+            runtime.SendToPipe(pipe1, sender1, new TEvTxProxy::TEvUnsubscribeLastStep(coordinatorId, 123), 1, 0);
+
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events1);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_C(step > lastStep, "step: " << step << " lastStep: " << lastStep);
+                lastStep = step;
+            }
+
+            {
+                auto ev = TEventSinkActor::Wait<TEvTxProxy::TEvUpdatedLastStep>(runtime, events2);
+                ui64 step = ev->Get()->Record.GetLastStep();
+                UNIT_ASSERT_VALUES_EQUAL(step, lastStep);
+            }
+
+            // Unsubscribe the first client
+            runtime.SendToPipe(pipe1, sender1, new TEvTxProxy::TEvUnsubscribeLastStep(coordinatorId, 124), 1, 0);
+
+            // We expect the second client to receive updates, but not the first one
+            runtime.SimulateSleep(TDuration::Seconds(2));
+            UNIT_ASSERT(events1.size() == 0);
+            UNIT_ASSERT(events2.size() > 0);
+            events2.clear();
+
+            // Close the second pipe
+            runtime.ClosePipe(pipe2, {}, 1);
+
+            // We expect the second client to stop receiving updates as well
+            runtime.SimulateSleep(TDuration::Seconds(2));
+            UNIT_ASSERT(events1.size() == 0);
+            UNIT_ASSERT(events2.size() == 0);
+        }
+
     } // Y_UNIT_TEST_SUITE(Coordinator)
 
 

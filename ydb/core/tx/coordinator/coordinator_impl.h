@@ -460,6 +460,18 @@ private:
         i64 CurrentTxInFly;
     };
 
+    struct TLastStepSubscriber {
+        TActorId PipeServer;
+        TActorId InterconnectSession;
+        ui64 SeqNo;
+        ui64 Cookie;
+    };
+
+    struct TPipeServerData {
+        // Subscriber -> Pointer into LastStepSubscribers
+        THashMap<TActorId, TLastStepSubscriber*> LastStepSubscribers;
+    };
+
     bool IcbRegistered = false;
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
@@ -469,7 +481,8 @@ private:
     TCoordinatorMonCounters MonCounters;
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
-    THashSet<TActorId> PipeServers;
+    THashMap<TActorId, TLastStepSubscriber> LastStepSubscribers;
+    THashMap<TActorId, TPipeServerData> PipeServers;
 
     typedef THashMap<TTabletId, TMediator> TMediatorsIndex;
     TMediatorsIndex Mediators;
@@ -505,6 +518,8 @@ private:
 
         return TActor::Die(ctx);
     }
+
+    void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie);
 
     void IcbRegister();
     bool ReadOnlyLeaseEnabled() override;
@@ -547,6 +562,11 @@ private:
     TActorId EnsureReadStepSubscriptionManager(const TActorContext &ctx);
     void Handle(TEvTxProxy::TEvSubscribeReadStep::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxy::TEvUnsubscribeReadStep::TPtr &ev, const TActorContext &ctx);
+
+    void Handle(TEvTxProxy::TEvSubscribeLastStep::TPtr &ev);
+    void Handle(TEvTxProxy::TEvUnsubscribeLastStep::TPtr &ev);
+    void NotifyUpdatedLastStep();
+    void NotifyUpdatedLastStep(const TActorId& actorId, const TLastStepSubscriber& subscriber);
 
     void Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvMediatorQueueStop::TPtr &ev, const TActorContext &ctx);
@@ -601,6 +621,8 @@ public:
                 HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);
                 HFunc(TEvTxProxy::TEvSubscribeReadStep, Handle);
                 HFunc(TEvTxProxy::TEvUnsubscribeReadStep, Handle);
+                hFunc(TEvTxProxy::TEvSubscribeLastStep, Handle);
+                hFunc(TEvTxProxy::TEvUnsubscribeLastStep, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
@@ -613,6 +635,8 @@ public:
                 HFunc(TEvPrivate::TEvAcquireReadStepFlush, Handle);
                 HFunc(TEvTxProxy::TEvSubscribeReadStep, Handle);
                 HFunc(TEvTxProxy::TEvUnsubscribeReadStep, Handle);
+                hFunc(TEvTxProxy::TEvSubscribeLastStep, Handle);
+                hFunc(TEvTxProxy::TEvUnsubscribeLastStep, Handle);
                 HFunc(TEvPrivate::TEvPlanTick, Handle);
                 HFunc(TEvTxCoordinator::TEvMediatorQueueConfirmations, Handle);
                 HFunc(TEvTxCoordinator::TEvMediatorQueueRestart, Handle);

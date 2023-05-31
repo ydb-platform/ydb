@@ -351,6 +351,7 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     i32 BalancerProgress; // all values below 0 mean that balancer is not active (-1 = dead, -2 = starting)
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
+    EBalancerType LastBalancerTrigger = EBalancerType::None;
 
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
@@ -364,6 +365,7 @@ protected:
     bool RequestingSequenceNow = false;
     size_t RequestingSequenceIndex = 0;
     bool ProcessTabletBalancerScheduled = false;
+    bool ProcessTabletBalancerPostponed = false;
     bool ProcessPendingOperationsScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
@@ -617,6 +619,7 @@ public:
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
+    TDuration GetBalancerCooldown() const;
 
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;
     ui64 MetricsWindowSize = TDuration::Minutes(1).MilliSeconds();
@@ -639,6 +642,10 @@ public:
 
     TDuration GetMinPeriodBetweenBalance() const {
         return TDuration::Seconds(CurrentConfig.GetMinPeriodBetweenBalance());
+    }
+
+    TDuration GetMinPeriodBetweenEmergencyBalance() const {
+        return TDuration::Seconds(CurrentConfig.GetMinPeriodBetweenEmergencyBalance());
     }
 
     TDuration GetMinPeriodBetweenReassign() const {

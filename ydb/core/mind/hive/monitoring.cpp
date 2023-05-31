@@ -783,12 +783,13 @@ public:
         UpdateConfig(db, "MaxRequestSequenceSize", TSchemeIds::State::MaxRequestSequenceSize);
         UpdateConfig(db, "MetricsWindowSize", TSchemeIds::State::MetricsWindowSize);
         UpdateConfig(db, "ResourceOvercommitment", TSchemeIds::State::ResourceOvercommitment);
-        UpdateConfig(db, "MinPeriodBetweenBalance");
         UpdateConfig(db, "NodeBalanceStrategy");
         UpdateConfig(db, "TabletBalanceStrategy");
+        UpdateConfig(db, "MinPeriodBetweenBalance");
         UpdateConfig(db, "BalancerInflight");
         UpdateConfig(db, "MaxMovementsOnAutoBalancer");
         UpdateConfig(db, "ContinueAutoBalancer");
+        UpdateConfig(db, "MinPeriodBetweenEmergencyBalance");
         UpdateConfig(db, "EmergencyBalancerInflight");
         UpdateConfig(db, "MaxMovementsOnEmergencyBalancer");
         UpdateConfig(db, "ContinueEmergencyBalancer");
@@ -1069,6 +1070,7 @@ public:
         ShowConfig(out, "BalancerInflight");
         ShowConfig(out, "MaxMovementsOnAutoBalancer");
         ShowConfig(out, "ContinueAutoBalancer");
+        ShowConfig(out, "MinPeriodBetweenEmergencyBalance");
         ShowConfig(out, "EmergencyBalancerInflight");
         ShowConfig(out, "MaxMovementsOnEmergencyBalancer");
         ShowConfig(out, "ContinueEmergencyBalancer");

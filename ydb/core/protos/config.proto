@@ -1598,9 +1598,10 @@ message THiveConfig {
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
     optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
     optional bool WarmUpEnabled = 55 [default = false];
-    optional uint64 EmergencyBalancerInflight = 56 [default = 5]; // tablets
-    optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 1000];
+    optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
+    optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
     optional bool ContinueEmergencyBalancer = 58 [default = true];
+    optional double MinPeriodBetweenEmergencyBalance = 59 [default = 0.1]; // seconds
 }
 
 message TDataShardConfig {

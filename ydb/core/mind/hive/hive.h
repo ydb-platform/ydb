@@ -72,6 +72,12 @@ enum class EFollowerStrategy : ui32 {
     Read,
 };
 
+enum class EBalancerType {
+    None,
+    Scatter,
+    Emergency,
+};
+
 TString EFollowerStrategyName(EFollowerStrategy value);
 
 struct ISubActor {

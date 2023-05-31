@@ -117,7 +117,9 @@ jobs:
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
         aws_bucket: ${{vars.AWS_BUCKET}}
         aws_endpoint: ${{vars.AWS_ENDPOINT}}
-
+        testman_token: ${{secrets.TESTMO_TOKEN}}
+        testman_url: ${{vars.TESTMO_URL}}
+        testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
   release-runner:
     name: Release self-hosted YC runner if provided on-demand
     needs:

@@ -153,7 +153,7 @@ runs:
         -- cat $WORKDIR/short.log
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/*.xml \
+        --results $PYTESTREPDIR/*.xml \
         -- cat $WORKDIR/pytest-short.log
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3

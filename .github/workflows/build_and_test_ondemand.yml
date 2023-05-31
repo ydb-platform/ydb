@@ -94,7 +94,7 @@ jobs:
       uses: ./.github/actions/build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Run unit tests
+    - name: Run tests
       if: inputs.run_unit_tests
       uses: ./.github/actions/test
       with:

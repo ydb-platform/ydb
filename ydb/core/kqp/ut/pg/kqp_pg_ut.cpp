@@ -34,16 +34,17 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-NYdb::NScripting::TExecuteYqlResult ExecutePgSelect(
+NYdb::NTable::TDataQueryResult ExecutePgSelect(
     NKikimr::NKqp::TKikimrRunner& kikimr, const TString& tableName)
 {
-    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-    auto result = client.ExecuteYqlScript(
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    auto result = session.ExecuteDataQuery(
         TStringBuilder() << R"(
         --!syntax_pg
         SELECT * FROM ")"
         << tableName << "\""
-    ).GetValueSync();
+    , TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return result;
 }
@@ -53,7 +54,8 @@ void ExecutePgInsert(
     const TString& tableName,
     const TPgTypeTestSpec& spec)
 {
-    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
     auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
     if (spec.TypeId == CHAROID) {
         valType = "\"char\"";
@@ -70,7 +72,7 @@ void ExecutePgInsert(
             '%s'::%s, '%s'::%s\n\
         )", tableName.Data(), keyIn.Data(), keyType.Data(), spec.TextIn(i).Data(), valType.Data());
         Cerr << req << Endl;
-        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
@@ -80,7 +82,8 @@ void ExecutePgArrayInsert(
     const TString& tableName,
     const TPgTypeTestSpec& spec)
 {
-    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
     auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
     if (spec.TypeId == CHAROID) {
         valType = "\"char\"";
@@ -103,7 +106,7 @@ void ExecutePgArrayInsert(
             %s, %s\n\
         );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
         Cerr << req << Endl;
-        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
@@ -113,7 +116,8 @@ bool ExecutePgInsertForCoercion(
     const TString& tableName,
     const TPgTypeCoercionTestSpec& spec)
 {
-    NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
     auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
     if (spec.TypeId == CHAROID) {
         valType = "\"char\"";
@@ -129,14 +133,15 @@ bool ExecutePgInsertForCoercion(
     )", tableName.Data(), spec.TextIn().Data(), valType.Data());
     Cerr << req << Endl;
 
-    auto result = client.ExecuteYqlScript(req).GetValueSync();
+    auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
     if (!result.IsSuccess()) {
         Cerr << result.GetIssues().ToString() << Endl;
     }
     return result.IsSuccess();
 }
 
-void ValidatePgYqlResult(const NYdb::NScripting::TExecuteYqlResult& result, const TPgTypeTestSpec& spec) {
+template <typename T>
+void ValidatePgYqlResult(const T& result, const TPgTypeTestSpec& spec) {
     TResultSetParser parser(result.GetResultSetParser(0));
     bool gotRows = false;
     for (size_t i = 0; parser.TryNextRow(); ++i) {
@@ -1015,11 +1020,12 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(EmptyQuery) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = client.ExecuteYqlScript(R"(
+        auto result = session.ExecuteDataQuery(R"(
             --!syntax_pg
-        )").GetValueSync();
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         Y_ENSURE(result.GetResultSets().empty());
@@ -1027,16 +1033,17 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(NoTableQuery) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = client.ExecuteYqlScript(R"(
+        auto result = session.ExecuteDataQuery(R"(
             --!syntax_pg
             SELECT * FROM (VALUES
                 (1, 'one'),
                 (2, 'two'),
                 (3, 'three')
             ) AS t (int8, varchar);
-        )").GetValueSync();
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -1056,7 +1063,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn);
             session.Close().GetValueSync();
 
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+            session = db.CreateSession().GetValueSync().GetSession();
             auto result = ExecutePgSelect(kikimr, tableName);
             ValidatePgYqlResult(result, spec);
         };
@@ -1181,12 +1188,13 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn, emptyTableName, 0);
             session.Close().GetValueSync();
 
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-            auto result = client.ExecuteYqlScript(
+            db = kikimr.GetTableClient();
+            session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
                 TStringBuilder() << R"(
                 --!syntax_pg
                 INSERT INTO )" << emptyTableName << " (key, value) SELECT * FROM \"" << tableName << "\";"
-            ).GetValueSync();
+            , TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
         };
 
@@ -1218,11 +1226,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             if (!isArray) {
                 ExecutePgInsert(kikimr, tableName, spec);
-                result = ExecutePgSelect(kikimr, tableName);
+                auto result = ExecutePgSelect(kikimr, tableName);
                 ValidatePgYqlResult(result, spec);
             } else {
                 ExecutePgArrayInsert(kikimr, tableName, spec);
-                result = ExecutePgSelect(kikimr, tableName);
+                auto result = ExecutePgSelect(kikimr, tableName);
                 TResultSetParser parser(result.GetResultSetParser(0));
                 for (size_t i = 0; parser.TryNextRow(); ++i) {
                     auto check = [&parser, &spec] (const TString& column, const TString& expected) {
@@ -1279,11 +1287,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             if (!isArray) {
                 ExecutePgInsert(kikimr, tableName, spec);
-                result = ExecutePgSelect(kikimr, tableName);
+                auto result = ExecutePgSelect(kikimr, tableName);
                 ValidatePgYqlResult(result, spec);
             } else {
                 ExecutePgArrayInsert(kikimr, tableName, spec);
-                result = ExecutePgSelect(kikimr, tableName);
+                auto result = ExecutePgSelect(kikimr, tableName);
                 TResultSetParser parser(result.GetResultSetParser(0));
                 for (size_t i = 0; parser.TryNextRow(); ++i) {
                     auto check = [&parser, &spec] (const TString& column, const TString& expected) {
@@ -1325,7 +1333,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         TTableBuilder builder;
         UNIT_ASSERT_EXCEPTION(builder.AddNonNullableColumn("key", TPgType("pgint2")), yexception);
 
-        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
         auto req = TStringBuilder() << R"(
         --!syntax_pg
         CREATE TABLE Pg (
@@ -1333,7 +1342,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         value int2 NOT NULL
         );)";
         Cerr << req << Endl;
-        auto result = client.ExecuteYqlScript(req).GetValueSync();
+        auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Type annotation, code: 1030\n"
         "    <main>:1:1: Error: At function: KiCreateTable!\n"
@@ -1348,7 +1357,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         PRIMARY KEY (key)
         );)";
         Cerr << reqV1 << Endl;
-        result = client.ExecuteYqlScript(reqV1).GetValueSync();
+        result = session.ExecuteDataQuery(reqV1, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
                 UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Type annotation, code: 1030\n"
         "    <main>:6:22: Error: At function: KiCreateTable!\n"

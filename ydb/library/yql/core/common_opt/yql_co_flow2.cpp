@@ -1747,7 +1747,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         TSet<TStringBuf> usedFields;
         auto extractor = node->Child(2);
         for (ui32 i = 1; i < extractor->ChildrenSize(); ++i) {
-            TSet<TStringBuf> lambdaSubset;            
+            TSet<TStringBuf> lambdaSubset;
             if (!HaveFieldsSubset(extractor->ChildPtr(i), *extractor->Child(0)->Child(0), lambdaSubset, *optCtx.ParentsMap)) {
                 return node;
             }

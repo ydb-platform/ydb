@@ -90,13 +90,13 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST_LIMIT(CommitTransaction, DoCommitTransactionRequest, Off)
     ADD_REQUEST_LIMIT(RollbackTransaction, DoRollbackTransactionRequest, Off)
 
-
     ADD_REQUEST_LIMIT(PrepareDataQuery, DoPrepareDataQueryRequest, Ru)
     ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru)
     ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru)
 
     ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress)
     ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress)
+    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru)
 
 #undef ADD_REQUEST_LIMIT
 #undef ADD_STREAM_REQUEST_LIMIT

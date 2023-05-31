@@ -84,5 +84,19 @@ private:
 
 };
 
+class TCommandKvRunReadRowsRandom : public TWorkloadCommand {
+public:
+    TCommandKvRunReadRowsRandom();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    ui64 MaxFirstKey;
+    ui64 ColumnsCnt;
+    ui64 RowsCnt;
+
+};
+
 }
 }

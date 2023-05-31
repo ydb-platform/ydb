@@ -1,10 +1,11 @@
-#include "service_table.h"
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common.h"
 #include "service_table.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
@@ -24,80 +25,6 @@ using namespace NActors;
 using namespace Ydb;
 
 namespace {
-
-bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
-    bool ok = true;
-    switch (type.GetTypeId()) {
-    case NScheme::NTypeIds::Bool:
-    case NScheme::NTypeIds::Int8:
-    case NScheme::NTypeIds::Uint8:
-    case NScheme::NTypeIds::Int16:
-    case NScheme::NTypeIds::Uint16:
-    case NScheme::NTypeIds::Int32:
-    case NScheme::NTypeIds::Uint32:
-    case NScheme::NTypeIds::Int64:
-    case NScheme::NTypeIds::Uint64:
-    case NScheme::NTypeIds::Float:
-    case NScheme::NTypeIds::Double:
-    case NScheme::NTypeIds::String:
-        break;
-
-    case NScheme::NTypeIds::Decimal:
-        ok = !NYql::NDecimal::IsError(cell.AsValue<NYql::NDecimal::TInt128>());
-        break;
-
-    case NScheme::NTypeIds::Date:
-        ok = cell.AsValue<ui16>() < NUdf::MAX_DATE;
-        break;
-
-    case NScheme::NTypeIds::Datetime:
-        ok = cell.AsValue<ui32>() < NUdf::MAX_DATETIME;
-        break;
-
-    case NScheme::NTypeIds::Timestamp:
-        ok = cell.AsValue<ui64>() < NUdf::MAX_TIMESTAMP;
-        break;
-
-    case NScheme::NTypeIds::Interval:
-        ok = (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
-        break;
-
-    case NScheme::NTypeIds::Utf8:
-        ok = NYql::IsUtf8(cell.AsBuf());
-        break;
-
-    case NScheme::NTypeIds::Yson:
-        ok = NYql::NDom::IsValidYson(cell.AsBuf());
-        break;
-
-    case NScheme::NTypeIds::Json:
-        ok = NYql::NDom::IsValidJson(cell.AsBuf());
-        break;
-
-    case NScheme::NTypeIds::JsonDocument:
-        // JsonDocument value was verified at parsing time
-        break;
-
-    case NScheme::NTypeIds::DyNumber:
-        // DyNumber value was verified at parsing time
-        break;
-
-    case NScheme::NTypeIds::Pg:
-        // no pg validation here
-        break;
-
-    default:
-        err = Sprintf("Unexpected type %d", type.GetTypeId());
-        return false;
-    }
-
-    if (!ok) {
-        err = Sprintf("Invalid %s value", NScheme::TypeName(type).c_str());
-    }
-
-    return ok;
-}
-
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
@@ -195,173 +122,11 @@ public:
     {}
 
 private:
-    static bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
-                                  TCell& c, TString& err, TMemoryPool& valueDataPool)
-    {
-        if (vp->Hasnull_flag_value()) {
-            c = TCell();
-            return true;
-        }
-
-        if (vp->Hasnested_value()) {
-            vp = &vp->Getnested_value();
-        }
-
-        const Ydb::Value& val = *vp;
-
-#define EXTRACT_VAL(cellType, protoType, cppType) \
-        case NScheme::NTypeIds::cellType : { \
-                cppType v = val.Get##protoType##_value(); \
-                c = TCell((const char*)&v, sizeof(v)); \
-                break; \
-            }
-
-        switch (type.GetTypeId()) {
-        EXTRACT_VAL(Bool, bool, ui8);
-        EXTRACT_VAL(Int8, int32, i8);
-        EXTRACT_VAL(Uint8, uint32, ui8);
-        EXTRACT_VAL(Int16, int32, i16);
-        EXTRACT_VAL(Uint16, uint32, ui16);
-        EXTRACT_VAL(Int32, int32, i32);
-        EXTRACT_VAL(Uint32, uint32, ui32);
-        EXTRACT_VAL(Int64, int64, i64);
-        EXTRACT_VAL(Uint64, uint64, ui64);
-        EXTRACT_VAL(Float, float, float);
-        EXTRACT_VAL(Double, double, double);
-        EXTRACT_VAL(Date, uint32, ui16);
-        EXTRACT_VAL(Datetime, uint32, ui32);
-        EXTRACT_VAL(Timestamp, uint64, ui64);
-        EXTRACT_VAL(Interval, int64, i64);
-        case NScheme::NTypeIds::Json :
-        case NScheme::NTypeIds::Utf8 : {
-                TString v = val.Gettext_value();
-                c = TCell(v.data(), v.size());
-                break;
-            }
-        case NScheme::NTypeIds::JsonDocument : {
-            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
-            if (!binaryJson.Defined()) {
-                err = "Invalid JSON for JsonDocument provided";
-                return false;
-            }
-            const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
-            c = TCell(binaryJsonInPool.data(), binaryJsonInPool.size());
-            break;
-        }
-        case NScheme::NTypeIds::DyNumber : {
-            const auto dyNumber = NDyNumber::ParseDyNumberString(val.Gettext_value());
-            if (!dyNumber.Defined()) {
-                err = "Invalid DyNumber string representation";
-                return false;
-            }
-            const auto dyNumberInPool = valueDataPool.AppendString(TStringBuf(*dyNumber));
-            c = TCell(dyNumberInPool.data(), dyNumberInPool.size());
-            break;
-        }
-        case NScheme::NTypeIds::Yson :
-        case NScheme::NTypeIds::String : {
-                TString v = val.Getbytes_value();
-                c = TCell(v.data(), v.size());
-                break;
-            }
-        case NScheme::NTypeIds::Decimal : {
-            std::pair<ui64,ui64>& decimalVal = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
-            decimalVal.first = val.low_128();
-            decimalVal.second = val.high_128();
-            c = TCell((const char*)&decimalVal, sizeof(decimalVal));
-            break;
-        }
-        case NScheme::NTypeIds::Pg : {
-            TString binary;
-            bool isText = false;
-            TString text = val.Gettext_value();
-            if (!text.empty()) {
-                isText = true;
-                auto desc = type.GetTypeDesc();
-                auto id = NPg::PgTypeIdFromTypeDesc(desc);
-                auto res = NPg::PgNativeBinaryFromNativeText(text, id);
-                if (res.Error) {
-                    err = TStringBuilder() << "Invalid text value for "
-                        << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
-                    return false;
-                }
-                binary = res.Str;
-            } else {
-                binary = val.Getbytes_value();
-            }
-            auto* desc = type.GetTypeDesc();
-            if (typmod != -1 && NPg::TypeDescNeedsCoercion(desc)) {
-                auto res = NPg::PgNativeBinaryCoerce(TStringBuf(binary), desc, typmod);
-                if (res.Error) {
-                    err = TStringBuilder() << "Unable to coerce value for "
-                        << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;
-                    return false;
-                }
-                if (res.NewValue) {
-                    const auto valueInPool = valueDataPool.AppendString(TStringBuf(*res.NewValue));
-                    c = TCell(valueInPool.data(), valueInPool.size());
-                } else if (isText) {
-                    const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
-                    c = TCell(valueInPool.data(), valueInPool.size());
-                } else {
-                    c = TCell(binary.data(), binary.size());
-                }
-            } else {
-                auto error = NPg::PgNativeBinaryValidate(TStringBuf(binary), desc);
-                if (error) {
-                    err = TStringBuilder() << "Invalid binary value for "
-                        << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *error;
-                    return false;
-                }
-                if (isText) {
-                    const auto valueInPool = valueDataPool.AppendString(TStringBuf(binary));
-                    c = TCell(valueInPool.data(), valueInPool.size());
-                } else {
-                    c = TCell(binary.data(), binary.size());
-                }
-            }
-            break;
-        }
-        default:
-            err = Sprintf("Unexpected type %d", type.GetTypeId());
-            return false;
-        };
-
-        return CheckValueData(type, c, err);
-    }
-
-    template <class TProto>
-    static bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto,
-                                   TString& err, TMemoryPool& valueDataPool)
-    {
-        cells.clear();
-        cells.reserve(descr.size());
-
-        for (auto& fd : descr) {
-            if (proto.items_size() <= (int)fd.PositionInStruct) {
-                err = "Invalid request";
-                return false;
-            }
-            cells.push_back({});
-            if (!CellFromProtoVal(fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), cells.back(), err, valueDataPool)) {
-                return false;
-            }
-
-            if (fd.NotNull && cells.back().IsNull()) {
-                err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-private:
     bool ReportCostInfoEnabled() const {
         return GetProtoRequest(Request.get())->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
 
-    TString GetDatabase()override {
+    TString GetDatabase() override {
         return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
     }
 

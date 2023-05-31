@@ -2298,6 +2298,35 @@ public:
 
     }
 
+    TAsyncReadRowsResult ReadRows(const TString& path, TValue&& keys, const TReadRowsSettings& settings) {
+        auto request = MakeRequest<Ydb::Table::ReadRowsRequest>();
+        request.set_path(path);
+        auto* protoKeys = request.mutable_keys();
+        *protoKeys->mutable_type() = TProtoAccessor::GetProto(keys.GetType());
+        *protoKeys->mutable_value() = TProtoAccessor::GetProto(keys);
+
+        auto promise = NewPromise<TReadRowsResult>();
+
+        auto responseCb = [promise]
+            (Ydb::Table::ReadRowsResponse* response, TPlainStatus status) mutable {
+                Y_VERIFY(response);
+                TResultSet resultSet = TResultSet(response->result_set());
+                TReadRowsResult val(TStatus(std::move(status)), std::move(resultSet));
+                promise.SetValue(std::move(val));
+            };
+
+        Connections_->Run<Ydb::Table::V1::TableService, Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>(
+            std::move(request),
+            responseCb,
+            &Ydb::Table::V1::TableService::Stub::AsyncReadRows,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings), // requestSettings
+            TEndpointKey() // preferredEndpoint
+            );
+
+        return promise.GetFuture();
+    }
+
     TAsyncStatus Close(const TSession::TImpl* sessionImpl, const TCloseSessionSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
         request.set_session_id(sessionImpl->GetId());
@@ -3352,6 +3381,12 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataForma
         const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
 {
     return Impl_->BulkUpsert(table, format, data, schema, settings);
+}
+
+TAsyncReadRowsResult TTableClient::ReadRows(const TString& table, TValue&& rows,
+    const TReadRowsSettings& settings)
+{
+    return Impl_->ReadRows(table, std::move(rows), settings);
 }
 
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const TString& query, const TParams& params,
@@ -4738,6 +4773,11 @@ ui64 TReadReplicasSettings::GetReadReplicasCount() const {
 
 TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
     : TStatus(std::move(status))
+{}
+
+TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
+    : TStatus(std::move(status))
+    , ResultSet(std::move(resultSet))
 {}
 
 } // namespace NTable

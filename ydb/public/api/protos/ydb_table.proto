@@ -1052,6 +1052,26 @@ message ReadTableResult {
     Ydb.ResultSet result_set = 1;
 }
 
+message ReadRowsRequest {
+    // Session identifier
+    string session_id = 1;
+    // Path to table to read
+    string path = 2;
+    // Keys to read
+    TypedValue keys = 3;
+    // Output columns
+    repeated string columns = 4;
+}
+
+message ReadRowsResponse {
+    // Status of request (same as other statuses)
+    StatusIds.StatusCode status = 1;
+    // Issues
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    // Result set (same as result of sql request)
+    Ydb.ResultSet result_set = 3;
+}
+
 message BulkUpsertRequest {
     string table = 1;
     // "rows" parameter must be a list of structs where each stuct represents one row.

@@ -50,6 +50,7 @@ public:
         UpsertRandom,
         InsertRandom,
         SelectRandom,
+        ReadRowsRandom,
         MaxType
     };
 
@@ -57,6 +58,7 @@ private:
     TQueryInfoList UpsertRandom();
     TQueryInfoList InsertRandom();
     TQueryInfoList SelectRandom();
+    TQueryInfoList ReadRowsRandom();
 
     TKvWorkloadGenerator(const TKvWorkloadParams* params);
 

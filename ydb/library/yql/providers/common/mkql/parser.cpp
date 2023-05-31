@@ -137,7 +137,6 @@ TRuntimeNode WrapWithDecompress(
 }
 } // namespace
 
-
 TRuntimeNode BuildParseCall(
     TPosition pos,
     TRuntimeNode input,
@@ -391,7 +390,6 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
 
     const auto& settings = GetSettings(wrapper.Settings().Cast().Ref());
     TPosition pos = ctx.ExprCtx.GetPosition(wrapper.Pos());
-
     return BuildParseCall(
         pos,
         input,
@@ -405,32 +403,6 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
         finalItemType,
         ctx,
         useBlocks);
-}
-
-TMaybe<TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx) {
-    const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
-    const TStructExprType* rowType = wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-
-    const auto finalItemType = NCommon::BuildType(
-        wrapper.RowType().Ref(),
-        *rowType,
-        ctx.ProgramBuilder);
-
-    const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
-
-    return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
-        // MKQL_ENSURE(!extraColumnsByPathIndex && metadataColumns.empty(), "TODO");
-
-        TRuntimeNode::TList fields;
-
-        for (ui32 i = 0; i < finalItemStructType->GetMembersCount(); ++i) {
-            TStringBuf name = finalItemStructType->GetMemberName(i);
-            fields.push_back(ctx.ProgramBuilder.Member(item, name));
-        }
-
-        fields.push_back(ctx.ProgramBuilder.Member(item, BlockLengthColumnName));
-        return fields;
-    });
 }
 
 }

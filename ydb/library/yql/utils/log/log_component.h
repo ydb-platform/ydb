@@ -7,7 +7,7 @@
 namespace NYql {
 namespace NLog {
 
-// keep this enum in sync with simmilar enum from ydb/library/yql/utils/log/proto/logger_config.proto
+// keep this enum in sync with simmilar enum from yqlworker config.proto
 enum class EComponent {
     Default = 0,
     Core,
@@ -33,7 +33,6 @@ enum class EComponent {
     ProviderS3,
     CoreDq,
     HttpGateway,
-    ProviderGeneric,
     // <--- put other log components here
     MaxValue
 };
@@ -76,7 +75,6 @@ struct EComponentHelpers {
         case EComponent::ProviderS3: return TStringBuf("S3");
         case EComponent::CoreDq: return TStringBuf("core dq");
         case EComponent::HttpGateway: return TStringBuf("http gw");
-        case EComponent::ProviderGeneric: return TStringBuf("generic");
         default:
             ythrow yexception() << "invalid log component value: "
                                 << ToInt(component);
@@ -108,7 +106,6 @@ struct EComponentHelpers {
         if (str == TStringBuf("S3")) return EComponent::ProviderS3;
         if (str == TStringBuf("core dq")) return EComponent::CoreDq;
         if (str == TStringBuf("http gw")) return EComponent::HttpGateway;
-        if (str == TStringBuf("generic")) return EComponent::ProviderGeneric;
         ythrow yexception() << "unknown log component: '" << str << '\'';
     }
 

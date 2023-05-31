@@ -9,8 +9,7 @@ enum class DatabaseType {
     Ydb,
     ClickHouse,
     DataStreams,
-    ObjectStorage,
-    Generic
+    ObjectStorage
 };
 
 struct TDatabaseAuth {

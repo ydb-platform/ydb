@@ -32,7 +32,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-  steps:
   - name: Init
     id: init
     shell: bash

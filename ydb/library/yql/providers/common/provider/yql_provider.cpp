@@ -468,6 +468,32 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext&) {
+    TMaybeNode<TCoAtomList> permissions;
+    TMaybeNode<TCoAtomList> pathes;
+    TMaybeNode<TCoAtomList> roleNames;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "permissions") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                permissions = tuple.Value().Cast<TCoAtomList>();;
+            } else if (name == "roles") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                roleNames = tuple.Value().Cast<TCoAtomList>();
+            } else if (name == "pathes") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                pathes = tuple.Value().Cast<TCoAtomList>();
+            }
+        }
+    }
+
+    TWritePermissionSettings ret(std::move(permissions), std::move(pathes), std::move(roleNames));
+    return ret;
+}
+
 TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybe<NNodes::TCoNameValueTupleList> kvFeatures;

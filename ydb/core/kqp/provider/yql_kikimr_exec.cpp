@@ -11,6 +11,8 @@
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
+#include <ydb/core/ydb_convert/ydb_convert.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -48,6 +50,42 @@ namespace {
         astNode.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
 
         exec.Ptr()->ChildRef(TKiExecDataQuery::idx_Ast) = astNode.Ptr();
+    }
+
+    TModifyPermissionsSettings ParsePermissionsSettings(TKiModifyPermissions modifyPermissions) {
+        TModifyPermissionsSettings permissionsSettings;
+
+        TString action = modifyPermissions.Action().StringValue();
+        if (action == "grant") {
+            permissionsSettings.Action = TModifyPermissionsSettings::EAction::Grant;
+        } else if (action == "revoke") {
+            permissionsSettings.Action = TModifyPermissionsSettings::EAction::Revoke;
+        }
+
+        for (auto atom : modifyPermissions.Permissions()) {
+            const TString permission = atom.Cast<TCoAtom>().StringValue();
+            if (permission == "all_privileges") {
+                if (permissionsSettings.Action == TModifyPermissionsSettings::EAction::Grant) {
+                    permissionsSettings.Permissions.insert("ydb.generic.full");
+                } else if (permissionsSettings.Action == TModifyPermissionsSettings::EAction::Revoke) {
+                    permissionsSettings.Permissions.clear();
+                    permissionsSettings.IsPermissionsClear = true;
+                    break;
+                }
+                continue;
+            }
+            permissionsSettings.Permissions.insert(NKikimr::ConvertShortYdbPermissionNameToFullYdbPermissionName(permission));
+        }
+
+        THashSet<TString> pathesMap;
+        for (auto atom : modifyPermissions.Pathes()) {
+            permissionsSettings.Pathes.insert(atom.Cast<TCoAtom>().StringValue());
+        }
+
+        for (auto atom : modifyPermissions.Roles()) {
+            permissionsSettings.Roles.insert(atom.Cast<TCoAtom>().StringValue());
+        }
+        return permissionsSettings;
     }
 
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
@@ -1518,6 +1556,30 @@ public:
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();
+        }
+
+        if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {
+            if (!EnsureNotPrepare("MODIFY PERMISSIONS", input->Pos(), SessionCtx->Query(), ctx)) {
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeGrantPermissions.Cast().DataSink().Cluster());
+            TModifyPermissionsSettings settings = ParsePermissionsSettings(maybeGrantPermissions.Cast());
+
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->ModifyPermissions(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing MODIFY PERMISSIONS");
         }
 
         if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) {

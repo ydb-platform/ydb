@@ -771,6 +771,20 @@ using namespace NACLib;
 
 namespace {
 
+const TString YDB_DATABASE_CONNECT = "ydb.database.connect";
+const TString YDB_TABLES_MODIFY = "ydb.tables.modify";
+const TString YDB_TABLES_READ = "ydb.tables.read";
+const TString YDB_GENERIC_LIST = "ydb.generic.list";
+const TString YDB_GENERIC_READ = "ydb.generic.read";
+const TString YDB_GENERIC_WRITE = "ydb.generic.write";
+const TString YDB_GENERIC_USE_LEGACY = "ydb.generic.use_legacy";
+const TString YDB_GENERIC_USE = "ydb.generic.use";
+const TString YDB_GENERIC_MANAGE = "ydb.generic.manage";
+const TString YDB_GENERIC_FULL_LEGACY = "ydb.generic.full_legacy";
+const TString YDB_GENERIC_FULL = "ydb.generic.full";
+const TString YDB_DATABASE_CREATE = "ydb.database.create";
+const TString YDB_DATABASE_DROP = "ydb.database.drop";
+const TString YDB_ACCESS_GRANT = "ydb.access.grant";
 const TString YDB_GRANULAR_SELECT_ROW = "ydb.granular.select_row";
 const TString YDB_GRANULAR_UPDATE_ROW = "ydb.granular.update_row";
 const TString YDB_GRANULAR_ERASE_ROW = "ydb.granular.erase_row";
@@ -804,20 +818,20 @@ const TString& GetAclName(const TString& name) {
 } // namespace
 
 const THashMap<TString, TACLAttrs> AccessMap_  = {
-    { "ydb.database.connect", TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
-    { "ydb.tables.modify", TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
-    { "ydb.tables.read", TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
-    { "ydb.generic.list", EAccessRights::GenericList},
-    { "ydb.generic.read", EAccessRights::GenericRead },
-    { "ydb.generic.write", EAccessRights::GenericWrite },
-    { "ydb.generic.use_legacy", EAccessRights::GenericUseLegacy },
-    { "ydb.generic.use", EAccessRights::GenericUse},
-    { "ydb.generic.manage", EAccessRights::GenericManage },
-    { "ydb.generic.full_legacy", EAccessRights::GenericFullLegacy},
-    { "ydb.generic.full", EAccessRights::GenericFull },
-    { "ydb.database.create", EAccessRights::CreateDatabase },
-    { "ydb.database.drop", EAccessRights::DropDatabase },
-    { "ydb.access.grant", EAccessRights::GrantAccessRights },
+    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
+    { YDB_TABLES_MODIFY, TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
+    { YDB_TABLES_READ, TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
+    { YDB_GENERIC_LIST, EAccessRights::GenericList},
+    { YDB_GENERIC_READ, EAccessRights::GenericRead },
+    { YDB_GENERIC_WRITE, EAccessRights::GenericWrite },
+    { YDB_GENERIC_USE_LEGACY, EAccessRights::GenericUseLegacy },
+    { YDB_GENERIC_USE, EAccessRights::GenericUse},
+    { YDB_GENERIC_MANAGE, EAccessRights::GenericManage },
+    { YDB_GENERIC_FULL_LEGACY, EAccessRights::GenericFullLegacy},
+    { YDB_GENERIC_FULL, EAccessRights::GenericFull },
+    { YDB_DATABASE_CREATE, EAccessRights::CreateDatabase },
+    { YDB_DATABASE_DROP, EAccessRights::DropDatabase },
+    { YDB_ACCESS_GRANT, EAccessRights::GrantAccessRights },
     { YDB_GRANULAR_SELECT_ROW, EAccessRights::SelectRow },
     { YDB_GRANULAR_UPDATE_ROW, EAccessRights::UpdateRow },
     { YDB_GRANULAR_ERASE_ROW, EAccessRights::EraseRow },
@@ -879,6 +893,39 @@ TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
         }
     }
     return result;
+}
+
+TString ConvertShortYdbPermissionNameToFullYdbPermissionName(const TString& name) {
+    static const THashMap<TString, TString> shortPermissionNames {
+        {"connect", YDB_DATABASE_CONNECT},
+        {"modify_tables", YDB_TABLES_MODIFY},
+        {"select_tables", YDB_TABLES_READ},
+        {"list", YDB_GENERIC_LIST},
+        {"select", YDB_GENERIC_READ},
+        {"insert", YDB_GENERIC_WRITE},
+        {"use_legacy", YDB_GENERIC_USE_LEGACY},
+        {"use", YDB_GENERIC_USE},
+        {"manage", YDB_GENERIC_MANAGE},
+        {"full_legacy", YDB_GENERIC_FULL_LEGACY},
+        {"full", YDB_GENERIC_FULL},
+        {"create", YDB_DATABASE_CREATE},
+        {"drop", YDB_DATABASE_DROP},
+        {"grant", YDB_ACCESS_GRANT},
+        {"select_row", YDB_GRANULAR_SELECT_ROW},
+        {"update_row", YDB_GRANULAR_UPDATE_ROW},
+        {"erase_row", YDB_GRANULAR_ERASE_ROW},
+        {"select_attributes", YDB_GRANULAR_READ_ATTRIBUTES},
+        {"modify_attributes", YDB_GRANULAR_WRITE_ATTRIBUTES},
+        {"create_directory", YDB_GRANULAR_CREATE_DIRECTORY},
+        {"create_table", YDB_GRANULAR_CREATE_TABLE},
+        {"create_queue", YDB_GRANULAR_CREATE_QUEUE},
+        {"remove_schema", YDB_GRANULAR_REMOVE_SCHEMA},
+        {"describe_schema", YDB_GRANULAR_DESCRIBE_SCHEMA},
+        {"alter_schema", YDB_GRANULAR_ALTER_SCHEMA}
+    };
+
+    const auto it = shortPermissionNames.find(to_lower(name));
+    return it != shortPermissionNames.cend() ? it->second : name;
 }
 
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl) {

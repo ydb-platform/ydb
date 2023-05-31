@@ -47,6 +47,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiAlterTopic::CallableName());
         DataSinkNames.insert(TKiDropTopic::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
+        DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
         DataSinkNames.insert(TKiDropUser::CallableName());
         DataSinkNames.insert(TKiCreateObject::CallableName());
@@ -100,7 +101,8 @@ struct TKikimrData {
             TYdbOperation::DropUser |
             TYdbOperation::CreateGroup |
             TYdbOperation::AlterGroup |
-            TYdbOperation::DropGroup;
+            TYdbOperation::DropGroup |
+            TYdbOperation::ModifyPermission;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -361,6 +363,9 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             return false;
         }
         Target = nameNode->Child(0)->Content();
+    } else if(tagName == "permission") {
+        KeyType = Type::Permission;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;

@@ -77,6 +77,17 @@ struct TWriteRoleSettings {
         : Other(other) {}
 };
 
+struct TWritePermissionSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtomList> Permissions;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> Pathes;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> RoleNames;
+
+    TWritePermissionSettings(NNodes::TMaybeNode<NNodes::TCoAtomList>&& permissions, NNodes::TMaybeNode<NNodes::TCoAtomList>&& pathes, NNodes::TMaybeNode<NNodes::TCoAtomList>&& roleNames)
+        : Permissions(std::move(permissions))
+        , Pathes(std::move(pathes))
+        , RoleNames(std::move(roleNames)) {}
+};
+
 struct TWriteObjectSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TCoNameValueTupleList Features;
@@ -117,6 +128,8 @@ TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 

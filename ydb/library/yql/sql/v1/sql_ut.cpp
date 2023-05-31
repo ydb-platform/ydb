@@ -3764,6 +3764,11 @@ select FormatType($f());
         ExpectFailWithError("ALTER USER CURRENT_USER RENAME TO $foo;", "<main>:1:1: Error: USE statement is missing - no default cluster is selected\n");
     }
 
+    Y_UNIT_TEST(ModifyPermissionsWithoutCluster) {
+        ExpectFailWithError("\n GRANT CONNECT ON `/Root` TO user;", "<main>:2:2: Error: USE statement is missing - no default cluster is selected\n");
+        ExpectFailWithError("\n REVOKE MANAGE ON `/Root` FROM user;", "<main>:2:2: Error: USE statement is missing - no default cluster is selected\n");
+    }
+
     Y_UNIT_TEST(ReservedRoleNames) {
         ExpectFailWithError("USE plato; CREATE USER current_User;", "<main>:1:24: Error: System role CURRENT_USER can not be used here\n");
         ExpectFailWithError("USE plato; ALTER USER current_User RENAME TO Current_role", "<main>:1:46: Error: System role CURRENT_ROLE can not be used here\n");

@@ -90,7 +90,7 @@ runs:
     shell: bash
     run: |
       export source_root=$WORKDIR
-      export build_root=WORKDIR/../build/
+      export build_root=$WORKDIR/../build/
 
       echo "Stdout log (gzip archive): ${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
       cd $WORKDIR/ydb/tests/functional/

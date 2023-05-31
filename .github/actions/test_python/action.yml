@@ -110,7 +110,8 @@ runs:
         -v --junit-xml=$TESTREPDIR/{}.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
         tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
-        tee -a $WORKDIR/pytest-short.log
+        grep -E '(FAILED|ERROR)\s*\[.*\]' | \
+        tee $WORKDIR/pytest-short.log
   - name: Test history upload results
     if: always() && inputs.testman_token
     shell: bash

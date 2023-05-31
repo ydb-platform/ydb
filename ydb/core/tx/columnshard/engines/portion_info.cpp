@@ -238,15 +238,6 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
     Y_VERIFY(Meta.IndexKeyStart && Meta.IndexKeyEnd);
 }
 
-std::tuple<std::shared_ptr<arrow::Scalar>, std::shared_ptr<arrow::Scalar>> TPortionInfo::MinMaxValue(const ui32 columnId) const {
-    auto it = Meta.ColumnMeta.find(columnId);
-    if (it == Meta.ColumnMeta.end()) {
-        return std::make_tuple(std::shared_ptr<arrow::Scalar>(), std::shared_ptr<arrow::Scalar>());
-    } else {
-        return std::make_tuple(it->second.Min, it->second.Max);
-    }
-}
-
 std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {
     if (!Meta.ColumnMeta.contains(columnId)) {
         return {};

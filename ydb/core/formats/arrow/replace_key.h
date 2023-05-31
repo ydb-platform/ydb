@@ -73,8 +73,17 @@ public:
     }
 
     template<typename T>
-    bool LessNotNull(const TReplaceKeyTemplate<T>& key) const {
-        return CompareNotNull(key) == std::partial_ordering::less;
+    std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, int size) const {
+        Y_VERIFY_DEBUG(size <= key.Size());
+        Y_VERIFY_DEBUG(size <= Size());
+
+        for (int i = 0; i < size; ++i) {
+            auto cmp = CompareColumnValueNotNull(i, key, i);
+            if (std::is_neq(cmp)) {
+                return cmp;
+            }
+        }
+        return std::partial_ordering::equivalent;
     }
 
     template<typename T>

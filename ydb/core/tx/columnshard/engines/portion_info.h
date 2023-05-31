@@ -336,7 +336,6 @@ struct TPortionInfo {
                      const TString& tierName);
     void AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted);
 
-    std::tuple<std::shared_ptr<arrow::Scalar>, std::shared_ptr<arrow::Scalar>> MinMaxValue(const ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
 

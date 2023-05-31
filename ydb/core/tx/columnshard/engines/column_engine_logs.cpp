@@ -1140,7 +1140,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         }
                     }
                     Y_VERIFY(outPortion.Produced());
-                    if (!compositeMark && !pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
+                    if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
                         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
                             ("granule", granule)("portion", portionInfo->Portion());
                         continue;

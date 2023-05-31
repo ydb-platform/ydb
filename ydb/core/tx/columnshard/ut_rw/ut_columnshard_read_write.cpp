@@ -2338,14 +2338,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             TTabletReadPredicateTest testAgent(runtime, planStep, txId, table.Pk);
             testAgent.Test(":1)").SetTo(TBorder(val1, false)).SetExpectedCount(1);
             testAgent.Test(":1]").SetTo(TBorder(val1, true)).SetExpectedCount(2);
-            testAgent.Test(":0)").SetTo(TBorder(val0, false)).SetExpectedCount(0).SetDataReadOnEmpty(composite);
+            testAgent.Test(":0)").SetTo(TBorder(val0, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
             testAgent.Test(":0]").SetTo(TBorder(val0, true)).SetExpectedCount(1);
 
             testAgent.Test("[0:0]").SetFrom(TBorder(val0, true)).SetTo(TBorder(val0, true)).SetExpectedCount(1);
             testAgent.Test("[0:1)").SetFrom(TBorder(val0, true)).SetTo(TBorder(val1, false)).SetExpectedCount(1);
             testAgent.Test("(0:1)").SetFrom(TBorder(val0, false)).SetTo(TBorder(val1, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
             testAgent.Test("outscope1").SetFrom(TBorder(val1M, true)).SetTo(TBorder(val1M_1, true))
-                .SetExpectedCount(0).SetDataReadOnEmpty(isStrPk0 || composite);
+                .SetExpectedCount(0).SetDataReadOnEmpty(isStrPk0);
 //            VERIFIED AS INCORRECT INTERVAL (its good)
 //            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
 
@@ -2359,8 +2359,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     testAgent.Test("[99990:99999]").SetFrom(TBorder(val9990, true)).SetTo(TBorder(val9999, true)).SetExpectedCount(100);
                 }
             } else {
-                testAgent.Test("(numRows:").SetFrom(TBorder(valNumRows, false)).SetExpectedCount(0).SetDataReadOnEmpty(composite);
-                testAgent.Test("(numRows-1:").SetFrom(TBorder(valNumRows_1, false)).SetExpectedCount(0).SetDataReadOnEmpty(composite);
+                testAgent.Test("(numRows:").SetFrom(TBorder(valNumRows, false)).SetExpectedCount(0);
+                testAgent.Test("(numRows-1:").SetFrom(TBorder(valNumRows_1, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
                 testAgent.Test("(numRows-2:").SetFrom(TBorder(valNumRows_2, false)).SetExpectedCount(1);
                 testAgent.Test("[numRows-1:").SetFrom(TBorder(valNumRows_1, true)).SetExpectedCount(1);
             }

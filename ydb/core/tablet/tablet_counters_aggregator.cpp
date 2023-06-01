@@ -922,7 +922,11 @@ private:
                 ResourcesStorageTableUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
                 ResourcesStorageTopicUsedBytes->Set(DiskSpaceTopicsTotalBytes->Val());
 
-                ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val() + ResourcesStorageTopicUsedBytes->Val());
+                if (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
+                    ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val() + ResourcesStorageTopicUsedBytes->Val());
+                } else {
+                    ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val());
+                }
 
                 auto quota = StreamShardsQuota->Val();
                 ResourcesStreamUsedShards->Set(StreamShardsCount->Val());

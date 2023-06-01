@@ -2316,7 +2316,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 3
                             PartitionPerTablet: 2
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )",  {NKikimrScheme::StatusResourceExhausted});
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -2333,7 +2333,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 1
                             PartitionPerTablet: 2
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )",  {NKikimrScheme::StatusResourceExhausted});
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -2351,7 +2351,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 1
                             PartitionPerTablet: 1
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )");
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -2368,7 +2368,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 2
                             PartitionPerTablet: 1
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )");
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 2
                             PartitionPerTablet: 1
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )",  {NKikimrScheme::StatusResourceExhausted});
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -3027,7 +3027,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 3
                             PartitionPerTablet: 2
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )",  {NKikimrScheme::StatusResourceExhausted});
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -3042,7 +3042,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 1
                             PartitionPerTablet: 2
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )",  {NKikimrScheme::StatusResourceExhausted});
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -3058,7 +3058,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 1
                             PartitionPerTablet: 1
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )");
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -3073,7 +3073,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 2
                             PartitionPerTablet: 1
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )");
 
             env.TestWaitNotification(runtime, txId - 1);
@@ -3088,7 +3088,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             Name: "Isolda"
                             TotalGroupCount: 2
                             PartitionPerTablet: 1
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001}}
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001} MeteringMode: METERING_MODE_RESERVED_CAPACITY}
                 )",  {NKikimrScheme::StatusResourceExhausted});
 
             env.TestWaitNotification(runtime, txId - 1);

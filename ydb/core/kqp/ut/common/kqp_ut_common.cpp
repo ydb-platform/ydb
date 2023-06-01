@@ -18,6 +18,18 @@ namespace NKqp {
 
 using namespace NYdb::NTable;
 
+const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
+[
+    [[1];[101u];["Value1"]];
+    [[2];[201u];["Value1"]];
+    [[3];[301u];["Value1"]];
+    [[1];[401u];["Value1"]];
+    [[2];[501u];["Value1"]];
+    [[3];[601u];["Value1"]];
+    [[1];[701u];["Value1"]];
+    [[2];[801u];["Value1"]]
+])";
+
 SIMPLE_UDF(TTestFilter, bool(i64)) {
     Y_UNUSED(valueBuilder);
     const i64 arg = args[0].Get<i64>();

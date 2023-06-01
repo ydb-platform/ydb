@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/kqp/counters/kqp_counters.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -415,59 +417,107 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST(CancelAfterWithWrite) {
-        return;
+    Y_UNIT_TEST(CancelAfterRwTx) {
         TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
 
-        int maxTimeoutMs = 500;
+            int maxTimeoutMs = 500;
 
-        auto createKey = [](int id) -> ui64 {
-            return (1u << 29) + id;
-        };
+            auto createKey = [](int id) -> ui64 {
+                return (1u << 29) + id;
+            };
 
-        auto createExpectedRow = [](ui64 key) -> TString {
-            return Sprintf(R"([[100500];[%luu];["newrecords"]])", key);
-        };
+            auto createExpectedRow = [](ui64 key) -> TString {
+                return Sprintf(R"([[100500];[%luu];["newrecords"]])", key);
+            };
 
-        TString expected;
+            TString expected;
 
-        for (int i = 1; i <= maxTimeoutMs; i++) {
-            auto params = db.GetParamsBuilder()
-                .AddParam("$id")
-                    .Uint64(createKey(i))
-                    .Build()
-                .Build();
-            auto result = session.ExecuteDataQuery(R"(
-                DECLARE $id AS Uint64;
-                SELECT * FROM `/Root/EightShard` WHERE Text = "newrecords" ORDER BY Key;
-                UPSERT INTO `/Root/EightShard` (Key, Data, Text) VALUES ($id, 100500, "newrecords");
-            )",
-            TTxControl::BeginTx(
-                TTxSettings::SerializableRW()).CommitTx(),
-                params,
-                TExecDataQuerySettings().CancelAfter(TDuration::MilliSeconds(i))
-            ).GetValueSync();
+            for (int i = 1; i <= maxTimeoutMs; i++) {
+                auto params = db.GetParamsBuilder()
+                    .AddParam("$id")
+                        .Uint64(createKey(i))
+                        .Build()
+                    .Build();
+                auto result = session.ExecuteDataQuery(R"(
+                    DECLARE $id AS Uint64;
+                    SELECT * FROM `/Root/EightShard` WHERE Text = "newrecords" ORDER BY Key;
+                    UPSERT INTO `/Root/EightShard` (Key, Data, Text) VALUES ($id, 100500, "newrecords");
+                )",
+                TTxControl::BeginTx(
+                    TTxSettings::SerializableRW()).CommitTx(),
+                    params,
+                    TExecDataQuerySettings().CancelAfter(TDuration::MilliSeconds(i))
+                ).GetValueSync();
 
-            if (result.IsSuccess()) {
-                auto yson = FormatResultSetYson(result.GetResultSet(0));
-                CompareYson(TString("[") + expected + "]", yson);
-                expected += createExpectedRow(createKey(i));
-                if (i != maxTimeoutMs)
-                    expected += ";";
-            } else {
-                switch (result.GetStatus()) {
-                    case EStatus::CANCELLED:
-                        break;
-                    default: {
-                        auto msg = TStringBuilder() << "unexpected status: " << result.GetStatus();
-                        UNIT_ASSERT_C(false, msg.data());
+                if (result.IsSuccess()) {
+                    auto yson = FormatResultSetYson(result.GetResultSet(0));
+                    CompareYson(TString("[") + expected + "]", yson);
+                    expected += createExpectedRow(createKey(i));
+                    if (i != maxTimeoutMs)
+                        expected += ";";
+                } else {
+                    switch (result.GetStatus()) {
+                        case EStatus::CANCELLED:
+                            break;
+                        default: {
+                            auto msg = TStringBuilder()
+                                << "unexpected status: " << result.GetStatus()
+                                << " issues: " << result.GetIssues().ToString();
+                            UNIT_ASSERT_C(false, msg.data());
+                        }
                     }
                 }
             }
         }
+
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(CancelAfterRoTx) {
+        TKikimrRunner kikimr;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            int maxTimeoutMs = 500;
+            bool wasCanceled = false;
+
+            for (int i = 1; i <= maxTimeoutMs; i++) {
+                auto result = session.ExecuteDataQuery(R"(
+                    DECLARE $id AS Uint64;
+                    SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+                )",
+                TTxControl::BeginTx(
+                    TTxSettings::SerializableRW()).CommitTx(),
+                    TExecDataQuerySettings().CancelAfter(TDuration::MilliSeconds(i))
+                ).GetValueSync();
+
+                if (result.IsSuccess()) {
+                    CompareYson(EXPECTED_EIGHTSHARD_VALUE1, FormatResultSetYson(result.GetResultSet(0)));
+                } else {
+                    switch (result.GetStatus()) {
+                        case EStatus::CANCELLED:
+                            wasCanceled = true;
+                            break;
+                        default: {
+                            auto msg = TStringBuilder()
+                                << "unexpected status: " << result.GetStatus()
+                                << " issues: " << result.GetIssues().ToString();
+                            UNIT_ASSERT_C(false, msg.data());
+                        }
+                    }
+                }
+            }
+            UNIT_ASSERT(wasCanceled);
+        }
+        WaitForZeroSessions(counters);
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {

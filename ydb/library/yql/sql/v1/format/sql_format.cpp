@@ -1042,6 +1042,18 @@ private:
         PopCurrentIndent();
     }
 
+    void VisitGrantPermissions(const TRule_grant_permissions_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_grant_permissions_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitRevokePermissions(const TRule_revoke_permissions_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_revoke_permissions_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateUser(const TRule_create_user_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -2092,7 +2104,9 @@ TStaticData::TStaticData()
         {TRule_drop_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropAsyncReplication)},
         {TRule_create_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateTopic)},
         {TRule_alter_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTopic)},
-        {TRule_drop_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTopic)}
+        {TRule_drop_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTopic)},
+        {TRule_grant_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitGrantPermissions)},
+        {TRule_revoke_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitRevokePermissions)}
         })
 {
     // ensure that all statements has a visitor

@@ -506,16 +506,21 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
     bool prevKeyColumn = false;
 
-    ui32 paddedKeyIntOffset = currIntOffset;
+    ui32 keyIntOffset = currIntOffset;
+
     for( auto & p: ColumnsPackInfo ) {
         if ( !p.IsString && !p.IsIType ) {
             if (prevKeyColumn && !p.IsKeyColumn) {
                 currIntOffset = ( (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) ) * sizeof(ui64);
-                KeyIntColumnsNum = (currIntOffset - NullsBitmapSize * sizeof(ui64)) / sizeof(ui64);
+
             }
             prevKeyColumn = p.IsKeyColumn;
             p.Offset = currIntOffset;
             currIntOffset += p.Bytes;
+            if (p.IsKeyColumn) {
+                keyIntOffset = currIntOffset;
+            }
+
         } else if ( p.IsString ) {
             p.Offset = currStrOffset;
             currStrOffset++;
@@ -528,8 +533,9 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         currIdx++;
     }
 
-    DataIntColumnsNum = (currIntOffset - NullsBitmapSize * sizeof(ui64)) / sizeof(ui64);
-
+    KeyIntColumnsNum =  (keyIntOffset + sizeof(ui64) - 1 ) / sizeof(ui64) - NullsBitmapSize;
+    DataIntColumnsNum = (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) - KeyIntColumnsNum - NullsBitmapSize;
+  
     GraceJoin::TColTypeInterface * cti_p = nullptr;
 
     if (TotalIColumnsNum > 0 ) {

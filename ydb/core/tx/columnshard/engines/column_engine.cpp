@@ -11,7 +11,7 @@ TString TMark::SerializeScalar(const NArrow::TReplaceKey& key, const std::shared
 }
 
 NArrow::TReplaceKey TMark::DeserializeScalar(const TString& key, const std::shared_ptr<arrow::Schema>& schema) {
-    Y_VERIFY(schema->num_fields() == 1);
+    Y_VERIFY(schema->num_fields() > 0);
     return NArrow::TReplaceKey::FromScalar(DeserializeKeyScalar(key, schema->field(0)->type()));
 }
 
@@ -67,6 +67,27 @@ NArrow::TReplaceKey TMark::MinBorder(const std::shared_ptr<arrow::Schema>& schem
         }
         return NArrow::TReplaceKey::FromBatch(arrow::RecordBatch::Make(schema, 1, columns), 0);
     }
+}
+
+NArrow::TReplaceKey TMark::ExtendBorder(const NArrow::TReplaceKey& key,
+                                        const std::shared_ptr<arrow::Schema>& schema) {
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    i32 numFields = schema->num_fields();
+    columns.reserve(numFields);
+    for (i32 i = 0; i < numFields; ++i) {
+        const auto& field = schema->field(i);
+        if (i < key.Size()) {
+            columns.emplace_back(key.ColumnPtr(i));
+            Y_VERIFY(columns.back()->type()->Equals(field->type()));
+        } else {
+            auto scalar = MinScalar(field->type());
+            Y_VERIFY(scalar);
+            auto res = arrow::MakeArrayFromScalar(*scalar, 1);
+            Y_VERIFY(res.ok());
+            columns.emplace_back(*res);
+        }
+    }
+    return NArrow::TReplaceKey::FromBatch(arrow::RecordBatch::Make(schema, 1, columns), 0);
 }
 
 }

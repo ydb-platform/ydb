@@ -53,12 +53,12 @@
         }                                                                                                                      \
     } while (0) /**/
 
-#define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)  \
-    LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "%s", [&]() { \
-        TStringBuilder logStringBuilder;                                               \
-        logStringBuilder << stream;                                                    \
-        return static_cast<TString>(logStringBuilder);                                 \
-    }().data())
+#define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)      \
+    LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, [&]() -> TString { \
+        TStringBuilder logStringBuilder;                                                   \
+        logStringBuilder << stream;                                                        \
+        return std::move(logStringBuilder);                                                \
+    }())
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)

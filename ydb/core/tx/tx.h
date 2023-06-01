@@ -16,11 +16,14 @@ struct TEvTxProxy {
         EvAcquireReadStep,
         EvSubscribeReadStep,
         EvUnsubscribeReadStep,
+        EvSubscribeLastStep,
+        EvUnsubscribeLastStep,
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
         EvAcquireReadStepResult,
         EvSubscribeReadStepResult,
         EvSubscribeReadStepUpdate,
+        EvUpdatedLastStep,
 
         EvEnd
     };
@@ -123,6 +126,40 @@ struct TEvTxProxy {
             Record.SetCoordinatorID(coordinator);
             Record.SetSeqNo(seqNo);
             Record.SetNextAcquireStep(nextAcquireStep);
+        }
+    };
+
+    struct TEvSubscribeLastStep
+        : public TEventPB<TEvSubscribeLastStep, NKikimrTx::TEvSubscribeLastStep, EvSubscribeLastStep>
+    {
+        TEvSubscribeLastStep() = default;
+
+        TEvSubscribeLastStep(ui64 coordinator, ui64 seqNo) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvUnsubscribeLastStep
+        : public TEventPB<TEvUnsubscribeLastStep, NKikimrTx::TEvUnsubscribeLastStep, EvUnsubscribeLastStep>
+    {
+        TEvUnsubscribeLastStep() = default;
+
+        TEvUnsubscribeLastStep(ui64 coordinator, ui64 seqNo) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvUpdatedLastStep
+        : public TEventPB<TEvUpdatedLastStep, NKikimrTx::TEvUpdatedLastStep, EvUpdatedLastStep>
+    {
+        TEvUpdatedLastStep() = default;
+
+        TEvUpdatedLastStep(ui64 coordinator, ui64 seqNo, ui64 lastStep) {
+            Record.SetCoordinatorID(coordinator);
+            Record.SetSeqNo(seqNo);
+            Record.SetLastStep(lastStep);
         }
     };
 };

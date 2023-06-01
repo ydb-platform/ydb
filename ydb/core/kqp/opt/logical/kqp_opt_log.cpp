@@ -35,6 +35,7 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
@@ -49,7 +50,6 @@ public:
         AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
 
-        AddHandler(1, &TCoFlatMap::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(1, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
         AddHandler(1, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
         AddHandler(1, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
@@ -123,14 +123,14 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteTakeOverIndexRead(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRewriteTakeOverIndexRead(node, ctx, KqpCtx);
+    TMaybeNode<TExprBase> RewriteTakeOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteTakeOverIndexRead(node, ctx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTakeOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

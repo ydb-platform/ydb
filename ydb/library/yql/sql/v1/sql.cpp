@@ -874,6 +874,9 @@ protected:
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom> & result, const TRule_with_table_settings & settings);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result);
+    bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
+    bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
+    bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
 
     bool ValidateExternalTable(const TCreateTableParameters& params);
 private:
@@ -1880,6 +1883,12 @@ static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node,
             return false;
         }
         settings.VirtualTimestamps = exprNode;
+    } else if (to_lower(id.Name) == "resolved_timestamps") {
+        if (exprNode->GetOpName() != "Interval") {
+            ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;
+            return false;
+        }
+        settings.ResolvedTimestamps = exprNode;
     } else if (to_lower(id.Name) == "retention_period") {
         if (exprNode->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;
@@ -7055,6 +7064,177 @@ bool TSqlTranslation::RoleParameters(const TRule_create_user_option& node, TRole
     return true;
 }
 
+bool TSqlTranslation::PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result) {
+    // permission_id:
+    //   CONNECT
+    // | LIST
+    // | INSERT
+    // | MANAGE
+    // | DROP
+    // | GRANT
+    // | MODIFY (TABLES | ATTRIBUTES)
+    // | (UPDATE | ERASE) ROW
+    // | (REMOVE | DESCRIBE | ALTER) SCHEMA
+    // | SELECT (TABLES | ATTRIBUTES | ROW)?
+    // | (USE | FULL) LEGACY?
+    // | CREATE (DIRECTORY | TABLE | QUEUE)?
+
+    auto handleOneIdentifier = [&result, this] (const auto& permissionNameKeyword) {
+        result = TDeferredAtom(Ctx.Pos(), GetIdentifier(*this, permissionNameKeyword).Name);
+    };
+
+    auto handleTwoIdentifiers = [&result, this] (const auto& permissionNameKeyword) {
+        const auto& token1 = permissionNameKeyword.GetToken1();
+        const auto& token2 = permissionNameKeyword.GetToken2();
+        TString identifierName = TIdentifier(TPosition(token1.GetColumn(), token1.GetLine()), Identifier(token1)).Name +
+                                "_" +
+                                TIdentifier(TPosition(token2.GetColumn(), token2.GetLine()), Identifier(token2)).Name;
+        result = TDeferredAtom(Ctx.Pos(), identifierName);
+    };
+
+    auto handleOneOrTwoIdentifiers = [&result, this] (const auto& permissionNameKeyword) {
+        TString identifierName = GetIdentifier(*this, permissionNameKeyword).Name;
+        if (permissionNameKeyword.HasBlock2()) {
+            identifierName += "_" + GetIdentifier(*this, permissionNameKeyword.GetBlock2()).Name;
+        }
+        result = TDeferredAtom(Ctx.Pos(), identifierName);
+    };
+
+    switch (node.GetAltCase()) {
+        case TRule_permission_id::kAltPermissionId1:
+        {
+            // CONNECT
+            handleOneIdentifier(node.GetAlt_permission_id1());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId2:
+        {
+            // LIST
+            handleOneIdentifier(node.GetAlt_permission_id2());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId3:
+        {
+            // INSERT
+            handleOneIdentifier(node.GetAlt_permission_id3());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId4:
+        {
+            // MANAGE
+            handleOneIdentifier(node.GetAlt_permission_id4());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId5:
+        {
+            // DROP
+            handleOneIdentifier(node.GetAlt_permission_id5());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId6:
+        {
+            // GRANT
+            handleOneIdentifier(node.GetAlt_permission_id6());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId7:
+        {
+            // MODIFY (TABLES | ATTRIBUTES)
+            handleTwoIdentifiers(node.GetAlt_permission_id7());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId8:
+        {
+            // (UPDATE | ERASE) ROW
+            handleTwoIdentifiers(node.GetAlt_permission_id8());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId9:
+        {
+            // (REMOVE | DESCRIBE | ALTER) SCHEMA
+            handleTwoIdentifiers(node.GetAlt_permission_id9());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId10:
+        {
+            // SELECT (TABLES | ATTRIBUTES | ROW)?
+            handleOneOrTwoIdentifiers(node.GetAlt_permission_id10());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId11:
+        {
+            // (USE | FULL) LEGACY?
+            handleOneOrTwoIdentifiers(node.GetAlt_permission_id11());
+            break;
+        }
+        case TRule_permission_id::kAltPermissionId12:
+        {
+            // CREATE (DIRECTORY | TABLE | QUEUE)?
+            handleOneOrTwoIdentifiers(node.GetAlt_permission_id12());
+            break;
+        }
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+    return true;
+}
+
+bool TSqlTranslation::PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result) {
+    // permission_name: permission_id | STRING_VALUE;
+    switch (node.Alt_case()) {
+        case TRule_permission_name::kAltPermissionName1:
+        {
+            return PermissionNameClause(node.GetAlt_permission_name1().GetRule_permission_id1(), result);
+            break;
+        }
+        case TRule_permission_name::kAltPermissionName2:
+        {
+            const TString stringValue(Ctx.Token(node.GetAlt_permission_name2().GetToken1()));
+            auto unescaped = StringContent(Ctx, Ctx.Pos(), stringValue);
+            if (!unescaped) {
+                return false;
+            }
+            result = TDeferredAtom(Ctx.Pos(), unescaped->Content);
+            break;
+        }
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+    return true;
+}
+
+bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption) {
+    // permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
+    switch (node.Alt_case()) {
+        case TRule_permission_name_target::kAltPermissionNameTarget1:
+        {
+            const auto& permissionNameRule = node.GetAlt_permission_name_target1();
+            result.emplace_back();
+            if (!PermissionNameClause(permissionNameRule.GetRule_permission_name1(), result.back())) {
+                return false;
+            }
+            for (const auto& item : permissionNameRule.GetBlock2()) {
+                result.emplace_back();
+                if (!PermissionNameClause(item.GetRule_permission_name2(), result.back())) {
+                    return false;
+                }
+            }
+            break;
+        }
+        case TRule_permission_name_target::kAltPermissionNameTarget2:
+        {
+            result.emplace_back(Ctx.Pos(), "all_privileges");
+            break;
+        }
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+    if (withGrantOption) {
+        result.emplace_back(Ctx.Pos(), "grant");
+    }
+    return true;
+}
+
 TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteSettings& settings, TPosition& selectPos) {
     // PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
     // (WITH external_call_settings)?
@@ -9899,6 +10079,91 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
             AddStatementToBlocks(blocks, BuildDropTopic(Ctx.Pos(), tr, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore36: {
+            // GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
+            Ctx.BodyPart();
+            auto& node = core.GetAlt_sql_stmt_core36().GetRule_grant_permissions_stmt1();
+
+            Ctx.Token(node.GetToken1());
+            const TPosition pos = Ctx.Pos();
+
+            TString service = Ctx.Scoped->CurrService;
+            TDeferredAtom cluster = Ctx.Scoped->CurrCluster;
+            if (cluster.Empty()) {
+                Error() << "USE statement is missing - no default cluster is selected";
+                return false;
+            }
+
+            TVector<TDeferredAtom> permissions;
+            if (!PermissionNameClause(node.GetRule_permission_name_target2(), permissions, node.has_block10())) {
+                return false;
+            }
+
+            TVector<TDeferredAtom> schemaPathes;
+            schemaPathes.emplace_back(Ctx.Pos(), Id(node.GetRule_an_id_schema4(), *this));
+            for (const auto& item : node.GetBlock5()) {
+                schemaPathes.emplace_back(Ctx.Pos(), Id(item.GetRule_an_id_schema2(), *this));
+            }
+
+            TVector<TDeferredAtom> roleNames;
+            const bool allowSystemRoles = false;
+            roleNames.emplace_back();
+            if (!RoleNameClause(node.GetRule_role_name7(), roleNames.back(), allowSystemRoles)) {
+                return false;
+            }
+            for (const auto& item : node.GetBlock8()) {
+                roleNames.emplace_back();
+                if (!RoleNameClause(item.GetRule_role_name2(), roleNames.back(), allowSystemRoles)) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildGrantPermissions(pos, service, cluster, permissions, schemaPathes, roleNames, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore37:
+        {
+            // REVOKE (GRANT OPTION FOR)? permission_name_target ON an_id_schema (COMMA an_id_schema)* FROM role_name (COMMA role_name)*;
+            Ctx.BodyPart();
+            auto& node = core.GetAlt_sql_stmt_core37().GetRule_revoke_permissions_stmt1();
+
+            Ctx.Token(node.GetToken1());
+            const TPosition pos = Ctx.Pos();
+
+            TString service = Ctx.Scoped->CurrService;
+            TDeferredAtom cluster = Ctx.Scoped->CurrCluster;
+            if (cluster.Empty()) {
+                Error() << "USE statement is missing - no default cluster is selected";
+                return false;
+            }
+
+            TVector<TDeferredAtom> permissions;
+            if (!PermissionNameClause(node.GetRule_permission_name_target3(), permissions, node.HasBlock2())) {
+                return false;
+            }
+
+            TVector<TDeferredAtom> schemaPathes;
+            schemaPathes.emplace_back(Ctx.Pos(), Id(node.GetRule_an_id_schema5(), *this));
+            for (const auto& item : node.GetBlock6()) {
+                schemaPathes.emplace_back(Ctx.Pos(), Id(item.GetRule_an_id_schema2(), *this));
+            }
+
+            TVector<TDeferredAtom> roleNames;
+            const bool allowSystemRoles = false;
+            roleNames.emplace_back();
+            if (!RoleNameClause(node.GetRule_role_name8(), roleNames.back(), allowSystemRoles)) {
+                return false;
+            }
+            for (const auto& item : node.GetBlock9()) {
+                roleNames.emplace_back();
+                if (!RoleNameClause(item.GetRule_role_name2(), roleNames.back(), allowSystemRoles)) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildRevokePermissions(pos, service, cluster, permissions, schemaPathes, roleNames, Ctx.Scoped));
             break;
         }
         default:

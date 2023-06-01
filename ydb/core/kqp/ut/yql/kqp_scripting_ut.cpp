@@ -15,18 +15,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NScripting;
 
-static const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
-[
-    [[1];[101u];["Value1"]];
-    [[2];[201u];["Value1"]];
-    [[3];[301u];["Value1"]];
-    [[1];[401u];["Value1"]];
-    [[2];[501u];["Value1"]];
-    [[3];[601u];["Value1"]];
-    [[1];[701u];["Value1"]];
-    [[2];[801u];["Value1"]]
-])";
-
 Y_UNIT_TEST_SUITE(KqpScripting) {
     Y_UNIT_TEST(EndOfQueryCommit) {
         TKikimrRunner kikimr;

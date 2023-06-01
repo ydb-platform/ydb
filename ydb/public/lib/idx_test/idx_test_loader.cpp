@@ -700,12 +700,14 @@ public:
             TTableDescription tableDescription,
             const TString& tableName,
             TTableClient& client,
-            IWorkLoader::ELoadCommand stmt)
+            IWorkLoader::ELoadCommand stmt,
+            size_t opsPerTx)
         : TRandomValueProvider(TableDescriptionToShardsPower(tableDescription), KEYRANGELIMIT)
         , TableDescription_(tableDescription)
         , TableName_(tableName)
         , Client_(client)
         , Stmt_(stmt)
+        , OpsPerTx_(opsPerTx)
     {
         CreatePrograms();
     }
@@ -782,45 +784,61 @@ public:
         }
 
         TString sql;
+        TVector<TString> predicates;
+        predicates.reserve(OpsPerTx_);
+        TVector<TString> updates;
+        updates.reserve(OpsPerTx_);
         TVector<std::pair<TColumn, TString>> resultColumns;
         Y_VERIFY(Stmt_ == IWorkLoader::LC_DELETE || Stmt_ == IWorkLoader::LC_UPDATE);
 
-        size_t id = 0;
-        TString predicate;
-        for (const TString& str : pkTypeStrings) {
-            const TString paramName = Sprintf("$items_%zu", id);
-            sql += Sprintf("DECLARE %s AS %s;\n", paramName.c_str(), str.c_str());
-            resultColumns.push_back({pkCol[id], paramName});
-            predicate += Sprintf(" %s = %s ", pkCol[id].Name.c_str(), paramName.c_str());
-            id++;
-            if (id != pkTypeStrings.size()) {
-                predicate += " AND ";
-            }
-        }
-        if (Stmt_ == IWorkLoader::LC_DELETE) {
-            sql += Sprintf("DELETE FROM `%s` WHERE ", TableName_.c_str());
-            sql += predicate;
-        } else {
-            TString update = " SET ";
-            size_t dataId = 0;
-            for (const TString& str : valueTypeStrings) {
-                const TString paramName = Sprintf("$items_%zu", id);
-                sql += Sprintf("DECLARE %s AS %s;\n", paramName.c_str(), str.c_str());
-                resultColumns.push_back({valueCol[dataId], paramName});
-                update += Sprintf(" %s = %s ", valueCol[dataId].Name.c_str(), paramName.c_str());
-                id++;
-                dataId++;
-                if (dataId != valueTypeStrings.size()) {
-                    update += ", ";
+        for (size_t opIndex = 0, paramId = 0; opIndex < OpsPerTx_; ++opIndex) {
+            TString predicate;
+
+            for (size_t pkId = 0; pkId < pkTypeStrings.size(); ++pkId) {
+                const TString paramName = Sprintf("$items_%zu", paramId++);
+                sql += Sprintf("DECLARE %s AS %s;\n", paramName.c_str(), pkTypeStrings[pkId].c_str());
+                resultColumns.push_back({pkCol[pkId], paramName});
+                predicate += Sprintf(" %s = %s ", pkCol[pkId].Name.c_str(), paramName.c_str());
+
+                if (pkId + 1 != pkTypeStrings.size()) {
+                    predicate += " AND ";
                 }
             }
 
-            sql += Sprintf("UPDATE `%s` ", TableName_.c_str());
-            sql += update;
-            sql += " WHERE ";
-            sql += predicate;
+            predicates.emplace_back(std::move(predicate));
+
+            if (Stmt_ == IWorkLoader::LC_UPDATE) {
+                TString update = " SET ";
+
+                for (size_t dataId = 0; dataId < valueTypeStrings.size(); ++dataId) {
+                    const TString paramName = Sprintf("$items_%zu", paramId++);
+                    sql += Sprintf("DECLARE %s AS %s;\n", paramName.c_str(), valueTypeStrings[dataId].c_str());
+                    resultColumns.push_back({valueCol[dataId], paramName});
+                    update += Sprintf(" %s = %s ", valueCol[dataId].Name.c_str(), paramName.c_str());
+
+                    if (dataId + 1 != valueTypeStrings.size()) {
+                        update += ", ";
+                    }
+                }
+
+                updates.emplace_back(std::move(update));
+            }
         }
 
+
+        for (size_t opIndex = 0; opIndex < OpsPerTx_; ++opIndex) {
+            if (Stmt_ == IWorkLoader::LC_DELETE) {
+                sql += Sprintf("DELETE FROM `%s` WHERE ", TableName_.c_str());
+                sql += predicates[opIndex];
+                sql += ";\n";
+            } else {
+                sql += Sprintf("UPDATE `%s` ", TableName_.c_str());
+                sql += updates[opIndex];
+                sql += " WHERE ";
+                sql += predicates[opIndex];
+                sql += ";\n";
+            }
+        }
 
         return {SetPragmas(sql), resultColumns};
     }
@@ -849,6 +867,7 @@ private:
     TString TableName_;
     TTableClient Client_;
     const IWorkLoader::ELoadCommand Stmt_;
+    const size_t OpsPerTx_;
     // program, columns
     TVector<std::pair<TString, TVector<std::pair<TColumn, TString>>>> Programs_;
 };
@@ -861,12 +880,14 @@ public:
             TTableDescription tableDescription,
             const TString& tableName,
             TTableClient& client,
-            IWorkLoader::ELoadCommand stmt)
+            IWorkLoader::ELoadCommand stmt,
+            size_t opsPerTx)
         : TRandomValueProvider(TableDescriptionToShardsPower(tableDescription), KEYRANGELIMIT)
         , TableDescription_(tableDescription)
         , TableName_(tableName)
         , Client_(client)
         , Stmt_(stmt)
+        , OpsPerTx_(opsPerTx)
     {
         CreatePrograms();
     }
@@ -875,11 +896,16 @@ public:
         auto rnd = RandomNumber<ui32>(Programs_.size());
         const auto& program = Programs_[rnd];
         const auto& programText = program.first;
-        TVector<NYdb::TValue> batch;
-        batch.emplace_back(::NIdxTest::CreateRow(program.second, *this));
 
-        const auto params = ::NIdxTest::CreateParamsAsList(batch, ParamName_);
-        return RunOperation(Client_, programText, params);
+        NYdb::TParamsBuilder params;
+        for (size_t opIndex = 0; opIndex < OpsPerTx_; ++opIndex) {
+            const TString paramName = Sprintf("$items_%zu", opIndex);
+            TVector<NYdb::TValue> batch;
+            batch.emplace_back(::NIdxTest::CreateRow(program.second, *this));
+            ::NIdxTest::AddParamsAsList(params, batch, paramName);
+        }
+
+        return RunOperation(Client_, programText, params.Build());
     }
 
     IWorkLoader::ELoadCommand GetTaskId() const override {
@@ -928,33 +954,39 @@ private:
         auto rowType = NIdxTest::CreateRow(resCol, *this);
         auto rowsTypeString = NYdb::FormatType(rowType.GetType());
 
-        TString sql;
-        switch (Stmt_) {
-            case IWorkLoader::LC_UPSERT:
-                sql = "DECLARE %s AS List<%s>; UPSERT INTO `%s` SELECT * FROM AS_TABLE(%s);";
-            break;
-            case IWorkLoader::LC_REPLACE:
-                sql = "DECLARE %s AS List<%s>; REPLACE INTO `%s` SELECT * FROM AS_TABLE(%s);";
-            break;
-            case IWorkLoader::LC_INSERT:
-                sql = "DECLARE %s AS List<%s>; INSERT INTO `%s` SELECT * FROM AS_TABLE(%s);";
-            break;
-            case IWorkLoader::LC_UPDATE_ON:
-                sql = "DECLARE %s AS List<%s>; UPDATE `%s` ON SELECT * FROM AS_TABLE(%s);";
-            break;
-            case IWorkLoader::LC_DELETE_ON:
-                sql = "DECLARE %s AS List<%s>; DELETE FROM `%s` ON SELECT * FROM AS_TABLE(%s);";
-            break;
-            default:
-                ythrow yexception() << "unsupported statement";
-            break;
+        TString program;
+        for (size_t opIndex = 0; opIndex < OpsPerTx_; ++opIndex) {
+            const TString paramName = Sprintf("$items_%zu", opIndex);
+            program += Sprintf("DECLARE %s AS List<%s>;\n", paramName.c_str(), rowsTypeString.c_str());
         }
 
-        auto program = Sprintf(sql.c_str(),
-            ParamName_.c_str(),
-            rowsTypeString.c_str(),
-            TableName_.c_str(),
-            ParamName_.c_str());
+        for (size_t opIndex = 0; opIndex < OpsPerTx_; ++opIndex) {
+            TString sql;
+            const TString paramName = Sprintf("$items_%zu", opIndex);
+
+            switch (Stmt_) {
+                case IWorkLoader::LC_UPSERT:
+                    sql = "UPSERT INTO `%s` SELECT * FROM AS_TABLE(%s);\n";
+                    break;
+                case IWorkLoader::LC_REPLACE:
+                    sql = "REPLACE INTO `%s` SELECT * FROM AS_TABLE(%s);\n";
+                    break;
+                case IWorkLoader::LC_INSERT:
+                    sql = "INSERT INTO `%s` SELECT * FROM AS_TABLE(%s);\n";
+                    break;
+                case IWorkLoader::LC_UPDATE_ON:
+                    sql = "UPDATE `%s` ON SELECT * FROM AS_TABLE(%s);\n";
+                    break;
+                case IWorkLoader::LC_DELETE_ON:
+                    sql = "DELETE FROM `%s` ON SELECT * FROM AS_TABLE(%s);\n";
+                    break;
+                default:
+                    ythrow yexception() << "unsupported statement";
+                    break;
+            }
+
+            program += Sprintf(sql.c_str(), TableName_.c_str(), paramName.c_str());
+        }
 
         return {SetPragmas(program), resCol};
     }
@@ -975,9 +1007,9 @@ private:
     TString TableName_;
     TTableClient Client_;
     const IWorkLoader::ELoadCommand Stmt_;
+    const size_t OpsPerTx_;
     // program, columns
     TVector<std::pair<TString, TVector<TColumn>>> Programs_;
-    const TString ParamName_ = "$items";
 };
 
 class TTimingTracker {
@@ -1075,31 +1107,31 @@ public:
             switch (i & loadCommands) {
                 case IWorkLoader::LC_UPSERT:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPSERT), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPSERT, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_INSERT:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_INSERT), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_INSERT, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_UPDATE:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamItemsTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_UPDATE_ON:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE_ON), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_UPDATE_ON, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_REPLACE:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_REPLACE), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_REPLACE, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_DELETE:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamItemsTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_DELETE_ON:
                     tasks.emplace_back(std::make_pair(std::make_unique<TUpdateViaParamListTask>(
-                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE_ON), 1000));
+                        tableDescription.GetRef(), tableName, Client_, IWorkLoader::LC_DELETE_ON, settings.OpsPerTx), 1000));
                 break;
                 case IWorkLoader::LC_SELECT:
                     tasks.emplace_back(std::make_pair(std::make_unique<TSelectAndCompareTask>(

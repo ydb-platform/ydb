@@ -257,7 +257,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     TLocalRateLimiterResource DeleteObjectsQuoterResource_;
     TLocalRateLimiterResource OtherActionsQuoterResource_;
     i64 EarlyRequestQueuesListBudget_ = EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET; // Defence from continuously requesting queues list.
-    bool UseLeaderCPUOptimization = false;
+    bool UseLeaderCPUOptimization = true;
 
     // State machine
     THashMultiMap<TString, TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_; // queue name -> request
@@ -345,6 +345,7 @@ STATEFN(TSqsService::StateFunc) {
         hFunc(TEvWakeup, HandleWakeup);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+        hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
         hFunc(TSqsEvents::TEvNodeTrackerSubscriptionStatus, HandleNodeTrackingSubscriptionStatus);
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfiguration);
         hFunc(TSqsEvents::TEvSqsRequest, HandleSqsRequest);
@@ -746,6 +747,19 @@ TSqsService::TUserInfoPtr TSqsService::GetUserOrWait(TAutoPtr<TEvent>& ev) {
         return nullptr;
     }
     return userIt->second;
+}
+
+void TSqsService::HandleReloadStateRequest(TSqsEvents::TEvReloadStateRequest::TPtr& ev) {
+    const auto userIt = Users_.find(ev->Get()->Record.GetTarget().GetUserName());
+    if (userIt != Users_.end()) {
+        auto queueIt = userIt->second->Queues_.find(ev->Get()->Record.GetTarget().GetQueueName());
+        if (queueIt != userIt->second->Queues_.end()) {
+            if (queueIt->second->LocalLeader_) {
+                Send(ev->Forward(queueIt->second->LocalLeader_));
+                return;
+            }
+        }
+    }
 }
 
 void TSqsService::HandleNodeTrackingSubscriptionStatus(TSqsEvents::TEvNodeTrackerSubscriptionStatus::TPtr& ev) {

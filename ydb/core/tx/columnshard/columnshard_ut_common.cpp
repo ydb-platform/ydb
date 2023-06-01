@@ -341,3 +341,26 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
 }
 
 }
+
+namespace NKikimr::NColumnShard {
+    NOlap::TIndexInfo BuildTableInfo(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+                         const std::vector<std::pair<TString, NScheme::TTypeInfo>>& key) {
+        NOlap::TIndexInfo indexInfo = NOlap::TIndexInfo::BuildDefault();
+
+        for (ui32 i = 0; i < ydbSchema.size(); ++i) {
+            ui32 id = i + 1;
+            auto& name = ydbSchema[i].first;
+            auto& type = ydbSchema[i].second;
+
+            indexInfo.Columns[id] = NTable::TColumn(name, id, type, "");
+            indexInfo.ColumnNames[name] = id;
+        }
+
+        for (const auto& [keyName, keyType] : key) {
+            indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
+        }
+
+        indexInfo.SetAllKeys();
+        return indexInfo;
+    }
+}

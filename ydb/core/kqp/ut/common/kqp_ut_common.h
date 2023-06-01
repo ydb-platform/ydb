@@ -68,6 +68,8 @@ namespace NKqp {
 class TKqpCounters;
 const TString KikimrDefaultUtDomainRoot = "Root";
 
+extern const TString EXPECTED_EIGHTSHARD_VALUE1;
+
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
@@ -261,7 +263,7 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session);
+void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true);
 
 // KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have
 // database name specified. Before that it returns errors.

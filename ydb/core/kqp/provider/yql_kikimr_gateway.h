@@ -488,6 +488,19 @@ struct TCreateUserSettings {
     bool PasswordEncrypted = false;
 };
 
+struct TModifyPermissionsSettings {
+    enum class EAction : ui32 {
+        Grant,
+        Revoke
+    };
+
+    EAction Action;
+    THashSet<TString> Permissions;
+    THashSet<TString> Pathes;
+    THashSet<TString> Roles;
+    bool IsPermissionsClear = false;
+};
+
 struct TAlterUserSettings {
     TString UserName;
     TString Password;
@@ -711,6 +724,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTopic(const TString& cluster, const TString& topic) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> ModifyPermissions(const TString& cluster, const TModifyPermissionsSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 

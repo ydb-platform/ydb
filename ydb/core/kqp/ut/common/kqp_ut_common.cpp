@@ -18,6 +18,18 @@ namespace NKqp {
 
 using namespace NYdb::NTable;
 
+const TString EXPECTED_EIGHTSHARD_VALUE1 = R"(
+[
+    [[1];[101u];["Value1"]];
+    [[2];[201u];["Value1"]];
+    [[3];[301u];["Value1"]];
+    [[1];[401u];["Value1"]];
+    [[2];[501u];["Value1"]];
+    [[3];[601u];["Value1"]];
+    [[1];[701u];["Value1"]];
+    [[2];[801u];["Value1"]]
+])";
+
 SIMPLE_UDF(TTestFilter, bool(i64)) {
     Y_UNUSED(valueBuilder);
     const i64 arg = args[0].Get<i64>();
@@ -408,7 +420,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, tors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
@@ -907,7 +919,7 @@ std::vector<NJson::TJsonValue> FindPlanStages(const NJson::TJsonValue& plan) {
     return stages;
 }
 
-void CreateSampleTablesWithIndex(TSession& session) {
+void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
     auto res = session.ExecuteSchemeQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/SecondaryKeys` (
@@ -937,6 +949,9 @@ void CreateSampleTablesWithIndex(TSession& session) {
 
     )").GetValueSync();
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    if (!populateTables)
+        return;
 
     auto result = session.ExecuteDataQuery(R"(
 

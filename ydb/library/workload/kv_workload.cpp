@@ -66,6 +66,8 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
             return InsertRandom();
         case EType::SelectRandom:
             return SelectRandom();
+        case EType::ReadRowsRandom:
+            return ReadRowsRandom();
         default:
             return TQueryInfoList();
     }
@@ -164,6 +166,24 @@ TQueryInfoList TKvWorkloadGenerator::SelectRandom() {
     auto params = paramsBuilder.Build();
 
     return TQueryInfoList(1, TQueryInfo(ss.str(), std::move(params)));
+}
+
+TQueryInfoList TKvWorkloadGenerator::ReadRowsRandom() {
+    NYdb::TValueBuilder keys;
+    keys.BeginList();
+    for (size_t i = 0; i < Params.RowsCnt; ++i) {
+        keys.AddListItem()
+            .BeginStruct()
+                .AddMember("c0").Uint64(KeyUniformDistGen(Gen))
+            .EndStruct();
+    }
+    keys.EndList();
+
+    TQueryInfo info;
+    info.TablePath = DbPath + "/kv_test";
+    info.UseReadRows = true;
+    info.KeyToRead = keys.Build();
+    return TQueryInfoList(1, std::move(info));
 }
 
 TQueryInfoList TKvWorkloadGenerator::GetInitialData() {

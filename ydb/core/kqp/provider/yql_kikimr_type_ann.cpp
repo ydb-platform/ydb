@@ -207,6 +207,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Permission:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -1270,6 +1274,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {

@@ -274,7 +274,7 @@ private:
             return x;
         };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
-            Name, makeResponseString().data(), Context.peer().c_str());
+            Name, makeResponseString().data(), GetPeerName().c_str());
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
@@ -287,7 +287,7 @@ private:
         TOut resp;
         TString msg = "no resource";
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s nodata (no resources) peer# %s", this,
-            Name, Context.peer().c_str());
+            Name, GetPeerName().c_str());
 
         StateFunc = &TSimpleRequest::FinishDoneWithoutProcessing;
         OnBeforeCall();
@@ -312,7 +312,7 @@ private:
             return resp;
         };
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] received request Name# %s ok# %s data# %s peer# %s current inflight# %li", this,
-            Name, ok ? "true" : "false", makeRequestString().data(), Context.peer().c_str(), Server->GetCurrentInFlight());
+            Name, ok ? "true" : "false", makeRequestString().data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
             Y_VERIFY(!ok);
@@ -350,7 +350,7 @@ private:
     bool FinishDone(bool ok) {
         OnAfterCall();
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
-            Name, ok ? "true" : "false", Context.peer().c_str());
+            Name, ok ? "true" : "false", GetPeerName().c_str());
         Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
             TDuration::Seconds(RequestTimer.Passed()));
         Server->DecRequest();
@@ -362,7 +362,7 @@ private:
     bool FinishDoneWithoutProcessing(bool ok) {
         OnAfterCall();
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this,
-            Name, ok ? "true" : "false", Context.peer().c_str());
+            Name, ok ? "true" : "false", GetPeerName().c_str());
 
         return false;
     }

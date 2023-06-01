@@ -30,8 +30,14 @@ TIndexationCounters::TIndexationCounters(const TString& module) {
     CorrectDataSerializationBytes = SubGroup->GetCounter(module + "/Counters/CorrectDataSerialization/Bytes", true);
     CorrectDataSerialization = SubGroup->GetCounter(module + "/Counters/CorrectDataSerialization/Count", true);
 
+    CompactionDuration = SubGroup->GetHistogram(module + "/Histogram/CompactionDuration", NMonitoring::ExponentialHistogram(18, 2, 20));
+    CompactionInputSize = SubGroup->GetHistogram(module + "/Histogram/CompactionInputSize", NMonitoring::ExponentialHistogram(18, 2, 1024));
+    CompactionExceptions = SubGroup->GetCounter(module + "/Counters/Exceptions/Count", true);
+    CompactionFails = SubGroup->GetCounter(module + "/Counters/CompactionFails/Count", true);
+
     SplittedPortionLargestColumnSize = SubGroup->GetHistogram(module + "/Histogram/SplittedPortionLargestColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
     SplittedPortionColumnSize = SubGroup->GetHistogram(module + "/Histogram/SplittedPortionColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
+    SimpleSplitPortionLargestColumnSize = SubGroup->GetHistogram(module + "/Histogram/SimpleSplitPortionLargestColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
     TooSmallBlob = SubGroup->GetCounter(module + "/Counters/TooSmallBlob/Count", true);
     TooSmallBlobFinish = SubGroup->GetCounter(module + "/Counters/TooSmallBlobFinish/Count", true);
     TooSmallBlobStart = SubGroup->GetCounter(module + "/Counters/TooSmallBlobStart/Count", true);

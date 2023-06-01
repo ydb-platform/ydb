@@ -95,6 +95,12 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "ModifyPermissions is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
     TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "CreateUser is not yet implemented for intent determination transformer"));
@@ -260,6 +266,8 @@ private:
             case TKikimrKey::Type::Object:
                 return TStatus::Ok;
             case TKikimrKey::Type::Topic:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Permission:
                 return TStatus::Ok;
         }
 
@@ -433,7 +441,11 @@ public:
             || node.IsCallable(TKiCreateObject::CallableName())
             || node.IsCallable(TKiAlterObject::CallableName())
             || node.IsCallable(TKiDropObject::CallableName()))
-{
+        {
+            return true;
+        }
+
+        if (node.IsCallable(TKiModifyPermissions::CallableName())) {
             return true;
         }
 
@@ -719,6 +731,26 @@ public:
                 }
                 break;
             }
+
+            case TKikimrKey::Type::Permission: {
+                NCommon::TWritePermissionSettings settings = NCommon::ParseWritePermissionsSettings(TExprList(node->Child(4)), ctx);
+                const auto& mode = key.GetPermissionAction();
+
+                if (mode == "grant" || mode == "revoke") {
+                    return Build<TKiModifyPermissions>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Action().Build(mode)
+                        .Permissions(settings.Permissions.Cast())
+                        .Pathes(settings.Pathes.Cast())
+                        .Roles(settings.RoleNames.Cast())
+                        .Done()
+                        .Ptr();
+                } else {
+                    YQL_ENSURE(false, "unknown Permission action \"" << TString(mode) << "\"");
+                }
+                break;
+            }
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO."));
@@ -818,6 +850,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropObject>(input)) {
         return HandleDropObject(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiModifyPermissions>(input)) {
+        return HandleModifyPermissions(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiCreateUser>(input)) {

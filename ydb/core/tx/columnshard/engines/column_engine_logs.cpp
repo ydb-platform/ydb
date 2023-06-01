@@ -663,8 +663,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
                                         const TSnapshot& snapshot) {
     auto changes = std::static_pointer_cast<TChanges>(indexChanges);
 
-    const auto& indexInfo = GetIndexInfo();
-
     // Update tmp granules with real ids
     auto granuleRemap = changes->TmpToNewGranules(LastGranule);
     ui64 portion = LastPortion;
@@ -678,11 +676,11 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
             produced = changes->CompactionInfo->InGranule() ? TPortionMeta::COMPACTED : TPortionMeta::SPLIT_COMPACTED;
         }
 
-        portionInfo.UpdateRecordsMeta(indexInfo, produced);
+        portionInfo.UpdateRecordsMeta(produced);
     }
 
     for (auto& [portionInfo, _] : changes->PortionsToEvict) {
-        portionInfo.UpdateRecordsMeta(indexInfo, TPortionMeta::EVICTED);
+        portionInfo.UpdateRecordsMeta(TPortionMeta::EVICTED);
     }
 
     for (auto& [_, id] : changes->PortionsToMove) {
@@ -1085,7 +1083,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     out->Granules.reserve(pathGranules.size());
     // TODO: out.Portions.reserve()
     std::optional<TMarksMap::const_iterator> previousIterator;
-    const bool compositeMark = GetIndexKey()->num_fields() > 1;
+    const bool compositeMark = UseCompositeMarks();
 
     for (auto&& filter : pkRangesFilter) {
         std::optional<NArrow::TReplaceKey> indexKeyFrom = filter.KeyFrom(GetIndexKey());
@@ -1142,7 +1140,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         }
                     }
                     Y_VERIFY(outPortion.Produced());
-                    if (!compositeMark && !pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
+                    if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
                         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
                             ("granule", granule)("portion", portionInfo->Portion());
                         continue;

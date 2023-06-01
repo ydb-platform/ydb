@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option cc_enable_arenas = true;
+
+package NYql.Generic;
+
+import "ydb/library/yql/providers/generic/connector/api/protos/connector.proto";
+
+message TSource {
+    // Token to access database
+    string token = 1;
+    // Prepared Select expression
+    NYql.Connector.API.Select select = 2;
+    // Description of instance to connect
+    NYql.Connector.API.DataSourceInstance data_source_instance = 3;
+}

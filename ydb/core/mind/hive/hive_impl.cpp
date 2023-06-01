@@ -2054,8 +2054,8 @@ TResourceRawValues THive::GetDefaultResourceInitialMaximumValues() {
 }
 
 void THive::ProcessTabletBalancer() {
-    if (!ProcessTabletBalancerScheduled && BootQueue.BootQueue.empty()) {
-        Schedule(GetMinPeriodBetweenBalance(), new TEvPrivate::TEvProcessTabletBalancer());
+    if (!ProcessTabletBalancerScheduled && !ProcessTabletBalancerPostponed && BootQueue.BootQueue.empty()) {
+        Schedule(GetBalancerCooldown(), new TEvPrivate::TEvProcessTabletBalancer());
         ProcessTabletBalancerScheduled = true;
     }
 }
@@ -2107,7 +2107,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
         BLOG_D("Balancer has been postponed because of sub activity");
-        ProcessTabletBalancer();
+        ProcessTabletBalancerPostponed = false;
         return;
     }
 
@@ -2131,6 +2131,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 
         if (!overloadedNodes.empty()) {
             BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
+            LastBalancerTrigger = EBalancerType::Emergency;
             StartHiveBalancer(CurrentConfig.GetMaxMovementsOnEmergencyBalancer(), CurrentConfig.GetContinueEmergencyBalancer(), GetEmergencyBalancerInflight(), overloadedNodes);
             return;
         }
@@ -2143,6 +2144,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     if (stats.Scatter >= GetMinScatterToBalance()) {
         BLOG_TRACE("Scatter " << stats.Scatter << " over limit "
                    << GetMinScatterToBalance() << " - starting balancer");
+        LastBalancerTrigger = EBalancerType::Scatter;
         StartHiveBalancer(CurrentConfig.GetMaxMovementsOnAutoBalancer(), CurrentConfig.GetContinueAutoBalancer(), GetBalancerInflight());
     }
 }
@@ -2195,6 +2197,10 @@ void THive::RemoveSubActor(ISubActor* subActor) {
     auto it = std::find(SubActors.begin(), SubActors.end(), subActor);
     if (it != SubActors.end()) {
         SubActors.erase(it);
+    }
+    if (SubActors.empty() && ProcessTabletBalancerPostponed) {
+        ProcessTabletBalancerPostponed = false;
+        ProcessTabletBalancer();
     }
 }
 
@@ -2420,6 +2426,17 @@ void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNice
             tablet.Followers.erase(std::prev(itFollower.base()));
             --followerCount;
         }
+    }
+}
+
+TDuration THive::GetBalancerCooldown() const {
+    switch(LastBalancerTrigger) {
+        case EBalancerType::None:
+            return TDuration::Seconds(0);
+        case EBalancerType::Scatter:
+            return GetMinPeriodBetweenBalance();
+        case EBalancerType::Emergency:
+            return GetMinPeriodBetweenEmergencyBalance();
     }
 }
 

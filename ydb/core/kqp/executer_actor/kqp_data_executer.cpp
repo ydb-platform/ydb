@@ -127,11 +127,14 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters, bool streamResult,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-        NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
+        NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        const TActorId& creator)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, TWilsonKqp::DataExecuter, "DataExecuter")
         , AsyncIoFactory(std::move(asyncIoFactory))
         , StreamResult(streamResult)
     {
+        Target = creator;
+
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.ValidateLocks || Request.EraseLocks) {
@@ -273,6 +276,10 @@ public:
     }
 
 private:
+    bool IsCancelAfterAllowed(const TEvKqp::TEvAbortExecution::TPtr& ev) const {
+        return ReadOnlyTx || ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::CANCELLED;
+    }
+
     TString CurrentStateFuncName() const override {
         const auto& func = CurrentStateFunc();
         if (func == &TThis::PrepareState) {
@@ -514,8 +521,12 @@ private:
     }
 
     void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        CancelProposal(0);
-        TBase::HandleAbortExecution(ev);
+        if (IsCancelAfterAllowed(ev)) {
+            CancelProposal(0);
+            TBase::HandleAbortExecution(ev);
+        } else {
+            LOG_D("Got TEvAbortExecution from : " << ev->Sender << " but cancelation is not alowed");
+        }
     }
 
     void CancelProposal(ui64 exceptShardId) {
@@ -917,10 +928,14 @@ private:
     }
 
     void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        if (ImmediateTx) {
-            CancelProposal(0);
+        if (IsCancelAfterAllowed(ev)) {
+            if (ImmediateTx) {
+                CancelProposal(0);
+            }
+            TBase::HandleAbortExecution(ev);
+        } else {
+            LOG_D("Got TEvAbortExecution from : " << ev->Sender << " but cancelation is not alowed");
         }
-        TBase::HandleAbortExecution(ev);
     }
 
     void HandleExecute(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
@@ -2351,9 +2366,9 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory)
+    TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig, std::move(asyncIoFactory));
+    return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig, std::move(asyncIoFactory), creator);
 }
 
 } // namespace NKqp

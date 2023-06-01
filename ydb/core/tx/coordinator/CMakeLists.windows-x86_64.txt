@@ -32,6 +32,7 @@ target_sources(core-tx-coordinator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__configure.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__check.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__init.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__last_step_subscriptions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__mediators_confirmations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__plan_step.cpp

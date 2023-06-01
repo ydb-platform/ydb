@@ -62,9 +62,10 @@ public:
                 << " at tablet " << TabletId << " (index)");
 
             BlobsToRead.erase(blobId);
-            TxEvent->PutStatus = event.Status;
-            if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
-                TxEvent->PutStatus = NKikimrProto::ERROR;
+            if (event.Status == NKikimrProto::UNKNOWN) {
+                TxEvent->SetPutStatus(NKikimrProto::ERROR);
+            } else {
+                TxEvent->SetPutStatus(event.Status);
             }
             return;
         }
@@ -125,12 +126,12 @@ private:
 
     void Index(const TActorContext& ctx) {
         Y_VERIFY(TxEvent);
-        if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
+        if (TxEvent->GetPutStatus() == NKikimrProto::UNKNOWN) {
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
 
             TCpuGuard guard(TxEvent->ResourceUsage);
             NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = indexationLogic.Apply(TxEvent->IndexChanges);
+            TxEvent->Blobs = std::move(indexationLogic.Apply(TxEvent->IndexChanges).DetachResult());
             LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
         } else {
             LOG_S_ERROR("Indexing failed at tablet " << TabletId);

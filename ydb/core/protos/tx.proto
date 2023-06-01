@@ -102,6 +102,35 @@ message TEvSubscribeReadStepUpdate {
     optional fixed64 NextAcquireStep = 3;
 }
 
+// Coordinator to sibling coordinators
+// Subscribes to updates of the last planned step, which is sent to all
+// subscribers as soon as planning of said step has started. This indicates
+// that said step needs to be planned on siblings sooner rather than later.
+message TEvSubscribeLastStep {
+    // Coordinator tablet id for paranoid checks
+    optional fixed64 CoordinatorID = 1;
+    // Sender increments seqno each time it re-subscribes
+    // This invalidates all subscriptions with a lower seqno
+    optional uint64 SeqNo = 2;
+}
+
+// Coordinator to sibling coordinators
+// Unsubscribes a previous subscription, usually sent before tablet dies
+message TEvUnsubscribeLastStep {
+    optional fixed64 CoordinatorID = 1;
+    optional uint64 SeqNo = 2;
+}
+
+// Coordinator to subscribers
+// The last known step that has started to be planned, sent before it is
+// persistent in storage, and as such may temporarily jump backwards on
+// restarts.
+message TEvUpdatedLastStep {
+    optional fixed64 CoordinatorID = 1;
+    optional uint64 SeqNo = 2;
+    optional fixed64 LastStep = 3;
+}
+
 // coordinator to mediator
 message TCoordinatorTransaction {
     repeated uint64 AffectedSet = 1; // read and write set - joined and then filtered for concrete mediator

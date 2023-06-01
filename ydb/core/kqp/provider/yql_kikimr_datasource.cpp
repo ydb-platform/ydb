@@ -84,6 +84,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Topic:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Permission:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;

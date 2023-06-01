@@ -100,6 +100,7 @@ TCommandKvRun::TCommandKvRun()
     AddCommand(std::make_unique<TCommandKvRunUpsertRandom>());
     AddCommand(std::make_unique<TCommandKvRunInsertRandom>());
     AddCommand(std::make_unique<TCommandKvRunSelectRandom>());
+    AddCommand(std::make_unique<TCommandKvRunReadRowsRandom>());
 }
 
 TCommandKvRunUpsertRandom::TCommandKvRunUpsertRandom()
@@ -211,6 +212,41 @@ int TCommandKvRunSelectRandom::Run(TConfig& config) {
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
 
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TKvWorkloadGenerator::EType::SelectRandom));
+}
+
+TCommandKvRunReadRowsRandom::TCommandKvRunReadRowsRandom()
+    : TWorkloadCommand("ReadRows", {}, "ReadRows rows matching primary key(s)")
+{}
+
+void TCommandKvRunReadRowsRandom::Config(TConfig& config) {
+    TWorkloadCommand::Config(config);
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption("max-first-key", "Maximum value of a first primary key")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
+    config.Opts->AddLongOption("cols", "Number of columns to select for a single query")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+    config.Opts->AddLongOption("rows", "Number of rows to select for a single query")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+}
+
+void TCommandKvRunReadRowsRandom::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+}
+
+int TCommandKvRunReadRowsRandom::Run(TConfig& config) {
+    PrepareForRun(config);
+
+    NYdbWorkload::TKvWorkloadParams params;
+    params.DbPath = config.Database;
+    params.MaxFirstKey = MaxFirstKey;
+    params.ColumnsCnt = ColumnsCnt;
+    params.RowsCnt = RowsCnt;
+
+    NYdbWorkload::TWorkloadFactory factory;
+    auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
+
+    return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TKvWorkloadGenerator::EType::ReadRowsRandom));
 }
 
 } // namespace NYdb::NConsoleClient

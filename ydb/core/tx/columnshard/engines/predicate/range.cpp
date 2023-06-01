@@ -40,45 +40,22 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(std::shared_ptr<arrow
 }
 
 bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {
-    ui32 idx = 0;
-    bool matchFrom = false;
-    bool matchTo = false;
-    for (auto&& c : indexInfo.GetReplaceKey()->field_names()) {
-        const auto& [minValue, maxValue ] = info.MinMaxValue(indexInfo.GetColumnId(c));
-        if (!matchFrom) {
-            const int result = PredicateFrom.MatchScalar(idx, maxValue);
-            if (result < 0) {
-                return false;
-            } else if (result > 0) {
-                matchFrom = true;
-                if (matchTo) {
-                    return true;
-                }
-            } else if (result == 0) {
-                ++idx;
-                if (matchTo) {
-                    continue;
-                }
-            }
+    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetIndexKey())) {
+        const auto& portionEnd = info.IndexKeyEnd();
+        const int commonSize = std::min(from->Size(), portionEnd.Size());
+        if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
+            return false;
         }
-        if (!matchTo) {
-            const int result = PredicateTo.MatchScalar(idx, minValue);
-            if (result < 0) {
-                return false;
-            } else if (result > 0) {
-                matchTo = true;
-                if (matchFrom) {
-                    return true;
-                }
-            } else if (result == 0) {
-                ++idx;
-                if (matchFrom) {
-                    continue;
-                }
-            }
-        }
-        ++idx;
     }
+
+    if (auto to = PredicateTo.ExtractKey(indexInfo.GetIndexKey())) {
+        const auto& portionStart = info.IndexKeyStart();
+        const int commonSize = std::min(to->Size(), portionStart.Size());
+        if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {
+            return false;
+        }
+    }
+
     return true;
 }
 

@@ -54,6 +54,8 @@ sql_stmt_core:
   | create_topic_stmt
   | alter_topic_stmt
   | drop_topic_stmt
+  | grant_permissions_stmt
+  | revoke_permissions_stmt
 ;
 
 expr:
@@ -613,6 +615,28 @@ drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMM
 role_name: an_id_or_type | bind_parameter;
 create_user_option: ENCRYPTED? PASSWORD expr;
 
+grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
+revoke_permissions_stmt: REVOKE (GRANT OPTION FOR)? permission_name_target ON an_id_schema (COMMA an_id_schema)* FROM role_name (COMMA role_name)*;
+
+permission_id:
+      CONNECT
+    | LIST
+    | INSERT
+    | MANAGE
+    | DROP
+    | GRANT
+    | MODIFY (TABLES | ATTRIBUTES)
+    | (UPDATE | ERASE) ROW
+    | (REMOVE | DESCRIBE | ALTER) SCHEMA
+    | SELECT (TABLES | ATTRIBUTES | ROW)?
+    | (USE | FULL) LEGACY?
+    | CREATE (DIRECTORY | TABLE | QUEUE)?
+;
+
+permission_name: permission_id | STRING_VALUE;
+
+permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
+
 create_replication_stmt: CREATE ASYNC REPLICATION object_ref
     FOR replication_target (COMMA replication_target)*
     WITH LPAREN replication_settings RPAREN
@@ -964,12 +988,28 @@ keyword_hint_uncompat:
 ;
 
 keyword_as_compat:
-    CONSUMER
+    ATTRIBUTES
+  | CONNECT
+  | CONSUMER
   | DATA
+  | DESCRIBE
+  | DIRECTORY
+  | GRANT
+  | LEGACY
+  | MANAGE
+  | MODIFY
+  | OPTION
+  | QUEUE
+  | PRIVILEGES
+//  | READ
+  | REMOVE
   | REPLICATION
+  | REVOKE
   | SOURCE
+  | TABLES
   | TOPIC
   | TYPE
+//  | WRITE
 ;
 
 // insert new keyword into keyword_as_compat also
@@ -986,6 +1026,7 @@ keyword_compat: (
   | ASC
   | ASYNC
   | ATTACH
+  | ATTRIBUTES
   | AUTOINCREMENT
   | BEFORE
   | BEGIN
@@ -998,6 +1039,7 @@ keyword_compat: (
   | COMMIT
   | CONDITIONAL
   | CONFLICT
+  | CONNECT
   | CONSTRAINT
   | CONSUMER
   | COVER
@@ -1014,7 +1056,9 @@ keyword_compat: (
   | DEFINE
   | DELETE
   | DESC
+  | DESCRIBE
   | DETACH
+  | DIRECTORY
   | DISABLE
   | DISCARD
   | DO
@@ -1042,6 +1086,7 @@ keyword_compat: (
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GRANT
   | GROUP
   | GROUPING
   | HASH
@@ -1063,9 +1108,12 @@ keyword_compat: (
   | ISNULL
   | JOIN
   | KEY
+  | LEGACY
   | LEFT
   | LIKE
+  | MANAGE
   | MATCH
+  | MODIFY
   | NATURAL
   | NO
   | NOTNULL
@@ -1075,6 +1123,7 @@ keyword_compat: (
   | OFFSET
   | ON
   | ONLY
+  | OPTION
   | OR
   | ORDER
   | OTHERS
@@ -1088,12 +1137,16 @@ keyword_compat: (
   | PRECEDING
   | PRESORT
   | PRIMARY
+  | PRIVILEGES
+  | QUEUE
 //  | QUERY
   | RAISE
+//  | READ
   | REFERENCES
   | REGEXP
   | REINDEX
   | RELEASE
+  | REMOVE
   | RENAME
   | REPLACE
   | REPLICATION
@@ -1103,6 +1156,7 @@ keyword_compat: (
   | RESULT
   | RETURNING
   | REVERT
+  | REVOKE
   | RIGHT
   | RLIKE
   | ROLLBACK
@@ -1118,6 +1172,7 @@ keyword_compat: (
   | SYSTEM
   | TABLE
   | TABLESAMPLE
+  | TABLES
   | TABLESTORE
   | TEMP
   | TEMPORARY
@@ -1142,6 +1197,7 @@ keyword_compat: (
   | VIRTUAL
   | WITH
   | WRAPPER
+//  | WRITE
   | XOR
   );
 
@@ -1256,6 +1312,7 @@ ASC: A S C;
 ASSUME: A S S U M E;
 ASYNC: A S Y N C;
 ATTACH: A T T A C H;
+ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
 AUTOMAP: A U T O M A P;
 BEFORE: B E F O R E;
@@ -1277,6 +1334,7 @@ COMMIT: C O M M I T;
 COMPACT: C O M P A C T;
 CONDITIONAL: C O N D I T I O N A L;
 CONFLICT: C O N F L I C T;
+CONNECT: C O N N E C T;
 CONSTRAINT: C O N S T R A I N T;
 CONSUMER: C O N S U M E R;
 COVER: C O V E R;
@@ -1297,8 +1355,10 @@ DEFERRED: D E F E R R E D;
 DEFINE: D E F I N E;
 DELETE: D E L E T E;
 DESC: D E S C;
+DESCRIBE: D E S C R I B E;
 DETACH: D E T A C H;
 DICT: D I C T;
+DIRECTORY: D I R E C T O R Y;
 DISABLE: D I S A B L E;
 DISCARD: D I S C A R D;
 DISTINCT: D I S T I N C T;
@@ -1337,6 +1397,7 @@ FULL: F U L L;
 FUNCTION: F U N C T I O N;
 GLOB: G L O B;
 GLOBAL: G L O B A L;
+GRANT: G R A N T;
 GROUP: G R O U P;
 GROUPING: G R O U P I N G;
 GROUPS: G R O U P S;
@@ -1365,12 +1426,15 @@ JSON_EXISTS: J S O N '_' E X I S T S;
 JSON_VALUE: J S O N '_' V A L U E;
 JSON_QUERY: J S O N '_' Q U E R Y;
 KEY: K E Y;
+LEGACY: L E G A C Y;
 LEFT: L E F T;
 LIKE: L I K E;
 LIMIT: L I M I T;
 LIST: L I S T;
 LOCAL: L O C A L;
+MANAGE: M A N A G E;
 MATCH: M A T C H;
+MODIFY: M O D I F Y;
 NATURAL: N A T U R A L;
 NO: N O;
 NOT: N O T;
@@ -1382,6 +1446,7 @@ OF: O F;
 OFFSET: O F F S E T;
 ON: O N;
 ONLY: O N L Y;
+OPTION: O P T I O N;
 OPTIONAL: O P T I O N A L;
 OR: O R;
 ORDER: O R D E R;
@@ -1396,15 +1461,19 @@ PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
 PRESORT: P R E S O R T;
 PRIMARY: P R I M A R Y;
+PRIVILEGES: P R I V I L E G E S;
 PROCESS: P R O C E S S;
+QUEUE: Q U E U E;
 //QUERY: Q U E R Y;
 RAISE: R A I S E;
 RANGE: R A N G E;
+//READ: R E A D;
 REDUCE: R E D U C E;
 REFERENCES: R E F E R E N C E S;
 REGEXP: R E G E X P;
 REINDEX: R E I N D E X;
 RELEASE: R E L E A S E;
+REMOVE: R E M O V E;
 RENAME: R E N A M E;
 REPEATABLE: R E P E A T A B L E;
 REPLACE: R E P L A C E;
@@ -1417,6 +1486,7 @@ RESULT: R E S U L T;
 RETURN: R E T U R N;
 RETURNING: R E T U R N I N G;
 REVERT: R E V E R T;
+REVOKE: R E V O K E;
 RIGHT: R I G H T;
 RLIKE: R L I K E;
 ROLLBACK: R O L L B A C K;
@@ -1438,6 +1508,7 @@ SYMBOLS: S Y M B O L S;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;
 TABLE: T A B L E;
+TABLES: T A B L E S;
 TABLESAMPLE: T A B L E S A M P L E;
 TABLESTORE: T A B L E S T O R E;
 TAGGED: T A G G E D;
@@ -1472,6 +1543,7 @@ WINDOW: W I N D O W;
 WITH: W I T H;
 WITHOUT: W I T H O U T;
 WRAPPER: W R A P P E R;
+//WRITE: W R I T E;
 XOR: X O R;
 TRUE: T R U E;
 FALSE: F A L S E;

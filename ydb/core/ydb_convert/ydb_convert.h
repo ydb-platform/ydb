@@ -2,9 +2,15 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+
+#include <util/memory/pool.h>
 
 namespace NKikimr {
 
@@ -36,8 +42,15 @@ struct TACLAttrs {
 TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name);
 
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32);
+TString ConvertShortYdbPermissionNameToFullYdbPermissionName(const TString& name);
 
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl);
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl);
+
+bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
+                                TCell& c, TString& err, TMemoryPool& valueDataPool);
+
+void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
+
 
 } // namespace NKikimr

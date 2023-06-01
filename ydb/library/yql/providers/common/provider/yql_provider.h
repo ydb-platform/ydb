@@ -77,6 +77,17 @@ struct TWriteRoleSettings {
         : Other(other) {}
 };
 
+struct TWritePermissionSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtomList> Permissions;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> Pathes;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> RoleNames;
+
+    TWritePermissionSettings(NNodes::TMaybeNode<NNodes::TCoAtomList>&& permissions, NNodes::TMaybeNode<NNodes::TCoAtomList>&& pathes, NNodes::TMaybeNode<NNodes::TCoAtomList>&& roleNames)
+        : Permissions(std::move(permissions))
+        , Pathes(std::move(pathes))
+        , RoleNames(std::move(roleNames)) {}
+};
+
 struct TWriteObjectSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TCoNameValueTupleList Features;
@@ -118,6 +129,8 @@ TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
 
+TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
+
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
@@ -151,6 +164,7 @@ void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCo
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
+void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& statistics);
 
 bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx);
 bool ValidateCompressionForOutput(std::string_view format, std::string_view compression, TExprContext& ctx);

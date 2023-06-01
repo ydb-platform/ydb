@@ -2312,6 +2312,496 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    struct ExpectedPermissions {
+        TString Path;
+        THashMap<TString, TVector<TString>> Permissions;
+    };
+
+    void CheckPermissions(TSession& session, TVector<ExpectedPermissions>&& expectedPermissionsValues) {
+        for (auto& value : expectedPermissionsValues) {
+            TDescribeTableResult describe = session.DescribeTable(value.Path).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto tableDesc = describe.GetTableDescription();
+            const auto& permissions = tableDesc.GetPermissions();
+
+            THashMap<TString, TVector<TString>> describePermissions;
+            for (const auto& permission : permissions) {
+                auto& permissionNames = describePermissions[permission.Subject];
+                permissionNames.insert(permissionNames.end(), permission.PermissionNames.begin(), permission.PermissionNames.end());
+            }
+
+            auto& expectedPermissions = value.Permissions;
+            UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissions.size(), describePermissions.size(), "Number of user names does not equal on path: " + value.Path);
+            for (auto& item : expectedPermissions) {
+                auto& expectedPermissionNames = item.second;
+                auto& describedPermissionNames = describePermissions[item.first];
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissionNames.size(), describedPermissionNames.size(), "Number of permissions for " + item.first + " does not equal on path: " + value.Path);
+                sort(expectedPermissionNames.begin(), expectedPermissionNames.end());
+                sort(describedPermissionNames.begin(), describedPermissionNames.end());
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissionNames, describedPermissionNames, "Permissions are not equal on path: " + value.Path);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ModifyPermissions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << "/Root/table1" << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            query.clear();
+            query << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << "/Root/table2" << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );)";
+            result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT CONNECT ON `/Root` TO user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {.Path = "/Root",
+                                                .Permissions = {
+                                                            {"user1", {"ydb.database.connect"}}
+                                                            }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE "ydb.database.connect" ON `/Root` FROM user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT MODIFY TABLES, 'ydb.tables.read' ON `/Root/table1`, `/Root/table2` TO user2;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE SELECT TABLES, "ydb.tables.modify", ON `/Root/table2` FROM user2;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT "ydb.generic.read", LIST, "ydb.generic.write", USE LEGACY ON `/Root` TO user3, user4, user5;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user3", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                                                    {"user4", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE "ydb.generic.use_legacy", SELECT, "ydb.generic.list", INSERT ON `/Root` FROM user4, user3;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT ALL ON `/Root` TO user6;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                                                    {"user6", {"ydb.generic.full"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE ALL PRIVILEGES ON `/Root` FROM user6;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT "ydb.generic.use", "ydb.generic.manage" ON `/Root` TO user7 WITH GRANT OPTION;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                                                    {"user7", {"ydb.generic.use", "ydb.generic.manage", "ydb.access.grant"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE GRANT OPTION FOR USE, MANAGE ON `/Root` FROM user7;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT USE LEGACY, FULL LEGACY, FULL, CREATE, DROP, GRANT,
+                  SELECT ROW, UPDATE ROW, ERASE ROW, SELECT ATTRIBUTES,
+                  MODIFY ATTRIBUTES, CREATE DIRECTORY, CREATE TABLE, CREATE QUEUE,
+                  REMOVE SCHEMA, DESCRIBE SCHEMA, ALTER SCHEMA ON `/Root` TO user8;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                                                    {"user8", {"ydb.generic.use_legacy", "ydb.generic.full_legacy", "ydb.generic.full",
+                                                                   "ydb.database.create", "ydb.database.drop", "ydb.access.grant", "ydb.granular.select_row",
+                                                                   "ydb.granular.update_row", "ydb.granular.erase_row", "ydb.granular.read_attributes",
+                                                                  "ydb.granular.write_attributes", "ydb.granular.create_directory", "ydb.granular.create_table",
+                                                                  "ydb.granular.create_queue", "ydb.granular.remove_schema", "ydb.granular.describe_schema", "ydb.granular.alter_schema"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE "ydb.granular.write_attributes", "ydb.granular.create_directory", "ydb.granular.create_table", "ydb.granular.create_queue",
+                   "ydb.granular.select_row", "ydb.granular.update_row", "ydb.granular.erase_row", "ydb.granular.read_attributes",
+                   "ydb.generic.use_legacy", "ydb.generic.full_legacy", "ydb.generic.full", "ydb.database.create", "ydb.database.drop", "ydb.access.grant",
+                   "ydb.granular.remove_schema", "ydb.granular.describe_schema", "ydb.granular.alter_schema" ON `/Root` FROM user8;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {
+                                                    {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                            });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE LIST, INSERT ON `/Root` FROM user9, user4, user5;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {{"user5", {"ydb.generic.read", "ydb.generic.use_legacy"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {
+                                                    {"user2", {"ydb.tables.read", "ydb.tables.modify"}}
+                                                }
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            REVOKE ALL ON `/Root`, `/Root/table1` FROM user9, user4, user5, user2;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(session, {
+                                            {
+                                                .Path = "/Root",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table1",
+                                                .Permissions = {}
+                                            },
+                                            {
+                                                .Path = "/Root/table2",
+                                                .Permissions = {}
+                                            }
+                                        });
+        }
+    }
+
+    Y_UNIT_TEST(ModifyUnknownPermissions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT ROW SELECT ON `/Root` TO user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+            CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT `ydb.database.connect` ON `/Root` TO user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token '`ydb.database.connect`'");
+            CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT CONNECT, READ ON `/Root` TO user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'READ'");
+            CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT "" ON `/Root` TO user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown permission name: ");
+            CheckPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+        }
+    }
+
+    Y_UNIT_TEST(ModifyPermissionsByIncorrectPathes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            GRANT CONNECT, LIST ON `/Root`, `/UnknownPath` TO user1;
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error for the path: /UnknownPath");
+            CheckPermissions(session, {{.Path = "/Root", .Permissions = {{"user1", {"ydb.database.connect", "ydb.generic.list"}}}}});
+        }
+    }
+
     Y_UNIT_TEST(CreateUserWithoutPassword) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -4364,7 +4854,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
-
         TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
@@ -4476,7 +4965,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
-
         TTestHelper::TColumnTableStore testTableStore;
 
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);

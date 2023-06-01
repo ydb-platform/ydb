@@ -468,6 +468,32 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     return ret;
 }
 
+TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext&) {
+    TMaybeNode<TCoAtomList> permissions;
+    TMaybeNode<TCoAtomList> pathes;
+    TMaybeNode<TCoAtomList> roleNames;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "permissions") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                permissions = tuple.Value().Cast<TCoAtomList>();;
+            } else if (name == "roles") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                roleNames = tuple.Value().Cast<TCoAtomList>();
+            } else if (name == "pathes") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                pathes = tuple.Value().Cast<TCoAtomList>();
+            }
+        }
+    }
+
+    TWritePermissionSettings ret(std::move(permissions), std::move(pathes), std::move(roleNames));
+    return ret;
+}
+
 TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybe<NNodes::TCoNameValueTupleList> kvFeatures;
@@ -1125,6 +1151,42 @@ double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx) {
     return GetDataReplicationFactor(1.0, lambda.Child(1), lambda.Head().ChildrenSize() > 0 ? lambda.Head().Child(0) : nullptr, ctx);
 }
 
+void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& statistics)
+{
+    writer.OnBeginMap();
+    for (auto& el : statistics.Entries) {
+        writer.OnKeyedItem(el.Name);
+        if (el.Value) {
+            writer.OnStringScalar(*el.Value);
+            continue;
+        }
+
+        writer.OnBeginMap();
+        if (auto val = el.Sum) {
+            writer.OnKeyedItem("sum");
+            writer.OnInt64Scalar(*val);
+        }
+        if (auto val = el.Count) {
+            writer.OnKeyedItem("count");
+            writer.OnInt64Scalar(*val);
+        }
+        if (auto val = el.Avg) {
+            writer.OnKeyedItem("avg");
+            writer.OnInt64Scalar(*val);
+        }
+        if (auto val = el.Max) {
+            writer.OnKeyedItem("max");
+            writer.OnInt64Scalar(*val);
+        }
+        if (auto val = el.Min) {
+            writer.OnKeyedItem("min");
+            writer.OnInt64Scalar(*val);
+        }
+        writer.OnEndMap();
+    }
+    writer.OnEndMap();
+}
+
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) {
     if (statistics.empty()) {
         return;
@@ -1134,69 +1196,32 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 
     writer.OnBeginMap();
 
-    if (totalOnly) {
-        for (const auto& opStatistics : statistics) {
-            for (auto& el : opStatistics.second.Entries) {
-                if (el.Value) {
-                    continue;
-                }
+    for (const auto& opStatistics : statistics) {
+        for (auto& el : opStatistics.second.Entries) {
+            if (el.Value) {
+                continue;
+            }
 
-                auto& totalEntry = total[el.Name];
-                if (auto val = el.Sum) {
-                    std::get<0>(totalEntry) += *val;
-                }
-                if (auto val = el.Count) {
-                    std::get<1>(totalEntry) += *val;
-                }
-                if (auto val = el.Max) {
-                    std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry));
-                }
-                if (auto val = el.Min) {
-                    std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>()));
-                }
+            auto& totalEntry = total[el.Name];
+            if (auto val = el.Sum) {
+                std::get<0>(totalEntry) += *val;
+            }
+            if (auto val = el.Count) {
+                std::get<1>(totalEntry) += *val;
+            }
+            if (auto val = el.Max) {
+                std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry));
+            }
+            if (auto val = el.Min) {
+                std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>()));
             }
         }
     }
-    else {
-        for (const auto& opStatistics : statistics) {
-            writer.OnKeyedItem(ToString(opStatistics.first));
-            writer.OnBeginMap();
-            for (auto& el : opStatistics.second.Entries) {
-                writer.OnKeyedItem(el.Name);
-                if (el.Value) {
-                    writer.OnStringScalar(*el.Value);
-                    continue;
-                }
 
-                auto& totalEntry = total[el.Name];
-                writer.OnBeginMap();
-                if (auto val = el.Sum) {
-                    writer.OnKeyedItem("sum");
-                    writer.OnInt64Scalar(*val);
-                    std::get<0>(totalEntry) += *val;
-                }
-                if (auto val = el.Count) {
-                    writer.OnKeyedItem("count");
-                    writer.OnInt64Scalar(*val);
-                    std::get<1>(totalEntry) += *val;
-                }
-                if (auto val = el.Avg) {
-                    writer.OnKeyedItem("avg");
-                    writer.OnInt64Scalar(*val);
-                }
-                if (auto val = el.Max) {
-                    writer.OnKeyedItem("max");
-                    writer.OnInt64Scalar(*val);
-                    std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry));
-                }
-                if (auto val = el.Min) {
-                    writer.OnKeyedItem("min");
-                    writer.OnInt64Scalar(*val);
-                    std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>()));
-                }
-                writer.OnEndMap();
-            }
-            writer.OnEndMap();
+    if (totalOnly == false) {
+        for (const auto& [key, value] : statistics) {
+            writer.OnKeyedItem(ToString(key));
+            WriteStatistics(writer, value);
         }
     }
 

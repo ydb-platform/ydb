@@ -2452,10 +2452,17 @@ TExprNode::TPtr OptimizeCompare(const TExprNode::TPtr& node, TExprContext& ctx) 
     return node;
 }
 
+template <bool WithConstraints>
 TExprNode::TPtr DropReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (IsListReorder(node->Head())) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
+    }
+    if constexpr (WithConstraints) {
+        if (auto sorted = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << *sorted << " input";
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), TCoUnordered::CallableName(), {node->HeadPtr()}));
+        }
     }
 
     return node;
@@ -2609,10 +2616,12 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
                     return KeepSortedConstraint(res, topConstr, ctx);
                 }
             }
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over input with " << *inputConstr;
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), TCoUnordered::CallableName(), {node->HeadPtr()}));
         }
     }
 
-    if (IsSort) {
+    if constexpr (IsSort) {
         const auto& nodeToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (nodeToCheck.IsCallable({"List", "AsList"})) {
             ui32 count = nodeToCheck.ChildrenSize();
@@ -2633,6 +2642,8 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
                     return KeepSortedConstraint(node->HeadPtr(), sortConstr, ctx);
                 }
             }
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over input with " << *inputConstr;
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), TCoUnordered::CallableName(), {node->HeadPtr()}));
         }
     } else if (!IsTop) {
         if (node->Head().IsCallable(node->Content())) {
@@ -4405,8 +4416,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["GroupByKey"] = std::bind(&DropReorder, _1, _2);
-    map["CombineByKey"] = std::bind(&DropReorder, _1, _2);
+    map["GroupByKey"] = std::bind(&DropReorder<false>, _1, _2);
+    map["CombineByKey"] = std::bind(&DropReorder<true>, _1, _2);
 
     map["ToList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Head().IsCallable("Nothing")) {
@@ -4544,7 +4555,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        return DropReorder(node, ctx);
+        return DropReorder<false>(node, ctx);
     };
 
     map["Min"] = std::bind(&OptimizeMinMax<true>, _1, _2);
@@ -5406,7 +5417,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
-        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend"})) {
+        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
         }

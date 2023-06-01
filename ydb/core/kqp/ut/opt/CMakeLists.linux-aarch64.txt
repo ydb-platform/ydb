@@ -36,6 +36,7 @@ target_link_options(ydb-core-kqp-ut-opt PRIVATE
 )
 target_sources(ydb-core-kqp-ut-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_agg_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_kv_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_merge_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ne_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_not_null_ut.cpp

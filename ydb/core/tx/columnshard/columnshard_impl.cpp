@@ -899,7 +899,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
 #endif
 
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
-    ev->PutStatus = NKikimrProto::OK; // No new blobs to write
+    ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 
     ActiveCleanup = true;
     return ev;

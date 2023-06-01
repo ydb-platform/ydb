@@ -8,6 +8,8 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tx/tx.h>
 
+#include <library/cpp/actors/interconnect/interconnect.h>
+
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
@@ -132,6 +134,7 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
             VolatileState.LastPlanned = planStep;
             VolatileState.Queue.RapidFreeze = true;
 
+            NotifyUpdatedLastStep();
             Execute(CreateTxPlanStep(planStep, slots, true), ctx);
         }
     } else {
@@ -228,6 +231,7 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
         VolatileState.LastEmptyPlanAt = { };
     }
 
+    NotifyUpdatedLastStep();
     Execute(CreateTxPlanStep(next, slots, false), ctx);
 }
 
@@ -308,14 +312,36 @@ void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& 
 }
 
 void TTxCoordinator::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
-    PipeServers.insert(ev->Get()->ServerId);
+    auto res = PipeServers.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(ev->Get()->ServerId),
+        std::forward_as_tuple());
+    Y_VERIFY_S(res.second, "Unexpected TEvServerConnected for " << ev->Get()->ServerId);
 }
 
 void TTxCoordinator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
-    PipeServers.erase(ev->Get()->ServerId);
+    auto it = PipeServers.find(ev->Get()->ServerId);
+    Y_VERIFY_S(it != PipeServers.end(), "Unexpected TEvServerDisconnected for " << ev->Get()->ServerId);
+
+    for (auto& pr : it->second.LastStepSubscribers) {
+        LastStepSubscribers.erase(pr.first);
+    }
+
+    PipeServers.erase(it);
+
     if (ReadStepSubscriptionManager) {
         ctx.Send(ReadStepSubscriptionManager, new TEvPrivate::TEvPipeServerDisconnected(ev->Get()->ServerId));
     }
+}
+
+void TTxCoordinator::SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie) {
+    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, SelfId(), event, flags, cookie);
+
+    if (sessionId) {
+        ev->Rewrite(TEvInterconnect::EvForward, sessionId);
+    }
+
+    TActivationContext::Send(ev.Release());
 }
 
 void TTxCoordinator::IcbRegister() {

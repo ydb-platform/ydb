@@ -1,5 +1,5 @@
 #pragma once
-#include "program.h"
+#include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 
 namespace NKikimr::NOlap {

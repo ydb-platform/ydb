@@ -883,7 +883,8 @@ public:
         if (expectFail) {
             res.Wait();
             UNIT_ASSERT(!res.GetValue().IsSuccess());
-        } else if (doWait) {
+        } else {
+            Y_UNUSED(doWait);
             res.Wait();
             Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
             UNIT_ASSERT(res.GetValue().IsSuccess());

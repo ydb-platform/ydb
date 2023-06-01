@@ -50,6 +50,12 @@ public:
         return *result;
     }
 
+    TResult&& DetachResult() {
+        auto result = std::get_if<TResult>(&Result);
+        Y_VERIFY(result, "incorrect object for result request");
+        return std::move(*result);
+    }
+
     const TResult& operator*() const {
         return GetResult();
     }

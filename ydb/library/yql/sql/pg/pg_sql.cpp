@@ -248,9 +248,13 @@ public:
             return nullptr;
         }
 
-        Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
-            A("world"))));
+
+        if (Settings.EndOfQueryCommit) {
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"))));
+        }
         Statements.push_back(L(A("return"), A("world")));
+
 
         if (DqEngineEnabled) {
             Statements[DqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
@@ -1163,7 +1167,7 @@ private:
         auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
                                            ListLength(node->typeName->names) - 1));
         const auto colType = FindColumnTypeAlias(colTypeVal);
-        
+
         ctx.Columns.push_back(
                 QL(QA(node->colname), L(A("PgType"), QA(colType)))
                 );

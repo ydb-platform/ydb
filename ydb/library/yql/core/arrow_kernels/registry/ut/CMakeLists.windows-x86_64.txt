@@ -26,6 +26,7 @@ target_link_libraries(ydb-library-yql-core-arrow_kernels-registry-ut PUBLIC
   yql-sql-pg_dummy
   yql-minikql-invoke_builtins
   yql-minikql-comp_nodes
+  url_udf
 )
 target_sources(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry/ut/registry_ut.cpp

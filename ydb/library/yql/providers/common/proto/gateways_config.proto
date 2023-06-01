@@ -530,6 +530,15 @@ message TDbToolConfig {
 }
 
 
+/////////// Generic gateway for the external data sources ////////////
+
+message TGenericGatewayConfig {
+    required string Endpoint = 1;
+
+    // external data sources that can be accessed via connector
+    optional TClickHouseGatewayConfig ClickHouse = 2;
+}
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -553,4 +562,5 @@ message TGatewaysConfig {
     optional THttpGatewayConfig HttpGateway = 18;
     optional TYtOrmGatewayConfig YtOrm = 19;
     optional TDbToolConfig DbTool = 20;
+    optional TGenericGatewayConfig Generic = 21;
 }

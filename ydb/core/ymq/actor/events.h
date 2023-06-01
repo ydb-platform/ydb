@@ -14,6 +14,7 @@
 #include <ydb/core/ymq/base/processed_request_attributes.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/queue_path.h>
+#include <ydb/core/ymq/proto/events.pb.h>
 #include <ydb/core/ymq/proto/records.pb.h>
 
 #include <library/cpp/actors/core/event_pb.h>
@@ -131,6 +132,8 @@ struct TSqsEvents {
         EvNodeTrackerSubscriptionStatus,
 
         EvForceReloadState,
+        EvReloadStateRequest,
+        EvReloadStateResponse,
 
         EvEnd,
     };
@@ -944,6 +947,24 @@ struct TSqsEvents {
             : NextTryAfter(nextTryAfter)
         {}
         TDuration NextTryAfter;
+    };
+    
+    struct TEvReloadStateRequest : public NActors::TEventPB<TEvReloadStateRequest, TReloadStateRequest, EvReloadStateRequest> {
+        TEvReloadStateRequest() = default;
+        
+        TEvReloadStateRequest(const TString& user, const TString& queue) {
+            Record.MutableTarget()->SetUserName(user);
+            Record.MutableTarget()->SetQueueName(queue);
+        }
+    };
+
+    struct TEvReloadStateResponse : public NActors::TEventPB<TEvReloadStateResponse, TReloadStateResponse, EvReloadStateResponse> {
+        TEvReloadStateResponse() = default;
+        TEvReloadStateResponse(const TString& user, const TString& queue, TInstant reloadedAt) {
+            Record.MutableWho()->SetUserName(user);
+            Record.MutableWho()->SetQueueName(queue);
+            Record.SetReloadedAtMs(reloadedAt.MilliSeconds());
+        }
     };
 };
 

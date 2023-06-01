@@ -104,24 +104,6 @@ public:
             return { };
         }
 
-        /**
-         * Joins two disjoint page lists a and b
-         */
-        static TPage* Join(TPage* a, TPage* b) {
-            if (a == nullptr) {
-                return b;
-            } else if (b == nullptr) {
-                return a;
-            }
-            TPage* aLast = a->Prev()->Node();
-            TPage* bLast = b->Prev()->Node();
-            aLast->SetNext(b);
-            b->SetPrev(aLast);
-            bLast->SetNext(a);
-            a->SetPrev(bLast);
-            return a;
-        }
-
         struct TWeight {
             static ui64 Get(TPage *x) {
                 return x->Size;
@@ -235,7 +217,7 @@ public:
     };
 
 public:
-    TPrivatePageCache(const TCacheCacheConfig &cacheConfig, bool prepareForSharedCache = true);
+    TPrivatePageCache(const TCacheCacheConfig &cacheConfig);
 
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     TPage::TWaitQueuePtr ForgetPageCollection(TLogoBlobID id);
@@ -276,7 +258,6 @@ private:
 
     TStats Stats;
     TCacheCache<TPage, TPage::TWeight> Cache;
-    bool PrepareForSharedCache;
 
     bool Restore(TPage *page);
     void Touch(TPage *page);

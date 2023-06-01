@@ -809,6 +809,7 @@ message TFeatureFlags {
     optional bool EnableTopicSplitMerge = 95 [default = false];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
+    optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
 }
 
 message THttpProxyConfig {

@@ -176,9 +176,9 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
 }
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->CachedMessageData && ev->Get()->CachedMessageData->Info);
+    Y_VERIFY(ev->Get()->CachedMessageData);
 
-    CLOG_T(ctx, "Handle " << ev->Get()->CachedMessageData->Info->ToString());
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
     NodesManager.ProcessResponse(ev, ctx);
 }

@@ -13,7 +13,8 @@ namespace NDiscovery {
     struct TCachedMessageData {
         TString CachedMessage;
         TString CachedMessageSsl;
-        THolder<TEvStateStorage::TEvBoardInfo> Info;
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+        TEvStateStorage::TEvBoardInfo::EStatus Status = TEvStateStorage::TEvBoardInfo::EStatus::Ok;
     };
 }
 
@@ -54,10 +55,11 @@ struct TEvDiscovery {
 };
 
 namespace NDiscovery {
-    std::pair<TString, TString> CreateSerializedMessage(
-                    const THolder<TEvStateStorage::TEvBoardInfo>&,
-                    TSet<TString>,
-                    const THolder<TEvInterconnect::TEvNodeInfo>&);
+    NDiscovery::TCachedMessageData CreateCachedMessage(
+        const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&,
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
+        TSet<TString>,
+        const THolder<TEvInterconnect::TEvNodeInfo>&);
 }
 
 using TLookupPathFunc = std::function<TString(const TString&)>;

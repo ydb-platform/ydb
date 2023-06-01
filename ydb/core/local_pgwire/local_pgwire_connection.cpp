@@ -25,6 +25,7 @@ extern NActors::IActor* CreatePgwireKqpProxy(
 );
 
 NActors::IActor* CreatePgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
+NActors::IActor* CreatePgwireKqpProxyDescribe(std::unordered_map<TString, TString> params,  NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TString& script);
 
 class TPgYdbConnection : public TActor<TPgYdbConnection> {
     using TBase = TActor<TPgYdbConnection>;
@@ -101,6 +102,13 @@ public:
             return;
         }
 
+        auto query(ConvertQuery(it->second));
+        auto script(ToPgSyntax(query.Query, ConnectionParams));
+
+        TActorId actorId = Register(CreatePgwireKqpProxyDescribe(ConnectionParams, std::move(ev), script));
+        BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
+        return;
+        /*
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         auto query = ConvertQuery(it->second);
         Ydb::Scripting::ExecuteYqlRequest request;
@@ -164,7 +172,7 @@ public:
             }
 
             actorSystem->Send(ev->Sender, response.release(), 0, ev->Cookie);
-        });
+        });*/
     }
 
     void Handle(NPG::TEvPGEvents::TEvExecute::TPtr& ev) {

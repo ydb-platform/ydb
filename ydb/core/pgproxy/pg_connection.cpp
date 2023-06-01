@@ -531,32 +531,42 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvDescribeResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
-            { // parameterDescription
-                TPGStreamOutput<TPGParameterDescription> parameterDescription;
-                parameterDescription << uint16_t(ev->Get()->ParameterTypes.size()); // number of fields
-                for (auto type : ev->Get()->ParameterTypes) {
-                    parameterDescription << type;
+            if (ev->Get()->ErrorFields.empty()) {
+                { // parameterDescription
+                    TPGStreamOutput<TPGParameterDescription> parameterDescription;
+                    parameterDescription << uint16_t(ev->Get()->ParameterTypes.size()); // number of fields
+                    for (auto type : ev->Get()->ParameterTypes) {
+                        parameterDescription << type;
+                    }
+                    SendStream(parameterDescription);
                 }
-                SendStream(parameterDescription);
-            }
-            if (ev->Get()->DataFields.size() > 0) {
-                // rowDescription
-                TPGStreamOutput<TPGRowDescription> rowDescription;
-                rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
-                for (const auto& field : ev->Get()->DataFields) {
-                    rowDescription
-                        << TStringBuf(field.Name) << '\0'
-                        << uint32_t(field.TableId)
-                        << uint16_t(field.ColumnId)
-                        << uint32_t(field.DataType)
-                        << uint16_t(field.DataTypeSize)
-                        << uint32_t(0xffffffff) // type modifier
-                        << uint16_t(0)          // format text
-                        ;
+                if (ev->Get()->DataFields.size() > 0) {
+                    // rowDescription
+                    TPGStreamOutput<TPGRowDescription> rowDescription;
+                    rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
+                    for (const auto& field : ev->Get()->DataFields) {
+                        rowDescription
+                            << TStringBuf(field.Name) << '\0'
+                            << uint32_t(field.TableId)
+                            << uint16_t(field.ColumnId)
+                            << uint32_t(field.DataType)
+                            << uint16_t(field.DataTypeSize)
+                            << uint32_t(0xffffffff) // type modifier
+                            << uint16_t(0)          // format text
+                            ;
+                    }
+                    SendStream(rowDescription);
+                } else {
+                    SendMessage(TPGNoData());
                 }
-                SendStream(rowDescription);
             } else {
-                SendMessage(TPGNoData());
+                // error response
+                TPGStreamOutput<TPGErrorResponse> errorResponse;
+                for (const auto& field : ev->Get()->ErrorFields) {
+                    errorResponse << field.first << field.second << '\0';
+                }
+                errorResponse << '\0';
+                SendStream(errorResponse);
             }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();

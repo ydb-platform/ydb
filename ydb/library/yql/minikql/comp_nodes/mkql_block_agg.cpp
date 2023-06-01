@@ -677,6 +677,7 @@ public:
             if (result == EFetchResult::Yield) {
                 return result;
             } else if (result == EFetchResult::One) {
+                ++s.BatchNum_;
                 ui64 batchLength = GetBatchLength(s.Values_.data());
                 if (!batchLength) {
                     continue;
@@ -824,6 +825,7 @@ private:
         using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
         using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
 
+        ui64 BatchNum_ = 0;
         TVector<NUdf::TUnboxedValue> Values_;
         TVector<NUdf::TUnboxedValue*> ValuePointers_;
         TVector<std::unique_ptr<TAggregator>> Aggs_;
@@ -969,16 +971,16 @@ private:
 
                 for (auto i : Streams_[currentStreamIndex]) {
                     if (output[Keys_.size() + i]) {
-                        s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.UnwrappedValues_.data(), row);
+                        s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.BatchNum_, s.UnwrappedValues_.data(), row);
                     }
                 }
             } else {
                 for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (output[Keys_.size() + i]) {
                         if constexpr (Finalize) {
-                            s.Aggs_[i]->LoadState(ptr, s.Values_.data(), row);
+                            s.Aggs_[i]->LoadState(ptr, s.BatchNum_, s.Values_.data(), row);
                         } else {
-                            s.Aggs_[i]->InitKey(ptr, s.Values_.data(), row);
+                            s.Aggs_[i]->InitKey(ptr, s.BatchNum_, s.Values_.data(), row);
                         }
                     }
 
@@ -1009,9 +1011,9 @@ private:
                 for (auto i : Streams_[currentStreamIndex]) {
                     if (output[Keys_.size() + i]) {
                         if (isNewStream) {
-                            s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.UnwrappedValues_.data(), row);
+                            s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.BatchNum_, s.UnwrappedValues_.data(), row);
                         } else {
-                            s.Aggs_[i]->UpdateState(ptr + s.AggStateOffsets_[i], s.UnwrappedValues_.data(), row);
+                            s.Aggs_[i]->UpdateState(ptr + s.AggStateOffsets_[i], s.BatchNum_, s.UnwrappedValues_.data(), row);
                         }
                     }
                 }
@@ -1019,9 +1021,9 @@ private:
                 for (size_t i = 0; i < s.Aggs_.size(); ++i) {
                     if (output[Keys_.size() + i]) {
                         if constexpr (Finalize) {
-                            s.Aggs_[i]->UpdateState(ptr, s.Values_.data(), row);
+                            s.Aggs_[i]->UpdateState(ptr, s.BatchNum_, s.Values_.data(), row);
                         } else {
-                            s.Aggs_[i]->UpdateKey(ptr, s.Values_.data(), row);
+                            s.Aggs_[i]->UpdateKey(ptr, s.BatchNum_, s.Values_.data(), row);
                         }
                     }
 

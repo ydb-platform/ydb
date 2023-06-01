@@ -2900,7 +2900,16 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
         .Callable("ShuffleByKeys")
             .Add(0, AggList)
             .Add(1, keySelector)
-            .Add(2, lambdaStream)
+            .Lambda(2)
+                .Param("stream")
+                .Apply(GetContextLambda())
+                    .With(0)
+                        .Apply(lambdaStream)
+                            .With(0, "stream")
+                        .Seal()
+                    .Done()
+                .Seal()
+            .Seal()
         .Seal()
         .Build();
 }

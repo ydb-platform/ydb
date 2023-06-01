@@ -48,7 +48,7 @@ const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMin
     if (returnType) {
         MKQL_ENSURE(argsColumns.size() == 1, "Expected one column");
         TType* stateType = AS_TYPE(TBlockType, tupleType->GetElementType(argsColumns[0]))->GetItemType();
-        TType* returnItemType = AS_TYPE(TBlockType, returnType);
+        TType* returnItemType = AS_TYPE(TBlockType, returnType)->GetItemType();
         return NPg::LookupAggregation(name, AS_TYPE(TPgType, stateType)->GetTypeId(), AS_TYPE(TPgType, returnItemType)->GetTypeId());
     } else {
         TVector<ui32> argTypeIds;

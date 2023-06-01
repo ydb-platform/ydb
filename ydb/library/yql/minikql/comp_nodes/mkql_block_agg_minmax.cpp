@@ -298,9 +298,9 @@ public:
     {
     }
 
-    void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TGenericState();
-        UpdateKey(state, columns, row);
+        UpdateKey(state, batchNum, columns, row);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -309,7 +309,8 @@ public:
         *typedState = TGenericState();
     }
 
-    void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void UpdateKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(batchNum);
         auto typedState = static_cast<TGenericState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<IsMin>(typedState, datum, row, *Reader_, *Converter_, *Compare_, Ctx_);
@@ -342,9 +343,9 @@ public:
     {
     }
 
-    void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TGenericState();
-        UpdateState(state, columns, row);
+        UpdateState(state, batchNum, columns, row);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -353,7 +354,8 @@ public:
         *typedState = TGenericState();
     }
 
-    void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(batchNum);
         auto typedState = static_cast<TGenericState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<IsMin>(typedState, datum, row, *Reader_, *Converter_, *Compare_, Ctx_);
@@ -534,9 +536,9 @@ public:
     {
     }
 
-    void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TGenericState();
-        UpdateKey(state, columns, row);
+        UpdateKey(state, batchNum, columns, row);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -545,7 +547,8 @@ public:
         *typedState = TGenericState();
     }
 
-    void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void UpdateKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(batchNum);
         auto typedState = static_cast<TGenericState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<TStringType, IsMin>(typedState, datum, row);
@@ -572,9 +575,9 @@ public:
     {
     }
 
-    void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TGenericState();
-        UpdateState(state, columns, row);
+        UpdateState(state, batchNum, columns, row);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -583,7 +586,8 @@ public:
         *typedState = TGenericState();
     }
 
-    void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(batchNum);
         auto typedState = static_cast<TGenericState*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<TStringType, IsMin>(typedState, datum, row);
@@ -758,9 +762,9 @@ public:
     {
     }
 
-    void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TStateType();
-        UpdateKey(state, columns, row);
+        UpdateKey(state, batchNum, columns, row);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -768,7 +772,8 @@ public:
         Y_UNUSED(state);
     }
 
-    void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void UpdateKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(batchNum);
         auto typedState = static_cast<TStateType*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState, datum, row);
@@ -797,9 +802,9 @@ public:
     {
     }
 
-    void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
         new(state) TStateType();
-        UpdateState(state, columns, row);
+        UpdateState(state, batchNum, columns, row);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -807,7 +812,8 @@ public:
         Y_UNUSED(state);
     }
 
-    void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) final {
+    void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+        Y_UNUSED(batchNum);
         auto typedState = static_cast<TStateType*>(state);
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         PushValueToState<IsNullable, IsScalar, TIn, IsMin>(typedState, datum, row);

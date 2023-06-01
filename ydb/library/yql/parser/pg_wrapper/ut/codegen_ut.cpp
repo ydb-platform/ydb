@@ -134,8 +134,8 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
                             builder.Add(NUdf::TBlockItem{});
                         } else {
                             auto s = item.AsStringRef();
-                            size_t len = s.Size() - VARHDRSZ;
-                            const char* ptr = s.Data() + VARHDRSZ;
+                            size_t len = s.Size() - VARHDRSZ - sizeof(void*);
+                            const char* ptr = s.Data() + VARHDRSZ + sizeof(void*);
                             builder.Add(NUdf::TBlockItem{NUdf::TStringRef(ptr, len)});
                         }
                     }
@@ -206,8 +206,9 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             arrow::BinaryBuilder builder;
             ARROW_OK(builder.Reserve(N));
             for (size_t i = 0; i < N; ++i) {
-                std::string s(VARHDRSZ + 500, 'A' + i % 26);
-                auto t = (text*)s.data();
+                std::string s(sizeof(void*) + VARHDRSZ + 500, 'A' + i % 26);
+                NUdf::ZeroMemoryContext(s.data() + sizeof(void*));
+                auto t = (text*)(s.data() + sizeof(void*));
                 SET_VARSIZE(t, VARHDRSZ + 500);
                 builder.Append(s);
             }

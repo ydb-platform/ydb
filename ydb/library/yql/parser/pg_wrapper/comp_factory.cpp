@@ -1510,7 +1510,7 @@ struct TFromPgExec {
         case BYTEAOID:
         case CSTRINGOID: {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), SourceId == BYTEAOID ? arrow::binary() : arrow::utf8(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -1519,12 +1519,12 @@ struct TFromPgExec {
                 }
 
                 ui32 len;
-                const char* ptr = item.AsStringRef().Data();
+                const char* ptr = item.AsStringRef().Data() + sizeof(void*);
                 if (SourceId == CSTRINGOID) {
-                    len = strlen(item.AsStringRef().Data());
+                    len = strlen(ptr);
                 } else {
-                    len = GetCleanVarSize((const text*)item.AsStringRef().Data());
-                    Y_ENSURE(len + VARHDRSZ == item.AsStringRef().Size());
+                    len = GetCleanVarSize((const text*)ptr);
+                    Y_ENSURE(len + VARHDRSZ + sizeof(void*) == item.AsStringRef().Size());
                     ptr += VARHDRSZ;
                 }
 
@@ -1639,7 +1639,7 @@ struct TToPgExec {
         case BYTEAOID:
         case CSTRINGOID: {
             NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
             std::vector<char> tmp;
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
@@ -1650,7 +1650,7 @@ struct TToPgExec {
 
                 ui32 len;
                 if (TargetId == CSTRINGOID) {
-                    len = 1 + item.AsStringRef().Size();
+                    len = sizeof(void*) + 1 + item.AsStringRef().Size();
                     if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
                         ythrow yexception() << "Too long string";
                     }
@@ -1660,10 +1660,11 @@ struct TToPgExec {
                     }
 
                     tmp.resize(len);
-                    memcpy(tmp.data(), item.AsStringRef().Data(), len - 1);
+                    NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
+                    memcpy(tmp.data() + sizeof(void*), item.AsStringRef().Data(), len - 1 - sizeof(void*));
                     tmp[len - 1] = 0;
                 } else {
-                    len = VARHDRSZ + item.AsStringRef().Size();
+                    len = sizeof(void*) + VARHDRSZ + item.AsStringRef().Size();
                     if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
                         ythrow yexception() << "Too long string";
                     }
@@ -1673,8 +1674,9 @@ struct TToPgExec {
                     }
 
                     tmp.resize(len);
-                    memcpy(tmp.data() + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ);
-                    UpdateCleanVarSize((text*)tmp.data(), item.AsStringRef().Size());
+                    NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
+                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ);
+                    UpdateCleanVarSize((text*)(tmp.data() + sizeof(void*)), item.AsStringRef().Size());
                 }
 
                 builder.Add(NUdf::TBlockItem(NUdf::TStringRef(tmp.data(), len)));
@@ -2561,8 +2563,9 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
             size = strlen(ptr) + 1;
         }
 
-        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(size, &pool)));
-        std::memcpy(buffer->mutable_data(), ptr, size);
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(size + sizeof(void*), &pool)));
+        NUdf::ZeroMemoryContext(buffer->mutable_data() + sizeof(void*));
+        std::memcpy(buffer->mutable_data() + sizeof(void*), ptr, size);
         return arrow::Datum(std::make_shared<arrow::BinaryScalar>(buffer));
     }
 }

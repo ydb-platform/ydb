@@ -255,6 +255,10 @@ message TSchemaSeqNo {
     optional uint64 Round = 2;
 }
 
+message TIndexGranuleMeta {
+    optional uint32 MarkSize = 1; // Composite key mark (granule border) size: count of first PK elements in mark
+}
+
 message TIndexPortionMeta {
     oneof Produced {
         bool IsInserted = 1;
@@ -263,7 +267,7 @@ message TIndexPortionMeta {
         bool IsEvicted = 4;
     }
     optional string TierName = 5;
-    optional bytes IndexKeyBorders = 6; // arrow::RecordBatch with first and last IndexKey rows
+    optional bytes PrimaryKeyBorders = 6; // arrow::RecordBatch with first and last ReplaceKey rows
 }
 
 message TIndexColumnMeta {

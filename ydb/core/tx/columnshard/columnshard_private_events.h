@@ -25,8 +25,7 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
-    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
-        NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
+    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex>, public TPutStatus {
         NOlap::TVersionedIndex IndexInfo;
         THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
@@ -35,8 +34,6 @@ struct TEvPrivate {
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
         TUsage ResourceUsage;
-        TVector<ui32> YellowMoveChannels;
-        TVector<ui32> YellowStopChannels;
         bool CacheData{false};
         TDuration Duration;
 
@@ -112,12 +109,12 @@ struct TEvPrivate {
                     }
                 }
             } else {
-                TxEvent->PutStatus = NKikimrProto::OK;
+                TxEvent->SetPutStatus(NKikimrProto::OK);
             }
         }
 
         bool NeedDataReadWrite() const {
-            return (TxEvent->PutStatus != NKikimrProto::OK);
+            return (TxEvent->GetPutStatus() != NKikimrProto::OK);
         }
     };
 

@@ -73,13 +73,28 @@ NUdf::TUnboxedValuePod ToValue(T value) {
     return NUdf::TUnboxedValuePod(value);
 }
 
+struct TUdfModuleInfo {
+    TString LibraryPath;
+    TString ModuleName;
+    NUdf::TUniquePtr<NUdf::IUdfModule> Module;
+};
+
 template<bool UseLLVM>
 struct TSetup {
-    TSetup(TComputationNodeFactory nodeFactory = {})
+    TSetup(TComputationNodeFactory nodeFactory = {}, TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
     {
         NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
+        if (!modules.empty()) {
+            auto mutableRegistry = FunctionRegistry->Clone();
+            for (auto& m : modules) {
+                mutableRegistry->AddModule(m.LibraryPath, m.ModuleName, std::move(m.Module));
+            }
+
+            FunctionRegistry = mutableRegistry;
+        }
+
         RandomProvider = CreateDeterministicRandomProvider(1);
         TimeProvider = CreateDeterministicTimeProvider(10000000);
 

@@ -123,6 +123,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_rate_limiter_api.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_columns.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_read_rows.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_remove_directory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_rename_tables.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_rollback_transaction.cpp

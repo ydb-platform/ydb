@@ -117,6 +117,7 @@ target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/codegen_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/error_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp

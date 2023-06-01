@@ -24,6 +24,8 @@ using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
 
+constexpr TDuration RESEND_RELOAD_REQUEST_PERIOD = TDuration::Seconds(5);
+
 struct TSqsProxyService::TNodeInfo : public TAtomicRefCount<TNodeInfo> {
     explicit TNodeInfo(ui32 nodeId)
         : NodeId(nodeId)
@@ -53,6 +55,9 @@ void TSqsProxyService::Bootstrap() {
 
     SqsCounters_ = GetSqsServiceCounters(AppData()->Counters, "core");
     YmqPublicCounters_ = GetYmqPublicCounters(AppData()->Counters);
+
+    ReloadStateRequestId_ = CreateGuidAsString();
+    Send(SelfId(), new TEvents::TEvWakeup());
 }
 
 void TSqsProxyService::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
@@ -69,8 +74,7 @@ void TSqsProxyService::HandleSqsRequest(TSqsEvents::TEvSqsRequest::TPtr& ev) {
 void TSqsProxyService::HandleProxySqsRequest(TSqsEvents::TEvProxySqsRequest::TPtr& ev) {
     TProxyRequestInfoRef request = new TProxyRequestInfo(std::move(ev));
     RequestsToProxy_.emplace(request->RequestId, request);
-    Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetLeaderNodeForQueueRequest(request->RequestId, request->ProxyRequest->Get()->UserName, request->ProxyRequest->Get()->QueueName));
-    RLOG_SQS_REQ_DEBUG(request->RequestId, "Send get leader node request to sqs service");
+    RequestLeaderNode(request->RequestId, request->ProxyRequest->Get()->UserName, request->ProxyRequest->Get()->QueueName);
 }
 
 static TSqsEvents::TEvProxySqsResponse::EProxyStatus GetLeaderNodeForQueueStatusToProxyStatus(TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus status) {
@@ -89,8 +93,85 @@ static TSqsEvents::TEvProxySqsResponse::EProxyStatus GetLeaderNodeForQueueStatus
     }
 }
 
+TSqsProxyService::TReloadStateRequestsInfoPtr TSqsProxyService::GetReloadStateRequestsInfo(const TString& user, const TString& queue) {
+    auto userIt = ReloadStateRequestsInfo_.find(user);
+    if (userIt != ReloadStateRequestsInfo_.end()) {
+        auto queueIt = userIt->second.find(queue);
+        if (queueIt != userIt->second.end()) {
+            return queueIt->second;
+        }
+    }
+    return nullptr;
+}
+
+void TSqsProxyService::RemoveReloadStateRequestsInfo(const TString& user, const TString& queue) {
+    auto userIt = ReloadStateRequestsInfo_.find(user);
+    if (userIt != ReloadStateRequestsInfo_.end()) {
+        userIt->second.erase(queue);
+        if (userIt->second.empty()) {
+            ReloadStateRequestsInfo_.erase(userIt);
+        }
+    }
+}
+
+void TSqsProxyService::ScheduleReloadStateRequest(TReloadStateRequestsInfoPtr info) {
+    info->RequestSendedAt = TInstant::Zero();
+    info->LeaderNodeRequested = false;
+    info->PlannedToSend = true;
+    ReloadStatePlanningToSend_.push_back(std::make_pair(TActivationContext::Now() + RESEND_RELOAD_REQUEST_PERIOD, info));
+    
+}
+
+void TSqsProxyService::SendReloadStateIfNeeded(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev) {
+    auto info = GetReloadStateRequestsInfo(ev->Get()->UserName, ev->Get()->QueueName);
+    if (!info) {
+        return;
+    }
+
+    if (info->RequestSendedAt == TInstant::Zero() && !info->PlannedToSend) {
+        if (ev->Get()->Status == TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::OK) {
+            Send(MakeSqsServiceID(ev->Get()->NodeId), new TSqsEvents::TEvReloadStateRequest(info->User, info->Queue));
+
+            info->RequestSendedAt = TActivationContext::Now();
+            ReloadStateRequestSended_[info->RequestSendedAt].insert(info);
+        } else if (
+            ev->Get()->Status == TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::NoUser
+            || ev->Get()->Status == TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::NoQueue
+        ) {
+            RemoveReloadStateRequestsInfo(ev->Get()->UserName, ev->Get()->QueueName);
+        } else {
+            ScheduleReloadStateRequest(info);
+        }
+    }
+}
+
+void TSqsProxyService::HandleWakeup(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
+    auto now = TActivationContext::Now();
+    while (!ReloadStatePlanningToSend_.empty() && ReloadStatePlanningToSend_.front().first <= now) {
+        auto info = ReloadStatePlanningToSend_.front().second;
+        ReloadStatePlanningToSend_.pop_front();
+        
+        RequestLeaderNode(info);
+    }
+    auto timeoutBorder = now - RESEND_RELOAD_REQUEST_PERIOD;
+    while (!ReloadStateRequestSended_.empty() && ReloadStateRequestSended_.begin()->first <= timeoutBorder) {
+        for (auto info : ReloadStateRequestSended_.begin()->second) {
+            RequestLeaderNode(info);
+        }
+        ReloadStateRequestSended_.erase(ReloadStateRequestSended_.begin());
+    }
+    
+    Schedule(TDuration::MilliSeconds(100), new TEvWakeup());
+}
+
 void TSqsProxyService::HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev) {
     RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Got leader node for queue response. Node id: " << ev->Get()->NodeId << ". Status: " << static_cast<int>(ev->Get()->Status));
+    
+    if (ev->Get()->RequestId == ReloadStateRequestId_) {
+        SendReloadStateIfNeeded(ev);
+        return;
+    }
+    
     const auto requestIt = RequestsToProxy_.find(ev->Get()->RequestId);
     if (requestIt == RequestsToProxy_.end()) {
         RLOG_SQS_REQ_ERROR(ev->Get()->RequestId, "Request was not found in requests to proxy map");
@@ -150,6 +231,54 @@ void TSqsProxyService::HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     HandleDisconnect(nodeId);
 }
 
+void TSqsProxyService::RequestLeaderNode(TReloadStateRequestsInfoPtr info) {
+    info->PlannedToSend = false;
+    info->LeaderNodeRequested = true;
+    info->RequestSendedAt = TInstant::Zero();
+    
+    RequestLeaderNode(ReloadStateRequestId_, info->User, info->Queue);
+}
+
+void TSqsProxyService::RequestLeaderNode(const TString& reqId, const TString& user, const TString& queue) {
+    Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetLeaderNodeForQueueRequest(reqId, user, queue));
+    RLOG_SQS_REQ_DEBUG(reqId, "Send get leader node request to sqs service for " << user << "/" << queue);
+}
+
+void TSqsProxyService::HandleReloadStateRequest(TSqsEvents::TEvReloadStateRequest::TPtr& ev) {
+    const auto& target = ev->Get()->Record.GetTarget();
+    
+    auto info = GetReloadStateRequestsInfo(target.GetUserName(), target.GetQueueName());
+    if (!info) {
+        info = new TReloadStateRequestsInfo();
+        info->User = target.GetUserName();
+        info->Queue = target.GetQueueName();
+        ReloadStateRequestsInfo_[target.GetUserName()][target.GetQueueName()] = info;
+    }
+
+    info->ReloadStateBorder = TActivationContext::Now();
+    if (info->RequestSendedAt == TInstant::Zero() && !info->LeaderNodeRequested) {
+        RequestLeaderNode(ReloadStateRequestId_, target.GetUserName(), target.GetQueueName());
+    }
+}
+
+void TSqsProxyService::HandleReloadStateResponse(TSqsEvents::TEvReloadStateResponse::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+    const auto& who = record.GetWho();
+    auto info = GetReloadStateRequestsInfo(who.GetUserName(), who.GetQueueName());
+    
+    if (!info) {
+        return;
+    }
+    ReloadStateRequestSended_[info->RequestSendedAt].erase(info);
+    TInstant reloadedAt = TInstant::MilliSeconds(record.GetReloadedAtMs());
+    if (reloadedAt < info->ReloadStateBorder) {
+        ScheduleReloadStateRequest(info);
+    } else {
+        RemoveReloadStateRequestsInfo(who.GetUserName(), who.GetQueueName());
+    }
+}
+
+
 STATEFN(TSqsProxyService::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TSqsEvents::TEvExecuted,              HandleExecuted);
@@ -160,6 +289,9 @@ STATEFN(TSqsProxyService::StateFunc) {
         hFunc(TEvInterconnect::TEvNodeConnected,    HandleConnect);
         hFunc(TEvents::TEvUndelivered,              HandleUndelivered);
         hFunc(TSqsEvents::TEvGetLeaderNodeForQueueResponse, HandleGetLeaderNodeForQueueResponse);
+        hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
+        hFunc(TSqsEvents::TEvReloadStateResponse, HandleReloadStateResponse);
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
     default:
         LOG_SQS_ERROR("Unknown type of event came to SQS service actor: " << ev->Type << " (" << ev->GetTypeName() << "), sender: " << ev->Sender);
     }

@@ -347,6 +347,19 @@
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
                 {"Index": 4, "Name": "Ast", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TKiModifyPermissions",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiModifyPermissions!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Action", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Permissions", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Pathes", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "Roles", "Type": "TCoAtomList"}
+            ]
         }
     ]
 }

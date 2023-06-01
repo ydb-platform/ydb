@@ -472,4 +472,7 @@ namespace NKikimr::NColumnShard {
             return arrow::RecordBatch::Make(Schema, RowsCount, columns);
         }
     };
+
+    NOlap::TIndexInfo BuildTableInfo(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+                         const std::vector<std::pair<TString, NScheme::TTypeInfo>>& key);
 }

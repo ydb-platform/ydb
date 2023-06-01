@@ -76,9 +76,10 @@ public:
             LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob "
                         << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
                         << TabletId << " (compaction)");
-            TxEvent->PutStatus = event.Status;
-            if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
-                TxEvent->PutStatus = NKikimrProto::ERROR;
+            if (event.Status == NKikimrProto::UNKNOWN) {
+                TxEvent->SetPutStatus(NKikimrProto::ERROR);
+            } else {
+                TxEvent->SetPutStatus(event.Status);
             }
         }
 
@@ -135,7 +136,7 @@ private:
 
     void CompactGranules(const TActorContext& ctx) {
         Y_VERIFY(TxEvent);
-        if (TxEvent->PutStatus != NKikimrProto::EReplyStatus::UNKNOWN) {
+        if (TxEvent->GetPutStatus() != NKikimrProto::EReplyStatus::UNKNOWN) {
             LOG_S_INFO("Granules compaction not started at tablet " << TabletId);
             ctx.Send(Parent, TxEvent.release());
             return;
@@ -146,11 +147,12 @@ private:
             TCpuGuard guard(TxEvent->ResourceUsage);
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-
-            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, GetCurrentCounters());
-            TxEvent->Blobs = compactionLogic.Apply(TxEvent->IndexChanges);
+            {
+                NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, GetCurrentCounters());
+                TxEvent->Blobs = std::move(compactionLogic.Apply(TxEvent->IndexChanges).DetachResult());
+            }
             if (TxEvent->Blobs.empty()) {
-                TxEvent->PutStatus = NKikimrProto::OK; // nothing to write, commit
+                TxEvent->SetPutStatus(NKikimrProto::OK); // nothing to write, commit
             }
         }
         TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;

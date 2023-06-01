@@ -58,7 +58,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         << ") changes: " << *changes << " at tablet " << Self->TabletID());
 
     bool ok = false;
-    if (Ev->Get()->PutStatus == NKikimrProto::OK) {
+    if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
         Y_VERIFY(Ev->Get()->IndexInfo.GetLastSchema()->GetSnapshot() <= snapshot);
 
@@ -246,52 +246,18 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     }
 
-    Self->TablesManager.MutablePrimaryIndex().FreeLocks(changes);
-
-    if (changes->IsInsert()) {
-        Self->ActiveIndexing = false;
-
-        Self->IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
-        Self->IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
-        Self->IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
-        Self->IncCounter(COUNTER_INDEXING_TIME, Ev->Get()->Duration.MilliSeconds());
-    } else if (changes->IsCompaction()) {
-        Self->ActiveCompaction--;
-
-        Y_VERIFY(changes->CompactionInfo);
-        bool inGranule = changes->CompactionInfo->InGranule();
-
-        if (inGranule) {
-            Self->IncCounter(ok ? COUNTER_COMPACTION_SUCCESS : COUNTER_COMPACTION_FAIL);
-            Self->IncCounter(COUNTER_COMPACTION_BLOBS_WRITTEN, blobsWritten);
-            Self->IncCounter(COUNTER_COMPACTION_BYTES_WRITTEN, bytesWritten);
-        } else {
-            Self->IncCounter(ok ? COUNTER_SPLIT_COMPACTION_SUCCESS : COUNTER_SPLIT_COMPACTION_FAIL);
-            Self->IncCounter(COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, blobsWritten);
-            Self->IncCounter(COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
-        }
-        Self->IncCounter(COUNTER_COMPACTION_TIME, Ev->Get()->Duration.MilliSeconds());
-    } else if (changes->IsCleanup()) {
-        Self->ActiveCleanup = false;
+    if (changes->IsCleanup()) {
         TriggerActivity = changes->NeedRepeat ? TBackgroundActivity::Cleanup() : TBackgroundActivity::None();
-
         Self->BlobManager->GetCleanupBlobs(BlobsToForget);
-
-        Self->IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
-        Self->ActiveTtl = false;
         //TriggerActivity = changes->NeedRepeat ? TBackgroundActivity::Ttl() : TBackgroundActivity::None();
 
         // Do not start new TTL till we evict current PortionsToEvict. We could evict them twice otherwise
         Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
         Self->ActiveEvictions = ExportTierBlobs.size();
-
-        Self->IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
-        Self->IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);
-        Self->IncCounter(COUNTER_EVICTION_BYTES_WRITTEN, bytesWritten);
     }
 
-    Self->UpdateResourceMetrics(ctx, Ev->Get()->ResourceUsage);
+    Self->FinishWriteIndex(ctx, Ev, ok, blobsWritten, bytesWritten);
     return true;
 }
 
@@ -299,7 +265,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
     LOG_S_DEBUG("TTxWriteIndex.Complete at tablet " << Self->TabletID());
 
-    if (Ev->Get()->PutStatus == NKikimrProto::TRYLATER) {
+    if (Ev->Get()->GetPutStatus() == NKikimrProto::TRYLATER) {
         ctx.Schedule(Self->FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
     } else {
         Self->EnqueueBackgroundActivities(false, TriggerActivity);
@@ -317,18 +283,64 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     Self->ForgetBlobs(ctx, BlobsToForget);
 }
 
+void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWriteIndex::TPtr& ev,
+                                    bool ok, ui64 blobsWritten, ui64 bytesWritten) {
+    auto changes = ev->Get()->IndexChanges;
+    Y_VERIFY(changes);
+
+   TablesManager.MutablePrimaryIndex().FreeLocks(changes);
+
+    if (changes->IsInsert()) {
+        ActiveIndexing = false;
+
+        IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
+        IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
+        IncCounter(COUNTER_INDEXING_TIME, ev->Get()->Duration.MilliSeconds());
+    } else if (changes->IsCompaction()) {
+        ActiveCompaction--;
+
+        Y_VERIFY(changes->CompactionInfo);
+        bool inGranule = changes->CompactionInfo->InGranule();
+
+        if (inGranule) {
+            IncCounter(ok ? COUNTER_COMPACTION_SUCCESS : COUNTER_COMPACTION_FAIL);
+            IncCounter(COUNTER_COMPACTION_BLOBS_WRITTEN, blobsWritten);
+            IncCounter(COUNTER_COMPACTION_BYTES_WRITTEN, bytesWritten);
+        } else {
+            IncCounter(ok ? COUNTER_SPLIT_COMPACTION_SUCCESS : COUNTER_SPLIT_COMPACTION_FAIL);
+            IncCounter(COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, blobsWritten);
+            IncCounter(COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
+        }
+        IncCounter(COUNTER_COMPACTION_TIME, ev->Get()->Duration.MilliSeconds());
+    } else if (changes->IsCleanup()) {
+        ActiveCleanup = false;
+
+        IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
+    } else if (changes->IsTtl()) {
+        ActiveTtl = false;
+
+        IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
+        IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(COUNTER_EVICTION_BYTES_WRITTEN, bytesWritten);
+    }
+
+    UpdateResourceMetrics(ctx, ev->Get()->ResourceUsage);
+}
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
-    auto& blobs = ev->Get()->Blobs;
+    auto putStatus = ev->Get()->GetPutStatus();
 
-    if (ev->Get()->PutStatus == NKikimrProto::UNKNOWN) {
+    if (putStatus == NKikimrProto::UNKNOWN) {
         if (IsAnyChannelYellowStop()) {
             LOG_S_ERROR("WriteIndex (out of disk space) at tablet " << TabletID());
 
             IncCounter(COUNTER_OUT_OF_SPACE);
-            ev->Get()->PutStatus = NKikimrProto::TRYLATER;
-            Execute(new TTxWriteIndex(this, ev), ctx);
+            ev->Get()->SetPutStatus(NKikimrProto::TRYLATER);
+            FinishWriteIndex(ctx, ev);
+            ctx.Schedule(FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
         } else {
+            auto& blobs = ev->Get()->Blobs;
             LOG_S_DEBUG("WriteIndex (" << blobs.size() << " blobs) at tablet " << TabletID());
 
             Y_VERIFY(!blobs.empty());
@@ -336,13 +348,13 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
                 BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
         }
     } else {
-        if (ev->Get()->PutStatus == NKikimrProto::OK) {
-            LOG_S_DEBUG("WriteIndex (records) at tablet " << TabletID());
+        if (putStatus == NKikimrProto::OK) {
+            LOG_S_DEBUG("WriteIndex at tablet " << TabletID());
         } else {
             LOG_S_INFO("WriteIndex error at tablet " << TabletID());
         }
 
-        OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+        OnYellowChannels(*ev->Get());
         Execute(new TTxWriteIndex(this, ev), ctx);
     }
 }

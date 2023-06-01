@@ -2326,10 +2326,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
     }
 
-    Y_UNIT_TEST(ShouldNotReadHeadFromFollower) {
+    Y_UNIT_TEST(ShouldReadHeadFromFollower) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -2338,13 +2338,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount, true);
 
-        TRowVersion someVersion = TRowVersion(10000, Max<ui64>());
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, someVersion);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
-        const auto& record = readResult->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
+
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+            {3, 3, 3, 300},
+        });
     }
 
     Y_UNIT_TEST(ShouldStopWhenNodeDisconnected) {

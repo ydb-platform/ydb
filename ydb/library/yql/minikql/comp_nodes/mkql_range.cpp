@@ -437,8 +437,8 @@ private:
 
     void DoIntersect(TComputationContext& ctx, TUnboxedValueQueue& current, TUnboxedValueQueue&& next) const {
         TUnboxedValueQueue result;
-        auto cmp = TypeInfos.front().RangeCompare;
-        auto boundaryCmp = TypeInfos.front().BoundaryCompare;
+        auto cmp = TypeInfos.front().RangeCompare.Get();
+        auto boundaryCmp = TypeInfos.front().BoundaryCompare.Get();
         while (!current.empty() && !next.empty()) {
             TUnboxedValueQueue* minInput;
             TUnboxedValueQueue* maxInput;

@@ -3,6 +3,8 @@
 #include "predicate/predicate.h"
 #include "index_logic_logs.h"
 
+#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+
 
 namespace NKikimr {
 
@@ -170,27 +172,6 @@ static const std::vector<std::pair<TString, TTypeInfo>> testKey = {
     {"uid", TTypeInfo(NTypeIds::Utf8) }
 };
 
-TIndexInfo TestTableInfo(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testColumns,
-                         const std::vector<std::pair<TString, TTypeInfo>>& key = testKey) {
-    TIndexInfo indexInfo = TIndexInfo::BuildDefault();
-
-    for (ui32 i = 0; i < ydbSchema.size(); ++i) {
-        ui32 id = i + 1;
-        auto& name = ydbSchema[i].first;
-        auto& type = ydbSchema[i].second;
-
-        indexInfo.Columns[id] = NTable::TColumn(name, id, type, "");
-        indexInfo.ColumnNames[name] = id;
-    }
-
-    for (const auto& [keyName, keyType] : key) {
-        indexInfo.KeyColumns.push_back(indexInfo.ColumnNames[keyName]);
-    }
-
-    indexInfo.SetAllKeys();
-    return indexInfo;
-}
-
 template <typename TKeyDataType>
 class TBuilder {
 public:
@@ -281,7 +262,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     changes->Blobs.insert(blobs.begin(), blobs.end());
 
     TIndexationLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
-    std::vector<TString> newBlobs = logic.Apply(changes);
+    std::vector<TString> newBlobs = std::move(logic.Apply(changes).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
 
@@ -306,7 +287,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     changes->SetBlobs(std::move(blobs));
 
     TCompactionLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
-    std::vector<TString> newBlobs = logic.Apply(changes);
+    std::vector<TString> newBlobs = std::move(logic.Apply(changes).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
 
@@ -357,7 +338,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     void WriteLoadRead(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
                        const std::vector<std::pair<TString, TTypeInfo>>& key) {
         TTestDbWrapper db;
-        TIndexInfo tableInfo = TestTableInfo(ydbSchema, key);
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
         std::vector<ui64> paths = {1, 2};
 
@@ -453,7 +434,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     void ReadWithPredicates(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
                             const std::vector<std::pair<TString, TTypeInfo>>& key) {
         TTestDbWrapper db;
-        TIndexInfo tableInfo = TestTableInfo(ydbSchema, key);
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(0, TestLimits());
@@ -552,7 +533,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexWriteOverload) {
         TTestDbWrapper db;
-        TIndexInfo tableInfo = TestTableInfo();
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
 
         ui64 pathId = 1;
         ui32 step = 1000;
@@ -634,7 +615,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexTtl) {
         TTestDbWrapper db;
-        TIndexInfo tableInfo = TestTableInfo();
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
 
         ui64 pathId = 1;
         ui32 step = 1000;

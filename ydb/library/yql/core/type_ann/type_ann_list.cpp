@@ -1816,7 +1816,7 @@ namespace {
         }
 
         if (!input->Head().GetTypeAnn()) {
-            YQL_ENSURE(input->Type() == TExprNode::Lambda);
+            YQL_ENSURE(input->Head().Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
                 << "Expected (optional) list or dict type, but got lambda"));
             return IGraphTransformer::TStatus::Error;
@@ -5354,7 +5354,7 @@ namespace {
 
             const TTypeAnnotationNode* originalResultType = nullptr;
             if (hasOriginalType) {
-                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();                
+                auto originalExtractorType = input->Child(3)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
                 originalResultType = GetOriginalResultType(input->Pos(), isMany, originalExtractorType, ctx.Expr);
                 if (!originalResultType) {
                     return IGraphTransformer::TStatus::Error;
@@ -5366,7 +5366,7 @@ namespace {
                 if (overState) {
                     if (argTypes.size() != 1) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                            "Expected only one argument")); 
+                            "Expected only one argument"));
                         return IGraphTransformer::TStatus::Error;
                     }
 

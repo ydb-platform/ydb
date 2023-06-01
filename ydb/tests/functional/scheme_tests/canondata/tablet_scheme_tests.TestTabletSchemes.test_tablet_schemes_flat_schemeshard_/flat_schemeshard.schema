@@ -6190,6 +6190,11 @@
                 "ColumnId": 8,
                 "ColumnName": "AwsRegion",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "ResolvedTimestampsIntervalMs",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -6203,7 +6208,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6268,6 +6274,11 @@
                 "ColumnId": 8,
                 "ColumnName": "AwsRegion",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "ResolvedTimestampsIntervalMs",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -6281,7 +6292,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,

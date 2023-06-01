@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-local_pgwire PUBLIC
   core-grpc_services-local_rpc
   ydb-core-protos
   ydb-core-pgproxy
+  ydb-core-ydb_convert
   api-grpc
   lib-operation_id-protos
 )

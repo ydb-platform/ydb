@@ -29,6 +29,7 @@ namespace NKikimr::NSsa {
 
 using EOperation = NArrow::EOperation;
 using EAggregate = NArrow::EAggregate;
+using TFunctionPtr = std::shared_ptr<arrow::compute::ScalarFunction>;
 
 const char * GetFunctionName(EOperation op);
 const char * GetFunctionName(EAggregate op);
@@ -36,8 +37,52 @@ const char * GetHouseFunctionName(EAggregate op);
 inline const char * GetHouseGroupByName() { return "ch.group_by"; }
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
+struct TDatumBatch {
+    std::shared_ptr<arrow::Schema> Schema;
+    std::vector<arrow::Datum> Datums;
+    int64_t Rows{};
+
+    arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
+    arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
+    std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
+    static std::shared_ptr<TDatumBatch> FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch);
+};
+
+template <class TAssignObject>
+class IStepFunction {
+    using TSelf = IStepFunction<TAssignObject>;
+protected:
+    arrow::compute::ExecContext* Ctx;
+public:
+    using TPtr = std::shared_ptr<TSelf>;
+
+    IStepFunction(arrow::compute::ExecContext* ctx)
+        : Ctx(ctx)
+    {}
+
+    virtual ~IStepFunction() {}
+
+    virtual arrow::Result<arrow::Datum> Call(const TAssignObject& assign, const TDatumBatch& batch) const = 0;
+
+protected:
+    std::optional<std::vector<arrow::Datum>> BuildArgs(const TDatumBatch& batch, const std::vector<std::string>& args) const {
+        std::vector<arrow::Datum> arguments;
+        arguments.reserve(args.size());
+        for (auto& colName : args) {
+            auto column = batch.GetColumnByName(colName);
+            if (!column.ok()) {
+                return {};
+            }
+            arguments.push_back(*column);
+        }
+        return std::move(arguments);
+    }
+};
+
 class TAssign {
 public:
+    using TOperationType = EOperation;
+
     TAssign(const std::string& name, EOperation op, std::vector<std::string>&& args)
         : Name(name)
         , Operation(ValidateOperation(op, args.size()))
@@ -115,24 +160,38 @@ public:
         , FuncOpts(nullptr)
     {}
 
+    TAssign(const std::string& name,
+            TFunctionPtr kernelFunction,
+            std::vector<std::string>&& args,
+            std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
+        : Name(name)
+        , Arguments(std::move(args))
+        , FuncOpts(funcOpts)
+        , KernelFunction(kernelFunction)
+    {}
+
     bool IsConstant() const { return Operation == EOperation::Constant; }
-    bool IsOk() const { return Operation != EOperation::Unspecified; }
+    bool IsOk() const { return Operation != EOperation::Unspecified || !!KernelFunction; }
     EOperation GetOperation() const { return Operation; }
     const std::vector<std::string>& GetArguments() const { return Arguments; }
     std::shared_ptr<arrow::Scalar> GetConstant() const { return Constant; }
     const std::string& GetName() const { return Name; }
-    const arrow::compute::FunctionOptions* GetFunctionOptions() const { return FuncOpts.get(); }
+    const arrow::compute::FunctionOptions* GetOptions() const { return FuncOpts.get(); }
 
+    IStepFunction<TAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
 private:
     std::string Name;
     EOperation Operation{EOperation::Unspecified};
     std::vector<std::string> Arguments;
     std::shared_ptr<arrow::Scalar> Constant;
     std::shared_ptr<arrow::compute::FunctionOptions> FuncOpts;
+    TFunctionPtr KernelFunction;
 };
 
 class TAggregateAssign {
 public:
+    using TOperationType = EAggregate;
+
     TAggregateAssign(const std::string& name, EAggregate op = EAggregate::Unspecified)
         : Name(name)
         , Operation(op)
@@ -152,19 +211,31 @@ public:
         }
     }
 
-    bool IsOk() const { return Operation != EAggregate::Unspecified; }
+    TAggregateAssign(const std::string& name,
+            TFunctionPtr kernelFunction,
+            std::vector<std::string>&& args)
+        : Name(name)
+        , Arguments(std::move(args))
+        , KernelFunction(kernelFunction)
+    {}
+
+    bool IsOk() const { return Operation != EAggregate::Unspecified || !!KernelFunction; }
     EAggregate GetOperation() const { return Operation; }
     const std::vector<std::string>& GetArguments() const { return Arguments; }
     std::vector<std::string>& MutableArguments() { return Arguments; }
     const std::string& GetName() const { return Name; }
-    const arrow::compute::ScalarAggregateOptions& GetAggregateOptions() const { return ScalarOpts; }
+    const arrow::compute::ScalarAggregateOptions* GetOptions() const { return &ScalarOpts; }
+    
+    IStepFunction<TAggregateAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
 
 private:
     std::string Name;
     EAggregate Operation{EAggregate::Unspecified};
     std::vector<std::string> Arguments;
     arrow::compute::ScalarAggregateOptions ScalarOpts; // TODO: make correct options
+    TFunctionPtr KernelFunction;
 };
+
 
 /// Group of commands that finishes with projection. Steps add locality for columns definition.
 ///
@@ -182,16 +253,7 @@ struct TProgramStep {
     std::vector<std::string> GroupByKeys; // TODO: it's possible to use them without GROUP BY for DISTINCT
     std::vector<std::string> Projection; // Step's result columns (remove others)
 
-    struct TDatumBatch {
-        std::shared_ptr<arrow::Schema> Schema;
-        std::vector<arrow::Datum> Datums;
-        int64_t Rows{};
-
-        arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
-        arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
-        std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
-        static std::shared_ptr<TProgramStep::TDatumBatch> FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch);
-    };
+    using TDatumBatch = TDatumBatch;
 
     std::set<std::string> GetColumnsInUsage() const;
 
@@ -207,7 +269,7 @@ struct TProgramStep {
     arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
     arrow::Status ApplyProjection(TDatumBatch& batch) const;
 
-   arrow::Status MakeCombinedFilter(TDatumBatch& batch, NArrow::TColumnFilter& result) const;
+    arrow::Status MakeCombinedFilter(TDatumBatch& batch, NArrow::TColumnFilter& result) const;
 };
 
 struct TProgram {

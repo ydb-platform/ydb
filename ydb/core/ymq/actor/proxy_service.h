@@ -47,6 +47,19 @@ struct TReplierToSenderActorCallback : public IReplyCallback {
 class TSqsProxyService
     : public TActorBootstrapped<TSqsProxyService>
 {
+private:
+    struct TReloadStateRequestsInfo : public TAtomicRefCount<TReloadStateRequestsInfo> {
+        TString User;
+        TString Queue;
+
+        TInstant RequestSendedAt;
+        TInstant ReloadStateBorder;
+        bool PlannedToSend = false;
+        bool LeaderNodeRequested = false;
+    };
+
+    using TReloadStateRequestsInfoPtr = TIntrusivePtr<TReloadStateRequestsInfo>;
+
 public:
     struct TNodeInfo;
     using TNodeInfoRef = TIntrusivePtr<TNodeInfo>;
@@ -69,6 +82,15 @@ private:
     void SendProxyError(TProxyRequestInfoRef request, TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus);
     void SendProxyErrors(TNodeInfo& nodeInfo, TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus);
 
+
+    TReloadStateRequestsInfoPtr GetReloadStateRequestsInfo(const TString& user, const TString& queue);
+    void RemoveReloadStateRequestsInfo(const TString& user, const TString& queue);
+    void ScheduleReloadStateRequest(TReloadStateRequestsInfoPtr info);
+    void SendReloadStateIfNeeded(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev);
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
+    void RequestLeaderNode(TReloadStateRequestsInfoPtr info);
+    void RequestLeaderNode(const TString& reqId, const TString& user, const TString& queue);
+
 private:
     STATEFN(StateFunc);
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
@@ -80,6 +102,8 @@ private:
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void HandleDisconnect(ui32 nodeId);
     void HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev);
+    void HandleReloadStateRequest(TSqsEvents::TEvReloadStateRequest::TPtr& ev);
+    void HandleReloadStateResponse(TSqsEvents::TEvReloadStateResponse::TPtr& ev);
 
 private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCounters_;
@@ -89,6 +113,12 @@ private:
     THashMap<ui32, TNodeInfoRef> NodesInfo_;
 
     THashMap<TString, TProxyRequestInfoRef> RequestsToProxy_;
+
+    THashMap<TString, THashMap<TString, TReloadStateRequestsInfoPtr>> ReloadStateRequestsInfo_;
+    TDeque<std::pair<TInstant, TReloadStateRequestsInfoPtr>> ReloadStatePlanningToSend_;
+    TMap<TInstant, THashSet<TReloadStateRequestsInfoPtr>> ReloadStateRequestSended_;
+    TString ReloadStateRequestId_;
+    
 };
 
 } // namespace NKikimr::NSQS

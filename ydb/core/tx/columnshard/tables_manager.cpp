@@ -289,7 +289,8 @@ std::shared_ptr<NOlap::TColumnEngineChanges> TTablesManager::StartIndexCleanup(c
 }
 
 NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfo = NOlap::TIndexInfo::BuildFromProto(schema);
+    bool forceCompositeMarks = AppData()->FeatureFlags.GetForceColumnTablesCompositeMarks();
+    std::optional<NOlap::TIndexInfo> indexInfo = NOlap::TIndexInfo::BuildFromProto(schema, forceCompositeMarks);
     Y_VERIFY(indexInfo);
     return *indexInfo;
 }

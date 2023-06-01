@@ -190,8 +190,9 @@ public:
         return result;
     }
 
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-        TIndexInfo result("", 0, schema.GetCompositeMarks());
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
+                                                    bool forceCompositeMarks) {
+        TIndexInfo result("", 0, forceCompositeMarks || schema.GetCompositeMarks());
         if (!result.DeserializeFromProto(schema)) {
             return {};
         }
@@ -276,6 +277,10 @@ public:
 
      /// Returns whether the replace keys defined.
     bool IsReplacing() const { return ReplaceKey.get(); }
+
+    bool IsCompositeIndexKey() const {
+        return CompositeIndexKey;
+    }
 
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;

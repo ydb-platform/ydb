@@ -66,7 +66,11 @@ public:
         , Settings(settings)
         , ServiceCounters(serviceCounters, "task_controller")
         , PingPeriod(pingPeriod)
-        , AggrPeriod(aggrPeriod)
+        , AggrPeriod(
+            settings->AggregateStatsByStage.Get().GetOrElse(TDqSettings::TDefault::AggregateStatsByStage)
+            ? aggrPeriod
+            : TDuration::Zero()
+        )
         , Issues(CreateDefaultTimeProvider())
     {
         if (Settings) {
@@ -333,15 +337,19 @@ private:
         YQL_ENSURE(x.GetTasks().size() == 1);
         auto& s = x.GetTasks(0);
         ui64 taskId = s.GetTaskId();
+        ui64 stageId = s.GetStageId();
 
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
         }
 
-        std::map<TString, TString> labels = {
-            {"Task", ToString(taskId)}
+        std::map<TString, TString> commonLabels = {
+            {"Task", ToString(taskId)},
+            {"Stage", ToString(stageId)}
         };
+
+        auto labels = commonLabels;
 
         auto& stats = s;
         // basic stats
@@ -399,10 +407,8 @@ private:
 //        }
 
         for (const auto& stats : s.GetInputChannels()) {
-            std::map<TString, TString> labels = {
-                {"Task", ToString(taskId)},
-                {"InputChannel", ToString(stats.GetChannelId())}
-            };
+            auto labels = commonLabels;
+            labels["InputChannel"] = ToString(stats.GetChannelId());
 
             ADD_COUNTER(Chunks);
             ADD_COUNTER(Bytes);
@@ -417,10 +423,8 @@ private:
         }
 
         for (const auto& stats : s.GetOutputChannels()) {
-            std::map<TString, TString> labels = {
-                {"Task", ToString(taskId)},
-                {"OutputChannel", ToString(stats.GetChannelId())}
-            };
+            auto labels = commonLabels;
+            labels["OutputChannel"] = ToString(stats.GetChannelId());
 
             ADD_COUNTER(Chunks)
             ADD_COUNTER(Bytes);
@@ -441,10 +445,8 @@ private:
         }
 
         for (const auto& stats : s.GetSources()) {
-            std::map<TString, TString> labels = {
-                {"Task", ToString(taskId)},
-                {"Source", ToString(stats.GetInputIndex())}
-            };
+            auto labels = commonLabels;
+            labels["Source"] = ToString(stats.GetInputIndex());
 
             ADD_COUNTER(Chunks);
             ADD_COUNTER(Bytes);
@@ -461,10 +463,8 @@ private:
         }
 
         for (const auto& stats : s.GetSinks()) {
-            std::map<TString, TString> labels = {
-                {"Task", ToString(taskId)},
-                {"Sink", ToString(stats.GetOutputIndex())}
-            };
+            auto labels = commonLabels;
+            labels["Sink"] = ToString(stats.GetOutputIndex());
 
             ADD_COUNTER(Chunks)
             ADD_COUNTER(Bytes);

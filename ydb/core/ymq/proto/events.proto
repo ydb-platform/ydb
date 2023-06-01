@@ -1,0 +1,15 @@
+package NKikimr.NSQS;
+
+message TQueueInfo {
+    optional string UserName = 1;
+    optional string QueueName = 2;
+}
+
+message TReloadStateRequest {
+    optional TQueueInfo Target = 1;
+}
+
+message TReloadStateResponse {
+    optional TQueueInfo Who = 1;
+    optional uint64 ReloadedAtMs = 2;  
+}

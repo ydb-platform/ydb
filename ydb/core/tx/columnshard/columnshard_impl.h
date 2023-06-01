@@ -195,10 +195,8 @@ class TColumnShard
         return Executor()->GetStats().IsAnyChannelYellowMove;
     }
 
-    void OnYellowChannels(TVector<ui32>&& yellowMove, TVector<ui32>&& yellowStop) {
-        if (yellowMove.size() || yellowStop.size()) {
-            Executor()->OnYellowChannels(std::move(yellowMove), std::move(yellowStop));
-        }
+    void OnYellowChannels(TPutStatus& putStatus) {
+        putStatus.OnYellowChannels(Executor());
     }
 
     void SetCounter(NColumnShard::ESimpleCounters counter, ui64 num) const {
@@ -384,7 +382,7 @@ private:
     const TScanCounters ScanCounters;
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
-    
+
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;
@@ -458,6 +456,8 @@ private:
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
 
+    void FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWriteIndex::TPtr& ev,
+                        bool ok = false, ui64 blobsWritten = 0, ui64 bytesWritten = 0);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
     TActorId GetS3ActorForTier(const TString& tierId) const;
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName, ui64 pathId,

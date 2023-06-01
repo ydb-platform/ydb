@@ -211,11 +211,16 @@ public:
         }
     }
 
-    NArrow::TReplaceKey DeserializeMark(const TString& key) const override {
-        if (UseCompositeMarks()) {
+    NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const override {
+        if (markNumKeys) {
+            Y_VERIFY(*markNumKeys == (ui32)MarkSchema()->num_fields());
             return TMark::DeserializeComposite(key, MarkSchema());
         } else {
-            return TMark::DeserializeScalar(key, MarkSchema());
+            NArrow::TReplaceKey markKey = TMark::DeserializeScalar(key, MarkSchema());
+            if (UseCompositeMarks()) {
+                return TMark::ExtendBorder(markKey, MarkSchema());
+            }
+            return markKey;
         }
     }
 
@@ -302,8 +307,8 @@ private:
         return *CachedDefaultMark;
     }
 
-    bool UseCompositeMarks() const {
-        return MarkSchema()->num_fields() > 1;
+    bool UseCompositeMarks() const noexcept {
+        return GetIndexInfo().IsCompositeIndexKey();
     }
 
     void ClearIndex() {

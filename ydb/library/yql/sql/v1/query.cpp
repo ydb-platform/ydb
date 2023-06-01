@@ -165,6 +165,9 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.VirtualTimestamps) {
         settings = node.L(settings, node.Q(node.Y(node.Q("virtual_timestamps"), desc.Settings.VirtualTimestamps)));
     }
+    if (desc.Settings.ResolvedTimestamps) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("resolved_timestamps"), desc.Settings.ResolvedTimestamps)));
+    }
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
     }
@@ -1883,6 +1886,109 @@ TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const 
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped) {
     return new TDropRoles(pos, service, cluster, toDrop, isUser, force, scoped);
+}
+
+class TPermissionsAction final : public TAstListNode {
+public:
+    struct TPermissionParameters {
+        TString PermissionAction;
+        TVector<TDeferredAtom> Permissions;
+        TVector<TDeferredAtom> SchemaPathes;
+        TVector<TDeferredAtom> RoleNames;
+    };
+
+    TPermissionsAction(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TPermissionParameters& parameters, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Service(service)
+        , Cluster(cluster)
+        , Parameters(parameters)
+        , Scoped(scoped)
+    {
+        FakeSource = BuildFakeSource(pos);
+        scoped->UseCluster(service, cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
+        TNodePtr permissionAction = TDeferredAtom(Pos, Parameters.PermissionAction).Build();
+
+        if (!permissionAction->Init(ctx, FakeSource.Get()) ||
+            !cluster->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        TVector<TNodePtr> pathes;
+        pathes.reserve(Parameters.SchemaPathes.size());
+        for (auto& item : Parameters.SchemaPathes) {
+            pathes.push_back(item.Build());
+            if (!pathes.back()->Init(ctx, FakeSource.Get())) {
+                return false;
+            }
+        }
+        auto options = Y(Q(Y(Q("pathes"), Q(new TAstListNodeImpl(Pos, std::move(pathes))))));
+
+        TVector<TNodePtr> permissions;
+        permissions.reserve(Parameters.Permissions.size());
+        for (auto& item : Parameters.Permissions) {
+            permissions.push_back(item.Build());
+            if (!permissions.back()->Init(ctx, FakeSource.Get())) {
+                return false;
+            }
+        }
+        options = L(options, Q(Y(Q("permissions"), Q(new TAstListNodeImpl(Pos, std::move(permissions))))));
+
+        TVector<TNodePtr> roles;
+        roles.reserve(Parameters.RoleNames.size());
+        for (auto& item : Parameters.RoleNames) {
+            roles.push_back(item.Build());
+            if (!roles.back()->Init(ctx, FakeSource.Get())) {
+                return false;
+            }
+        }
+        options = L(options, Q(Y(Q("roles"), Q(new TAstListNodeImpl(Pos, std::move(roles))))));
+
+        auto block = Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)));
+        block = L(block, Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("permission"), Y("String", permissionAction)))), Y("Void"), Q(options))));
+        block = L(block, Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")));
+        Add("block", Q(block));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+
+private:
+    const TString Service;
+    TDeferredAtom Cluster;
+    TPermissionParameters Parameters;
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPathes, const TVector<TDeferredAtom>& roleNames, TScopedStatePtr scoped) {
+    return new TPermissionsAction(pos,
+                                  service,
+                                  cluster,
+                                  {.PermissionAction = "grant",
+                                               .Permissions = permissions,
+                                               .SchemaPathes = schemaPathes,
+                                               .RoleNames = roleNames},
+                                  scoped);
+}
+
+TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPathes, const TVector<TDeferredAtom>& roleNames, TScopedStatePtr scoped) {
+    return new TPermissionsAction(pos,
+                                  service,
+                                  cluster,
+                                  {.PermissionAction = "revoke",
+                                               .Permissions = permissions,
+                                               .SchemaPathes = schemaPathes,
+                                               .RoleNames = roleNames},
+                                  scoped);
 }
 
 class TAsyncReplication

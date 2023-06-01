@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
             .SetEnableBackgroundTasks(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetForceColumnTablesCompositeMarks(true);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);

@@ -5,6 +5,28 @@
 #include <arrow/compute/exec_internal.h>
 #include <arrow/array/builder_primitive.h>
 
+#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
+
+BEGIN_SIMPLE_ARROW_UDF(TInc, i32(i32)) {
+    Y_UNUSED(valueBuilder);
+    const i32 arg = args[0].Get<i32>();
+    return NYql::NUdf::TUnboxedValuePod(arg + 1);
+}
+
+struct TIncKernelExec : public NYql::NUdf::TUnaryKernelExec<TIncKernelExec> {
+    template <typename TSink>
+    static void Process(NYql::NUdf::TBlockItem arg, const TSink& sink) {
+        sink(NYql::NUdf::TBlockItem(arg.As<i32>() + 1));
+    }
+};
+
+END_SIMPLE_ARROW_UDF(TInc, TIncKernelExec::Do);
+
+SIMPLE_MODULE(TBlockUTModule,
+    TInc
+)
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -14,6 +36,11 @@ namespace {
         const auto& kernel = kernelNode->GetArrowKernel();        
         arrow::compute::KernelContext kernelContext(&execContext);
         std::unique_ptr<arrow::compute::KernelState> state;
+        if (kernel.init) {
+            state = ARROW_RESULT(kernel.init(&kernelContext, { &kernel, kernelNode->GetArgsDesc(), nullptr }));
+            kernelContext.SetState(state.get());
+        }
+
         auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
         ARROW_OK(executor->Init(&kernelContext, { &kernel, kernelNode->GetArgsDesc(), nullptr }));
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
@@ -600,6 +627,56 @@ Y_UNIT_TEST(WithScalars) {
     auto res = datums.back().array()->GetValues<ui64>(1);
     for (size_t i = 0; i < blockSize; ++i) {
         auto expected = 3 * i;
+        UNIT_ASSERT_VALUES_EQUAL(res[i], expected);
+    }
+}
+
+Y_UNIT_TEST(Udf) {
+    TVector<TUdfModuleInfo> modules;
+    modules.emplace_back(TUdfModuleInfo{"", "BlockUT", new TBlockUTModule()});
+    TSetup<false> setup({}, std::move(modules));
+
+    auto& pb = *setup.PgmBuilder;
+
+    const auto i32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
+    const auto i32BlocksType = pb.NewBlockType(i32Type, TBlockType::EShape::Many);
+    const auto arg1 = pb.Arg(i32BlocksType);
+    const auto userType = pb.NewTupleType({
+        pb.NewTupleType({i32BlocksType}),
+        pb.NewEmptyStructType(),
+        pb.NewEmptyTupleType()});
+    const auto udf = pb.Udf("BlockUT.Inc_BlocksImpl", pb.NewVoid(), userType);
+    const auto apply = pb.Apply(udf, {arg1});
+
+    const auto graph = setup.BuildGraph(apply, {arg1.GetNode() });
+    const auto topology = graph->GetKernelsTopology();
+    UNIT_ASSERT(topology);
+    UNIT_ASSERT_VALUES_EQUAL(topology->InputArgsCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Node->GetKernelName(), "Apply");
+    const std::vector<ui32> expectedInputs1{0};
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
+
+    arrow::compute::ExecContext execContext;
+    const size_t blockSize = 100000;
+    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    {
+        arrow::Int32Builder builder1(execContext.memory_pool());
+        ARROW_OK(builder1.Reserve(blockSize));
+        for (size_t i = 0; i < blockSize; ++i) {
+            builder1.UnsafeAppend(i);
+        }
+
+        std::shared_ptr<arrow::ArrayData> data1;
+        ARROW_OK(builder1.FinishInternal(&data1));
+        datums[0] = data1;
+    }
+
+    ExecuteAllKernels(datums, topology, execContext);
+
+    auto res = datums.back().array()->GetValues<i32>(1);
+    for (size_t i = 0; i < blockSize; ++i) {
+        auto expected = i + 1;
         UNIT_ASSERT_VALUES_EQUAL(res[i], expected);
     }
 }

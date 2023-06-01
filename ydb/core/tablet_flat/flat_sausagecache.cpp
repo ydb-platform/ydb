@@ -42,9 +42,8 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     }
 }
 
-TPrivatePageCache::TPrivatePageCache(const TCacheCacheConfig &cacheConfig, bool prepareForSharedCache)
+TPrivatePageCache::TPrivatePageCache(const TCacheCacheConfig &cacheConfig)
     : Cache(cacheConfig)
-    , PrepareForSharedCache(prepareForSharedCache)
 {
 }
 
@@ -53,13 +52,27 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     Y_VERIFY(itpair.second, "double registration of page collection is forbidden. logic flaw?");
     ++Stats.TotalCollections;
 
-    TPage* evicted = nullptr;
-
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
         Y_VERIFY_DEBUG(page);
         if (page->LoadState == TPage::LoadStateLoaded && !page->Sticky) {
-            evicted = TPage::Join(evicted, Cache.Touch(page));
+            auto &x = ToTouchShared[page->Info->Id][page->Id];
+            if (!page->SharedPending && !page->SharedBody && page->PinnedBody) {
+                // We keep pinned body around until it's either
+                // accepted or dropped by the shared cache
+                page->SharedPending = true;
+                x = page->PinnedBody;
+            }
+
+            if (!page->PinPad) {
+                page->LoadState = TPage::LoadStateNo;
+                if (!page->SharedPending && page->PinnedBody) {
+                    page->PinnedBody = { };
+                }
+                page->SharedBody.UnUse();
+            }
+
+            Y_VERIFY_DEBUG(!page->IsUnnecessary());
         }
         if (page->SharedBody)
             Stats.TotalSharedBody += page->Size;
@@ -67,11 +80,11 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
             Stats.TotalPinnedBody += page->Size;
         if (page->PinnedBody && !page->SharedBody)
             Stats.TotalExclusive += page->Size;
+        if (page->SharedPending)
+            Stats.TotalSharedPending += page->Size;
         if (page->Sticky)
             Stats.TotalSticky += page->Size;
     }
-
-    Evict(evicted);
 
     ++info->Users;
 }
@@ -419,16 +432,14 @@ void TPrivatePageCache::Evict(TPage *pages) {
         case TPage::LoadStateRequested:
         case TPage::LoadStateRequestedAsync:
             break;
-        case TPage::LoadStateLoaded:
-            if (PrepareForSharedCache) {
-                auto &x = ToTouchShared[page->Info->Id][page->Id];
-                if (!page->SharedPending && !page->SharedBody && page->PinnedBody) {
-                    // We keep pinned body around until it's either
-                    // accepted or dropped by the shared cache
-                    Stats.TotalSharedPending += page->Size;
-                    page->SharedPending = true;
-                    x = page->PinnedBody;
-                }
+        case TPage::LoadStateLoaded: {
+            auto &x = ToTouchShared[page->Info->Id][page->Id];
+            if (!page->SharedPending && !page->SharedBody && page->PinnedBody) {
+                // We keep pinned body around until it's either
+                // accepted or dropped by the shared cache
+                Stats.TotalSharedPending += page->Size;
+                page->SharedPending = true;
+                x = page->PinnedBody;
             }
 
             if (!page->PinPad) {
@@ -446,6 +457,7 @@ void TPrivatePageCache::Evict(TPage *pages) {
             }
 
             break;
+        }
         default:
             Y_FAIL("unknown load state");
         }

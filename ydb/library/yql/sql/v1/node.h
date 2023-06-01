@@ -1195,6 +1195,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Format;
         TNodePtr InitialScan;
         TNodePtr VirtualTimestamps;
+        TNodePtr ResolvedTimestamps;
         TNodePtr RetentionPeriod;
         TNodePtr AwsRegion;
         std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
@@ -1474,6 +1475,8 @@ namespace NSQLTranslationV1 {
         TScopedStatePtr scoped);
     TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
     TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped);
+    TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPathes, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
+    TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPathes, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
     TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,

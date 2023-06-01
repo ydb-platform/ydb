@@ -569,6 +569,11 @@ namespace {
         using TMethod = std::function<void(TString&&, NYql::TAlterGroupSettings::EAction, std::vector<TString>&&)>;
         TMethod SendNextRole;
     };
+
+    struct TModifyPermissionsWrapper : public TThrRefBase {
+        using TMethod = std::function<void(NYql::TModifyPermissionsSettings::EAction action, THashSet<TString>&& permissions, THashSet<TString>&& roles, TVector<TString>&& pathes)>;
+        TMethod ModifyPermissionsForPathes;
+    };
 }
 
 class TKikimrIcGateway : public IKqpGateway {
@@ -1179,6 +1184,120 @@ public:
             NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
             drop.SetName(pathPair.second);
             return SendSchemeRequest(ev.Release());
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> ModifyPermissions(const TString& cluster, const NYql::TModifyPermissionsSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            if (settings.Permissions.empty() && !settings.IsPermissionsClear) {
+                return MakeFuture(ResultFromError<TGenericResult>("No permissions names for modify permissions"));
+            }
+
+            if (settings.Pathes.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No pathes for modify permissions"));
+            }
+
+            if (settings.Roles.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No roles for modify permissions"));
+            }
+
+            TVector<TPromise<TGenericResult>> promises;
+            promises.reserve(settings.Pathes.size());
+            TVector<TFuture<TGenericResult>> futures;
+            futures.reserve(settings.Pathes.size());
+
+            NACLib::TDiffACL acl;
+            switch (settings.Action) {
+                case NYql::TModifyPermissionsSettings::EAction::Grant: {
+                    for (const auto& sid : settings.Roles) {
+                        for (const auto& permission : settings.Permissions) {
+                            TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                            acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                        }
+                    }
+                }
+                break;
+                case NYql::TModifyPermissionsSettings::EAction::Revoke: {
+                    if (settings.IsPermissionsClear) {
+                        for (const auto& sid : settings.Roles) {
+                            acl.ClearAccessForSid(sid);
+                        }
+                    } else {
+                        for (const auto& sid : settings.Roles) {
+                            for (const auto& permission : settings.Permissions) {
+                                TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                                acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                            }
+                        }
+                    }
+                }
+                break;
+                default: {
+                    return MakeFuture(ResultFromError<TGenericResult>("Unknown permission action"));
+                }
+            }
+
+            const auto serializedDiffAcl = acl.SerializeAsString();
+
+            TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
+            pathPairs.reserve(settings.Pathes.size());
+            for (const auto& path : settings.Pathes) {
+                pathPairs.push_back(std::make_pair(&path, SplitPathByDirAndBaseNames(path)));
+            }
+
+            for (const auto& path : pathPairs) {
+                promises.push_back(NewPromise<TGenericResult>());
+                futures.push_back(promises.back().GetFuture());
+
+                auto ev = MakeHolder<TRequest>();
+                auto& record = ev->Record;
+                record.SetDatabaseName(Database);
+                if (UserToken) {
+                    record.SetUserToken(UserToken->GetSerializedToken());
+                }
+
+                const auto& [dirname, basename] = path.second;
+                NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+                modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+                modifyScheme->SetWorkingDir(dirname);
+                modifyScheme->MutableModifyACL()->SetName(basename);
+
+                modifyScheme->MutableModifyACL()->SetDiffACL(serializedDiffAcl);
+                SendSchemeRequest(ev.Release()).Apply([promise = promises.back(), path = *path.first](const TFuture<TGenericResult>& future) mutable{
+                    auto result = future.GetValue();
+                    if (!result.Success()) {
+                        result.AddIssue(NYql::TIssue("Error for the path: " + path));
+                    }
+                    promise.SetValue(result);
+                });
+            }
+
+            return WaitAll(futures).Apply([futures](const TFuture<void>& f){
+                Y_UNUSED(f);
+                TGenericResult result;
+                result.SetSuccess();
+                bool isSuccess = true;
+                for (const auto& future : futures) {
+                    TGenericResult receivedResult = future.GetValue();
+                    if (!receivedResult.Success()) {
+                        isSuccess = false;
+                        result.AddIssues(receivedResult.Issues());
+                    }
+                }
+                if (!isSuccess) {
+                    result.SetStatus(TIssuesIds::DEFAULT_ERROR);
+                }
+                return result;
+            });
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -2061,6 +2180,14 @@ private:
     }
 
 private:
+    static std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
+        auto splitPos = path.find_last_of('/');
+        if (splitPos == path.npos || splitPos + 1 == path.size()) {
+            ythrow yexception() << "wrong path format '" << path << "'" ;
+        }
+        return {path.substr(0, splitPos), path.substr(splitPos + 1)};
+    }
+
     static TListPathResult GetListPathResult(const TPathDescription& pathDesc, const TString& path) {
         if (pathDesc.GetSelf().GetPathType() != EPathTypeDir) {
             return ResultFromError<TListPathResult>(TString("Directory not found: ") + path);

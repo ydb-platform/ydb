@@ -753,7 +753,7 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     } else {
         std::sort(points.begin(), points.end(),
             [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-                return a.LessNotNull(b);
+                return a.CompareNotNull(b) == std::partial_ordering::less;
             }
         );
     }

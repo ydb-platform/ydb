@@ -11,7 +11,8 @@ using namespace NKikimr::NMiniKQL;
 template <typename F>
 void TestOne(F&& f) {
     TExprContext ctx;
-    auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
+    auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+    FillStaticModules(*functionRegistry);
     auto nodeFactory = GetBuiltinFactory();
     TKernelRequestBuilder b(*functionRegistry);
     auto index = f(b, ctx);
@@ -81,4 +82,14 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Div, blockInt32Type, blockInt32Type, blockOptInt32Type);
         });
     }
+
+    Y_UNIT_TEST(TestUdf) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockOptStringType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TOptionalExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::String)));
+            return b.Udf("Url.GetHost", false, { blockOptStringType }, blockOptStringType) ;
+        });
+    }
+
 }

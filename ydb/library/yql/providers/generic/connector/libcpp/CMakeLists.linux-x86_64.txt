@@ -19,7 +19,7 @@ target_link_libraries(generic-connector-libcpp PUBLIC
   library-yql-ast
   yql-public-issue
   library-yql-utils
-  api
+  generic-connector-api
 )
 target_sources(generic-connector-libcpp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/client_grpc.cpp

@@ -26,22 +26,22 @@ get_built_tool_path(
   cpp_styleguide
 )
 
-add_library(api)
-set_property(TARGET api PROPERTY
+add_library(generic-connector-api)
+set_property(TARGET generic-connector-api PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
-target_link_libraries(api PUBLIC
+target_link_libraries(generic-connector-api PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
-  api-protos
+  connector-api-protos
   contrib-libs-protobuf
 )
-target_proto_messages(api PRIVATE
+target_proto_messages(generic-connector-api PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/connector.proto
 )
-target_proto_addincls(api
+target_proto_addincls(generic-connector-api
   ./
   ${CMAKE_SOURCE_DIR}/
   ${CMAKE_BINARY_DIR}
@@ -50,11 +50,11 @@ target_proto_addincls(api
   ${CMAKE_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
-target_proto_outs(api
+target_proto_outs(generic-connector-api
   --cpp_out=${CMAKE_BINARY_DIR}/
   --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
 )
-target_proto_plugin(api
+target_proto_plugin(generic-connector-api
   grpc_cpp
   grpc_cpp
 )

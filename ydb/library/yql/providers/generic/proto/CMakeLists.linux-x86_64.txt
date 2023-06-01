@@ -36,7 +36,7 @@ target_link_libraries(providers-generic-proto PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  api-protos
+  connector-api-protos
   contrib-libs-protobuf
 )
 target_proto_messages(providers-generic-proto PRIVATE

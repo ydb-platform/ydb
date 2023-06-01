@@ -6,6 +6,8 @@ on:
       - 'stable-*'
     paths-ignore:
       - 'ydb/docs/**'
+      - '.github/**'
+      - '*'
     types:
       - 'opened'
       - 'synchronize'

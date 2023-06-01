@@ -203,16 +203,21 @@ NYdb::TParams CreateParamsAsItems(const TVector<TValue>& values, const TVector<T
 }
 
 NYdb::TParams CreateParamsAsList(const TVector<NYdb::TValue>& batch, const TString& paramName) {
+    NYdb::TParamsBuilder paramsBuilder;
+    AddParamsAsList(paramsBuilder, batch, paramName);
+    return paramsBuilder.Build();
+}
+
+void AddParamsAsList(NYdb::TParamsBuilder& paramsBuilder, const TVector<NYdb::TValue>& batch, const TString& paramName) {
     TValueBuilder builder;
     builder.BeginList();
 
-    for (const NYdb::TValue& item: batch) {
+    for (const NYdb::TValue& item : batch) {
         builder.AddListItem(item);
     }
     builder.EndList();
-    NYdb::TParamsBuilder paramsBuilder;
+
     paramsBuilder.AddParam(paramName, builder.Build());
-    return paramsBuilder.Build();
 }
 
 class TDataProvider

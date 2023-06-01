@@ -67,7 +67,7 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
         IWorkLoader::LC_UPDATE_ON |
         IWorkLoader::LC_DELETE_ON |
         IWorkLoader::LC_DELETE;
-    workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{rowsCount, 5});
+    workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{rowsCount, 5, 1});
     auto checker = CreateChecker(driver);
     checker->Run("Root/Test");
     driver.Stop(true);
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             ui32 stms =
                 IWorkLoader::LC_UPSERT |
                 (withDataColumn ? IWorkLoader::LC_ALTER_ADD_INDEX_WITH_DATA_COLUMN : IWorkLoader::LC_ALTER_ADD_INDEX);
-            workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{2000, 1});
+            workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{2000, 1, 1});
             auto checker = CreateChecker(driver);
             checker->Run("Root/Test");
             driver.Stop(true);

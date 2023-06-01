@@ -228,7 +228,8 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
+    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite>
+                    , public NColumnShard::TPutStatus {
         TEvWrite() = default;
 
         TEvWrite(const TActorId& source, ui64 metaShard, ui64 writeId, ui64 tableId,
@@ -262,13 +263,10 @@ struct TEvColumnShard {
             return ActorIdFromProto(Record.GetSource());
         }
 
-        NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
         NColumnShard::TUnifiedBlobId BlobId;
         std::shared_ptr<arrow::RecordBatch> WrittenBatch;
         NColumnShard::TBlobBatch BlobBatch;
         NColumnShard::TUsage ResourceUsage;
-        TVector<ui32> YellowMoveChannels;
-        TVector<ui32> YellowStopChannels;
         ui64 MaxSmallBlobSize;
     };
 

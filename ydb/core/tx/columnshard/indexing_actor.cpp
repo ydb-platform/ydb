@@ -62,9 +62,10 @@ public:
                 << " at tablet " << TabletId << " (index)");
 
             BlobsToRead.erase(blobId);
-            TxEvent->PutStatus = event.Status;
-            if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
-                TxEvent->PutStatus = NKikimrProto::ERROR;
+            if (event.Status == NKikimrProto::UNKNOWN) {
+                TxEvent->SetPutStatus(NKikimrProto::ERROR);
+            } else {
+                TxEvent->SetPutStatus(event.Status);
             }
             return;
         }
@@ -125,7 +126,7 @@ private:
 
     void Index(const TActorContext& ctx) {
         Y_VERIFY(TxEvent);
-        if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
+        if (TxEvent->GetPutStatus() == NKikimrProto::UNKNOWN) {
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
 
             TCpuGuard guard(TxEvent->ResourceUsage);

@@ -67,9 +67,10 @@ public:
             LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId.ToString()
                 << " status " << NKikimrProto::EReplyStatus_Name(event.Status)
                 << " at tablet " << TabletId << " (eviction)");
-            TxEvent->PutStatus = event.Status;
-            if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
-                TxEvent->PutStatus = NKikimrProto::ERROR;
+            if (event.Status == NKikimrProto::UNKNOWN) {
+                TxEvent->SetPutStatus(NKikimrProto::ERROR);
+            } else {
+                TxEvent->SetPutStatus(event.Status);
             }
         }
 
@@ -121,7 +122,7 @@ private:
 
     void EvictPortions(const TActorContext& ctx) {
         Y_VERIFY(TxEvent);
-        if (TxEvent->PutStatus != NKikimrProto::EReplyStatus::UNKNOWN) {
+        if (TxEvent->GetPutStatus() != NKikimrProto::EReplyStatus::UNKNOWN) {
             LOG_S_INFO("Portions eviction not started at tablet " << TabletId);
             ctx.Send(Parent, TxEvent.release());
             return;
@@ -135,7 +136,7 @@ private:
             NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
             TxEvent->Blobs = std::move(evictionLogic.Apply(TxEvent->IndexChanges).DetachResult());
             if (TxEvent->Blobs.empty()) {
-                TxEvent->PutStatus = NKikimrProto::OK;
+                TxEvent->SetPutStatus(NKikimrProto::OK);
             }
         }
         ui32 blobsSize = TxEvent->Blobs.size();

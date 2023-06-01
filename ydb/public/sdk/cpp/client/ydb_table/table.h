@@ -847,6 +847,7 @@ class TCommitTransactionResult;
 class TKeepAliveResult;
 class TSessionPoolImpl;
 class TBulkUpsertResult;
+class TReadRowsResult;
 class TScanQueryPartIterator;
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
@@ -859,6 +860,7 @@ using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResu
 using TAsyncTablePartIterator = NThreading::TFuture<TTablePartIterator>;
 using TAsyncKeepAliveResult = NThreading::TFuture<TKeepAliveResult>;
 using TAsyncBulkUpsertResult = NThreading::TFuture<TBulkUpsertResult>;
+using TAsyncReadRowsResult = NThreading::TFuture<TReadRowsResult>;
 using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -960,6 +962,9 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     FLUENT_SETTING_DEFAULT(TString, FormatSettings, "");
 };
 
+struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
+};
+
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
     // Return query plan without actual query execution
     FLUENT_SETTING_DEFAULT(bool, Explain, false);
@@ -1056,6 +1061,9 @@ public:
         const TBulkUpsertSettings& settings = TBulkUpsertSettings());
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
         const TString& data, const TString& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings());
+
+    TAsyncReadRowsResult ReadRows(const TString& table, TValue&& keys,
+        const TReadRowsSettings& settings = TReadRowsSettings());
 
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query,
         const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
@@ -1965,6 +1973,17 @@ private:
 class TBulkUpsertResult : public TStatus {
 public:
     explicit TBulkUpsertResult(TStatus&& status);
+};
+
+class TReadRowsResult : public TStatus {
+    TResultSet ResultSet;
+
+  public:
+    explicit TReadRowsResult(TStatus&& status, TResultSet&& resultSet);
+
+    TResultSet GetResultSet() {
+        return std::move(ResultSet);
+    }
 };
 
 } // namespace NTable

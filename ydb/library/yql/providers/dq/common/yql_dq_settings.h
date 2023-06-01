@@ -146,6 +146,7 @@ struct TDqSettings {
         SAVE_SETTING(HashShuffleMaxTasks);
         SAVE_SETTING(UseWideChannels);
         SAVE_SETTING(UseFastPickleTransport);
+        SAVE_SETTING(AggregateStatsByStage);
 #undef SAVE_SETTING
     }
 

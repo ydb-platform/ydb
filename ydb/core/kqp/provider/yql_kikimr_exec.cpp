@@ -1348,6 +1348,20 @@ public:
                                     );
 
                                     add_changefeed->set_virtual_timestamps(FromString<bool>(to_lower(value)));
+                                } else if (name == "resolved_timestamps") {
+                                    YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
+                                    const auto value = FromString<i64>(
+                                        setting.Value().Cast<TCoInterval>().Literal().Value()
+                                    );
+
+                                    if (value <= 0) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << name << " must be positive"));
+                                        return SyncError();
+                                    }
+
+                                    const auto interval = TDuration::FromValue(value);
+                                    Y_UNUSED(interval); // TODO(ilnaz): implement
                                 } else if (name == "retention_period") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(

@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 
 package NYql.Generic;
 
-import "yql/providers/connector/api/protos/connector.proto";
+import "ydb/library/yql/providers/generic/connector/api/protos/connector.proto";
 
 message TSource {
     // Token to access database

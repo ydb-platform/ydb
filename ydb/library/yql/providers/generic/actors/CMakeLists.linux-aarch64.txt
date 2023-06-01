@@ -20,7 +20,7 @@ target_link_libraries(providers-generic-actors PUBLIC
   common-token_accessor-client
   providers-generic-proto
   yql-public-types
-  providers-connector-libcpp
+  generic-connector-libcpp
 )
 target_sources(providers-generic-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/actors/yql_generic_read_actor.cpp

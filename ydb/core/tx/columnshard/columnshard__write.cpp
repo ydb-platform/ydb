@@ -44,7 +44,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
     ui32 status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
     auto& logoBlobId = Ev->Get()->BlobId;
-    auto putStatus = Ev->Get()->PutStatus;
+    auto putStatus = Ev->Get()->GetPutStatus();
     Y_VERIFY(putStatus == NKikimrProto::OK);
     Y_VERIFY(logoBlobId.IsValid());
 
@@ -129,7 +129,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LastAccessTime = TAppData::TimeProvider->Now();
 
-    OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+    OnYellowChannels(*ev->Get());
 
     auto& record = Proto(ev->Get());
     auto& data = record.GetData();
@@ -137,7 +137,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     ui64 metaShard = record.GetTxInitiator();
     ui64 writeId = record.GetWriteId();
     TString dedupId = record.GetDedupId();
-    auto putStatus = ev->Get()->PutStatus;
+    auto putStatus = ev->Get()->GetPutStatus();
 
     bool isWritable = TablesManager.IsWritableTable(tableId);
     bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !TablesManager.HasPrimaryIndex() || !isWritable;

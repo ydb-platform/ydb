@@ -97,5 +97,6 @@ NYdb::TValue CreateValue(const NYdb::TColumn& column, const TRandomValueProvider
 NYdb::TValue CreateRow(const TVector<NYdb::TColumn>& columns, const TRandomValueProvider& rvp);
 NYdb::TParams CreateParamsAsItems(const TVector<NYdb::TValue>& values, const TVector<TString>& paramNames);
 NYdb::TParams CreateParamsAsList(const TVector<NYdb::TValue>& batch, const TString& paramName);
+void AddParamsAsList(NYdb::TParamsBuilder& paramsBuilder, const TVector<NYdb::TValue>& batch, const TString& paramName);
 
 }

@@ -1,0 +1,479 @@
+syntax = "proto3";
+
+package NYql.Connector.API;
+
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+// NOTE: Protobuf-generated code for Go will appear in yql (non-public) path
+option go_package = "a.yandex-team.ru/yql/providers/connector/libgo/gen/protos";
+
+// ---------- API Requests ----------
+
+// ListTablesRequest requests the list of tables in a particular database of the data source
+message ListTablesRequest {
+    // Data source instance to connect
+    DataSourceInstance data_source_instance = 1;
+
+    // There may be a huge number of tables in the data source,
+    // and here are ways to extract only necessary ones:
+    oneof filtering {
+        // Regexp to filter table names
+        string pattern = 2;
+    }
+}
+
+// ListTablesResponse returns the list of tables in a particular database of the data source
+message ListTablesResponse {
+    // Table names list
+    repeated string tables = 1;
+
+    // Call result
+    Error error = 100;
+}
+
+// DescribeTableRequest requests table metadata
+message DescribeTableRequest {
+    // Data source instance to connect
+    DataSourceInstance data_source_instance = 1;
+    // Table to describe
+    string table = 2;
+}
+
+// DescribeTableResponse returns table metadata
+message DescribeTableResponse {
+    // The whole schema of a table
+    Schema schema = 1;
+    // Call result
+    Error error = 100;
+}
+
+// Schema represents the schema of the table
+message Schema {
+    // Columns with YQL types
+    repeated Ydb.Column columns = 1;
+    // TODO: optional metadata?
+}
+
+// ListSplitRequests asks Connector to split the requested data into elementary parts.
+message ListSplitsRequest {
+    // Data source instance to connect
+    DataSourceInstance data_source_instance = 1;
+
+    // YQ engine may want to read data from different tables simultaneously.
+    // Perhaps Connector will provide consistency guarantees across the tables some day.
+    repeated Select selects = 2;
+
+    // Defines the number of splits (and, as a consequence, affects the size of the split).
+    // If you don't want splitting, set 1.
+    uint32 max_split_count = 3;
+
+    // Connector will try to divide the data into the splits of this size,
+    // but the exact match is not guaranteed.
+    // Also this setting can be overridden by max_split_count.
+    uint64 split_size = 4;
+
+    // Sometimes YQ doesn't know the exact size of the data set,
+    // so it asks Connector to split the data into the splits of $split_size,
+    // and the $max_split_count = MaxUINT32.
+    // But if the data is too large, and too many splits will be generated,
+    // this may exceed the memory available for YQ.
+    // In such case, it's better to fail fast. This limit helps to implement it:
+    uint64 split_number_limit = 5;
+}
+
+// ListTableSplitsResponse returns the list of splits for a particular set of table partitions
+message ListSplitsResponse {
+    // the list of splits for concurrent reading
+    repeated Split splits = 1;
+
+    // Call result
+    Error error = 100;
+}
+
+// Select describes what to read from the data source.
+//
+// In RDBMS systems this call internally transforms into SQL expression using this template:
+// SELECT $what
+// FROM $from
+// WHERE $filter
+// LIMIT $limit [OFFSET $offset]
+// TODO: support JOIN, ORDER BY, GROUP BY
+message Select {
+    // Data source instance to connect
+    DataSourceInstance data_source_instance = 1;
+
+    // Describes what particularly to get from the data source
+    message What {
+        message Item {
+            // TODO: support aggregate functions
+            // TODO: support subqueries?
+            // TODO: support aggregates?
+
+            // YQ can read particular table columns or call aggregate functions, for example.
+            oneof payload {
+                // a column to read
+                Ydb.Column column = 1;
+            }
+        }
+
+        // NOTE: this API intentionally makes it not possible to request 'SELECT *'.
+        // YQ must provide all the column names explicitly.
+        //
+        // Еmpty list means that YQ wants to get empty tuples in the response.
+        // On the connector's side this request will be transformed into something like
+        // SELECT 1 FROM $table (...)
+        repeated Item items = 1;
+    }
+
+    // Transforms into SELECT $what.
+    What what = 2;
+
+    message From {
+        // TODO: for some of RDBMS the table name may be not enough
+        string table = 1;
+    }
+
+    // Transforms into FROM $from
+    From from = 3;
+
+    message Where {
+        // Strongly typed tree of predicates
+        Filter filter_typed = 1;
+
+        // An internal representation of YQL request part describing filters.
+        // Advanced connectors may use it for the full-fledged implementations of the push down.
+        AST filter_raw = 2;
+    }
+
+    // Transforms into WHERE $filter.
+    // Optional field.
+    Where where = 4;
+
+    message Limit {
+        uint64 limit = 1;
+        uint64 offset = 2;
+    }
+
+    // Transforms into LIMIT $limit [OFFSET $offset].
+    // Optional field.
+    Limit limit = 5;
+}
+
+// Split is a certain part of a table. In general, it should be much smaller than a partition.
+// It also represents a unit of a parallel work for YQ engine.
+message Split {
+    // Every split contains the description of SELECT it was generated for.
+    Select select = 1;
+
+    oneof payload {
+        // Different data sources may use different ways to describe a split,
+        // and we don't want YQ to dig into its internals (at least now),
+        // so we make the description opaque for YQ.
+        bytes description = 2;
+    }
+}
+
+// ReadDataRequest reads the data associated with a particular table split.
+message ReadSplitsRequest {
+    // Data source instance to connect
+    DataSourceInstance data_source_instance = 1;
+
+    // Splits that YQ engine would like to read.
+    repeated Split splits = 2;
+
+    enum Mode {
+        MODE_RESERVED = 0;
+        // Connector will read splits in a single thread one by one.
+        // The data will be returned in the order corresponding to the order of requested splits.
+        ORDERED = 1;
+        // Connector may read different splits concurrently and send the split fragments to the response stream
+        // as soon as the data is obtained from the data source. Thus the stream is multiplexed between splits.
+        UNORDERED = 2;
+    }
+
+    // Determines the mode of data extraction
+    Mode mode = 3;
+
+    enum Format {
+        FORMAT_RESERVED = 0;
+        // ColumnSet is a simple representation of columnar data.
+        // Do not use in production.
+        COLUMN_SET = 1;
+        // Arrow IPC Streaming format:
+        // https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format
+        ARROW_IPC_STREAMING = 2;
+    }
+
+    // Determines the format of data representation
+    Format format = 4;
+
+    // Pagination helps to manage the process of fragmentation data stream from the data source into the fragments.
+    // If empty, the whole result will be sent back in a single message.
+    Pagination pagination = 5;
+
+    // Specifies the location of split from where to start reading.
+    // If stream has been recently interrupted, YQ may retry reading the split from the interrupted block
+    // instead of reading the split from scratch.
+    // If empty, the connector will return the split data from the very beginning.
+    Continuation continuation = 6;
+}
+
+
+// ReadDataResponse returns the data corresponding to a particular split
+message ReadSplitsResponse {
+    // Protobuf columnar representation of data.
+    // Use it only for debugging, don't use in production.
+    message ColumnSet {
+        message Column {
+            repeated Ydb.Value data = 1;
+        }
+
+        repeated Ydb.Column meta = 1;
+        repeated Column data = 2;
+    }
+
+    // There may be various formats to represent data
+    oneof payload {
+        // Columnar data in protobuf format with YDB types.
+        // Use it only for debugging, don't use in production.
+        ColumnSet column_set = 1;
+
+        // Data in Arrow IPC streaming format.
+        bytes arrow_ipc_streaming = 2;
+    }
+
+    // Since multiple splits can be read within one request, it's important to
+    // match the received data with the requested split.
+    uint32 split_index_number = 3;
+
+    // Specifies the location where the next block starts.
+    // If stream has been interrupted, YQ may retry reading using the Continuation message
+    // received for the last time.
+    Continuation continuation = 4;
+
+    // Call result
+    Error error = 100;
+}
+
+// Pagination describes how to split data stream from data source into fragments
+// in order to return them as separate GRPC messages to YQ.
+message Pagination {
+    // In the RDBMS the default pagination method is LIMIT/OFFSET.
+    // Instead of full table scan:
+    //
+    // SELECT col1 FROM table
+    //
+    // connector may internally invoke multiple requests to the data:
+    //
+    // SELECT col1 FROM table LIMIT $rows                     // return first $rows to YQ
+    // SELECT col1 FROM table LIMIT $rows OFFSET $rows        // return next  $rows to YQ
+    // SELECT col1 FROM table LIMIT $rows OFFSET $rows        // (...)
+    // SELECT col1 FROM table LIMIT $rows OFFSET $rows
+    // (...)
+    //
+    // Some RDBMS may support cursors as the more advanced way of pagination.
+    //
+    // BEGIN;
+    // DECLARE cur CURSOR FOR SELECT col1 FROM table;
+    // FETCH $rows FROM cur;                                   // return first $rows to YQ
+    // FETCH $rows FROM cur;                                   // return next  $rows to YQ
+    // FETCH $rows FROM cur;                                   // (...)
+    // (...)
+    // COMMIT;
+    //
+    // The choice of pagination method is the responsibility of the connector (at least now),
+    // but the engine can specify how many rows to return in each message of the stream.
+    uint64 rows = 1;
+
+    // Memory limitation helps to control the effective size of a block returned in every response.
+    // It may override the previous limit.
+    uint64 bytes = 2;
+}
+
+// Continuation is a special type useful for the request retry.
+// In case if split reading was interrupted,
+// the engine does not have to read all the split data from the very beginning,
+// it can specify the location from where it wants to reread the data instead.
+message Continuation {
+    oneof payload {
+        // In general description should be opaque to YQ.
+        bytes description = 1;
+    }
+}
+
+// ---------- Filters ----------
+
+// Filter - a special type to describe a constraint (or a set of constraints) applied to SQL expression:
+// SELECT $columns FROM $table WHERE $filter.
+// It can be also used for the purpose of split pruning.
+message Filter {
+    // Represents an elementary comparison between a column and some value
+    message Comparison {
+
+        // A subset of comparators corresponding to the binary logical operators
+        message Binary {
+
+            // An operation code.
+            enum Operation {
+                RESERVED = 0;
+                L = 1;  // renders to "col < value"
+                LE = 2; // renders to "col <= value"
+                EQ = 3; // renders to "col = value"
+                NE = 4; // renders to "col != value"
+                GE = 5; // renders to "col >= value"
+                G = 6;  // renders to "col > value"
+            }
+
+            oneof payload {
+                // A scalar value
+                Ydb.TypedValue typed_value = 1;
+                // A name of another column to compare with
+                string column = 2;
+            }
+        }
+
+        // Renders to "$column IS NULL"
+        message IsNull {
+            string column = 1;
+        }
+
+        // Renders to "$column IS NOT NULL"
+        message IsNotNull {
+            string column = 1;
+        }
+
+        // Renders to "$column IN $(values)"
+        message In {
+            repeated Ydb.TypedValue values = 1;
+        }
+
+        // Renders to "$column BETWEEN $least AND $greatest"
+        message Between {
+            Ydb.TypedValue least = 1;
+            Ydb.TypedValue greatest = 2;
+        }
+
+        oneof payload {
+            Binary binary = 1;
+            IsNull is_null = 2;
+            IsNotNull is_not_null = 3;
+            In in = 4;
+            Between between = 5;
+        }
+    }
+
+    // transforms into "AND"
+    message Conjunction {
+        repeated Filter operands = 1;
+    }
+
+    // transforms into "OR"
+    message Disjunction {
+        repeated Filter operands = 1;
+    }
+
+    // transforms into "NOT"
+    message Negation {
+        Filter operand = 1;
+    }
+
+    // SubExpr transformation rules:
+    // 1. top-level:      $children
+    // 2. other levels:  ($children)
+    message SubExpr {
+        // Next level expression
+        Filter operand = 1;
+    }
+
+    oneof payload {
+        Comparison comparison = 1;
+        Conjunction conjunction = 2;
+        Disjunction disjunction = 3;
+        Negation negation = 4;
+        SubExpr sub_expr = 5;
+    }
+}
+
+// ---------- Utils ----------
+
+// DataSourceInstance helps to identify the instance of a data source to route request to.
+message DataSourceInstance {
+    oneof location {
+        // Network address to connect to '<prefix>://<path>[:<port>]', for example:
+        // http://my_external_service:2023
+        // grpc://my_external_service:2023
+        string endpoint = 1;
+
+        // Preconfigured installation name hiding network details.
+        // This installation must be described in the configuration of Connector service app:
+        // installations {
+        // { "postgres", {"https://postgres.yandexcloud.net", other_params}
+        // }
+        string installation = 2;
+    }
+
+    // What database to connect
+    string database = 3;
+
+    message Credentials {
+        // Basic
+        message Basic {
+            string username = 1;
+            string password = 2;
+        }
+
+        // Copied from: https://a.yandex-team.ru/arcadia/ydb/public/api/protos/draft/fq.proto?rev=r10844260#L419
+        message NoneAuth {}
+
+        // Copied from: https://a.yandex-team.ru/arcadia/ydb/public/api/protos/draft/fq.proto?rev=r10844260#L426
+        message IamAuth {
+            message CurrentIAMTokenAuth {}
+
+            message ServiceAccountAuth {
+                string id = 1;
+            }
+
+            oneof identity {
+                CurrentIAMTokenAuth current_iam = 1;
+                ServiceAccountAuth service_account = 2;
+            }
+        }
+
+        oneof payload {
+            Basic basic = 1;
+            IamAuth iam_auth = 2;
+            NoneAuth none = 3;
+        }
+    }
+
+    // Information for authentication
+    Credentials credentials = 4;
+}
+
+// Special type to describe the result of any operation
+message Error {
+    // High-level code
+    Ydb.StatusIds.StatusCode status = 1;
+
+    // Error message
+    string message = 2;
+
+    // Detailed explanation of a problem;
+    // must be empty if status == SUCCESS
+    repeated Ydb.Issue.IssueMessage issues = 3;
+}
+
+// AST is an internal representation of an YQL request.
+// Advanced connectors may use it for the full-fledged implementations of the push down.
+message AST {
+    message List {
+        repeated AST children = 1;
+    }
+
+    oneof payload {
+        bytes atom = 1;
+        List list = 2;
+    }
+}

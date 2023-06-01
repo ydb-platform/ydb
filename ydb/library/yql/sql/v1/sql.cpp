@@ -1883,6 +1883,12 @@ static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node,
             return false;
         }
         settings.VirtualTimestamps = exprNode;
+    } else if (to_lower(id.Name) == "resolved_timestamps") {
+        if (exprNode->GetOpName() != "Interval") {
+            ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;
+            return false;
+        }
+        settings.ResolvedTimestamps = exprNode;
     } else if (to_lower(id.Name) == "retention_period") {
         if (exprNode->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << id.Name;

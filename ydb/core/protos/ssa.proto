@@ -40,6 +40,11 @@ message TProgram {
         optional string Name = 1;
     }
 
+    enum EFunctionType {
+        SIMPLE_ARROW = 1;
+        YQL_KERNEL = 2;
+    }
+
     message TAssignment {
         enum EFunction {
             FUNC_UNSPECIFIED = 0;
@@ -85,6 +90,8 @@ message TProgram {
         message TFunction {
             optional uint32 Id = 1; // EFunction
             repeated TColumn Arguments = 2;
+            optional EFunctionType FunctionType = 3 [ default = SIMPLE_ARROW ];
+            optional uint32 KernelIdx = 4; 
         }
 
         message TExternalFunction {
@@ -127,6 +134,8 @@ message TProgram {
             optional uint32 Id = 1; // EAggregateFunction
             repeated TColumn Arguments = 2;
             optional string Variant = 3; // i.e. POP/SAMP for AGG_VAR, AGG_COVAR, AGG_STDDEV
+            optional EFunctionType FunctionType = 4 [ default = SIMPLE_ARROW ];
+            optional uint32 KernelIdx = 5; 
             // TODO: Parameters, i.e. N for topK(N)(arg)
         }
 
@@ -171,4 +180,5 @@ message TOlapProgram {
     // RecordBatch deserialization require arrow::Schema, thus store it here
     optional bytes ParametersSchema = 2;
     optional bytes Parameters = 3;
+    optional bytes Kernels = 4;
 }

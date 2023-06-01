@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <yql/providers/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 namespace NYql::NDq {
 

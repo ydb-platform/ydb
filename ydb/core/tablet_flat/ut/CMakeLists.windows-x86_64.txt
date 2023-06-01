@@ -42,7 +42,6 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_leases_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_range_cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_versions_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle_ut.cpp

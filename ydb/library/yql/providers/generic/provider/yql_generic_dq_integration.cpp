@@ -10,7 +10,7 @@
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <yql/providers/connector/libcpp/utils.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 
 namespace NYql {
 

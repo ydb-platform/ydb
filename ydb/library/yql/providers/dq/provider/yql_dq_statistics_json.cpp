@@ -10,8 +10,18 @@ namespace {
 struct TCountersByTask {
     THashMap<TString, TOperationStatistics> Inputs;
     THashMap<TString, TOperationStatistics> Outputs;
+    THashMap<TString, TOperationStatistics> Sources;
+    THashMap<TString, TOperationStatistics> Sinks;
     TOperationStatistics Generic;
 };
+
+void WriteEntries(NYson::TYsonWriter& writer, TStringBuf prefix, const THashMap<TString, TOperationStatistics>& data) {
+
+    for (const auto& [k, v] : data) {
+        writer.OnKeyedItem(prefix + k);
+        NCommon::WriteStatistics(writer, v);
+    }
+}
 
 } // namespace
 
@@ -78,7 +88,7 @@ void CollectTaskRunnerStatisticsByStage(NYson::TYsonWriter& writer, const TOpera
 
 void CollectTaskRunnerStatisticsByTask(NYson::TYsonWriter& writer, const TOperationStatistics& taskRunner)
 {
-    THashMap<TString, TCountersByTask> countersByTask;
+    THashMap<TString, THashMap<TString, TCountersByTask>> countersByStage;
 
     for (const auto& entry : taskRunner.Entries) {
         TString prefix, name;
@@ -86,21 +96,34 @@ void CollectTaskRunnerStatisticsByTask(NYson::TYsonWriter& writer, const TOperat
         if (!NCommon::ParseCounterName(&prefix, &labels, &name, entry.Name)) {
             continue;
         }
-        auto maybeInput = labels.find("Input");
-        auto maybeOutput = labels.find("Output");
+        auto maybeInput = labels.find("InputChannel");
+        auto maybeOutput = labels.find("OutputChannel");
+        auto maybeSource = labels.find("Source");
+        auto maybeSink = labels.find("Sink");
         auto maybeTask = labels.find("Task");
+        auto maybeStage = labels.find("Stage");
 
         if (maybeTask == labels.end()) {
             continue;
         }
+        if (maybeStage == labels.end()) {
+            continue;
+        }
 
         auto newEntry = entry; newEntry.Name = name;
+        auto& countersByTask = countersByStage[maybeStage->second];
         auto& counters = countersByTask[maybeTask->second];
         if (maybeInput != labels.end()) {
             counters.Inputs[maybeInput->second].Entries.emplace_back(newEntry);
         }
         if (maybeOutput != labels.end()) {
             counters.Outputs[maybeOutput->second].Entries.emplace_back(newEntry);
+        }
+        if (maybeSource != labels.end()) {
+            counters.Sources[maybeSource->second].Entries.emplace_back(newEntry);
+        }
+        if (maybeSink != labels.end()) {
+            counters.Sinks[maybeSink->second].Entries.emplace_back(newEntry);
         }
         if (maybeInput == labels.end() && maybeOutput == labels.end()) {
             counters.Generic.Entries.emplace_back(newEntry);
@@ -109,24 +132,25 @@ void CollectTaskRunnerStatisticsByTask(NYson::TYsonWriter& writer, const TOperat
 
     writer.OnBeginMap();
 
-    for (const auto& [task, counters] : countersByTask) {
-        writer.OnKeyedItem("Task=" + task);
-
+    for (const auto& [stage, countersByTask] : countersByStage) {
+        writer.OnKeyedItem("Stage=" + stage);
         writer.OnBeginMap();
 
-        for (const auto& [input, stat] : counters.Inputs) {
-            writer.OnKeyedItem("Input=" + input);
-            NCommon::WriteStatistics(writer, stat);
+        for (const auto& [task, counters] : countersByTask) {
+            writer.OnKeyedItem("Task=" + task);
+
+            writer.OnBeginMap();
+
+            WriteEntries(writer, "Input=", counters.Inputs);
+            WriteEntries(writer, "Output=", counters.Outputs);
+            WriteEntries(writer, "Source=", counters.Sources);
+            WriteEntries(writer, "Sink=", counters.Sinks);
+
+            writer.OnKeyedItem("Generic");
+            NCommon::WriteStatistics(writer, counters.Generic);
+
+            writer.OnEndMap();
         }
-
-        for (const auto& [output, stat] : counters.Outputs) {
-            writer.OnKeyedItem("Output=" + output);
-            NCommon::WriteStatistics(writer, stat);
-        }
-
-        writer.OnKeyedItem("Generic");
-        NCommon::WriteStatistics(writer, counters.Generic);
-
         writer.OnEndMap();
     }
 

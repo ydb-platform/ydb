@@ -80,7 +80,10 @@ private:
     void HandleGetRuntimeQueueAttributesWhileWorking(TSqsEvents::TEvGetRuntimeQueueAttributes::TPtr& ev);
     void HandleDeadLetterQueueNotification(TSqsEvents::TEvDeadLetterQueueNotification::TPtr& ev);
     void HandleForceReloadState(TSqsEvents::TEvForceReloadState::TPtr& ev);
+    void HandleReloadStateRequest(TSqsEvents::TEvReloadStateRequest::TPtr& ev);
 
+    void CheckStillDLQ();
+    void ForceReloadState();
     void BecomeWorking();
     void RequestConfiguration();
     void UpdateStateRequest();
@@ -120,6 +123,7 @@ private:
     void ProcessGetRuntimeQueueAttributes(ui64 shard);
     void FailGetRuntimeQueueAttributesForShard(ui64 shard);
     void FailRequestsDuringStartProblems();
+    void SendReloadStateRequestToDLQ();
 
     // send
     void ProcessSendMessageBatch(TSendMessageBatchRequestProcessing& reqInfo);
@@ -437,7 +441,8 @@ private:
     TMessageDelayStatistics DelayStatistics_;
     TInstant RetentionWakeupPlannedAt_;
     bool AskQueueAttributesInProcess_ = false;
-    bool UpdateStateRequestInProcess = false;
+    TInstant UpdateStateRequestStartedAt;
+    THashSet<ui32> ReloadStateRequestedFromNodes;
 
     bool UseCPUOptimization = false;
 

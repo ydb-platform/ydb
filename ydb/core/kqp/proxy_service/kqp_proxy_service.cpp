@@ -725,7 +725,7 @@ public:
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
         KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
-            << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId());
+            << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId() << ", source: " << ev->Sender);
 
         PendingRequests.Erase(requestId);
     }

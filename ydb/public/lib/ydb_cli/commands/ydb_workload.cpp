@@ -108,13 +108,18 @@ void TWorkloadCommand::WorkerFn(int taskId, TWorkloadQueryGenPtr workloadGen, co
     int retryCount = -1;
 
     NYdbWorkload::TQueryInfo queryInfo;
-    auto runQuery = [&queryInfo, &querySettings, &retryCount] (NYdb::NTable::TSession session) -> NYdb::TStatus {
+    auto runQuery = [this, &queryInfo, &querySettings, &retryCount] (NYdb::NTable::TSession session) -> NYdb::TStatus {
         ++retryCount;
         TStatus result(EStatus::SUCCESS, NYql::TIssues());
-        result = session.ExecuteDataQuery(queryInfo.Query.c_str(),
-            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-            queryInfo.Params, querySettings
-        ).GetValueSync();
+        if (queryInfo.UseReadRows) {
+            result = TableClient->ReadRows(queryInfo.TablePath, std::move(*queryInfo.KeyToRead))
+                .GetValueSync();
+        } else {
+            result = session.ExecuteDataQuery(queryInfo.Query.c_str(),
+                NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                queryInfo.Params, querySettings
+            ).GetValueSync();
+        }
         return result;
     };
 

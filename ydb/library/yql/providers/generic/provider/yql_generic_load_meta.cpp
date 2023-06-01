@@ -16,8 +16,8 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <yql/providers/connector/libcpp/client.h>
-#include <yql/providers/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 
 namespace NYql {
     using namespace NNodes;

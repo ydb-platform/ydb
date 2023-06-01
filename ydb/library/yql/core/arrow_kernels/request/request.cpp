@@ -54,6 +54,32 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     return Items_.size() - 1;
 }
 
+ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const std::vector<const TTypeAnnotationNode*>& argTypes,
+    const TTypeAnnotationNode* retType) {
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
+    std::vector<NKikimr::NMiniKQL::TType*> inputTypes;
+    for (const auto& type : argTypes) {
+        inputTypes.emplace_back(MakeType(type));
+    }
+
+    const auto userType = Pb_.NewTupleType({
+        Pb_.NewTupleType(inputTypes),
+        Pb_.NewEmptyStructType(),
+        Pb_.NewEmptyTupleType()});
+
+    auto udf = Pb_.Udf(isPolymorphic ? name : (name + "_BlocksImpl"), Pb_.NewVoid(), userType);
+    std::vector<NKikimr::NMiniKQL::TRuntimeNode> args;
+    for (const auto& type : argTypes) {
+        args.emplace_back(MakeArg(type));
+    }
+
+    auto apply = Pb_.Apply(udf, args);
+    auto outType = MakeType(retType);
+    Y_ENSURE(outType->IsSameType(*apply.GetStaticType()));
+    Items_.emplace_back(apply);
+    return Items_.size() - 1;
+}
+
 TString TKernelRequestBuilder::Serialize() {
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
     auto tuple = Items_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(Items_);
@@ -70,13 +96,18 @@ NKikimr::NMiniKQL::TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnota
 }
 
 NKikimr::NMiniKQL::TBlockType* TKernelRequestBuilder::MakeType(const TTypeAnnotationNode* type) {
+    auto [it, inserted] = CachedTypes_.emplace(type, nullptr);
+    if (!inserted) {
+        return it->second;
+    }
+
     TStringStream err;
     auto ret = NCommon::BuildType(*type, Pb_, err);
     if (!ret) {
         ythrow yexception() << err.Str();
     }
 
-    return AS_TYPE(NKikimr::NMiniKQL::TBlockType, ret);
+    return it->second = AS_TYPE(NKikimr::NMiniKQL::TBlockType, ret);
 }
 
 }

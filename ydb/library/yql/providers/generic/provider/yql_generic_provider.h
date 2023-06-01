@@ -6,7 +6,7 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <yql/providers/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;

@@ -130,7 +130,7 @@ Y_UNIT_TEST(CollectTaskRunnerStatisticsByTask) {
             TCounters::GetCounterName(
                 "Prefix",
                 {
-                    {"Input", "2"},
+                    {"InputChannel", "2"},
                     {"Stage", "10"},
                     {"Task", "1"},
                 },
@@ -144,7 +144,7 @@ Y_UNIT_TEST(CollectTaskRunnerStatisticsByTask) {
             TCounters::GetCounterName(
                 "Prefix",
                 {
-                    {"Output", "3"},
+                    {"OutputChannel", "3"},
                     {"Stage", "10"},
                     {"Task", "1"},
                 },
@@ -172,32 +172,34 @@ Y_UNIT_TEST(CollectTaskRunnerStatisticsByTask) {
         CollectTaskRunnerStatisticsByTask(writer, taskRunner);
     }
     TString expected = R"__({
-    "Task=1" = {
-        "Input=2" = {
-            "Counter1" = {
-                "sum" = 1;
-                "count" = 5;
-                "avg" = 4;
-                "max" = 2;
-                "min" = 3
-            }
-        };
-        "Output=3" = {
-            "Counter2" = {
-                "sum" = 1;
-                "count" = 5;
-                "avg" = 4;
-                "max" = 2;
-                "min" = 3
-            }
-        };
-        "Generic" = {
-            "Counter3" = {
-                "sum" = 1;
-                "count" = 5;
-                "avg" = 4;
-                "max" = 2;
-                "min" = 3
+    "Stage=10" = {
+        "Task=1" = {
+            "Input=2" = {
+                "Counter1" = {
+                    "sum" = 1;
+                    "count" = 5;
+                    "avg" = 4;
+                    "max" = 2;
+                    "min" = 3
+                }
+            };
+            "Output=3" = {
+                "Counter2" = {
+                    "sum" = 1;
+                    "count" = 5;
+                    "avg" = 4;
+                    "max" = 2;
+                    "min" = 3
+                }
+            };
+            "Generic" = {
+                "Counter3" = {
+                    "sum" = 1;
+                    "count" = 5;
+                    "avg" = 4;
+                    "max" = 2;
+                    "min" = 3
+                }
             }
         }
     }

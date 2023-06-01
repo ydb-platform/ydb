@@ -33,8 +33,6 @@ public:
         Y_VERIFY(!WriteEv || !WriteIndexEv);
     }
 
-    // TODO: CheckYellow
-
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
         TEvBlobStorage::TEvPutResult* msg = ev->Get();
         auto status = msg->Status;
@@ -46,12 +44,10 @@ public:
             YellowStopChannels.insert(msg->Id.Channel());
         }
 
-
         if (status != NKikimrProto::OK) {
             LOG_S_ERROR("Unsuccessful TEvPutResult for blob " << msg->Id.ToString()
                 << " status: " << status << " reason: " << msg->ErrorReason);
-            SendResultAndDie(ctx, status);
-            return;
+            return SendResultAndDie(ctx, status);
         }
 
         LOG_S_TRACE("TEvPutResult for blob " << msg->Id.ToString());
@@ -59,7 +55,7 @@ public:
         BlobBatch.OnBlobWriteResult(ev);
 
         if (BlobBatch.AllBlobWritesCompleted()) {
-            SendResultAndDie(ctx, NKikimrProto::OK);
+            return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
 
@@ -86,8 +82,7 @@ public:
         if (Deadline != TInstant::Max()) {
             TInstant now = TAppData::TimeProvider->Now();
             if (Deadline <= now) {
-                SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
-                return;
+                return SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
             }
 
             const TDuration timeout = Deadline - now;
@@ -103,7 +98,7 @@ public:
     }
 
     void SendWriteRequest(const TActorContext& ctx) {
-        Y_VERIFY(WriteEv->PutStatus == NKikimrProto::UNKNOWN);
+        Y_VERIFY(WriteEv->GetPutStatus() == NKikimrProto::UNKNOWN);
 
         auto& record = Proto(WriteEv.Get());
         ui64 pathId = record.GetTableId();
@@ -114,7 +109,7 @@ public:
             meta = record.GetMeta().GetSchema();
             if (meta.empty() || record.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
                 LOG_S_INFO("Bad metadata for writeId " << writeId << " pathId " << pathId << " at tablet " << TabletId);
-                SendResultAndDie(ctx, NKikimrProto::ERROR);
+                return SendResultAndDie(ctx, NKikimrProto::ERROR);
             }
         }
 
@@ -128,8 +123,7 @@ public:
         if (!batch) {
             LOG_S_INFO("Bad data for writeId " << writeId << ", pathId " << pathId
                 << " (" << strError << ") at tablet " << TabletId);
-            SendResultAndDie(ctx, NKikimrProto::ERROR);
-            return;
+            return SendResultAndDie(ctx, NKikimrProto::ERROR);
         }
 
         TString data;
@@ -142,8 +136,7 @@ public:
                 << srcData.size() << " bytes) and limit, writeId " << writeId << " pathId " << pathId
                 << " at tablet " << TabletId);
 
-            SendResultAndDie(ctx, NKikimrProto::ERROR);
-            return;
+            return SendResultAndDie(ctx, NKikimrProto::ERROR);
         }
 
         record.SetData(data); // modify for TxWrite
@@ -161,8 +154,7 @@ public:
             if (!outMeta.SerializeToString(&meta)) {
                 LOG_S_ERROR("Canot set metadata for blob, writeId " << writeId << " pathId " << pathId
                     << " at tablet " << TabletId);
-                SendResultAndDie(ctx, NKikimrProto::ERROR);
-                return;
+                return SendResultAndDie(ctx, NKikimrProto::ERROR);
             }
         }
         record.MutableMeta()->SetLogicalMeta(meta);
@@ -181,13 +173,13 @@ public:
             << " at tablet " << TabletId);
 
         if (BlobBatch.AllBlobWritesCompleted()) {
-            SendResultAndDie(ctx, NKikimrProto::OK);
+            return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
 
     void SendMultiWriteRequest(const TActorContext& ctx) {
         Y_VERIFY(WriteIndexEv);
-        Y_VERIFY(WriteIndexEv->PutStatus == NKikimrProto::UNKNOWN);
+        Y_VERIFY(WriteIndexEv->GetPutStatus() == NKikimrProto::UNKNOWN);
 
         auto indexChanges = WriteIndexEv->IndexChanges;
         LOG_S_DEBUG("Writing " << WriteIndexEv->Blobs.size() << " blobs at " << TabletId);
@@ -306,17 +298,12 @@ private:
     void SendResult(const TActorContext& ctx, NKikimrProto::EReplyStatus status) {
         SaveResourceUsage();
         if (WriteEv) {
-            LOG_S_DEBUG("Written " << WriteEv->BlobId.ToStringNew() << " Status: " << status);
-            WriteEv->PutStatus = status;
+            WriteEv->SetPutStatus(status, std::move(YellowMoveChannels), std::move(YellowStopChannels));
             WriteEv->BlobBatch = std::move(BlobBatch);
-            WriteEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());
-            WriteEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end());
             ctx.Send(DstActor, WriteEv.Release());
         } else {
-            WriteIndexEv->PutStatus = status;
+            WriteIndexEv->SetPutStatus(status, std::move(YellowMoveChannels), std::move(YellowStopChannels));
             WriteIndexEv->BlobBatch = std::move(BlobBatch);
-            WriteIndexEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());
-            WriteIndexEv->YellowStopChannels = TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end());
             ctx.Send(DstActor, WriteIndexEv.Release());
         }
     }

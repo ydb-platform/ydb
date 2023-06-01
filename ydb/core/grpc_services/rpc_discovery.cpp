@@ -123,8 +123,8 @@ public:
         if (!NameserviceResponse || !LookupResponse)
             return;
 
-        Y_VERIFY(LookupResponse->CachedMessageData->Info &&
-            LookupResponse->CachedMessageData->Info->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        Y_VERIFY(LookupResponse->CachedMessageData && !LookupResponse->CachedMessageData->InfoEntries.empty() &&
+            LookupResponse->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
         const TSet<TString> services(
             Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
@@ -136,8 +136,11 @@ public:
             cachedMessage = LookupResponse->CachedMessageData->CachedMessage;
             cachedMessageSsl = LookupResponse->CachedMessageData->CachedMessageSsl;
         } else {
-            std::tie(cachedMessage, cachedMessageSsl) = NDiscovery::CreateSerializedMessage(
-                LookupResponse->CachedMessageData->Info, std::move(services), NameserviceResponse);
+            auto cachedMessageData = NDiscovery::CreateCachedMessage(
+                {}, std::move(LookupResponse->CachedMessageData->InfoEntries),
+                std::move(services), NameserviceResponse);
+            cachedMessage = std::move(cachedMessageData.CachedMessage);
+            cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
         }
 
         if (Request->SslServer()) {

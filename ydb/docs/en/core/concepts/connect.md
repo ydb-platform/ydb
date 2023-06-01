@@ -16,7 +16,7 @@ Examples:
 
 ## Database path {#database}
 
-Database path (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the [format]{% if lang == "en" %} (https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} and uses the `/` character as separator. It always starts with a `/`.
+Database path (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the [format]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} and uses the `/` character as separator. It always starts with a `/`.
 
 A {{ ydb-short-name }} cluster may have multiple databases deployed, with their paths determined by the cluster configuration. Like the endpoint, `database` for cloud databases is displayed in the management console on the desired database page, and can also be obtained via the CLI of the cloud provider.
 

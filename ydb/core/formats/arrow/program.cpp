@@ -44,6 +44,109 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 
 namespace NKikimr::NSsa {
 
+template <class TAssignObject>
+class TInternalFunction : public IStepFunction<TAssignObject> {
+    using TBase = IStepFunction<TAssignObject>;
+public:
+    using TBase::TBase;
+    arrow::Result<arrow::Datum> Call(const TAssignObject& assign,  const TDatumBatch& batch) const override {
+        auto arguments = TBase::BuildArgs(batch, assign.GetArguments());
+        if (!arguments) {
+            return arrow::Status::Invalid("Error parsing args.");
+        }
+        auto funcNames = GetRegistryFunctionNames(assign.GetOperation());
+
+        arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
+        for (const auto& funcName : funcNames) {    
+            if (TBase::Ctx && TBase::Ctx->func_registry()->GetFunction(funcName).ok()) {
+                result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions(), TBase::Ctx);
+            } else {
+                result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions());
+            }
+            if (result.ok()) {
+                return PrepareResult(std::move(*result), assign);
+            }
+        }
+        return result;
+    }
+private:
+    virtual std::vector<std::string> GetRegistryFunctionNames(const typename TAssignObject::TOperationType& opId) const = 0;
+    virtual arrow::Result<arrow::Datum> PrepareResult(arrow::Datum&& datum, const TAssignObject& assign) const {
+        Y_UNUSED(assign);
+        return std::move(datum);
+    }
+};
+
+class TConstFunction : public IStepFunction<TAssign>  {
+    using TBase = IStepFunction<TAssign>;
+public:
+    using TBase::TBase;
+    arrow::Result<arrow::Datum> Call(const TAssign& assign,  const TDatumBatch& batch) const override {
+        Y_UNUSED(batch);
+        return assign.GetConstant();
+    }
+};
+
+class TAggregateFunction : public TInternalFunction<TAggregateAssign> {
+    using TBase = TInternalFunction<TAggregateAssign>;
+private:
+    using TBase::TBase;
+    std::vector<std::string> GetRegistryFunctionNames(const EAggregate& opId) const override {
+        return { GetFunctionName(opId), GetHouseFunctionName(opId)};
+    }
+    arrow::Result<arrow::Datum> PrepareResult(arrow::Datum&& datum, const TAggregateAssign& assign) const override {
+        if (!datum.is_scalar()) {
+            return arrow::Status::Invalid("Aggregate result is not a scalar.");
+        }
+
+        if (datum.scalar()->type->id() == arrow::Type::STRUCT) {
+            auto op = assign.GetOperation();
+            if (op == EAggregate::Min) {
+                const auto& minMax = datum.scalar_as<arrow::StructScalar>();
+                return minMax.value[0];
+            } else if (op == EAggregate::Max) {
+                const auto& minMax = datum.scalar_as<arrow::StructScalar>();
+                return minMax.value[1];
+            } else {
+                return arrow::Status::Invalid("Unexpected struct result for aggregate function.");
+            }
+        }
+        if (!datum.type()) {
+            return arrow::Status::Invalid("Aggregate result has no type.");
+        }
+        return std::move(datum);
+    }
+};
+
+class TSimpleFunction : public TInternalFunction<TAssign> {
+    using TBase = TInternalFunction<TAssign>;
+private:
+    using TBase::TBase;
+    virtual std::vector<std::string> GetRegistryFunctionNames(const EOperation& opId) const override {
+        return { GetFunctionName(opId) };
+    }
+};
+
+template <class TAssignObject>
+class TKernelFunction : public IStepFunction<TAssignObject> {
+    using TBase = IStepFunction<TAssignObject>;
+    const TFunctionPtr Function;
+    
+public:
+    TKernelFunction(const TFunctionPtr kernelsFunction, arrow::compute::ExecContext* ctx)
+        : TBase(ctx)
+        , Function(kernelsFunction)
+    {}
+
+    arrow::Result<arrow::Datum> Call(const TAssignObject& assign, const TDatumBatch& batch) const override {
+        auto arguments = TBase::BuildArgs(batch, assign.GetArguments());
+        if (!arguments) {
+            return arrow::Status::Invalid("Error parsing args.");
+        }
+        return Function->Execute(*arguments, assign.GetOptions(), TBase::Ctx);
+    }
+};
+
 const char * GetFunctionName(EOperation op) {
     switch (op) {
         case EOperation::CastBoolean:
@@ -338,64 +441,6 @@ CH::AggFunctionId GetHouseFunction(EAggregate op) {
     return CH::AggFunctionId::AGG_UNSPECIFIED;
 }
 
-
-template <bool houseFunction, typename TOpId, typename TOptions>
-arrow::Result<arrow::Datum> CallFunctionById(
-    TOpId funcId, const std::vector<std::string>& args,
-    const TOptions* funcOpts,
-    const TProgramStep::TDatumBatch& batch,
-    arrow::compute::ExecContext* ctx)
-{
-    std::vector<arrow::Datum> arguments;
-    arguments.reserve(args.size());
-
-    for (auto& colName : args) {
-        auto column = batch.GetColumnByName(colName);
-        if (!column.ok()) {
-            return column.status();
-        }
-        arguments.push_back(*column);
-    }
-    std::string funcName;
-    if constexpr (houseFunction) {
-        funcName = GetHouseFunctionName(funcId);
-    } else {
-        funcName = GetFunctionName(funcId);
-    }
-
-    if (ctx && ctx->func_registry()->GetFunction(funcName).ok()) {
-        return arrow::compute::CallFunction(funcName, arguments, funcOpts, ctx);
-    }
-    return arrow::compute::CallFunction(funcName, arguments, funcOpts);
-}
-
-arrow::Result<arrow::Datum> CallFunctionByAssign(
-    const TAssign& assign,
-    const TProgramStep::TDatumBatch& batch,
-    arrow::compute::ExecContext* ctx)
-{
-    return CallFunctionById<false>(assign.GetOperation(), assign.GetArguments(), assign.GetFunctionOptions(),
-                                   batch, ctx);
-}
-
-arrow::Result<arrow::Datum> CallFunctionByAssign(
-    const TAggregateAssign& assign,
-    const TProgramStep::TDatumBatch& batch,
-    arrow::compute::ExecContext* ctx)
-{
-    return CallFunctionById<false>(assign.GetOperation(), assign.GetArguments(), &assign.GetAggregateOptions(),
-                                   batch, ctx);
-}
-
-arrow::Result<arrow::Datum> CallHouseFunctionByAssign(
-    const TAggregateAssign& assign,
-    TProgramStep::TDatumBatch& batch,
-    arrow::compute::ExecContext* ctx)
-{
-    return CallFunctionById<true>(assign.GetOperation(), assign.GetArguments(), &assign.GetAggregateOptions(),
-                                  batch, ctx);
-}
-
 CH::GroupByOptions::Assign GetGroupByAssign(const TAggregateAssign& assign) {
     CH::GroupByOptions::Assign descr;
     descr.function = GetHouseFunction(assign.GetOperation());
@@ -411,10 +456,7 @@ CH::GroupByOptions::Assign GetGroupByAssign(const TAggregateAssign& assign) {
 }
 
 
-arrow::Status TProgramStep::TDatumBatch::AddColumn(
-    const std::string& name,
-    arrow::Datum&& column)
-{
+arrow::Status TDatumBatch::AddColumn(const std::string& name, arrow::Datum&& column) {
     if (Schema->GetFieldIndex(name) != -1) {
         return arrow::Status::Invalid("Trying to add duplicate column '" + name + "'");
     }
@@ -432,7 +474,7 @@ arrow::Status TProgramStep::TDatumBatch::AddColumn(
     return arrow::Status::OK();
 }
 
-arrow::Result<arrow::Datum> TProgramStep::TDatumBatch::GetColumnByName(const std::string& name) const {
+arrow::Result<arrow::Datum> TDatumBatch::GetColumnByName(const std::string& name) const {
     auto i = Schema->GetFieldIndex(name);
     if (i < 0) {
         return arrow::Status::Invalid("Not found column '" + name + "' or duplicate");
@@ -440,7 +482,7 @@ arrow::Result<arrow::Datum> TProgramStep::TDatumBatch::GetColumnByName(const std
     return Datums[i];
 }
 
-std::shared_ptr<arrow::RecordBatch> TProgramStep::TDatumBatch::ToRecordBatch() const {
+std::shared_ptr<arrow::RecordBatch> TDatumBatch::ToRecordBatch() const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(Datums.size());
     for (auto col : Datums) {
@@ -457,8 +499,7 @@ std::shared_ptr<arrow::RecordBatch> TProgramStep::TDatumBatch::ToRecordBatch() c
     return arrow::RecordBatch::Make(Schema, Rows, columns);
 }
 
-std::shared_ptr<TProgramStep::TDatumBatch>
-TProgramStep::TDatumBatch::FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch) {
+std::shared_ptr<TDatumBatch> TDatumBatch::FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch) {
     std::vector<arrow::Datum> datums;
     datums.reserve(batch->num_columns());
     for (int64_t i = 0; i < batch->num_columns(); ++i) {
@@ -472,11 +513,26 @@ TProgramStep::TDatumBatch::FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& 
         });
 }
 
+IStepFunction<TAssign>::TPtr TAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
+    if (KernelFunction) {
+        return std::make_shared<TKernelFunction<TAssign>>(KernelFunction, ctx);
+    }
+    if (IsConstant()) {
+        return std::make_shared<TConstFunction>(ctx);
+    }
+    return std::make_shared<TSimpleFunction>(ctx);
+}
 
-arrow::Status TProgramStep::ApplyAssignes(
-    TProgramStep::TDatumBatch& batch,
-    arrow::compute::ExecContext* ctx) const
-{
+
+IStepFunction<TAggregateAssign>::TPtr TAggregateAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
+    if (KernelFunction) {
+        return std::make_shared<TKernelFunction<TAggregateAssign>>(KernelFunction, ctx);
+    }
+    return std::make_shared<TAggregateFunction>(ctx);
+}
+
+
+arrow::Status TProgramStep::ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const {
     if (Assignes.empty()) {
         return arrow::Status::OK();
     }
@@ -486,29 +542,20 @@ arrow::Status TProgramStep::ApplyAssignes(
             return arrow::Status::Invalid("Assign to existing column '" + assign.GetName() + "'.");
         }
 
-        arrow::Datum column;
-        if (assign.IsConstant()) {
-            column = assign.GetConstant();
-        } else {
-            auto funcResult = CallFunctionByAssign(assign, batch, ctx);
-            if (!funcResult.ok()) {
-                return funcResult.status();
-            }
-            column = *funcResult;
+        auto funcResult = assign.GetFunction(ctx)->Call(assign, batch);
+        if (!funcResult.ok()) {
+            return funcResult.status();
         }
+        arrow::Datum column = *funcResult;
         auto status = batch.AddColumn(assign.GetName(), std::move(column));
         if (!status.ok()) {
             return status;
         }
     }
-    //return batch->Validate();
     return arrow::Status::OK();
 }
 
-arrow::Status TProgramStep::ApplyAggregates(
-    TDatumBatch& batch,
-    arrow::compute::ExecContext* ctx) const
-{
+arrow::Status TProgramStep::ApplyAggregates(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const {
     if (GroupBy.empty()) {
         return arrow::Status::OK();
     }
@@ -522,40 +569,13 @@ arrow::Status TProgramStep::ApplyAggregates(
 
     if (GroupByKeys.empty()) {
         for (auto& assign : GroupBy) {
-            auto funcResult = CallFunctionByAssign(assign, batch, ctx);
+            auto funcResult = assign.GetFunction(ctx)->Call(assign, batch);
             if (!funcResult.ok()) {
-                auto houseResult = CallHouseFunctionByAssign(assign, batch, ctx);
-                if (!houseResult.ok()) {
-                    return funcResult.status();
-                }
-                funcResult = houseResult;
+                return funcResult.status();
             }
-
             res.Datums.push_back(*funcResult);
-            auto& column = res.Datums.back();
-            if (!column.is_scalar()) {
-                return arrow::Status::Invalid("Aggregate result is not a scalar.");
-            }
-
-            if (column.scalar()->type->id() == arrow::Type::STRUCT) {
-                auto op = assign.GetOperation();
-                if (op == EAggregate::Min) {
-                    const auto& minMax = column.scalar_as<arrow::StructScalar>();
-                    column = minMax.value[0];
-                } else if (op == EAggregate::Max) {
-                    const auto& minMax = column.scalar_as<arrow::StructScalar>();
-                    column = minMax.value[1];
-                } else {
-                    return arrow::Status::Invalid("Unexpected struct result for aggregate function.");
-                }
-            }
-
-            if (!column.type()) {
-                return arrow::Status::Invalid("Aggregate result has no type.");
-            }
-            fields.emplace_back(std::make_shared<arrow::Field>(assign.GetName(), column.type()));
+            fields.emplace_back(std::make_shared<arrow::Field>(assign.GetName(), res.Datums.back().type()));
         }
-
         res.Rows = 1;
     } else {
         CH::GroupByOptions funcOpts;

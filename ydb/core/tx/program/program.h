@@ -1,5 +1,6 @@
 #pragma once
 
+#include "registry.h" 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/ssa.pb.h>
 #include <ydb/core/formats/arrow/program.h>
@@ -20,6 +21,7 @@ class TProgramContainer {
 private:
     std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
+    TKernelsRegistry KernelsRegistry;
 public:
     bool Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error);
 
@@ -38,7 +40,7 @@ public:
 
     bool HasEarlyFilterOnly() const;
 private:
-    bool ParseProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
+    bool ParseProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program, TString& error);
 };
 
 }

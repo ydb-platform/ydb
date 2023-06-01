@@ -35,6 +35,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-predicate
   columnshard-engines-storage
   formats-arrow-compression
+  core-tx-program
   udf-service-exception_policy
   tools-enum_parser-enum_serialization_runtime
 )

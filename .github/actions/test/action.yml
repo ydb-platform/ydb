@@ -144,17 +144,21 @@ runs:
     if: always() && inputs.testman_token
     shell: bash
     run: |
-      testmo automation:run:submit-thread \
-        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/unittests/*.xml 
-      testmo automation:run:submit-thread \
-        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/suites/*.xml \
-        -- cat $WORKDIR/short.log
-      testmo automation:run:submit-thread \
-        --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $PYTESTREPDIR/*.xml \
-        -- cat $WORKDIR/pytest-short.log
+      if [[ ${{inputs.run_unit_tests}} ]]; then
+        testmo automation:run:submit-thread \
+          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+          --results $TESTREPDIR/unittests/*.xml 
+        testmo automation:run:submit-thread \
+          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+          --results $TESTREPDIR/suites/*.xml \
+          -- cat $WORKDIR/short.log
+      fi
+      if [[ ${{inputs.run_functional_tests}} ]]; then
+        testmo automation:run:submit-thread \
+          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+          --results $PYTESTREPDIR/*.xml \
+          -- cat $WORKDIR/pytest-short.log
+      fi
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master

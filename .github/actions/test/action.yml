@@ -46,7 +46,7 @@ runs:
       rm -rf artifacts/* tmp/* test_reports/*
       echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
-      echo "PYTESTREPDIR=$(pwd)//ydb/tests/functional/test-results/xml" >> $GITHUB_ENV
+      echo "PYTESTREPDIR=$(pwd)/ydb/tests/functional/test-results/xml" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT

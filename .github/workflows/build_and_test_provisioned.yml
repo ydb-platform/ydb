@@ -56,7 +56,6 @@ jobs:
         sanitizer: ${{ inputs.sanitizer }}
     - name: Run tests
       uses: ./.github/actions/test
-      if: inputs.run_unit_tests
       with: 
         log_suffix: ${{format('{0}{1}', inputs.runner_label, inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}

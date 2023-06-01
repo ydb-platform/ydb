@@ -50,7 +50,7 @@ runs:
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
-      echo "pytest-logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
+      echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
   - name: Install Node required for Testmo CLI
     uses: actions/setup-node@v3
     with:

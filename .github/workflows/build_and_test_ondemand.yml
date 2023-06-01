@@ -95,7 +95,6 @@ jobs:
       with: 
         sanitizer: ${{ inputs.sanitizer }}
     - name: Run tests
-      if: inputs.run_unit_tests
       uses: ./.github/actions/test
       with:
         log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}

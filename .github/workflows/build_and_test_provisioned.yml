@@ -17,7 +17,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
       test_label_regexp:
         required: false
         type: string
@@ -37,7 +37,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
       test_label_regexp:
         required: false
         type: string

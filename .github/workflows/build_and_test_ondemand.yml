@@ -18,7 +18,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
   workflow_dispatch:
     inputs: 
       sanitizer:
@@ -36,7 +36,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
     
 jobs:
 

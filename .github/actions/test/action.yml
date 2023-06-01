@@ -113,6 +113,17 @@ runs:
         tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log
+
+      if [[ "${{inputs.testman_token}}" != '' ]]; then
+        testmo automation:run:submit-thread \
+          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+          --results $TESTREPDIR/unittests/*.xml 
+        testmo automation:run:submit-thread \
+          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
+          --results $TESTREPDIR/suites/*.xml \
+          -- cat $WORKDIR/short.log
+      fi
+
   - name: Run functional tests
     if: inputs.run_functional_tests == 'true' && (success() || failure())
     shell: bash
@@ -140,25 +151,17 @@ runs:
         tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.pytest-logfilename}}) | \
         grep -E '(FAILED|ERROR)\s*\[.*\]' | \
         tee $WORKDIR/pytest-short.log
-  - name: Test history upload results
-    if: always() && inputs.testman_token
-    shell: bash
-    run: |
-      if [[ ${{ inputs.run_unit_tests }} == true ]]; then
-        testmo automation:run:submit-thread \
-          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-          --results $TESTREPDIR/unittests/*.xml 
-        testmo automation:run:submit-thread \
-          --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-          --results $TESTREPDIR/suites/*.xml \
-          -- cat $WORKDIR/short.log
-      fi
-      if [[ ${{ inputs.run_functional_tests }} == true ]]; then
+      
+      if [[ "${{inputs.testman_token}}" != '' ]]; then
         testmo automation:run:submit-thread \
           --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
           --results $PYTESTREPDIR/*.xml \
           -- cat $WORKDIR/pytest-short.log
       fi
+  - name: Test history run complete
+    if: always() && inputs.testman_token
+    shell: bash
+    run: |
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master

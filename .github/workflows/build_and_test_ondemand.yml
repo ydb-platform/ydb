@@ -106,8 +106,8 @@ jobs:
         testman_token: ${{secrets.TESTMO_TOKEN}}
         testman_url: ${{vars.TESTMO_URL}}
         testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
-        run_unit_tests: ${{inputs.run_unit_tests}}
-        run_functional_tests: ${{inputs.run_functional_tests}}
+        run_unit_tests: ${{ inputs.run_unit_tests }}
+        run_functional_tests: ${{ inputs.run_functional_tests }}
   release-runner:
     name: Release self-hosted YC runner if provided on-demand
     needs:

@@ -3961,6 +3961,77 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         CompareYson(R"([[[1];[1];["Payload1"]];[[5];[5];["Payload5"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(IndexFilterPushDown) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false /*populateTables*/);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (0,    0,    "Value0"),
+                (1,    0,    "Value1"),
+                (2,    1,    "Value2");
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) LIMIT 1;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
+            .ExpectedReads = 1
+        });
+
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
+            .ExpectedReads = 1
+        });
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) AND Fk + Fk >= 0 LIMIT 1;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
+            .ExpectedReads = 1
+        });
+
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
+            .ExpectedReads = 1
+        });
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) ORDER BY Fk LIMIT 1;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
+            .ExpectedReads = 1
+        });
+
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
+            .ExpectedReads = 1
+        });
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT Fk, Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk = CAST(0 AS UInt32) AND Fk + Fk >= 0 ORDER BY Fk LIMIT 1;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
+            .ExpectedReads = 1
+        });
+
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
+            .ExpectedReads = 1
+        });
+    }
 }
 
 }

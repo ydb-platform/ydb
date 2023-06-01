@@ -94,7 +94,7 @@ runs:
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
   - name: Run unit tests
-    if: ${{ inputs.run_unit_tests }}
+    if: ${{ inputs.run_unit_tests == true }}
     shell: bash
     run: |
       cd $WORKDIR/../build/ydb
@@ -112,7 +112,7 @@ runs:
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log
   - name: Run functional tests
-    if: ${{ inputs.run_functional_tests && (success() || failure()) }}
+    if: ${{ inputs.run_functional_tests == false && (success() || failure()) }}
     shell: bash
     run: |
       export source_root=$WORKDIR

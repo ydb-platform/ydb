@@ -30,10 +30,8 @@ inputs:
     type: string
   run_unit_tests:
     type: boolean
-    default: true
   run_functional_tests:
     type: boolean
-    default: true
 
 runs:
   using: "composite"
@@ -96,7 +94,7 @@ runs:
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
   - name: Run unit tests
-    if: ${{inputs.run_unit_tests}}
+    if: ${{ inputs.run_unit_tests }}
     shell: bash
     run: |
       cd $WORKDIR/../build/ydb
@@ -114,7 +112,7 @@ runs:
         grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log
   - name: Run functional tests
-    if: ${{inputs.run_functional_tests}} && (success() || failure())
+    if: ${{ inputs.run_functional_tests && (success() || failure()) }}
     shell: bash
     run: |
       export source_root=$WORKDIR
@@ -144,7 +142,7 @@ runs:
     if: always() && inputs.testman_token
     shell: bash
     run: |
-      if [[ ${{inputs.run_unit_tests}} == true ]]; then
+      if [[ ${{ inputs.run_unit_tests }} == true ]]; then
         testmo automation:run:submit-thread \
           --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
           --results $TESTREPDIR/unittests/*.xml 
@@ -153,7 +151,7 @@ runs:
           --results $TESTREPDIR/suites/*.xml \
           -- cat $WORKDIR/short.log
       fi
-      if [[ ${{inputs.run_functional_tests}} == true ]]; then
+      if [[ ${{ inputs.run_functional_tests }} == true ]]; then
         testmo automation:run:submit-thread \
           --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
           --results $PYTESTREPDIR/*.xml \

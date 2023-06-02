@@ -246,10 +246,18 @@ SIMPLE_UDF(TGetDomain, TOptional<char*>(TOptional<char*>, ui8)) {
     return TUnboxedValue();
 }
 
-SIMPLE_UDF(TGetTLD, char*(TAutoMap<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TGetTLD, char*(TAutoMap<char*>)) {
     const TStringBuf url(args[0].AsStringRef());
     return valueBuilder->NewString(GetZone(GetOnlyHost(url)));
 }
+struct TGetTLDKernelExec : public TUnaryKernelExec<TGetTLDKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        const TStringBuf url(arg.AsStringRef());
+        return sink(TBlockItem(GetZone(GetOnlyHost(url))));
+    }
+};
+END_SIMPLE_ARROW_UDF(TGetTLD, TGetTLDKernelExec::Do);
 
 SIMPLE_UDF(TGetDomainLevel, ui64(TAutoMap<char*>)) {
     Y_UNUSED(valueBuilder);
@@ -381,15 +389,29 @@ struct TDecodeKernelExec : public TUnaryKernelExec<TDecodeKernelExec> {
 };
 END_SIMPLE_ARROW_UDF(TDecode, TDecodeKernelExec::Do);
 
-SIMPLE_UDF(TIsKnownTLD, bool(TAutoMap<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TIsKnownTLD, bool(TAutoMap<char*>)) {
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(IsTld(args[0].AsStringRef()));
 }
+struct TIsKnownTLDKernelExec : public TUnaryKernelExec<TIsKnownTLDKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        sink(TBlockItem(static_cast<ui8>(IsTld(arg.AsStringRef()))));
+    }
+};
+END_SIMPLE_ARROW_UDF(TIsKnownTLD, TIsKnownTLDKernelExec::Do);
 
-SIMPLE_UDF(TIsWellKnownTLD, bool(TAutoMap<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TIsWellKnownTLD, bool(TAutoMap<char*>)) {
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(IsVeryGoodTld(args[0].AsStringRef()));
 }
+struct TIsWellKnownTLDKernelExec : public TUnaryKernelExec<TIsWellKnownTLDKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        sink(TBlockItem(static_cast<ui8>(IsVeryGoodTld(arg.AsStringRef()))));
+    }
+};
+END_SIMPLE_ARROW_UDF(TIsWellKnownTLD, TIsWellKnownTLDKernelExec::Do);
 
 SIMPLE_UDF(THostNameToPunycode, TOptional<char*>(TAutoMap<char*>)) try {
     const TUtf16String& input = UTF8ToWide(args[0].AsStringRef());

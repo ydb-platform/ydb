@@ -43,6 +43,10 @@ runs:
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
+      echo "artifactsdir=$(pwd)/artifacts" >> $GITHUB_OUTPUT
+      echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
+      echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
+      echo "logurlprefix=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_OUTPUT
   - name: Install Node required for Testmo CLI
     uses: actions/setup-node@v3
     with:
@@ -88,33 +92,86 @@ runs:
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
   - name: Test
+    id: ctest
     shell: bash
     run: |
       cd $WORKDIR/../build/ydb
 
-      echo "Stdout log (gzip archive): ${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
+      echo "[Stdout log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.logfilename}})" >> $GITHUB_STEP_SUMMARY
+      echo "[Testmo](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
       TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
               --output-junit $TESTREPDIR/suites/ctest_report.xml \
-              -L '${{inputs.test_label_regexp}}' | \
-        sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
-        grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
-        tee $WORKDIR/short.log
+              -L '${{inputs.test_label_regexp}}' -E "${CTEST_SKIP_SHARDS:-}" | \
+        sed -u -e 's/\x1b\[[0-9;]*m//g' | \
+        tee >(gzip --stdout > ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}}) | \
+        grep --line-buffered -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
+        tee $WORKDIR/short.log || (
+          RC=$?
+          if [ $RC == 8 ]; then
+            echo "ctest returned TEST_ERRORS, recovering.."
+          else
+            exit $RC
+          fi
+      )
+  - name: archive unitest reports (orig)
+    shell: bash
+    run: |
+      tar -C $TESTREPDIR/ -czf ${{steps.init.outputs.artifactsdir}}/reports.tar.gz .
+      ls -la ${{steps.init.outputs.artifactsdir}}/reports.tar.gz
+      echo "[Unittest/CTest XML reports archive](${{steps.init.outputs.logurlprefix}}/reports.tar.gz)" >> $GITHUB_STEP_SUMMARY
+  - name: postprocess junit reports
+    shell: bash
+    run: |
+      echo "::group::junit-postprocess"
+      
+      .github/scripts/tests/junit-postprocess.py \
+        --filter-file ${{steps.init.outputs.testfilterfile}} \
+        $TESTREPDIR/unittests/
+
+      echo "::endgroup::"
+
+      echo "::group::ctest-postprocess"
+
+      .github/scripts/tests/ctest-postprocess.py \
+        --filter-file ${{steps.init.outputs.testshardfilterfile}} \
+        --decompress \
+        ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
+        $TESTREPDIR/suites/ctest_report.xml
+
+      echo "::endgroup::"
+  - name: extract log output
+    shell: bash
+    run: |
+      mkdir ${{steps.init.outputs.artifactsdir}}/logs/
+
+      .github/scripts/tests/extract-logs.py \
+        --write-summary \
+        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
+        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
+        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
+        --patch-jsuite \
+        --ctest-report $TESTREPDIR/suites/ctest_report.xml \
+        --junit-reports-path $TESTREPDIR/unittests/ \
+        --decompress \
+        ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
+        ${{steps.init.outputs.artifactsdir}}/logs/
+        
+
   - name: Test history upload results
     if: always() && inputs.testman_token
     shell: bash
     run: |
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/unittests/*.xml 
+        --results "$TESTREPDIR/unittests/*.xml"
       testmo automation:run:submit-thread \
         --exec-suppress \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/suites/*.xml \
+        --results "$TESTREPDIR/suites/*.xml" \
         -- cat $WORKDIR/short.log
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
   - name: Upload S3
@@ -124,6 +181,11 @@ runs:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
       aws_bucket: ${{inputs.aws_bucket}}
+      # FIXME: must be constant here
       source_dir: artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: ${{inputs.aws_endpoint}}
+  - name: finish
+    shell: bash
+    run: |
+      .github/scripts/tests/fail-checker.py $TESTREPDIR/unittests/ $TESTREPDIR/suites/

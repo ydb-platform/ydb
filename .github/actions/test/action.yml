@@ -126,7 +126,7 @@ runs:
         -- cat $WORKDIR/short.log
 
   - name: Run functional tests
-    if: inputs.run_functional_tests == 'true'
+    if: inputs.run_functional_tests == 'true' && (success() || failure())
     shell: bash
     run: |
       export source_root=$WORKDIR

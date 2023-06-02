@@ -154,7 +154,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
-      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+      options.NewTTLSettings().ColumnSeconds("modified_at").ExpireAfter(time.Hour),
     ),
   )
   ```

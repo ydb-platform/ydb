@@ -22,8 +22,11 @@
 
 #include <string.h>
 
+#include "y_absl/base/attributes.h"
 #include "y_absl/strings/str_format.h"
+#include "y_absl/strings/string_view.h"
 
+#include <grpc/slice_buffer.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 

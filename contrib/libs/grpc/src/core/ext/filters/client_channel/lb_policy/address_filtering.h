@@ -20,6 +20,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <map>
+#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <vector>

@@ -26,44 +26,53 @@
 
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+#include <utility>
 
+#include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
 
-#include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/host_port.h"
+#include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/socket_utils.h"
+#include "src/core/lib/uri/uri_parser.h"
 
 #ifdef GRPC_HAVE_UNIX_SOCKET
 #include <sys/un.h>
 #endif
 
 #ifdef GRPC_HAVE_UNIX_SOCKET
-static TString grpc_sockaddr_to_uri_unix_if_possible(
+static y_absl::StatusOr<TString> grpc_sockaddr_to_uri_unix_if_possible(
     const grpc_resolved_address* resolved_addr) {
   const grpc_sockaddr* addr =
       reinterpret_cast<const grpc_sockaddr*>(resolved_addr->addr);
   if (addr->sa_family != AF_UNIX) {
-    return "";
+    return y_absl::InvalidArgumentError(
+        y_absl::StrCat("Socket family is not AF_UNIX: ", addr->sa_family));
   }
   const auto* unix_addr = reinterpret_cast<const struct sockaddr_un*>(addr);
+  TString scheme, path;
   if (unix_addr->sun_path[0] == '\0' && unix_addr->sun_path[1] != '\0') {
-    return y_absl::StrCat(
-        "unix-abstract:",
-        y_absl::string_view(
-            unix_addr->sun_path + 1,
-            resolved_addr->len - sizeof(unix_addr->sun_family) - 1));
+    scheme = "unix-abstract";
+    path = TString(unix_addr->sun_path + 1,
+                       resolved_addr->len - sizeof(unix_addr->sun_family) - 1);
+  } else {
+    scheme = "unix";
+    path = unix_addr->sun_path;
   }
-  return y_absl::StrCat("unix:", unix_addr->sun_path);
+  y_absl::StatusOr<grpc_core::URI> uri = grpc_core::URI::Create(
+      std::move(scheme), /*authority=*/"", std::move(path),
+      /*query_parameter_pairs=*/{}, /*fragment=*/"");
+  if (!uri.ok()) return uri.status();
+  return uri->ToString();
 }
 #else
-static TString grpc_sockaddr_to_uri_unix_if_possible(
+static y_absl::StatusOr<TString> grpc_sockaddr_to_uri_unix_if_possible(
     const grpc_resolved_address* /* addr */) {
-  return "";
+  return y_absl::InvalidArgumentError("Unix socket is not supported.");
 }
 #endif
 
@@ -183,8 +192,8 @@ void grpc_sockaddr_make_wildcard6(int port,
   resolved_wild_out->len = static_cast<socklen_t>(sizeof(grpc_sockaddr_in6));
 }
 
-TString grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
-                                    bool normalize) {
+y_absl::StatusOr<TString> grpc_sockaddr_to_string(
+    const grpc_resolved_address* resolved_addr, bool normalize) {
   const int save_errno = errno;
   grpc_resolved_address addr_normalized;
   if (normalize && grpc_sockaddr_is_v4mapped(resolved_addr, &addr_normalized)) {
@@ -192,6 +201,28 @@ TString grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
   }
   const grpc_sockaddr* addr =
       reinterpret_cast<const grpc_sockaddr*>(resolved_addr->addr);
+  TString out;
+#ifdef GRPC_HAVE_UNIX_SOCKET
+  if (addr->sa_family == GRPC_AF_UNIX) {
+    const sockaddr_un* addr_un = reinterpret_cast<const sockaddr_un*>(addr);
+    bool abstract = addr_un->sun_path[0] == '\0';
+    if (abstract) {
+      int len = resolved_addr->len - sizeof(addr->sa_family);
+      if (len <= 0) {
+        return y_absl::InvalidArgumentError("empty UDS abstract path");
+      }
+      out = TString(addr_un->sun_path, len);
+    } else {
+      size_t maxlen = sizeof(addr_un->sun_path);
+      if (strnlen(addr_un->sun_path, maxlen) == maxlen) {
+        return y_absl::InvalidArgumentError("UDS path is not null-terminated");
+      }
+      out = TString(addr_un->sun_path);
+    }
+    return out;
+  }
+#endif
+
   const void* ip = nullptr;
   int port = 0;
   uint32_t sin6_scope_id = 0;
@@ -208,27 +239,30 @@ TString grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
     sin6_scope_id = addr6->sin6_scope_id;
   }
   char ntop_buf[GRPC_INET6_ADDRSTRLEN];
-  TString out;
   if (ip != nullptr && grpc_inet_ntop(addr->sa_family, ip, ntop_buf,
                                       sizeof(ntop_buf)) != nullptr) {
     if (sin6_scope_id != 0) {
       // Enclose sin6_scope_id with the format defined in RFC 6874 section 2.
       TString host_with_scope =
-          y_absl::StrFormat("%s%%25%" PRIu32, ntop_buf, sin6_scope_id);
+          y_absl::StrFormat("%s%%%" PRIu32, ntop_buf, sin6_scope_id);
       out = grpc_core::JoinHostPort(host_with_scope, port);
     } else {
       out = grpc_core::JoinHostPort(ntop_buf, port);
     }
   } else {
-    out = y_absl::StrFormat("(sockaddr family=%d)", addr->sa_family);
+    return y_absl::InvalidArgumentError(
+        y_absl::StrCat("Unknown sockaddr family: ", addr->sa_family));
   }
   /* This is probably redundant, but we wouldn't want to log the wrong error. */
   errno = save_errno;
   return out;
 }
 
-TString grpc_sockaddr_to_uri(const grpc_resolved_address* resolved_addr) {
-  if (resolved_addr->len == 0) return "";
+y_absl::StatusOr<TString> grpc_sockaddr_to_uri(
+    const grpc_resolved_address* resolved_addr) {
+  if (resolved_addr->len == 0) {
+    return y_absl::InvalidArgumentError("Empty address");
+  }
   grpc_resolved_address addr_normalized;
   if (grpc_sockaddr_is_v4mapped(resolved_addr, &addr_normalized)) {
     resolved_addr = &addr_normalized;
@@ -237,13 +271,13 @@ TString grpc_sockaddr_to_uri(const grpc_resolved_address* resolved_addr) {
   if (scheme == nullptr || strcmp("unix", scheme) == 0) {
     return grpc_sockaddr_to_uri_unix_if_possible(resolved_addr);
   }
-  TString path =
-      grpc_sockaddr_to_string(resolved_addr, false /* normalize */);
-  TString uri_str;
-  if (scheme != nullptr) {
-    uri_str = y_absl::StrCat(scheme, ":", path);
-  }
-  return uri_str;
+  auto path = grpc_sockaddr_to_string(resolved_addr, false /* normalize */);
+  if (!path.ok()) return path;
+  y_absl::StatusOr<grpc_core::URI> uri =
+      grpc_core::URI::Create(scheme, /*authority=*/"", std::move(path.value()),
+                             /*query_parameter_pairs=*/{}, /*fragment=*/"");
+  if (!uri.ok()) return uri.status();
+  return uri->ToString();
 }
 
 const char* grpc_sockaddr_get_uri_scheme(

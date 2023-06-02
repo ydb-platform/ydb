@@ -21,8 +21,12 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stdint.h>
+
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+
+#include "y_absl/status/statusor.h"
 
 #include "src/core/lib/iomgr/resolved_address.h"
 
@@ -61,14 +65,15 @@ int grpc_sockaddr_set_port(grpc_resolved_address* addr, int port);
 
 // Converts a sockaddr into a newly-allocated human-readable string.
 //
-// Currently, only the AF_INET and AF_INET6 families are recognized.
+// Currently, only the AF_INET, AF_INET6, and AF_UNIX families are recognized.
 // If the normalize flag is enabled, ::ffff:0.0.0.0/96 IPv6 addresses are
 // displayed as plain IPv4.
-TString grpc_sockaddr_to_string(const grpc_resolved_address* addr,
-                                    bool normalize) GRPC_MUST_USE_RESULT;
+y_absl::StatusOr<TString> grpc_sockaddr_to_string(
+    const grpc_resolved_address* addr, bool normalize) GRPC_MUST_USE_RESULT;
 
 /* Returns the URI string corresponding to \a addr */
-TString grpc_sockaddr_to_uri(const grpc_resolved_address* addr);
+y_absl::StatusOr<TString> grpc_sockaddr_to_uri(
+    const grpc_resolved_address* addr);
 
 /* Returns the URI scheme corresponding to \a addr */
 const char* grpc_sockaddr_get_uri_scheme(const grpc_resolved_address* addr);

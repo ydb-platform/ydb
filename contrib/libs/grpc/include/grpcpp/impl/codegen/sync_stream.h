@@ -20,7 +20,7 @@
 
 // IWYU pragma: private, include <grpcpp/support/sync_stream.h>
 
-#include <grpcpp/impl/codegen/call.h>
+#include <grpcpp/impl/call.h>
 #include <grpcpp/impl/codegen/channel_interface.h>
 #include <grpcpp/impl/codegen/client_context.h>
 #include <grpcpp/impl/codegen/completion_queue.h>
@@ -222,7 +222,12 @@ class ClientReader final : public ClientReaderInterface<R> {
   ///   The \a ClientContext associated with this call is updated with
   ///   possible metadata received from the server.
   grpc::Status Finish() override {
-    grpc::internal::CallOpSet<grpc::internal::CallOpClientRecvStatus> ops;
+    grpc::internal::CallOpSet<grpc::internal::CallOpRecvInitialMetadata,
+                              grpc::internal::CallOpClientRecvStatus>
+        ops;
+    if (!context_->initial_metadata_received_) {
+      ops.RecvInitialMetadata(context_);
+    }
     grpc::Status status;
     ops.ClientRecvStatus(context_, &status);
     call_.PerformOps(&ops);

@@ -18,8 +18,14 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
+
+#include <map>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <utility>
+#include <vector>
 
 #include "y_absl/strings/string_view.h"
 

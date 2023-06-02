@@ -20,7 +20,7 @@
 #include <util/string/cast.h>
 
 #include "y_absl/strings/string_view.h"
-#include "y_absl/types/variant.h"
+#include "y_absl/types/optional.h"
 
 namespace grpc_event_engine {
 namespace experimental {
@@ -32,10 +32,16 @@ namespace experimental {
 class EndpointConfig {
  public:
   virtual ~EndpointConfig() = default;
-  using Setting = y_absl::variant<y_absl::monostate, int, y_absl::string_view, void*>;
-  /// Returns the Setting for a specified key, or \a y_absl::monostate if there is
-  /// no such entry. Caller does not take ownership of the resulting value.
-  virtual Setting Get(y_absl::string_view key) const = 0;
+  // If the key points to an integer config, an integer value gets returned.
+  // Otherwise it returns an y_absl::nullopt_t
+  virtual y_absl::optional<int> GetInt(y_absl::string_view key) const = 0;
+  // If the key points to an string config, an string value gets returned.
+  // Otherwise it returns an y_absl::nullopt_t
+  virtual y_absl::optional<y_absl::string_view> GetString(
+      y_absl::string_view key) const = 0;
+  // If the key points to an void* config, a void* pointer value gets returned.
+  // Otherwise it returns nullptr
+  virtual void* GetVoidPointer(y_absl::string_view key) const = 0;
 };
 
 }  // namespace experimental

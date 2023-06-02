@@ -19,15 +19,23 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stddef.h>
+
+#include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <unordered_map>
 #include <vector>
 
-#include <grpc/impl/codegen/grpc_types.h>
-#include <grpc/support/string_util.h>
+#include "y_absl/status/status.h"
+#include "y_absl/status/statusor.h"
+#include "y_absl/strings/string_view.h"
 
-#include "src/core/lib/gprpp/ref_counted.h"
+#include <grpc/slice.h>
+#include <grpc/support/log.h>
+
+#include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json.h"
 #include "src/core/lib/service_config/service_config.h"
 #include "src/core/lib/service_config/service_config_parser.h"
@@ -62,13 +70,11 @@ namespace grpc_core {
 class ServiceConfigImpl final : public ServiceConfig {
  public:
   /// Creates a new service config from parsing \a json_string.
-  /// Returns null on parse error.
-  static RefCountedPtr<ServiceConfig> Create(const grpc_channel_args* args,
-                                             y_absl::string_view json_string,
-                                             grpc_error_handle* error);
+  static y_absl::StatusOr<RefCountedPtr<ServiceConfig>> Create(
+      const ChannelArgs& args, y_absl::string_view json_string);
 
-  ServiceConfigImpl(const grpc_channel_args* args, TString json_string,
-                    Json json, grpc_error_handle* error);
+  ServiceConfigImpl(const ChannelArgs& args, TString json_string, Json json,
+                    y_absl::Status* status);
   ~ServiceConfigImpl() override;
 
   y_absl::string_view json_string() const override { return json_string_; }
@@ -90,14 +96,13 @@ class ServiceConfigImpl final : public ServiceConfig {
 
  private:
   // Helper functions for parsing the method configs.
-  grpc_error_handle ParsePerMethodParams(const grpc_channel_args* args);
-  grpc_error_handle ParseJsonMethodConfig(const grpc_channel_args* args,
-                                          const Json& json);
+  y_absl::Status ParsePerMethodParams(const ChannelArgs& args);
+  y_absl::Status ParseJsonMethodConfig(const ChannelArgs& args, const Json& json,
+                                     size_t index);
 
   // Returns a path string for the JSON name object specified by json.
   // Sets *error on error.
-  static TString ParseJsonMethodName(const Json& json,
-                                         grpc_error_handle* error);
+  static y_absl::StatusOr<TString> ParseJsonMethodName(const Json& json);
 
   TString json_string_;
   Json json_;
@@ -115,8 +120,7 @@ class ServiceConfigImpl final : public ServiceConfig {
       nullptr;
   // Storage for all the vectors that are being used in
   // parsed_method_configs_table_.
-  y_absl::InlinedVector<std::unique_ptr<ServiceConfigParser::ParsedConfigVector>,
-                      32>
+  std::vector<std::unique_ptr<ServiceConfigParser::ParsedConfigVector>>
       parsed_method_config_vectors_storage_;
 };
 

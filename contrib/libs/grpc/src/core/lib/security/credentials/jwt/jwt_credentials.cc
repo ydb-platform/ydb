@@ -21,11 +21,14 @@
 #include "src/core/lib/security/credentials/jwt/jwt_credentials.h"
 
 #include <inttypes.h>
-#include <string.h>
+#include <stdlib.h>
 
+#include <map>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+#include <utility>
 
+#include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
 
 #include <grpc/support/alloc.h>
@@ -33,13 +36,14 @@
 #include <grpc/support/string_util.h>
 #include <grpc/support/sync.h>
 
-#include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/iomgr/exec_ctx.h"
+#include "src/core/lib/json/json.h"
 #include "src/core/lib/promise/promise.h"
 #include "src/core/lib/security/credentials/call_creds_util.h"
-#include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/surface/api_trace.h"
-#include "src/core/lib/transport/error_utils.h"
+#include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 using grpc_core::Json;
@@ -50,9 +54,9 @@ grpc_service_account_jwt_access_credentials::
   gpr_mu_destroy(&cache_mu_);
 }
 
-grpc_core::ArenaPromise<y_absl::StatusOr<grpc_core::ClientInitialMetadata>>
+grpc_core::ArenaPromise<y_absl::StatusOr<grpc_core::ClientMetadataHandle>>
 grpc_service_account_jwt_access_credentials::GetRequestMetadata(
-    grpc_core::ClientInitialMetadata initial_metadata,
+    grpc_core::ClientMetadataHandle initial_metadata,
     const grpc_call_credentials::GetRequestMetadataArgs* args) {
   gpr_timespec refresh_threshold = gpr_time_from_seconds(
       GRPC_SECURE_TOKEN_REFRESH_THRESHOLD_SECS, GPR_TIMESPAN);
@@ -107,7 +111,7 @@ grpc_service_account_jwt_access_credentials::GetRequestMetadata(
 grpc_service_account_jwt_access_credentials::
     grpc_service_account_jwt_access_credentials(grpc_auth_json_key key,
                                                 gpr_timespec token_lifetime)
-    : grpc_call_credentials(GRPC_CALL_CREDENTIALS_TYPE_JWT), key_(key) {
+    : key_(key) {
   gpr_timespec max_token_lifetime = grpc_max_auth_token_lifetime();
   if (gpr_time_cmp(token_lifetime, max_token_lifetime) > 0) {
     gpr_log(GPR_INFO,
@@ -117,6 +121,11 @@ grpc_service_account_jwt_access_credentials::
   }
   jwt_lifetime_ = token_lifetime;
   gpr_mu_init(&cache_mu_);
+}
+
+grpc_core::UniqueTypeName grpc_service_account_jwt_access_credentials::Type() {
+  static grpc_core::UniqueTypeName::Factory kFactory("Jwt");
+  return kFactory.Create();
 }
 
 grpc_core::RefCountedPtr<grpc_call_credentials>
@@ -131,14 +140,12 @@ grpc_service_account_jwt_access_credentials_create_from_auth_json_key(
 }
 
 static char* redact_private_key(const char* json_key) {
-  grpc_error_handle error = GRPC_ERROR_NONE;
-  Json json = Json::Parse(json_key, &error);
-  if (error != GRPC_ERROR_NONE || json.type() != Json::Type::OBJECT) {
-    GRPC_ERROR_UNREF(error);
+  auto json = Json::Parse(json_key);
+  if (!json.ok() || json->type() != Json::Type::OBJECT) {
     return gpr_strdup("<Json failed to parse.>");
   }
-  (*json.mutable_object())["private_key"] = "<redacted>";
-  return gpr_strdup(json.Dump(/*indent=*/2).c_str());
+  (*json->mutable_object())["private_key"] = "<redacted>";
+  return gpr_strdup(json->Dump(/*indent=*/2).c_str());
 }
 
 grpc_call_credentials* grpc_service_account_jwt_access_credentials_create(

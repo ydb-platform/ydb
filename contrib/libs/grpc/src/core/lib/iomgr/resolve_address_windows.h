@@ -32,14 +32,31 @@ class NativeDNSResolver : public DNSResolver {
   // Gets the singleton instance, creating it first if it doesn't exist
   static NativeDNSResolver* GetOrCreate();
 
-  OrphanablePtr<DNSResolver::Request> ResolveName(
-      y_absl::string_view name, y_absl::string_view default_port,
-      grpc_pollset_set* interested_parties,
+  TaskHandle LookupHostname(
       std::function<void(y_absl::StatusOr<std::vector<grpc_resolved_address>>)>
-          on_done) override;
+          on_resolved,
+      y_absl::string_view name, y_absl::string_view default_port, Duration timeout,
+      grpc_pollset_set* interested_parties,
+      y_absl::string_view name_server) override;
 
-  y_absl::StatusOr<std::vector<grpc_resolved_address>> ResolveNameBlocking(
+  y_absl::StatusOr<std::vector<grpc_resolved_address>> LookupHostnameBlocking(
       y_absl::string_view name, y_absl::string_view default_port) override;
+
+  TaskHandle LookupSRV(
+      std::function<void(y_absl::StatusOr<std::vector<grpc_resolved_address>>)>
+          on_resolved,
+      y_absl::string_view name, Duration timeout,
+      grpc_pollset_set* interested_parties,
+      y_absl::string_view name_server) override;
+
+  TaskHandle LookupTXT(
+      std::function<void(y_absl::StatusOr<TString>)> on_resolved,
+      y_absl::string_view name, Duration timeout,
+      grpc_pollset_set* interested_parties,
+      y_absl::string_view name_server) override;
+
+  // NativeDNSResolver does not support cancellation.
+  bool Cancel(TaskHandle handle) override;
 };
 
 }  // namespace grpc_core

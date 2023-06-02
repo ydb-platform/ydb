@@ -17,14 +17,23 @@
 
 #include "src/core/lib/security/credentials/external/aws_request_signer.h"
 
+#include <algorithm>
+#include <utility>
+#include <vector>
+
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 
+#include "y_absl/status/statusor.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/escaping.h"
+#include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
 #include "y_absl/strings/str_join.h"
 #include "y_absl/strings/str_split.h"
+#include "y_absl/strings/string_view.h"
 #include "y_absl/time/clock.h"
 #include "y_absl/time/time.h"
 

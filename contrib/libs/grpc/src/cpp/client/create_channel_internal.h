@@ -24,11 +24,10 @@
 #include <util/string/cast.h>
 #include <vector>
 
+#include <grpc/impl/codegen/grpc_types.h>
 #include <grpcpp/channel.h>
-#include <grpcpp/impl/codegen/client_interceptor.h>
+#include <grpcpp/support/client_interceptor.h>
 #include <grpcpp/support/config.h>
-
-struct grpc_channel;
 
 namespace grpc {
 

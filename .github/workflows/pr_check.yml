@@ -1,4 +1,4 @@
-name: PR check
+name: PR-check
 on: 
   pull_request_target:
     branches:

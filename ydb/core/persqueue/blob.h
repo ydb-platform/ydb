@@ -12,9 +12,6 @@
 namespace NKikimr {
 namespace NPQ {
 
-
-void CheckBlob(const TKey& key, const TString& blob);
-
 struct TPartData {
     ui16 PartNo;
     ui16 TotalParts;
@@ -96,6 +93,7 @@ struct TClientBlob {
     void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);
 
+    static void CheckBlob(const TKey& key, const TString& blob); 
 };
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;

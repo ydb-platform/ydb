@@ -1181,7 +1181,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     Y_VERIFY(res.second == valueD.size() || res.first.IsHead());
 
-    CheckBlob(key, valueD);
+    TClientBlob::CheckBlob(key, valueD);
 
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());

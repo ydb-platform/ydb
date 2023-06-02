@@ -112,7 +112,7 @@ namespace NPQ {
         void Verify(const TRequestedBlob& blob) const {
             TKey key(TKeyPrefix::TypeData, 0, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, false);
             Y_VERIFY(blob.Value.size() == blob.Size);
-            CheckBlob(key, blob.Value);
+            TClientBlob::CheckBlob(key, blob.Value);
         }
     };
 

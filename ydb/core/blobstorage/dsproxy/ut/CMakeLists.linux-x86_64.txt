@@ -57,6 +57,13 @@ set_property(
   SPLIT_FACTOR
   20
 )
+set_property(
+  TARGET
+  ydb-core-blobstorage-dsproxy-ut
+  PROPERTY
+  SPLIT_TYPE
+  MODULO
+)
 add_yunittest(
   NAME
   ydb-core-blobstorage-dsproxy-ut

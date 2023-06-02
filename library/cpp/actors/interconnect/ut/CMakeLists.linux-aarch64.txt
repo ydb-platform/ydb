@@ -1,0 +1,56 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(lib)
+add_subdirectory(protos)
+
+add_executable(library-cpp-actors-interconnect-ut)
+target_link_libraries(library-cpp-actors-interconnect-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  cpp-testing-unittest_main
+  cpp-actors-core
+  cpp-actors-interconnect
+  interconnect-ut-lib
+  interconnect-ut-protos
+  cpp-actors-testlib
+  cpp-digest-md5
+  cpp-testing-unittest
+)
+target_link_options(library-cpp-actors-interconnect-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(library-cpp-actors-interconnect-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/channel_scheduler_ut.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/event_holder_pool_ut.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/interconnect_ut.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/large.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/poller_actor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut/dynamic_proxy_ut.cpp
+)
+add_test(
+  NAME
+  library-cpp-actors-interconnect-ut
+  COMMAND
+  library-cpp-actors-interconnect-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(library-cpp-actors-interconnect-ut)

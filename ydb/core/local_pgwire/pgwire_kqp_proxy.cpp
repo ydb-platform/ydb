@@ -1,6 +1,5 @@
 #include "log_impl.h"
 #include "local_pgwire_util.h"
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -82,20 +81,9 @@ public:
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    auto noScript = ConnectionParams_.find("no-script") != ConnectionParams_.end();
-                    if (noScript) {
-                        Y_ENSURE(record.GetResponse().GetYdbResults().empty());
-                        if (!ResultSets_.empty()) {
-                            FillResultSet(ResultSets_.begin()->second, response.get());
-                        }
-                    } else {
-                        Y_ENSURE(ResultSets_.empty());
-                        auto results = record.GetResponse().GetResults();
-                        if (!results.empty()) {
-                            auto ydbResult = record.MutableResponse()->MutableYdbResults()->Add();
-                            NKqp::ConvertKqpQueryResultToDbResult(results.at(0), ydbResult);
-                            FillResultSet(*ydbResult, response.get());
-                        }
+                    Y_ENSURE(record.GetResponse().GetYdbResults().empty());
+                    if (!ResultSets_.empty()) {
+                        FillResultSet(ResultSets_.begin()->second, response.get());
                     }
 
                     // HACK
@@ -139,14 +127,9 @@ public:
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(ToPgSyntax(query, ConnectionParams_));
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        auto noScript = ConnectionParams_.find("no-script");
-        if (noScript == ConnectionParams_.end()) {
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
-        } else {
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.MutableTxControl()->set_commit_tx(true);
-        }
+        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        request.MutableTxControl()->set_commit_tx(true);
         request.SetKeepSession(false);
         request.SetDatabase(database);
         event->Record.SetUserToken(token);
@@ -193,14 +176,9 @@ public:
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(ToPgSyntax(query, ConnectionParams_));
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        auto noScript = ConnectionParams_.find("no-script");
-        if (noScript == ConnectionParams_.end()) {
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
-        } else {
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.MutableTxControl()->set_commit_tx(true);
-        }
+        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        request.MutableTxControl()->set_commit_tx(true);
         request.SetKeepSession(false);
         request.SetDatabase(database);
         event->Record.SetUserToken(token);
@@ -284,22 +262,12 @@ public:
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    auto results = record.GetResponse().GetResults();
-                    if (!results.empty()) {
-                        auto resultSet = record.MutableResponse()->MutableYdbResults()->Add();
-                        NKqp::ConvertKqpQueryResultToDbResult(results.at(0), resultSet);
-                        if (!WasMeta_) {
-                            FillMeta(*resultSet, response.get());
-                            WasMeta_ = true;
-                        }
-                        FillResultSet(*resultSet, response.get());
-                    }
+                    Y_ENSURE(record.GetResponse().GetResults().empty());
 
                     // HACK
                     if (response->DataRows.size() > 0) {
                         response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
                     }
-
                 } else {
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);

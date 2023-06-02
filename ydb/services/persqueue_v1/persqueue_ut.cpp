@@ -4153,14 +4153,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
         setup.GetPQConfig().SetRemoteClusterEnabledDelaySec(0);
         setup.GetPQConfig().SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(0);
+
         auto sessionWithNoPreferredCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(TString()));
         auto sessionWithLocalPreffedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetLocalCluster()));
-        auto sessionWithRemotePrefferedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()));
+        auto sessionWithRemotePrefferedCluster = setup.InitWriteSession(GenerateSessionSetupWithPreferredCluster(setup.GetRemoteCluster()), true);
+
         grpc::ClientContext context;
         auto sessionWithNoInitialization = setup.GetPersQueueService()->StreamingWrite(&context);
 
         log << TLOG_INFO << "Wait for session with remote preferred cluster to die";
-        AssertStreamingSessionDead(sessionWithRemotePrefferedCluster.first, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED);
+        AssertStreamingSessionDead(sessionWithRemotePrefferedCluster.Stream, Ydb::StatusIds::ABORTED, Ydb::PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED, sessionWithRemotePrefferedCluster.FirstMessage);
         AssertStreamingSessionAlive(sessionWithNoPreferredCluster.first);
         AssertStreamingSessionAlive(sessionWithLocalPreffedCluster.first);
 

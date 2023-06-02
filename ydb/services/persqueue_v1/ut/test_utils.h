@@ -81,3 +81,28 @@ void AssertStreamingSessionDead(std::unique_ptr<grpc::ClientReaderWriter<TClient
     UNIT_ASSERT_C(expectedErrorCode == actualErrorCode, serverMessage);
 }
 
+template<typename TClientMessage, typename TServerMessage>
+void AssertStreamingSessionDead(std::unique_ptr<grpc::ClientReaderWriter<TClientMessage, TServerMessage>>& stream,
+    const Ydb::StatusIds::StatusCode expectedStatus, const Ydb::PersQueue::ErrorCode::ErrorCode expectedErrorCode,
+    const TServerMessage& firstMessage)
+{
+    auto ensureExpectedError = [&](const TServerMessage& serverMessage) {
+        UNIT_ASSERT_LE(1, serverMessage.issues_size());
+        // TODO: Why namespace duplicates enum name "ErrorCode::ErrorCode"?
+        // TODO: Why "Ydb::PersQueue::ErrorCode::ErrorCode" doesn't work with streaming output like "Ydb::StatusIds::StatusCode" does?
+        auto actualErrorCode = static_cast<Ydb::PersQueue::ErrorCode::ErrorCode>(serverMessage.issues(0).issue_code());
+        UNIT_ASSERT_C(expectedErrorCode == actualErrorCode, serverMessage);
+    };
+
+    if (firstMessage.status() == expectedStatus) {
+        ensureExpectedError(firstMessage);
+        return;
+    }
+
+    TServerMessage serverMessage;
+    auto res = stream->Read(&serverMessage);
+    Cerr << serverMessage.DebugString() << "\n";
+    AssertSuccessfullStreamingOperation(res, stream);
+    UNIT_ASSERT_VALUES_EQUAL(expectedStatus, serverMessage.status());
+    ensureExpectedError(serverMessage);
+}

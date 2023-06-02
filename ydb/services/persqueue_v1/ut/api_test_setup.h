@@ -87,16 +87,40 @@ public:
     std::pair<std::unique_ptr<grpc::ClientReaderWriter<TStreamingWriteClientMessage, TStreamingWriteServerMessage>>, std::unique_ptr<grpc::ClientContext>> InitWriteSession(
         const typename TStreamingWriteClientMessage::InitRequest& setup = TStreamingWriteClientMessage::InitRequest())
     {
-        auto context = std::make_unique<grpc::ClientContext>();
-        auto stream = service->StreamingWrite(context.get());
-        InitSession(stream, setup);
-        return std::make_pair(std::move(stream), std::move(context));
+        auto result = InitWriteSession(setup, false);
+        return {std::move(result.Stream), std::move(result.Context)};
     }
 
     // Initializes session with default (possible overwriten by setup parameter) values and returns initialization response
     template<typename TClientMessage, typename TServerMessage>
     TServerMessage InitSession(std::unique_ptr<grpc::ClientReaderWriter<TClientMessage, TServerMessage>>& stream,
         const typename TClientMessage::InitRequest& setup = typename TClientMessage::InitRequest())
+    {
+        return InitSession(stream, setup, false);
+    }
+
+    using TClientContextPtr = std::unique_ptr<grpc::ClientContext>;
+    using TStreamPtr = std::unique_ptr<grpc::ClientReaderWriter<TStreamingWriteClientMessage, TStreamingWriteServerMessage>>;
+
+    struct TInitWriteSessionResult {
+        TClientContextPtr Context;
+        TStreamPtr Stream;
+        TStreamingWriteServerMessage FirstMessage;
+    };
+
+    TInitWriteSessionResult InitWriteSession(const typename TStreamingWriteClientMessage::InitRequest& setup,
+                                             bool mayBeAborted)
+    {
+        auto context = std::make_unique<grpc::ClientContext>();
+        auto stream = service->StreamingWrite(context.get());
+        auto message = InitSession(stream, setup, mayBeAborted);
+        return {std::move(context), std::move(stream), std::move(message)};
+    }
+
+    template<typename TClientMessage, typename TServerMessage>
+    TServerMessage InitSession(std::unique_ptr<grpc::ClientReaderWriter<TClientMessage, TServerMessage>>& stream,
+                               const typename TClientMessage::InitRequest& setup,
+                               bool mayBeAborted)
     {
         TClientMessage clientMessage;
         // TODO: Replace with MergeFrom?
@@ -113,8 +137,12 @@ public:
         Log << TLOG_INFO << "Wait for \"init_response\"";
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
         Cerr << "Init response: " << serverMessage.ShortDebugString() << Endl;
-        UNIT_ASSERT_C(serverMessage.server_message_case() == TServerMessage::kInitResponse, serverMessage);
-        Log << TLOG_INFO << "Session ID is " << serverMessage.init_response().session_id().Quote();
+
+        if ((serverMessage.status() != Ydb::StatusIds::ABORTED) || !mayBeAborted) {
+            UNIT_ASSERT_C(serverMessage.server_message_case() == TServerMessage::kInitResponse, serverMessage);
+            Log << TLOG_INFO << "Session ID is " << serverMessage.init_response().session_id().Quote();
+        }
+
         return serverMessage;
     }
 };

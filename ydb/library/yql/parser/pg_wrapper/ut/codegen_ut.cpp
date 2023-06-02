@@ -69,7 +69,6 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
             auto func = codegen->GetModule().getFunction(std::string("arrow_" + name));
             Y_ENSURE(func);
             codegen->AddGlobalMapping("GetPGKernelState", (const void*)&GetPGKernelState);
-            codegen->AddGlobalMapping("WithPgTry", (const void*)&WithPgTry);
             codegen->Verify();
             codegen->ExportSymbol(func);
             codegen->Compile();

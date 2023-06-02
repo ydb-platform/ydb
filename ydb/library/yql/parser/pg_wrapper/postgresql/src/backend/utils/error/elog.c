@@ -93,6 +93,7 @@
 __thread ErrorContextCallback *error_context_stack = NULL;
 
 __thread sigjmp_buf *PG_exception_stack = NULL;
+__thread bool yql_error_report_active = false;
 
 extern __thread bool redirection_done;
 
@@ -371,7 +372,7 @@ errstart(int elevel, const char *domain)
 		 */
 		if (elevel == ERROR)
 		{
-			if (PG_exception_stack == NULL ||
+			if ((PG_exception_stack == NULL && !yql_error_report_active) ||
 				ExitOnAnyError ||
 				proc_exit_inprogress)
 				elevel = FATAL;
@@ -1801,7 +1802,12 @@ pg_re_throw(void)
 	/* If possible, throw the error to the next outer setjmp handler */
 	if (PG_exception_stack != NULL)
 		siglongjmp(*PG_exception_stack, 1);
-	else
+	else if (yql_error_report_active) {
+		ErrorData  *edata = &errordata[errordata_stack_depth];
+		send_message_to_server_log(edata);
+		FlushErrorState();
+		yql_raise_error();
+	}
 	{
 		/*
 		 * If we get here, elog(ERROR) was thrown inside a PG_TRY block, which
@@ -3108,6 +3114,11 @@ send_message_to_server_log(ErrorData *edata)
 		appendStringInfoString(&buf, _("STATEMENT:  "));
 		append_with_tabs(&buf, debug_query_string);
 		appendStringInfoChar(&buf, '\n');
+	}
+
+	if (yql_error_report_active) {
+		yql_prepare_error(buf.data);
+		return;
 	}
 
 #ifdef HAVE_SYSLOG

@@ -233,7 +233,6 @@ struct TDefaultArgsPolicy {
 };
 
 extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
-extern "C" void WithPgTry(const TString& funcName, const std::function<void()>& func);
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
 struct TGenericExec {
@@ -275,10 +274,7 @@ struct TGenericExec {
         Y_ENSURE(state.flinfo.fn_strict == IsStrict);
         Y_ENSURE(state.IsFixedResult == IsFixedResult);
         TArenaMemoryContext arena;
-        WithPgTry(state.Name, [&]() {
-            Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
-        });
-
+        Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
         return arrow::Status::OK();
     }
 
@@ -517,18 +513,16 @@ public:
         auto ret = *typedState;
         if constexpr (HasFunc) {
             if (!IsStrict || !typedState->isnull) {
-                WithPgTry(Name_, [&]() {
-                    LOCAL_FCINFO(callInfo, 1);
-                    callInfo->flinfo = FuncInfo_;
-                    callInfo->nargs = 1;
-                    callInfo->fncollation = DEFAULT_COLLATION_OID;
-                    callInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
-                    callInfo->isnull = false;
-                    callInfo->args[0].isnull = typedState->isnull;
-                    callInfo->args[0].value = typedState->value;
-                    ret.value = Func_(callInfo);
-                    ret.isnull = callInfo->isnull;
-                });
+                LOCAL_FCINFO(callInfo, 1);
+                callInfo->flinfo = FuncInfo_;
+                callInfo->nargs = 1;
+                callInfo->fncollation = DEFAULT_COLLATION_OID;
+                callInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+                callInfo->isnull = false;
+                callInfo->args[0].isnull = typedState->isnull;
+                callInfo->args[0].value = typedState->value;
+                ret.value = Func_(callInfo);
+                ret.isnull = callInfo->isnull;
             }
         }
 
@@ -623,20 +617,18 @@ private:
                 fmgr_info(inFuncId, &InFuncInfo_);
                 Y_ENSURE(InFuncInfo_.fn_addr);
 
-                WithPgTry(this->AggDesc_.Name, [&]() {
-                    LOCAL_FCINFO(inCallInfo, 3);
-                    inCallInfo->flinfo = &this->InFuncInfo_;
-                    inCallInfo->nargs = 3;
-                    inCallInfo->fncollation = DEFAULT_COLLATION_OID;
-                    inCallInfo->isnull = false;
-                    inCallInfo->args[0] = { (Datum)this->AggDesc_.InitValue.c_str(), false };
-                    inCallInfo->args[1] = { ObjectIdGetDatum(this->TypeIOParam_), false };
-                    inCallInfo->args[2] = { Int32GetDatum(-1), false };
+                LOCAL_FCINFO(inCallInfo, 3);
+                inCallInfo->flinfo = &this->InFuncInfo_;
+                inCallInfo->nargs = 3;
+                inCallInfo->fncollation = DEFAULT_COLLATION_OID;
+                inCallInfo->isnull = false;
+                inCallInfo->args[0] = { (Datum)this->AggDesc_.InitValue.c_str(), false };
+                inCallInfo->args[1] = { ObjectIdGetDatum(this->TypeIOParam_), false };
+                inCallInfo->args[2] = { Int32GetDatum(-1), false };
 
-                    auto state = this->InFuncInfo_.fn_addr(inCallInfo);
-                    Y_ENSURE(!inCallInfo->isnull);
-                    PreparedInitValue_ = AnyDatumToPod(state, IsTransTypeFixed);
-                });
+                auto state = this->InFuncInfo_.fn_addr(inCallInfo);
+                Y_ENSURE(!inCallInfo->isnull);
+                PreparedInitValue_ = AnyDatumToPod(state, IsTransTypeFixed);
             }
         }
 
@@ -711,21 +703,19 @@ private:
                 filterBitmap = filterArray->template GetValues<uint8_t>(1);
             }
 
-            WithPgTry(this->AggDesc_.Name, [&]() {
-                if (hasNulls) {
-                    if (hasScalars) {
-                        AddManyImpl<true, true>(typedState, values, batchLength, filterBitmap);
-                    } else {
-                        AddManyImpl<true, false>(typedState, values, batchLength, filterBitmap);
-                    }
+            if (hasNulls) {
+                if (hasScalars) {
+                    AddManyImpl<true, true>(typedState, values, batchLength, filterBitmap);
                 } else {
-                    if (hasScalars) {
-                        AddManyImpl<false, true>(typedState, values, batchLength, filterBitmap);
-                    } else {
-                        AddManyImpl<false, false>(typedState, values, batchLength, filterBitmap);
-                    }
+                    AddManyImpl<true, false>(typedState, values, batchLength, filterBitmap);
                 }
-            });
+            } else {
+                if (hasScalars) {
+                    AddManyImpl<false, true>(typedState, values, batchLength, filterBitmap);
+                } else {
+                    AddManyImpl<false, false>(typedState, values, batchLength, filterBitmap);
+                }
+            }
         }
 
         template <bool HasNulls, bool HasScalars>
@@ -837,27 +827,25 @@ SkipCall:;
 
             if constexpr (HasSerialize) {
                 NUdf::TUnboxedValue ret;
-                WithPgTry(this->AggDesc_.Name, [&]() {
-                    LOCAL_FCINFO(serializeCallInfo, 1);
-                    serializeCallInfo->flinfo = &this->SerializeFuncInfo_;
-                    serializeCallInfo->nargs = 1;
-                    serializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
-                    serializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
-                    serializeCallInfo->isnull = false;
-                    serializeCallInfo->args[0].isnull = false;
-                    serializeCallInfo->args[0].value = typedState->value;
-                    auto ser = this->SerializeFunc_(serializeCallInfo);
-                    Y_ENSURE(!serializeCallInfo->isnull);
-                    if constexpr (IsSerializedTypeFixed) {
-                        ret = ScalarDatumToPod(ser);
-                    } else {
-                        ret = PointerDatumToPod(ser);
-                        if (ser == typedState->value) {
-                            typedState->value = 0;
-                            typedState->isnull = true;
-                        }
+                LOCAL_FCINFO(serializeCallInfo, 1);
+                serializeCallInfo->flinfo = &this->SerializeFuncInfo_;
+                serializeCallInfo->nargs = 1;
+                serializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
+                serializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+                serializeCallInfo->isnull = false;
+                serializeCallInfo->args[0].isnull = false;
+                serializeCallInfo->args[0].value = typedState->value;
+                auto ser = this->SerializeFunc_(serializeCallInfo);
+                Y_ENSURE(!serializeCallInfo->isnull);
+                if constexpr (IsSerializedTypeFixed) {
+                    ret = ScalarDatumToPod(ser);
+                } else {
+                    ret = PointerDatumToPod(ser);
+                    if (ser == typedState->value) {
+                        typedState->value = 0;
+                        typedState->isnull = true;
                     }
-                });
+                }
 
                 return ret;
             } else {
@@ -980,9 +968,7 @@ SkipCall:;
             }
 
             transCallInfo->isnull = false;
-            WithPgTry(this->AggDesc_.Name, [&]() {
-                ret = this->TransFunc_(transCallInfo);
-            });
+            ret = this->TransFunc_(transCallInfo);
 
             CopyState<IsTransTypeFixed>({ret, transCallInfo->isnull}, *typedState);
             SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);            
@@ -1043,18 +1029,16 @@ SkipCall:;
         }
 
         void Deserialize(Datum ser, NullableDatum& result) {
-            WithPgTry(this->AggDesc_.Name, [&]() {
-                LOCAL_FCINFO(deserializeCallInfo, 1);
-                deserializeCallInfo->flinfo = &this->DeserializeFuncInfo_;
-                deserializeCallInfo->nargs = 1;
-                deserializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
-                deserializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
-                deserializeCallInfo->isnull = false;
-                deserializeCallInfo->args[0].isnull = false;
-                deserializeCallInfo->args[0].value = ser;
-                result.value = this->DeserializeFunc_(deserializeCallInfo);
-                result.isnull = deserializeCallInfo->isnull;
-            });
+            LOCAL_FCINFO(deserializeCallInfo, 1);
+            deserializeCallInfo->flinfo = &this->DeserializeFuncInfo_;
+            deserializeCallInfo->nargs = 1;
+            deserializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
+            deserializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+            deserializeCallInfo->isnull = false;
+            deserializeCallInfo->args[0].isnull = false;
+            deserializeCallInfo->args[0].value = ser;
+            result.value = this->DeserializeFunc_(deserializeCallInfo);
+            result.isnull = deserializeCallInfo->isnull;
         }
 
         void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
@@ -1130,28 +1114,24 @@ SkipCall:;
                 }
             }
 
-            WithPgTry(this->AggDesc_.Name, [&]() {
-                LOCAL_FCINFO(combineCallInfo, 2);
-                combineCallInfo->flinfo = &this->CombineFuncInfo_;
-                combineCallInfo->nargs = 2;
-                combineCallInfo->fncollation = DEFAULT_COLLATION_OID;
-                combineCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
-                combineCallInfo->isnull = false;
-                combineCallInfo->args[0] = *typedState;
-                combineCallInfo->args[1] = deser;
-                auto ret = this->CombineFunc_(combineCallInfo);
-                if constexpr (!HasDeserialize) {                
-                    if (!combineCallInfo->isnull && ret == d.value) {
-                        typedState->isnull = false;
-                        typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
-                        return;
-                    }
+            LOCAL_FCINFO(combineCallInfo, 2);
+            combineCallInfo->flinfo = &this->CombineFuncInfo_;
+            combineCallInfo->nargs = 2;
+            combineCallInfo->fncollation = DEFAULT_COLLATION_OID;
+            combineCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+            combineCallInfo->isnull = false;
+            combineCallInfo->args[0] = *typedState;
+            combineCallInfo->args[1] = deser;
+            auto ret = this->CombineFunc_(combineCallInfo);
+            if constexpr (!HasDeserialize) {                
+                if (!combineCallInfo->isnull && ret == d.value) {
+                    typedState->isnull = false;
+                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                    return;
                 }
+            }
 
-                CopyState<IsTransTypeFixed>({ret, combineCallInfo->isnull}, *typedState);
-            });
-
-            
+            CopyState<IsTransTypeFixed>({ret, combineCallInfo->isnull}, *typedState);
             SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
         }
 

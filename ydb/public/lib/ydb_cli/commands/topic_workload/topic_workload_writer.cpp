@@ -109,7 +109,7 @@ void TTopicWorkloadWriterWorker::Process() {
         } else
             WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "No WaitEvent");
 
-        while (true) {
+        while (!*Params.ErrorFlag) {
             auto events = WriteSession->GetEvents(false);
             WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got " << events.size() << " events.");
 
@@ -205,9 +205,9 @@ bool TTopicWorkloadWriterWorker::ProcessReadyToAcceptEvent(
 
 bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
     const NYdb::NTopic::TSessionClosedEvent& event) {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Got close event: " << event.DebugString());
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_EMERG, TStringBuilder() << "Got close event: " << event.DebugString());
     //! Session is closed, stop any work with it.
-    Y_FAIL("session closed");
+    *Params.ErrorFlag = 1;
     return false;
 }
 

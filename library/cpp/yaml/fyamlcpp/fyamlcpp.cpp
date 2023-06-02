@@ -638,6 +638,9 @@ void TMapping::Remove(const TNodePairRef& toRemove) {
     ENSURE_NODE_NOT_EMPTY(Node_);
     ENSURE_NODE_NOT_EMPTY(toRemove);
     NDetail::RethrowOnError(fy_node_mapping_remove(Node_, toRemove.Pair_), Node_);
+    fy_node_free(fy_node_pair_key(toRemove.Pair_));
+    fy_node_free(fy_node_pair_value(toRemove.Pair_));
+    free(toRemove.Pair_);
 }
 
 TMappingIterator TMapping::Remove(const TMappingIterator& toRemove) {

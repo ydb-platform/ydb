@@ -1020,6 +1020,7 @@ message TSqsConfig {
 
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;
     optional TYdbAuthConfig AuthConfig = 67;
+    optional uint64 StartLocalLeaderInflightMax = 71 [default = 500];
 }
 
 message TConfigsDispatcherConfig {

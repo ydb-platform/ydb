@@ -1227,7 +1227,9 @@ public:
         }
 
         if (QueryState->ReportStats()) {
-            response->SetQueryPlan(SerializeAnalyzePlan(*stats));
+            if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                response->SetQueryPlan(SerializeAnalyzePlan(*stats));
+            }
             response->MutableQueryStats()->Swap(stats);
         }
     }

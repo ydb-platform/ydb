@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 namespace NKikimr {
@@ -165,6 +166,62 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
+    }
+
+    Y_UNIT_TEST(ExecStats) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$value").Uint32(10).Build()
+            .Build();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Basic);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM TwoShard WHERE Key < $value;
+        )", TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        UNIT_ASSERT(result.GetStats().Defined());
+        UNIT_ASSERT(!result.GetStats()->GetPlan().Defined());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    }
+
+    Y_UNIT_TEST(ExecStatsPlan) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$value").Uint32(10).Build()
+            .Build();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Full);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM TwoShard WHERE Key < $value;
+        )", TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        UNIT_ASSERT(result.GetStats().Defined());
+        UNIT_ASSERT(result.GetStats()->GetPlan().Defined());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+
+        auto stages = FindPlanStages(plan);
+
+        i64 totalTasks = 0;
+        for (const auto& stage : stages) {
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {

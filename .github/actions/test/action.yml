@@ -50,7 +50,12 @@ runs:
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
+      echo "artifactsdir=$(pwd)/artifacts" >> $GITHUB_OUTPUT
+      echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
+      echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
+      echo "logurlprefix=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_OUTPUT
       echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
+
   - name: Install Node required for Testmo CLI
     uses: actions/setup-node@v3
     with:
@@ -96,33 +101,92 @@ runs:
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
   - name: Run unit tests
+    id: ctest
     if: inputs.run_unit_tests == 'true'
     shell: bash
     run: |
       cd $WORKDIR/../build/ydb
 
-      echo "Stdout log (gzip archive): ${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.logfilename}}" >> $GITHUB_STEP_SUMMARY
+      echo "[Stdout unittest/ctest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.logfilename}})" >> $GITHUB_STEP_SUMMARY
+      echo "[Testmo](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
       TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
               --output-junit $TESTREPDIR/suites/ctest_report.xml \
-              -L '${{inputs.test_label_regexp}}' | \
-        sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.logfilename}}) | \
-        grep -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
-        tee $WORKDIR/short.log
-  - name: Unit tests history run upload
+              -L '${{inputs.test_label_regexp}}' -E "${CTEST_SKIP_SHARDS:-}" | \
+        sed -u -e 's/\x1b\[[0-9;]*m//g' | \
+        tee >(gzip --stdout > ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}}) | \
+        grep --line-buffered -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
+        tee $WORKDIR/short.log || (
+          RC=$?
+          if [ $RC == 8 ]; then
+            echo "ctest returned TEST_ERRORS, recovering.."
+          else
+            exit $RC
+          fi
+      )
+
+  - name: archive unitest reports (orig)
+    if: inputs.run_unit_tests == 'true'
+    shell: bash
+    run: |
+      tar -C $TESTREPDIR/ -czf ${{steps.init.outputs.artifactsdir}}/reports.tar.gz .
+      ls -la ${{steps.init.outputs.artifactsdir}}/reports.tar.gz
+      echo "[Unittest/CTest XML reports archive](${{steps.init.outputs.logurlprefix}}/reports.tar.gz)" >> $GITHUB_STEP_SUMMARY
+
+  - name: postprocess junit reports
+    if: inputs.run_unit_tests == 'true'
+    shell: bash
+    run: |
+      echo "::group::junit-postprocess"
+      
+      .github/scripts/tests/junit-postprocess.py \
+        --filter-file ${{steps.init.outputs.testfilterfile}} \
+        $TESTREPDIR/unittests/
+
+      echo "::endgroup::"
+
+      echo "::group::ctest-postprocess"
+
+      .github/scripts/tests/ctest-postprocess.py \
+        --filter-file ${{steps.init.outputs.testshardfilterfile}} \
+        --decompress \
+        ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
+        $TESTREPDIR/suites/ctest_report.xml
+
+      echo "::endgroup::"
+
+  - name: extract log output
+    if: inputs.run_unit_tests == 'true'
+    shell: bash
+    run: |
+      mkdir ${{steps.init.outputs.artifactsdir}}/logs/
+
+      .github/scripts/tests/extract-logs.py \
+        --write-summary \
+        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
+        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
+        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
+        --patch-jsuite \
+        --ctest-report $TESTREPDIR/suites/ctest_report.xml \
+        --junit-reports-path $TESTREPDIR/unittests/ \
+        --decompress \
+        ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
+        ${{steps.init.outputs.artifactsdir}}/logs/
+
+  - name: Unit test history upload results
     if: always() && inputs.run_unit_tests == 'true' && inputs.testman_token
     shell: bash
     run: |
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/unittests/*.xml 
+        --results "$TESTREPDIR/unittests/*.xml"
       testmo automation:run:submit-thread \
+        --exec-suppress \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $TESTREPDIR/suites/*.xml \
+        --results "$TESTREPDIR/suites/*.xml" \
         -- cat $WORKDIR/short.log
 
   - name: Run functional tests
@@ -132,7 +196,7 @@ runs:
       export source_root=$WORKDIR
       export build_root=$WORKDIR/../build/
 
-      echo "Stdout log (gzip archive): ${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{steps.init.outputs.pytest-logfilename}}" >> $GITHUB_STEP_SUMMARY
+      echo "[Stdout pytest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.pytest-logfilename}})" >> $GITHUB_STEP_SUMMARY
       cd $WORKDIR/ydb/tests/functional/
       bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed -e 's/ignore=//g')
       suites=""
@@ -149,16 +213,17 @@ runs:
       echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=$PYTESTREPDIR/{}.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > $WORKDIR/artifacts/${{steps.init.outputs.pytest-logfilename}}) | \
+        tee >(gzip --stdout > ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.pytest-logfilename}}) | \
         grep -E '(FAILED|ERROR)\s*\[.*\]' | \
         tee $WORKDIR/pytest-short.log
-  - name: Functional tests history run upload
+
+  - name: Functional tests history upload results
     if: always() && inputs.run_functional_tests == 'true' && inputs.testman_token
     shell: bash
     run: |
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
-        --results $PYTESTREPDIR/*.xml \
+        --results "$PYTESTREPDIR/*.xml" \
         -- cat $WORKDIR/pytest-short.log
 
   - name: Test history run complete
@@ -166,6 +231,7 @@ runs:
     shell: bash
     run: |
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
+
   - name: Upload S3
     uses: shallwefootball/s3-upload-action@master
     if: always()
@@ -173,6 +239,11 @@ runs:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
       aws_bucket: ${{inputs.aws_bucket}}
+      # FIXME: must be constant here
       source_dir: artifacts
       destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
       endpoint: ${{inputs.aws_endpoint}}
+  - name: finish
+    shell: bash
+    run: |
+      .github/scripts/tests/fail-checker.py $TESTREPDIR/unittests/ $TESTREPDIR/suites/

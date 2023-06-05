@@ -17,13 +17,17 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <map>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <vector>
 
+#include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
 
+#include <grpc/grpc_security.h>
+
 #include "src/core/lib/iomgr/endpoint.h"
-#include "src/core/lib/iomgr/resolve_address.h"
-#include "src/core/lib/security/context/security_context.h"
+#include "src/core/lib/iomgr/resolved_address.h"
 #include "src/core/lib/transport/metadata_batch.h"
 
 namespace grpc_core {

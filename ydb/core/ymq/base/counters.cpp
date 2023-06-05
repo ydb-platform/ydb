@@ -1017,6 +1017,12 @@ void TMonitoringCounters::InitCounters() {
     INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesDone, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
     INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesRows, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
     INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesErrors, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    
+    
+    INIT_COUNTER(MonitoringCounters, LocalLeaderStartInflight, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, LocalLeaderStartQueue, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    
+    INIT_HISTOGRAM_COUNTER(MonitoringCounters, LocalLeaderStartAwaitMs, ELifetime::Expiring, DurationBucketsMs, ELaziness::OnDemand);
 }
 
 } // namespace NKikimr::NSQS

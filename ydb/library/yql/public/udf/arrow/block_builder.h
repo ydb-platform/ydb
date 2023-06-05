@@ -506,10 +506,18 @@ public:
 
         if constexpr (PgString == EPgStringType::CString) {
             static_assert(Nullable);
-            DoAdd(TBlockItem(PgBuilder->AsCStringBuffer(value)));
+            auto buf = PgBuilder->AsCStringBuffer(value);
+            auto prevCtx = GetMemoryContext(buf.Data());
+            ZeroMemoryContext((char*)buf.Data());
+            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
+            SetMemoryContext((char*)buf.Data(), prevCtx);
         } else if constexpr (PgString == EPgStringType::Text) {
             static_assert(Nullable);
-            DoAdd(TBlockItem(PgBuilder->AsTextBuffer(value)));
+            auto buf = PgBuilder->AsTextBuffer(value);
+            auto prevCtx = GetMemoryContext(buf.Data());
+            ZeroMemoryContext((char*)buf.Data());
+            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
+            SetMemoryContext((char*)buf.Data(), prevCtx);
         } else {
             DoAdd(TBlockItem(value.AsStringRef()));
         }

@@ -12,11 +12,6 @@
 
 namespace NKikimr::NKqp {
 
-// Helpers.
-TString ScriptExecutionOperationFromExecutionId(const TString& executionId);
-TMaybe<TString> ScriptExecutionFromOperation(const TString& operationId);
-TMaybe<TString> ScriptExecutionFromOperation(const NOperationId::TOperationId& operationId);
-
 // Creates all needed tables.
 // Sends result event back when the work is done.
 NActors::IActor* CreateScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent);
@@ -27,6 +22,7 @@ NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPt
 // Operation API impl.
 NActors::IActor* CreateGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev);
 NActors::IActor* CreateListScriptExecutionOperationsActor(TEvListScriptExecutionOperations::TPtr ev);
+NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev);
 
 // Updates status in database.
 NActors::IActor* CreateScriptExecutionFinisher(

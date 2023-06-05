@@ -27,12 +27,12 @@
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
-#include "google/protobuf/any.upb.h"
+#include "upb/arena.h"
 #include "upb/def.h"
+#include "upb/upb.h"
 
-#include <grpc/grpc.h>
-
-#include "src/core/lib/channel/channel_stack.h"
+#include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/json/json.h"
 
 namespace grpc_core {
@@ -89,7 +89,7 @@ class XdsHttpFilterImpl {
   // Modifies channel args that may affect service config parsing (not
   // visible to the channel as a whole).
   // Takes ownership of args.  Caller takes ownership of return value.
-  virtual grpc_channel_args* ModifyChannelArgs(grpc_channel_args* args) const {
+  virtual ChannelArgs ModifyChannelArgs(const ChannelArgs& args) const {
     return args;
   }
 

@@ -20,7 +20,7 @@
 #if defined(GPR_ANDROID) || defined(GPR_LINUX) || defined(GPR_APPLE) ||     \
     defined(GPR_FREEBSD) || defined(GPR_OPENBSD) || defined(GPR_SOLARIS) || \
     defined(GPR_AIX) || defined(GPR_NACL) || defined(GPR_FUCHSIA) ||        \
-    defined(GRPC_POSIX_SOCKET)
+    defined(GRPC_POSIX_SOCKET) || defined(GPR_NETBSD)
 #define GRPC_EVENT_ENGINE_POSIX
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -31,6 +31,13 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 // must be included after the above
+
+// For some reason OPTIONAL is not defined and build for window is not OK
+// Let, define it here as empty
+#ifndef OPTIONAL
+#define OPTIONAL
+#endif
+
 #include <mswsock.h>
 #else
 #error UNKNOWN PLATFORM

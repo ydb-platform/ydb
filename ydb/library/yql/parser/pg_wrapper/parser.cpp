@@ -200,7 +200,7 @@ void PGParse(const TString& input, IPGParseEvents& events) {
             walker.Advance(input[i]);
         }
 
-        events.OnError(TIssue(position, TString(parsetree_and_error.error->message)));
+        events.OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
     } else {
         events.OnResult(parsetree_and_error.tree);
     }
@@ -230,6 +230,7 @@ extern "C" void setup_pg_thread_cleanup() {
     };
 
     static thread_local TThreadCleanup ThreadCleanup;
+    Log_error_verbosity = PGERROR_DEFAULT;
     SetDatabaseEncoding(PG_UTF8);
     MemoryContextInit();
     auto owner = ResourceOwnerCreate(NULL, "TopTransaction");

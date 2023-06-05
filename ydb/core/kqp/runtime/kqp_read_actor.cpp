@@ -442,6 +442,7 @@ public:
         }
 
         if (!Settings.HasShardIdHint()) {
+            InFlightShards.PushBack(&state);
             ResolveShard(&state);
         } else {
             StartShards();
@@ -521,7 +522,15 @@ public:
         CA_LOG_D("Received TEvResolveKeySetResult update for table '" << Settings.GetTable().GetTablePath() << "'");
 
         auto* request = ev->Get()->Request.Get();
-        if (request->ErrorCount > 0) {
+        THolder<TShardState> state;
+        if (!request->ResultSet.empty()) {
+            if (auto ptr = ResolveShards[request->ResultSet[0].UserData]) {
+                state = THolder<TShardState>(ptr);
+                ResolveShards.erase(request->ResultSet[0].UserData);
+            }
+        }
+
+        if (request->ErrorCount > 0 || !state) {
             CA_LOG_E("Resolve request failed for table '" << Settings.GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
 
             auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
@@ -557,13 +566,6 @@ public:
         }
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
-        THolder<TShardState> state;
-        if (auto ptr = ResolveShards[request->ResultSet[0].UserData]) {
-            state = THolder<TShardState>(ptr);
-            ResolveShards.erase(request->ResultSet[0].UserData);
-        } else {
-            return;
-        }
 
         if (keyDesc->GetPartitions().size() == 1) {
             auto& partition = keyDesc->GetPartitions()[0];
@@ -1173,7 +1175,7 @@ public:
             }
         }
 
-        if (RunningReads() == 0 && PendingShards.Empty() && ScanStarted) {
+        if (ScanStarted && RunningReads() == 0 && PendingShards.Empty() && ResolveShards.empty()) {
             finished = true;
         }
 

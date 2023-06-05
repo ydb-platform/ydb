@@ -865,6 +865,10 @@ struct TMonitoringCounters : public TAtomicRefCount<TMonitoringCounters> {
     TLazyCachedCounter CleanupRemovedQueuesRows;
     TLazyCachedCounter CleanupRemovedQueuesErrors;
 
+    TLazyCachedCounter LocalLeaderStartInflight;
+    TLazyCachedCounter LocalLeaderStartQueue;
+    TLazyCachedHistogram LocalLeaderStartAwaitMs;
+
     TMonitoringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& monitoringCounters)
         : MonitoringCounters(monitoringCounters)
         , Config(config)

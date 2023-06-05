@@ -122,21 +122,21 @@ private:
             TStringValue error("");
             auto r = GetPgBuilder().ValueFromText(BoolOid, "", error);
             UNIT_ASSERT(!r);
-            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "invalid input syntax for type boolean: \"\"");
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "ERROR:  invalid input syntax for type boolean: \"\"");
         }
 
         {
             TStringValue error("");
             auto r = GetPgBuilder().ValueFromText(BoolOid, "zzzz", error);
             UNIT_ASSERT(!r);
-            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "Terminate was called, reason(85): Error in 'in' function: boolin, reason: invalid input syntax for type boolean: \"zzzz\"");
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "ERROR:  invalid input syntax for type boolean: \"zzzz\"");
         }
 
         {
             TStringValue error("");
             auto r = GetPgBuilder().ValueFromBinary(BoolOid, "", error);
             UNIT_ASSERT(!r);
-            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "Error in 'recv' function: boolrecv, reason: no data left in message");
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "ERROR:  no data left in message");
         }
 
         {

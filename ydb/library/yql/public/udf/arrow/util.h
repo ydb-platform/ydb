@@ -125,5 +125,17 @@ private:
     size_t Len = 0;
 };
 
+inline void* GetMemoryContext(const void* ptr) {
+    return *(void**)((char*)ptr - sizeof(void*));
+}
+
+inline void SetMemoryContext(void* ptr, void* ctx) {
+    *(void**)((char*)ptr - sizeof(void*)) = ctx;
+}
+
+inline void ZeroMemoryContext(void* ptr) {
+    SetMemoryContext(ptr, nullptr);
+}
+
 }
 }

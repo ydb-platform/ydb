@@ -15,31 +15,25 @@
 
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 
-#include <grpc/event_engine/endpoint_config.h>
-#include <grpc/impl/codegen/grpc_types.h>
-#include <grpc/impl/codegen/log.h>
+#include "y_absl/types/optional.h"
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/useful.h"
 
 namespace grpc_event_engine {
 namespace experimental {
 
-EndpointConfig::Setting ChannelArgsEndpointConfig::Get(
+y_absl::optional<int> ChannelArgsEndpointConfig::GetInt(
     y_absl::string_view key) const {
-  const grpc_arg* arg = grpc_channel_args_find(args_, TString(key).c_str());
-  if (arg == nullptr) {
-    return y_absl::monostate();
-  }
-  switch (arg->type) {
-    case GRPC_ARG_STRING:
-      return y_absl::string_view(arg->value.string);
-    case GRPC_ARG_INTEGER:
-      return arg->value.integer;
-    case GRPC_ARG_POINTER:
-      return arg->value.pointer.p;
-  }
-  GPR_UNREACHABLE_CODE(return y_absl::monostate());
+  return args_.GetInt(key);
+}
+
+y_absl::optional<y_absl::string_view> ChannelArgsEndpointConfig::GetString(
+    y_absl::string_view key) const {
+  return args_.GetString(key);
+}
+
+void* ChannelArgsEndpointConfig::GetVoidPointer(y_absl::string_view key) const {
+  return args_.GetVoidPointer(key);
 }
 
 }  // namespace experimental

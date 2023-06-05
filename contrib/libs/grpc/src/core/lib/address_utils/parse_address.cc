@@ -21,26 +21,24 @@
 #include "src/core/lib/address_utils/parse_address.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #ifdef GRPC_HAVE_UNIX_SOCKET
 #include <sys/un.h>
 #endif
-#ifdef GRPC_POSIX_SOCKET
-#include <errno.h>
-#include <net/if.h>
-#endif
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 
+#include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/strip.h"
 
-#include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-#include <grpc/support/string_util.h>
 
-#include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/iomgr/grpc_if_nametoindex.h"
+#include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/socket_utils.h"
 
@@ -55,7 +53,7 @@ bool grpc_parse_unix(const grpc_core::URI& uri,
   }
   grpc_error_handle error =
       grpc_core::UnixSockaddrPopulate(uri.path(), resolved_addr);
-  if (error != GRPC_ERROR_NONE) {
+  if (!GRPC_ERROR_IS_NONE(error)) {
     gpr_log(GPR_ERROR, "%s", grpc_error_std_string(error).c_str());
     GRPC_ERROR_UNREF(error);
     return false;
@@ -72,7 +70,7 @@ bool grpc_parse_unix_abstract(const grpc_core::URI& uri,
   }
   grpc_error_handle error =
       grpc_core::UnixAbstractSockaddrPopulate(uri.path(), resolved_addr);
-  if (error != GRPC_ERROR_NONE) {
+  if (!GRPC_ERROR_IS_NONE(error)) {
     gpr_log(GPR_ERROR, "%s", grpc_error_std_string(error).c_str());
     GRPC_ERROR_UNREF(error);
     return false;
@@ -320,21 +318,23 @@ uint16_t grpc_strhtons(const char* port) {
   return htons(static_cast<unsigned short>(atoi(port)));
 }
 
-grpc_error_handle grpc_string_to_sockaddr(grpc_resolved_address* out,
-                                          const char* addr, int port) {
-  memset(out, 0, sizeof(grpc_resolved_address));
-  grpc_sockaddr_in6* addr6 = reinterpret_cast<grpc_sockaddr_in6*>(out->addr);
-  grpc_sockaddr_in* addr4 = reinterpret_cast<grpc_sockaddr_in*>(out->addr);
-  if (grpc_inet_pton(GRPC_AF_INET6, addr, &addr6->sin6_addr) == 1) {
-    addr6->sin6_family = GRPC_AF_INET6;
-    out->len = sizeof(grpc_sockaddr_in6);
-  } else if (grpc_inet_pton(GRPC_AF_INET, addr, &addr4->sin_addr) == 1) {
-    addr4->sin_family = GRPC_AF_INET;
-    out->len = sizeof(grpc_sockaddr_in);
-  } else {
-    return GRPC_ERROR_CREATE_FROM_CPP_STRING(
-        y_absl::StrCat("Failed to parse address:", addr));
+namespace grpc_core {
+
+y_absl::StatusOr<grpc_resolved_address> StringToSockaddr(
+    y_absl::string_view address_and_port) {
+  grpc_resolved_address out;
+  memset(&out, 0, sizeof(grpc_resolved_address));
+  if (!grpc_parse_ipv4_hostport(address_and_port, &out, /*log_errors=*/false) &&
+      !grpc_parse_ipv6_hostport(address_and_port, &out, /*log_errors=*/false)) {
+    return y_absl::InvalidArgumentError(
+        y_absl::StrCat("Failed to parse address:", address_and_port));
   }
-  grpc_sockaddr_set_port(out, port);
-  return GRPC_ERROR_NONE;
+  return out;
 }
+
+y_absl::StatusOr<grpc_resolved_address> StringToSockaddr(
+    y_absl::string_view address, int port) {
+  return StringToSockaddr(JoinHostPort(address, port));
+}
+
+}  // namespace grpc_core

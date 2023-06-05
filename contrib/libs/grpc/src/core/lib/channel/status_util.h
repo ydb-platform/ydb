@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <stdbool.h>
-#include <string.h>
+#include "y_absl/status/status.h"
+#include "y_absl/strings/string_view.h"
 
 #include <grpc/status.h>
 
@@ -62,6 +62,13 @@ class StatusCodeSet {
 };
 
 }  // namespace internal
+
+// Optionally rewrites a status as per
+// https://github.com/grpc/proposal/blob/master/A54-restrict-control-plane-status-codes.md.
+// The source parameter indicates where the status came from.
+y_absl::Status MaybeRewriteIllegalStatusCode(y_absl::Status status,
+                                           y_absl::string_view source);
+
 }  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_CHANNEL_STATUS_UTIL_H */

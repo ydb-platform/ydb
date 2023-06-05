@@ -21,10 +21,20 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <algorithm>
+#include <map>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include "y_absl/strings/numbers.h"
 #include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/string_view.h"
 
-#include "src/core/lib/iomgr/exec_ctx.h"
+#include "src/core/lib/gprpp/time.h"
+#include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json.h"
 
 namespace grpc_core {
@@ -45,9 +55,9 @@ bool ExtractJsonNumber(const Json& json, y_absl::string_view field_name,
                        NumericType* output,
                        std::vector<grpc_error_handle>* error_list) {
   static_assert(std::is_integral<NumericType>::value, "Integral required");
-  if (json.type() != Json::Type::NUMBER) {
-    error_list->push_back(GRPC_ERROR_CREATE_FROM_CPP_STRING(
-        y_absl::StrCat("field:", field_name, " error:type should be NUMBER")));
+  if (json.type() != Json::Type::NUMBER && json.type() != Json::Type::STRING) {
+    error_list->push_back(GRPC_ERROR_CREATE_FROM_CPP_STRING(y_absl::StrCat(
+        "field:", field_name, " error:type should be NUMBER or STRING")));
     return false;
   }
   if (!y_absl::SimpleAtoi(json.string_value(), output)) {

@@ -19,23 +19,31 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stdint.h>
+#include <string.h>
+
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <map>
+#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <vector>
 
-#include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
 #include "envoy/config/listener/v3/listener.upbdefs.h"
 #include "envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upbdefs.h"
+#include "upb/def.h"
 
-#include "src/core/ext/xds/xds_client.h"
 #include "src/core/ext/xds/xds_common_types.h"
 #include "src/core/ext/xds/xds_http_filters.h"
+#include "src/core/ext/xds/xds_resource_type.h"
 #include "src/core/ext/xds/xds_resource_type_impl.h"
 #include "src/core/ext/xds/xds_route_config.h"
+#include "src/core/lib/gprpp/time.h"
+#include "src/core/lib/iomgr/resolved_address.h"
 
 namespace grpc_core {
 
@@ -202,9 +210,9 @@ class XdsListenerResourceType
     return "envoy.api.v2.Listener";
   }
 
-  y_absl::StatusOr<DecodeResult> Decode(const XdsEncodingContext& context,
-                                      y_absl::string_view serialized_resource,
-                                      bool is_v2) const override;
+  DecodeResult Decode(const XdsResourceType::DecodeContext& context,
+                      y_absl::string_view serialized_resource,
+                      bool is_v2) const override;
 
   bool AllResourcesRequiredInSotW() const override { return true; }
 

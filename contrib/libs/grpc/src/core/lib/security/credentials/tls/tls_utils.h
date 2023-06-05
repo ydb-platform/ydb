@@ -27,7 +27,7 @@
 
 #include "y_absl/strings/string_view.h"
 
-#include "src/core/lib/security/context/security_context.h"
+#include <grpc/grpc_security.h>
 
 namespace grpc_core {
 

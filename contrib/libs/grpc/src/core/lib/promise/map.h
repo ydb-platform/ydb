@@ -20,7 +20,6 @@
 #include <stddef.h>
 
 #include <tuple>
-#include <type_traits>
 #include <utility>
 
 #include "y_absl/types/variant.h"

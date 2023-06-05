@@ -20,19 +20,28 @@
 
 #include "src/core/lib/gprpp/status_helper.h"
 
+#include <string.h>
+
+#include <algorithm>
+#include <utility>
+
 #include "y_absl/strings/cord.h"
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/match.h"
-#include "y_absl/strings/str_format.h"
+#include "y_absl/strings/numbers.h"
+#include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_join.h"
 #include "y_absl/time/clock.h"
 #include "google/protobuf/any.upb.h"
 #include "google/rpc/status.upb.h"
+#include "upb/arena.h"
+#include "upb/upb.h"
 #include "upb/upb.hpp"
 
 #include <grpc/support/log.h>
 
-#include "src/core/lib/gprpp/time_util.h"
+#include "src/core/lib/slice/percent_encoding.h"
+#include "src/core/lib/slice/slice.h"
 
 #include <util/string/cast.h>
 
@@ -220,9 +229,10 @@ y_absl::optional<TString> StatusGetStr(const y_absl::Status& status,
 
 void StatusSetTime(y_absl::Status* status, StatusTimeProperty key,
                    y_absl::Time time) {
+  TString time_str =
+      y_absl::FormatTime(y_absl::RFC3339_full, time, y_absl::UTCTimeZone());
   status->SetPayload(GetStatusTimePropertyUrl(key),
-                     y_absl::Cord(y_absl::string_view(
-                         reinterpret_cast<const char*>(&time), sizeof(time))));
+                     y_absl::Cord(std::move(time_str)));
 }
 
 y_absl::optional<y_absl::Time> StatusGetTime(const y_absl::Status& status,
@@ -231,14 +241,16 @@ y_absl::optional<y_absl::Time> StatusGetTime(const y_absl::Status& status,
       status.GetPayload(GetStatusTimePropertyUrl(key));
   if (p.has_value()) {
     y_absl::optional<y_absl::string_view> sv = p->TryFlat();
+    y_absl::Time time;
     if (sv.has_value()) {
-      // copy the content before casting to avoid misaligned address access
-      alignas(y_absl::Time) char buf[sizeof(const y_absl::Time)];
-      memcpy(buf, sv->data(), sizeof(const y_absl::Time));
-      return *reinterpret_cast<const y_absl::Time*>(buf);
+      if (y_absl::ParseTime(y_absl::RFC3339_full, sv.value(), &time, nullptr)) {
+        return time;
+      }
     } else {
       TString s = TString(*p);
-      return *reinterpret_cast<const y_absl::Time*>(s.c_str());
+      if (y_absl::ParseTime(y_absl::RFC3339_full, s, &time, nullptr)) {
+        return time;
+      }
     }
   }
   return {};
@@ -306,9 +318,14 @@ TString StatusToString(const y_absl::Status& status) {
                                    y_absl::CHexEscape(payload_view), "\""));
       } else if (y_absl::StartsWith(type_url, kTypeTimeTag)) {
         type_url.remove_prefix(kTypeTimeTag.size());
-        y_absl::Time t =
-            *reinterpret_cast<const y_absl::Time*>(payload_view.data());
-        kvs.push_back(y_absl::StrCat(type_url, ":\"", y_absl::FormatTime(t), "\""));
+        y_absl::Time t;
+        if (y_absl::ParseTime(y_absl::RFC3339_full, payload_view, &t, nullptr)) {
+          kvs.push_back(
+              y_absl::StrCat(type_url, ":\"", y_absl::FormatTime(t), "\""));
+        } else {
+          kvs.push_back(y_absl::StrCat(type_url, ":\"",
+                                     y_absl::CHexEscape(payload_view), "\""));
+        }
       } else {
         kvs.push_back(y_absl::StrCat(type_url, ":\"",
                                    y_absl::CHexEscape(payload_view), "\""));
@@ -339,9 +356,21 @@ namespace internal {
 google_rpc_Status* StatusToProto(const y_absl::Status& status, upb_Arena* arena) {
   google_rpc_Status* msg = google_rpc_Status_new(arena);
   google_rpc_Status_set_code(msg, int32_t(status.code()));
+  // Protobuf string field requires to be utf-8 encoding but C++ string doesn't
+  // this requirement so it can be a non utf-8 string. So it should be converted
+  // to a percent-encoded string to keep it as a utf-8 string.
+  Slice message_percent_slice =
+      PercentEncodeSlice(Slice::FromExternalString(status.message()),
+                         PercentEncodingType::Compatible);
+  char* message_percent = reinterpret_cast<char*>(
+      upb_Arena_Malloc(arena, message_percent_slice.length()));
+  if (message_percent_slice.length() > 0) {
+    memcpy(message_percent, message_percent_slice.data(),
+           message_percent_slice.length());
+  }
   google_rpc_Status_set_message(
-      msg, upb_StringView_FromDataAndSize(status.message().data(),
-                                          status.message().size()));
+      msg, upb_StringView_FromDataAndSize(message_percent,
+                                          message_percent_slice.length()));
   status.ForEachPayload([&](y_absl::string_view type_url,
                             const y_absl::Cord& payload) {
     google_protobuf_Any* any = google_rpc_Status_add_details(msg, arena);
@@ -371,9 +400,15 @@ google_rpc_Status* StatusToProto(const y_absl::Status& status, upb_Arena* arena)
 
 y_absl::Status StatusFromProto(google_rpc_Status* msg) {
   int32_t code = google_rpc_Status_code(msg);
-  upb_StringView message = google_rpc_Status_message(msg);
-  y_absl::Status status(static_cast<y_absl::StatusCode>(code),
-                      y_absl::string_view(message.data, message.size));
+  upb_StringView message_percent_upb = google_rpc_Status_message(msg);
+  Slice message_percent_slice = Slice::FromExternalString(
+      y_absl::string_view(message_percent_upb.data, message_percent_upb.size));
+  Slice message_slice =
+      PermissivePercentDecodeSlice(std::move(message_percent_slice));
+  y_absl::Status status(
+      static_cast<y_absl::StatusCode>(code),
+      y_absl::string_view(reinterpret_cast<const char*>(message_slice.data()),
+                        message_slice.size()));
   size_t detail_len;
   const google_protobuf_Any* const* details =
       google_rpc_Status_details(msg, &detail_len);

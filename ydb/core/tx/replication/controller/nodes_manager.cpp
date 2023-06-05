@@ -22,8 +22,9 @@ void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, 
 }
 
 void TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->CachedMessageData && ev->Get()->CachedMessageData->Info);
-    Y_VERIFY(ev->Get()->CachedMessageData->Info->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    Y_VERIFY(ev->Get()->CachedMessageData);
+    Y_VERIFY(!ev->Get()->CachedMessageData->InfoEntries.empty());
+    Y_VERIFY(ev->Get()->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
     auto it = NodeDiscoverers.find(ev->Sender);
     if (it == NodeDiscoverers.end()) {
@@ -33,7 +34,7 @@ void TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, co
     auto& nodes = TenantNodes[it->second];
     nodes.clear();
 
-    for (const auto& [actorId, _] : ev->Get()->CachedMessageData->Info->InfoEntries) {
+    for (const auto& [actorId, _] : ev->Get()->CachedMessageData->InfoEntries) {
         nodes.insert(actorId.NodeId());
     }
 

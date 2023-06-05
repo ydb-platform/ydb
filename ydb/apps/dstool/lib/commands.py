@@ -15,6 +15,7 @@ import ydb.apps.dstool.lib.dstool_cmd_group_check as group_check
 import ydb.apps.dstool.lib.dstool_cmd_group_decommit as group_decommit
 import ydb.apps.dstool.lib.dstool_cmd_group_list as group_list
 import ydb.apps.dstool.lib.dstool_cmd_group_show_blob_info as group_show_blob_info
+import ydb.apps.dstool.lib.dstool_cmd_group_show_storage_efficiency as group_show_storage_efficiency
 import ydb.apps.dstool.lib.dstool_cmd_group_show_usage_by_tablets as group_show_usage_by_tablets
 import ydb.apps.dstool.lib.dstool_cmd_group_state as group_state
 import ydb.apps.dstool.lib.dstool_cmd_group_take_snapshot as group_take_snapshot
@@ -44,7 +45,8 @@ modules = [
     node_list,
     box_list,
     pool_list, pool_create_virtual,
-    group_check, group_decommit, group_show_blob_info, group_show_usage_by_tablets, group_state, group_take_snapshot, group_add, group_list, group_virtual_create, group_virtual_cancel,
+    group_check, group_decommit, group_show_blob_info, group_show_storage_efficiency, group_show_usage_by_tablets,
+    group_state, group_take_snapshot, group_add, group_list, group_virtual_create, group_virtual_cancel,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list,
     vdisk_remove_donor, vdisk_evict, vdisk_list, vdisk_wipe,
     device_list,
@@ -54,7 +56,7 @@ default_structure = [
     ('device', ['list']),
     ('pdisk', ['add-by-serial', 'remove-by-serial', 'set', 'list']),
     ('vdisk', ['evict', 'remove-donor', 'wipe', 'list']),
-    ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'usage-by-tablets']), 'state', 'take-snapshot', 'list', ('virtual', ['create', 'cancel'])]),
+    ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'storage-efficiency', 'usage-by-tablets']), 'state', 'take-snapshot', 'list', ('virtual', ['create', 'cancel'])]),
     ('pool', ['list', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),

@@ -54,6 +54,7 @@ target_sources(common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_operation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/profile_manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/progress_bar.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/query_stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_list.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_remove.cpp

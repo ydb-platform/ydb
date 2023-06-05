@@ -345,6 +345,20 @@ message TEvDataQueryStreamPart {
     repeated NKikimrMiniKQL.TResult Results = 2;
 };
 
+message TCancelQueryRequest {
+    optional bytes SessionId = 1;
+};
+
+message TEvCancelQueryRequest {
+    optional TCancelQueryRequest Request = 1;
+    optional string TraceId = 2;
+};
+
+message TEvCancelQueryResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+}
+
 // Executer
 
 message TExecuterTxRequest {
@@ -611,4 +625,13 @@ message TEvFetchScriptResultsResponse {
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint64 ResultSetIndex = 3;
     optional Ydb.ResultSet ResultSet = 4;
+}
+
+// Request that is sent to run script actor to cancel execution and write finish status to database.
+message TEvCancelScriptExecutionRequest {
+}
+
+message TEvCancelScriptExecutionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
 }

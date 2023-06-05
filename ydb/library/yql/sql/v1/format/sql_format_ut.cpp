@@ -312,6 +312,18 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
+    
+    Y_UNIT_TEST(TableStoreOperations) {
+        TCases cases = {
+            {"alter tableStore uSer aDd column usEr int32",
+             "ALTER TABLESTORE uSer ADD COLUMN usEr int32;\n\n"},
+             {"alter tableStore uSer drOp column usEr",
+             "ALTER TABLESTORE uSer DROP COLUMN usEr;\n\n"}
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 
     Y_UNIT_TEST(ExternalDataSourceOperations) {
         TCases cases = {

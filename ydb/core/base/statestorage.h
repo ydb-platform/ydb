@@ -429,6 +429,11 @@ struct TEvStateStorage {
         }
     };
 
+    struct TBoardInfoEntry {
+        TString Payload;
+        bool Dropped = false;
+    };
+
     struct TEvBoardInfo : public TEventLocal<TEvBoardInfo, EvBoardInfo> {
         enum class EStatus {
             Unknown,
@@ -436,40 +441,36 @@ struct TEvStateStorage {
             NotAvailable,
         };
 
-        struct TInfoEntry {
-            TString Payload;
-        };
-
         const EStatus Status;
         const TString Path;
-        TMap<TActorId, TInfoEntry> InfoEntries;
+        const ui32 StateStorageGroupId;
+        TMap<TActorId, TBoardInfoEntry> InfoEntries;
 
-        TEvBoardInfo(EStatus status, const TString &path)
+        TEvBoardInfo(EStatus status, const TString &path, ui32 stateStorageGroupId)
             : Status(status)
             , Path(path)
+            , StateStorageGroupId(stateStorageGroupId)
         {}
 
         TEvBoardInfo(const TEvBoardInfo &x)
             : Status(x.Status)
             , Path(x.Path)
+            , StateStorageGroupId(x.StateStorageGroupId)
             , InfoEntries(x.InfoEntries)
         {}
     };
 
     struct TEvBoardInfoUpdate : public TEventLocal<TEvBoardInfoUpdate, EvBoardInfoUpdate> {
 
-        struct TInfoEntryUpdate {
-            TString Payload;
-            bool Dropped = false;
-        };
-
         const TEvBoardInfo::EStatus Status;
         const TString Path;
-        TMap<TActorId,TInfoEntryUpdate> Updates;
+        const ui32 StateStorageGroupId;
+        TMap<TActorId, TBoardInfoEntry> Updates;
 
-        TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path)
+        TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path, ui32 stateStorageGroupId)
             : Status(status)
             , Path(path)
+            , StateStorageGroupId(stateStorageGroupId)
         {}
     };
 };

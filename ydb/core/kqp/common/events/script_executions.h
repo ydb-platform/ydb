@@ -66,4 +66,39 @@ struct TEvListScriptExecutionOperationsResponse : public NActors::TEventLocal<TE
     std::vector<Ydb::Operations::Operation> Operations;
 };
 
+struct TEvCancelScriptExecutionOperation : public NActors::TEventLocal<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {
+    explicit TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+        : Database(database)
+        , OperationId(id)
+    {
+    }
+
+    TString Database;
+    NOperationId::TOperationId OperationId;
+};
+
+struct TEvCancelScriptExecutionOperationResponse : public NActors::TEventLocal<TEvCancelScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperationResponse> {
+    TEvCancelScriptExecutionOperationResponse() = default;
+
+    TEvCancelScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+        : Status(status)
+        , Issues(std::move(issues))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
+struct TEvScriptExecutionFinished : public NActors::TEventLocal<TEvScriptExecutionFinished, TKqpScriptExecutionEvents::EvScriptExecutionFinished> {
+    TEvScriptExecutionFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+        : Status(status)
+        , Issues(std::move(issues))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
 } // namespace NKikimr::NKqp

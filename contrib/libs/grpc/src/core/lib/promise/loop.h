@@ -19,7 +19,9 @@
 
 #include <new>
 #include <type_traits>
+#include <utility>
 
+#include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
 #include "y_absl/types/variant.h"
 

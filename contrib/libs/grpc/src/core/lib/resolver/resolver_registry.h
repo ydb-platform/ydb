@@ -19,9 +19,20 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/gprpp/memory.h"
+#include <map>
+#include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <utility>
+
+#include "y_absl/strings/string_view.h"
+
+#include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gprpp/orphanable.h"
+#include "src/core/lib/iomgr/iomgr_fwd.h"
+#include "src/core/lib/resolver/resolver.h"
 #include "src/core/lib/resolver/resolver_factory.h"
+#include "src/core/lib/uri/uri_parser.h"
 
 namespace grpc_core {
 
@@ -82,7 +93,7 @@ class ResolverRegistry {
   /// which all resolver calls will be run. \a result_handler is used to return
   /// results from the resolver.
   OrphanablePtr<Resolver> CreateResolver(
-      y_absl::string_view target, const grpc_channel_args* args,
+      y_absl::string_view target, const ChannelArgs& args,
       grpc_pollset_set* pollset_set,
       std::shared_ptr<WorkSerializer> work_serializer,
       std::unique_ptr<Resolver::ResultHandler> result_handler) const;

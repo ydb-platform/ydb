@@ -1,4 +1,5 @@
 #include "interactive.h"
+#include "progress_bar.h"
 #include "recursive_remove.h"
 
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -111,6 +112,7 @@ TStatus RemoveDirectoryRecursive(
         }
     }
 
+    TProgressBar bar(recursiveListResult.Entries.size());
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
@@ -145,6 +147,7 @@ TStatus RemoveDirectoryRecursive(
                 return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
                     << "Unsupported entry type: " << entry.Type));
         }
+        bar.AddProgress(1);
     }
 
     return TStatus(EStatus::SUCCESS, {});

@@ -19,18 +19,28 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <string.h>
+#include <stdint.h>
 
-#include "y_absl/container/inlined_vector.h"
+#include <map>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+
+#include "y_absl/base/thread_annotations.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/string_view.h"
+#include "y_absl/types/optional.h"
 
 #include <grpc/grpc_security.h>
+#include <grpc/support/log.h>
+#include <grpc/support/sync.h>
 
+#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/thd.h"
-#include "src/core/lib/iomgr/load_file.h"
-#include "src/core/lib/iomgr/pollset_set.h"
+#include "src/core/lib/gprpp/unique_type_name.h"
+#include "src/core/lib/iomgr/iomgr_fwd.h"
 #include "src/core/lib/security/credentials/tls/grpc_tls_certificate_distributor.h"
 #include "src/core/lib/security/security_connector/ssl_utils.h"
 
@@ -50,6 +60,39 @@ struct grpc_tls_certificate_provider
 
   virtual grpc_core::RefCountedPtr<grpc_tls_certificate_distributor>
   distributor() const = 0;
+
+  // Compares this grpc_tls_certificate_provider object with \a other.
+  // If this method returns 0, it means that gRPC can treat the two certificate
+  // providers as effectively the same. This method is used to compare
+  // `grpc_tls_certificate_provider` objects when they are present in
+  // channel_args. One important usage of this is when channel args are used in
+  // SubchannelKey, which leads to a useful property that allows subchannels to
+  // be reused when two different `grpc_tls_certificate_provider` objects are
+  // used but they compare as equal (assuming other channel args match).
+  int Compare(const grpc_tls_certificate_provider* other) const {
+    GPR_ASSERT(other != nullptr);
+    int r = type().Compare(other->type());
+    if (r != 0) return r;
+    return CompareImpl(other);
+  }
+
+  // The pointer value \a type is used to uniquely identify a creds
+  // implementation for down-casting purposes. Every provider implementation
+  // should use a unique string instance, which should be returned by all
+  // instances of that provider implementation.
+  virtual grpc_core::UniqueTypeName type() const = 0;
+
+  static y_absl::string_view ChannelArgName();
+  static int ChannelArgsCompare(const grpc_tls_certificate_provider* a,
+                                const grpc_tls_certificate_provider* b) {
+    return a->Compare(b);
+  }
+
+ private:
+  // Implementation for `Compare` method intended to be overridden by
+  // subclasses. Only invoked if `type()` and `other->type()` point to the same
+  // string.
+  virtual int CompareImpl(const grpc_tls_certificate_provider* other) const = 0;
 };
 
 namespace grpc_core {
@@ -68,11 +111,20 @@ class StaticDataCertificateProvider final
     return distributor_;
   }
 
+  UniqueTypeName type() const override;
+
  private:
   struct WatcherInfo {
     bool root_being_watched = false;
     bool identity_being_watched = false;
   };
+
+  int CompareImpl(const grpc_tls_certificate_provider* other) const override {
+    // TODO(yashykt): Maybe do something better here.
+    return QsortCompare(static_cast<const grpc_tls_certificate_provider*>(this),
+                        other);
+  }
+
   RefCountedPtr<grpc_tls_certificate_distributor> distributor_;
   TString root_certificate_;
   PemKeyCertPairList pem_key_cert_pairs_;
@@ -90,7 +142,7 @@ class FileWatcherCertificateProvider final
   FileWatcherCertificateProvider(TString private_key_path,
                                  TString identity_certificate_path,
                                  TString root_cert_path,
-                                 unsigned int refresh_interval_sec);
+                                 int64_t refresh_interval_sec);
 
   ~FileWatcherCertificateProvider() override;
 
@@ -98,11 +150,20 @@ class FileWatcherCertificateProvider final
     return distributor_;
   }
 
+  UniqueTypeName type() const override;
+
  private:
   struct WatcherInfo {
     bool root_being_watched = false;
     bool identity_being_watched = false;
   };
+
+  int CompareImpl(const grpc_tls_certificate_provider* other) const override {
+    // TODO(yashykt): Maybe do something better here.
+    return QsortCompare(static_cast<const grpc_tls_certificate_provider*>(this),
+                        other);
+  }
+
   // Force an update from the file system regardless of the interval.
   void ForceUpdate();
   // Read the root certificates from files and update the distributor.
@@ -118,7 +179,7 @@ class FileWatcherCertificateProvider final
   TString private_key_path_;
   TString identity_certificate_path_;
   TString root_cert_path_;
-  unsigned int refresh_interval_sec_ = 0;
+  int64_t refresh_interval_sec_ = 0;
 
   RefCountedPtr<grpc_tls_certificate_distributor> distributor_;
   Thread refresh_thread_;

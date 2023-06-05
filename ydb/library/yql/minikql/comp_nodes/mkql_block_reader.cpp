@@ -56,9 +56,9 @@ public:
         }
 
         if constexpr (PgString == NUdf::EPgStringType::CString) {
-             return PgBuilder->MakeCString(item.AsStringRef().Data()).Release();
+             return PgBuilder->MakeCString(item.AsStringRef().Data() + sizeof(void*)).Release();
         } else if constexpr (PgString == NUdf::EPgStringType::Text) {
-             return PgBuilder->MakeText(item.AsStringRef().Data()).Release();             
+             return PgBuilder->MakeText(item.AsStringRef().Data()+ sizeof(void*)).Release();
         } else {
             return MakeString(item.AsStringRef());
         }
@@ -72,9 +72,11 @@ public:
         }
 
         if constexpr (PgString == NUdf::EPgStringType::CString) {
-            return TBlockItem(PgBuilder->AsCStringBuffer(value));
+            auto buf = PgBuilder->AsCStringBuffer(value);
+            return TBlockItem(NYql::NUdf::TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*)));
         } else if constexpr (PgString == NUdf::EPgStringType::Text) {
-            return TBlockItem(PgBuilder->AsTextBuffer(value));
+            auto buf = PgBuilder->AsTextBuffer(value);
+            return TBlockItem(NYql::NUdf::TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*)));
         } else {
             return TBlockItem(value.AsStringRef());
         }

@@ -19,8 +19,15 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <grpc/impl/codegen/grpc_types.h>
+#include <map>
+#include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <type_traits>
 
+#include "y_absl/strings/string_view.h"
+
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/json/json.h"
 
 struct grpc_channel_credentials;

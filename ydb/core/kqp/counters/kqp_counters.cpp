@@ -73,6 +73,7 @@ void TKqpCountersBase::Init() {
     CloseSessionRequests = KqpGroup->GetCounter("Requests/CloseSession", true);
     CreateSessionRequests = KqpGroup->GetCounter("Requests/CreateSession", true);
     PingSessionRequests = KqpGroup->GetCounter("Requests/PingSession", true);
+    CancelQueryRequests = KqpGroup->GetCounter("Requests/CancelQuery", true);
 
     RequestBytes = KqpGroup->GetCounter("Requests/Bytes", true);
     YdbRequestBytes = YdbGroup->GetNamedCounter("name", "table.query.request.bytes", true);
@@ -304,6 +305,12 @@ void TKqpCountersBase::ReportQueryRequest(ui64 requestBytes, ui64 parametersByte
 
     *ParametersBytes += parametersBytes;
     *YdbParametersBytes += parametersBytes;
+}
+
+void TKqpCountersBase::ReportCancelQuery(ui64 requestSize) {
+    CancelQueryRequests->Inc();
+    *RequestBytes += requestSize;
+    *YdbRequestBytes += requestSize;
 }
 
 void TKqpCountersBase::ReportQueryWithRangeScan() {
@@ -857,6 +864,13 @@ void TKqpCounters::ReportQueryRequest(TKqpDbCountersPtr dbCounters, ui64 request
     TKqpCountersBase::ReportQueryRequest(requestBytes, parametersBytes, queryBytes);
     if (dbCounters) {
         dbCounters->ReportQueryRequest(requestBytes, parametersBytes, queryBytes);
+    }
+}
+
+void TKqpCounters::ReportCancelQuery(TKqpDbCountersPtr dbCounters, ui64 requestSize) {
+    TKqpCountersBase::ReportCancelQuery(requestSize);
+    if (dbCounters) {
+        dbCounters->ReportCancelQuery(requestSize);
     }
 }
 

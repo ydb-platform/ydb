@@ -223,7 +223,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
     UNIT_ASSERT(ts.size() == 2);
 
-    ui32 ttlSec = TInstant::Now().Seconds(); // disable internal tll
+    ui32 ttlSec = TAppData::TimeProvider->Now().Seconds(); // disable internal tll
     if (internal) {
         ttlSec -= (ts[0] + ts[1]) / 2; // enable internal ttl between ts1 and ts2
     }
@@ -288,7 +288,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     // Alter TTL
-    ttlSec = TInstant::Now().Seconds() - (ts[1] + 1);
+    ttlSec = TAppData::TimeProvider->Now().Seconds() - (ts[1] + 1);
     if (spec.HasTiers()) {
         spec.Tiers[0].EvictAfter = TDuration::Seconds(ttlSec);
     } else {
@@ -743,7 +743,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
         blobs.emplace_back(std::move(preload[1]));
     }
 
-    TInstant now = TInstant::Now();
+    TInstant now = TAppData::TimeProvider->Now();
     TDuration allowBoth = TDuration::Seconds(now.Seconds() - ts[0] + 600);
     TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
     TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);

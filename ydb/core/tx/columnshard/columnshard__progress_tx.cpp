@@ -220,6 +220,7 @@ private:
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "EnqueueProgressTx")("tablet_id", TabletID());
     if (!ProgressTxInFlight) {
         ProgressTxInFlight = true;
         Execute(new TTxProgressTx(this), ctx);

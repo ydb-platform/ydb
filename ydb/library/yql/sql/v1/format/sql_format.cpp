@@ -907,6 +907,12 @@ private:
         PopCurrentIndent();
     }
 
+    void VisitAlterTableStore(const TRule_alter_table_store_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_alter_table_store_stmt::GetDescriptor(), msg);
+    }
+
     void VisitDo(const TRule_do_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -2106,7 +2112,8 @@ TStaticData::TStaticData()
         {TRule_alter_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTopic)},
         {TRule_drop_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTopic)},
         {TRule_grant_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitGrantPermissions)},
-        {TRule_revoke_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitRevokePermissions)}
+        {TRule_revoke_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitRevokePermissions)},
+        {TRule_alter_table_store_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTableStore)}
         })
 {
     // ensure that all statements has a visitor

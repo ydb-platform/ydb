@@ -56,6 +56,7 @@ sql_stmt_core:
   | drop_topic_stmt
   | grant_permissions_stmt
   | revoke_permissions_stmt
+  | alter_table_store_stmt
 ;
 
 expr:
@@ -530,6 +531,12 @@ alter_table_action:
   | alter_table_alter_changefeed
   | alter_table_drop_changefeed
   | alter_table_rename_index_to
+;
+
+alter_table_store_stmt: ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
+alter_table_store_action:
+    alter_table_add_column
+  | alter_table_drop_column
 ;
 
 alter_table_add_column: ADD COLUMN? column_schema;

@@ -99,7 +99,7 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
 
     std::vector<TPortionInfo> tmp;
     tmp.reserve(portions.size());
-    for (const auto& portionInfo : portions) {
+    for (auto& portionInfo : portions) {
         ui64 curPortion = portionInfo.Portion();
 
         // Prevent merge of compacted portions with no intersections

@@ -1361,7 +1361,8 @@ public:
                                     }
 
                                     const auto interval = TDuration::FromValue(value);
-                                    Y_UNUSED(interval); // TODO(ilnaz): implement
+                                    auto& resolvedTimestamps = *add_changefeed->mutable_resolved_timestamps_interval();
+                                    resolvedTimestamps.set_seconds(interval.Seconds());
                                 } else if (name == "retention_period") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(

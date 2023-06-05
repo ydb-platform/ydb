@@ -20,6 +20,60 @@ void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
+void THelper::StartScanRequest(const TString& request, const bool expectSuccess, TVector<THashMap<TString, NYdb::TValue>>* result) const {
+    NYdb::NTable::TTableClient tClient(Server.GetDriver(),
+        NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
+    auto expectation = expectSuccess;
+    bool resultReady = false;
+    TVector<THashMap<TString, NYdb::TValue>> rows;
+    std::optional<NYdb::NTable::TScanQueryPartIterator> scanIterator;
+    tClient.StreamExecuteScanQuery(request).Subscribe([&scanIterator](NThreading::TFuture<NYdb::NTable::TScanQueryPartIterator> f) {
+        scanIterator = f.GetValueSync();
+    });
+    const TInstant start = TInstant::Now();
+    while (!resultReady && start + TDuration::Seconds(60) > TInstant::Now()) {
+        Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+        if (scanIterator && !resultReady) {
+            scanIterator->ReadNext().Subscribe([&](NThreading::TFuture<NYdb::NTable::TScanQueryPart> streamPartFuture) {
+                NYdb::NTable::TScanQueryPart streamPart = streamPartFuture.GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    resultReady = true;
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                } else {
+                    UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(), "Unexpected empty scan query response.");
+
+                    if (streamPart.HasQueryStats()) {
+                        auto plan = streamPart.GetQueryStats().GetPlan();
+                        NJson::TJsonValue jsonValue;
+                        if (plan) {
+                            UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, &jsonValue));
+                            Cerr << jsonValue << Endl;
+                        }
+                    }
+
+                    if (streamPart.HasResultSet()) {
+                        auto resultSet = streamPart.ExtractResultSet();
+                        NYdb::TResultSetParser rsParser(resultSet);
+                        while (rsParser.TryNextRow()) {
+                            THashMap<TString, NYdb::TValue> row;
+                            for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
+                                row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
+                                Cerr << resultSet.GetColumnsMeta()[ci].Name << "/" << rsParser.GetValue(ci).GetProto().DebugString() << Endl;
+                            }
+                            rows.emplace_back(std::move(row));
+                        }
+                    }
+                }
+            });
+        }
+    }
+    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
+    UNIT_ASSERT(resultReady);
+    if (result) {
+        *result = rows;
+    }
+}
+
 void THelper::StartDataRequest(const TString& request, const bool expectSuccess, TString* result) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));

@@ -17,6 +17,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
+#include <google/protobuf/util/time_util.h>
+
 #include <library/cpp/cache/cache.h>
 
 #include <util/generic/map.h>
@@ -4304,6 +4306,11 @@ TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithResolvedTimestamps(const TDuration& value) {
+    ResolvedTimestamps_ = value;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::WithRetentionPeriod(const TDuration& value) {
     RetentionPeriod_ = value;
     return *this;
@@ -4352,6 +4359,10 @@ EChangefeedState TChangefeedDescription::GetState() const {
 
 bool TChangefeedDescription::GetVirtualTimestamps() const {
     return VirtualTimestamps_;
+}
+
+const std::optional<TDuration>& TChangefeedDescription::GetResolvedTimestamps() const {
+    return ResolvedTimestamps_;
 }
 
 bool TChangefeedDescription::GetInitialScan() const {
@@ -4406,6 +4417,10 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     auto ret = TChangefeedDescription(proto.name(), mode, format);
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
+    }
+    if (proto.has_resolved_timestamps_interval()) {
+        ret.WithResolvedTimestamps(TDuration::MilliSeconds(
+            ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));
     }
     if (!proto.aws_region().empty()) {
         ret.WithAwsRegion(proto.aws_region());
@@ -4472,10 +4487,12 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
         break;
     }
 
+    if (ResolvedTimestamps_) {
+        SetDuration(*ResolvedTimestamps_, *proto.mutable_resolved_timestamps_interval());
+    }
+
     if (RetentionPeriod_) {
-        auto& retention = *proto.mutable_retention_period();
-        retention.set_seconds(RetentionPeriod_->Seconds());
-        retention.set_nanos(RetentionPeriod_->NanoSecondsOfSecond());
+        SetDuration(*RetentionPeriod_, *proto.mutable_retention_period());
     }
 
     for (const auto& [key, value] : Attributes_) {
@@ -4496,6 +4513,10 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
       << ", format: " << Format_ << ""
       << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << "";
 
+    if (ResolvedTimestamps_) {
+        o << ", resolved_timestamps: " << *ResolvedTimestamps_;
+    }
+
     if (RetentionPeriod_) {
         o << ", retention_period: " << *RetentionPeriod_;
     }
@@ -4512,6 +4533,7 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
+        && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()
         && lhs.GetAwsRegion() == rhs.GetAwsRegion();
 }
 

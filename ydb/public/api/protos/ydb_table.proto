@@ -161,6 +161,8 @@ message Changefeed {
     map<string, string> attributes = 7 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
     // Value that will be emitted in the `awsRegion` field of the record in DYNAMODB_STREAMS_JSON format
     string aws_region = 8 [(length).le = 128];
+    // Periodically emit resolved timestamps. If unspecified, resolved timestamps are not emitted.
+    google.protobuf.Duration resolved_timestamps_interval = 9;
 }
 
 message ChangefeedDescription {
@@ -193,6 +195,8 @@ message ChangefeedDescription {
     map<string, string> attributes = 6;
     // Value that will be emitted in the `awsRegion` field of the record in DYNAMODB_STREAMS_JSON format
     string aws_region = 7;
+    // Interval of emitting of resolved timestamps. If unspecified, resolved timestamps are not emitted.
+    google.protobuf.Duration resolved_timestamps_interval = 8;
 }
 
 message StoragePool {

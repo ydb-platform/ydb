@@ -209,6 +209,8 @@ public:
 
     // Enable virtual timestamps
     TChangefeedDescription& WithVirtualTimestamps();
+    // Enable resolved timestamps
+    TChangefeedDescription& WithResolvedTimestamps(const TDuration& interval);
     // Customise retention period of underlying topic (24h by default).
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
     // Initial scan will output the current state of the table first
@@ -225,6 +227,7 @@ public:
     EChangefeedFormat GetFormat() const;
     EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
+    const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
     const THashMap<TString, TString>& GetAttributes() const;
     const TString& GetAwsRegion() const;
@@ -246,6 +249,7 @@ private:
     EChangefeedFormat Format_;
     EChangefeedState State_ = EChangefeedState::Unknown;
     bool VirtualTimestamps_ = false;
+    std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
     THashMap<TString, TString> Attributes_;

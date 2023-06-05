@@ -23,7 +23,8 @@ struct TPingTaskParams {
 TPingTaskParams ConstructHardPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
-    const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters, uint64_t maxRequestSize) {
+    const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters,
+    uint64_t maxRequestSize, bool dumpRawStatistics) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -194,12 +195,13 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (request.statistics()) {
-            TString statistics;
-            try {
-                statistics = GetPrettyStatistics(request.statistics());
-            } catch (const std::exception&) {
-                CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
-                statistics = request.statistics();
+            TString statistics = request.statistics();
+            if (!dumpRawStatistics) {
+                try {
+                    statistics = GetPrettyStatistics(statistics);
+                } catch (const std::exception&) {
+                    CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
+                }
             }
             *query.mutable_statistics()->mutable_json() = statistics;
             *job.mutable_statistics()->mutable_json() = statistics;
@@ -526,7 +528,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     }
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl, Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize()) :
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl,
+            Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize(),
+            Config->Proto.GetDumpRawStatistics()) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);

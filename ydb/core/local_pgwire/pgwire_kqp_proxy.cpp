@@ -153,8 +153,9 @@ class TPgwireKqpProxyQuery : public TActorBootstrapped<TPgwireKqpProxyQuery> {
 
     std::unordered_map<TString, TString> ConnectionParams_;
     NPG::TEvPGEvents::TEvQuery::TPtr EventQuery_;
-    bool InTransaction_ = false;
     bool WasMeta_ = false;
+    TString Tag;
+    char TransactionStatus = 0;
 
 public:
     TPgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery)
@@ -184,7 +185,16 @@ public:
         event->Record.SetUserToken(token);
 
         // HACK
-        InTransaction_ = query.starts_with("BEGIN");
+        if (query.starts_with("BEGIN")) {
+            Tag = "BEGIN";
+            TransactionStatus = 'T';
+        } else if (query.starts_with("COMMIT")) {
+            Tag = "COMMIT";
+            TransactionStatus = 'I';
+        } else if (query.starts_with("ROLLBACK")) {
+            Tag = "ROLLBACK";
+            TransactionStatus = 'I';
+        }
 
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         BLOG_D("Sent event to kqpProxy, RequestActorId = " << EventQuery_->Sender << ", self: " << SelfId());
@@ -220,11 +230,8 @@ public:
     std::unique_ptr<NPG::TEvPGEvents::TEvQueryResponse> MakeResponse() {
         auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
 
-        // HACK
-        if (InTransaction_) {
-            response->Tag = "BEGIN";
-            response->TransactionStatus = 'T';
-        }
+        response->Tag = Tag;
+        response->TransactionStatus = TransactionStatus;
 
         return response;
     }

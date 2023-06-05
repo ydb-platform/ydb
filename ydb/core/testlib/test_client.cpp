@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/viewer/viewer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/services/auth/grpc_service.h>
@@ -1001,6 +1002,16 @@ namespace Tests {
                 {}
                 );
             NFq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
+        }
+        {
+            using namespace NViewer;
+            if (Settings->KikimrRunConfig) {
+                IActor* viewer = CreateViewer(*Settings->KikimrRunConfig);
+                SetupPQVirtualHandlers(dynamic_cast<IViewer*>(viewer));
+                SetupDBVirtualHandlers(dynamic_cast<IViewer*>(viewer));
+                TActorId viewerId = Runtime->Register(viewer, nodeIdx);
+                Runtime->RegisterService(MakeViewerID(nodeIdx), viewerId, nodeIdx);
+            }
         }
     }
 

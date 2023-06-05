@@ -42,6 +42,7 @@ protected:
     void ReportPingSession(ui64 requestSize);
     void ReportCloseSession(ui64 requestSize);
     void ReportQueryRequest(ui64 requestBytes, ui64 parametersBytes, ui64 queryBytes);
+    void ReportCancelQuery(ui64 requestSize);
 
     void ReportQueryWithRangeScan();
     void ReportQueryWithFullScan();
@@ -112,6 +113,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CloseSessionRequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr CreateSessionRequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr PingSessionRequests;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CancelQueryRequests;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr YdbRequestBytes;
@@ -272,6 +274,7 @@ public:
     void ReportQueryAction(TKqpDbCountersPtr dbCounters, NKikimrKqp::EQueryAction action);
     void ReportQueryType(TKqpDbCountersPtr dbCounters, NKikimrKqp::EQueryType type);
     void ReportQueryRequest(TKqpDbCountersPtr dbCounters, ui64 requestBytes, ui64 parametersBytes, ui64 queryBytes);
+    void ReportCancelQuery(TKqpDbCountersPtr dbCounters, ui64 requestSize);
 
     void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 resultsSize);

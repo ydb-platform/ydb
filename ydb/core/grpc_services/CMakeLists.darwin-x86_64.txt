@@ -40,6 +40,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-health_check
   ydb-core-io_formats
   core-kesus-tablet
+  core-kqp-common
   ydb-core-protos
   ydb-core-scheme
   ydb-core-sys_view

@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -18,6 +20,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -26,26 +29,6 @@
 #include <util/random/random.h>
 
 namespace NKikimr::NKqp {
-
-TString ScriptExecutionOperationFromExecutionId(const TString& executionId) {
-    Ydb::TOperationId operationId;
-    operationId.SetKind(Ydb::TOperationId::SCRIPT_EXECUTION);
-    NOperationId::AddOptionalValue(operationId, "actor_id", executionId);
-    return NOperationId::ProtoToString(operationId);
-}
-
-TMaybe<TString> ScriptExecutionFromOperation(const TString& operationId) {
-    NOperationId::TOperationId operation(operationId);
-    return ScriptExecutionFromOperation(operation);
-}
-
-TMaybe<TString> ScriptExecutionFromOperation(const NOperationId::TOperationId& operationId) {
-    const auto& values = operationId.GetValue("actor_id");
-    if (values.empty() || !values[0]) {
-        return Nothing();
-    }
-    return *values[0];
-}
 
 namespace {
 
@@ -85,6 +68,7 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvCreateScriptOperationResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCreateTableResponse,
+        EvLeaseCheckResult,
 
         EvEnd
     };
@@ -113,13 +97,26 @@ struct TEvPrivate {
     struct TEvCreateTableResponse : public NActors::TEventLocal<TEvCreateTableResponse, EvCreateTableResponse> {
         TEvCreateTableResponse() = default;
     };
+
+    struct TEvLeaseCheckResult : public NActors::TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {
+        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues, TMaybe<Ydb::StatusIds::StatusCode> operationStatus)
+            : Status(statusCode)
+            , Issues(std::move(issues))
+            , OperationStatus(operationStatus)
+        {
+        }
+
+        const Ydb::StatusIds::StatusCode Status;
+        const NYql::TIssues Issues;
+        const TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
+    };
 };
 
 
 class TQueryBase : public NKikimr::TQueryBase {
 public:
-    TQueryBase()
-        : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY)
+    TQueryBase(TString sessionId = {})
+        : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY, sessionId)
     {}
 };
 
@@ -566,7 +563,59 @@ private:
     NActors::TActorId RunScriptActorId;
 };
 
-class TScriptExecutionFinisher : public TQueryBase {
+class TScriptExecutionFinisherBase : public TQueryBase {
+public:
+    using TQueryBase::TQueryBase;
+
+    void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, const NYql::TIssues& issues, TTxControl txControl = TTxControl::ContinueAndCommitTx()) {
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $operation_status AS Int32;
+            DECLARE $execution_status AS Int32;
+            DECLARE $issues AS JsonDocument;
+
+            UPDATE `.metadata/script_executions`
+            SET
+                operation_status = $operation_status,
+                execution_status = $execution_status,
+                issues = $issues,
+                end_ts = CurrentUtcTimestamp()
+            WHERE database = $database AND execution_id = $execution_id;
+
+            DELETE FROM `.metadata/script_execution_leases`
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(executionId)
+                .Build()
+            .AddParam("$operation_status")
+                .Int32(operationStatus)
+                .Build()
+            .AddParam("$execution_status")
+                .Int32(execStatus)
+                .Build()
+            .AddParam("$issues")
+                .JsonDocument(SerializeIssues(issues))
+                .Build();
+
+        RunDataQuery(sql, &params, txControl);
+    }
+
+    void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, const TString& message, TTxControl txControl = TTxControl::ContinueAndCommitTx()) {
+        NYql::TIssues issues;
+        issues.AddIssue(message);
+        FinishScriptExecution(database, executionId, operationStatus, execStatus, issues, txControl);
+    }
+};
+
+class TScriptExecutionFinisher : public TScriptExecutionFinisherBase {
 public:
     TScriptExecutionFinisher(
         const TString& executionId,
@@ -607,73 +656,40 @@ public:
     }
 
     void OnQueryResult() override {
-        if (ResultSets.size() != 1) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
-            return;
+        if (!FinishWasRun) {
+            if (ResultSets.size() != 1) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+                return;
+            }
+            NYdb::TResultSetParser result(ResultSets[0]);
+            if (result.RowsCount() == 0) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "No such execution");
+                return;
+            }
+
+            result.TryNextRow();
+
+            const TMaybe<i64> leaseGenerationInDatabase = result.ColumnParser(0).GetOptionalInt64();
+            if (!leaseGenerationInDatabase) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation");
+                return;
+            }
+
+            if (LeaseGeneration != static_cast<ui64>(*leaseGenerationInDatabase)) {
+                Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Lease was lost");
+                return;
+            }
+
+            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, Issues);
+            FinishWasRun = true;
+        } else {
+            Finish();
         }
-        NYdb::TResultSetParser result(ResultSets[0]);
-        if (result.RowsCount() == 0) {
-            Finish(Ydb::StatusIds::BAD_REQUEST, "No such execution");
-            return;
-        }
-
-        result.TryNextRow();
-
-        const TMaybe<i64> leaseGenerationInDatabase = result.ColumnParser(0).GetOptionalInt64();
-        if (!leaseGenerationInDatabase) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unknown lease generation");
-            return;
-        }
-
-        if (LeaseGeneration != static_cast<ui64>(*leaseGenerationInDatabase)) {
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Lease was lost");
-            return;
-        }
-
-        TString sql = R"(
-            DECLARE $database AS Text;
-            DECLARE $execution_id AS Text;
-            DECLARE $operation_status AS Int32;
-            DECLARE $execution_status AS Int32;
-            DECLARE $issues AS JsonDocument;
-
-            UPDATE `.metadata/script_executions`
-            SET
-                operation_status = $operation_status,
-                execution_status = $execution_status,
-                issues = $issues,
-                end_ts = CurrentUtcTimestamp()
-            WHERE database = $database AND execution_id = $execution_id;
-
-            DELETE FROM `.metadata/script_execution_leases`
-            WHERE database = $database AND execution_id = $execution_id;
-        )";
-
-        NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database")
-                .Utf8(Database)
-                .Build()
-            .AddParam("$execution_id")
-                .Utf8(ExecutionId)
-                .Build()
-            .AddParam("$operation_status")
-                .Int32(OperationStatus)
-                .Build()
-            .AddParam("$execution_status")
-                .Int32(ExecStatus)
-                .Build()
-            .AddParam("$issues")
-                .JsonDocument(SerializeIssues(Issues))
-                .Build();
-
-        Y_UNUSED(DeserializeIssues);
-
-        RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         KQP_PROXY_LOG_D("Finish script execution operation. ExecutionId: " << ExecutionId << ". Lease generation: " << LeaseGeneration << ": " << Ydb::StatusIds::StatusCode_Name(status) << ". Issues: " << issues.ToOneLineString());
+        Send(Owner, new TEvScriptExecutionFinished(status, std::move(issues)));
     }
 
 private:
@@ -683,6 +699,7 @@ private:
     const Ydb::StatusIds::StatusCode OperationStatus;
     const Ydb::Query::ExecStatus ExecStatus;
     const NYql::TIssues Issues;
+    bool FinishWasRun = false;
 };
 
 class TGetScriptExecutionOperationActor : public TQueryBase {
@@ -948,6 +965,196 @@ private:
     std::vector<Ydb::Operations::Operation> Operations;
 };
 
+class TCheckLeaseStatusActor : public TScriptExecutionFinisherBase {
+public:
+    TCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED)
+        : Database(database)
+        , ExecutionId(executionId)
+        , StatusOnExpiredLease(statusOnExpiredLease)
+    {}
+
+    void OnRunQuery() override {
+        const TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+
+            SELECT operation_status FROM `.metadata/script_executions`
+                WHERE database = $database AND execution_id = $execution_id;
+
+            SELECT lease_deadline FROM `.metadata/script_execution_leases`
+                WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build();
+
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+    }
+
+    void OnQueryResult() override {
+        if (!FinishWasRun) {
+            if (ResultSets.size() != 2) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+                return;
+            }
+            NYdb::TResultSetParser result(ResultSets[0]);
+            if (result.RowsCount() == 0) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "No such execution");
+                return;
+            }
+
+            result.TryNextRow();
+
+            TMaybe<i32> operationStatus = result.ColumnParser(0).GetOptionalInt32();
+            TMaybe<TInstant> leaseDeadline;
+
+            NYdb::TResultSetParser result2(ResultSets[1]);
+
+            if (result2.RowsCount() > 0) {
+                result2.TryNextRow();
+
+                leaseDeadline = result2.ColumnParser(0).GetOptionalTimestamp();
+            }
+
+            if (leaseDeadline) {
+                if (operationStatus) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Invalid operation state");
+                } else if (*leaseDeadline < RunStartTime) {
+                    FinishWasRun = true;
+                    FinishScriptExecution(Database, ExecutionId, StatusOnExpiredLease, Ydb::Query::EXEC_STATUS_ABORTED, "Lease expired");
+                } else {
+                    // OperationStatus is Nothing(): currently running
+                    Finish();
+                }
+            } else if (operationStatus) {
+                OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+                Finish();
+            } else {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Invalid operation state");
+            }
+        } else {
+            OperationStatus = StatusOnExpiredLease;
+            Finish();
+        }
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvPrivate::TEvLeaseCheckResult(status, std::move(issues), OperationStatus));
+    }
+
+private:
+    const TInstant RunStartTime = TInstant::Now();
+    const TString Database;
+    const TString ExecutionId;
+    const Ydb::StatusIds::StatusCode StatusOnExpiredLease;
+    TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
+    bool FinishWasRun = false;
+};
+
+class TCancelScriptExecutionOperationActor : public NActors::TActorBootstrapped<TCancelScriptExecutionOperationActor> {
+public:
+    TCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev)
+        : Request(std::move(ev))
+    {}
+
+    void Bootstrap() {
+        const TMaybe<TString> executionId = NKqp::ScriptExecutionFromOperation(Request->Get()->OperationId);
+        if (!executionId) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
+        }
+        ExecutionId = *executionId;
+
+        if (!NKqp::ScriptExecutionIdToActorId(ExecutionId, RunScriptActor)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
+        }
+
+        Become(&TCancelScriptExecutionOperationActor::StateFunc);
+        Register(new TCheckLeaseStatusActor(Request->Get()->Database, ExecutionId));
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvPrivate::TEvLeaseCheckResult, Handle);
+        hFunc(TEvKqp::TEvCancelScriptExecutionResponse, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+    )
+
+    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            if (ev->Get()->OperationStatus) {
+                Reply(Ydb::StatusIds::PRECONDITION_FAILED); // Already finished.
+            } else {
+                if (CancelSent) { // We have not found the actor, but after it status of the operation is not defined, something strage happened.
+                    Reply(Ydb::StatusIds::INTERNAL_ERROR, "Failed to cancel script execution operation");
+                } else {
+                    SendCancelToRunScriptActor(); // The race: operation is still working, but it can finish before it receives cancel signal. Try to cancel first and then maybe check its status.
+                }
+            }
+        } else {
+            Reply(ev->Get()->Status, std::move(ev->Get()->Issues)); // Error getting operation in database.
+        }
+    }
+
+    void SendCancelToRunScriptActor() {
+        ui64 flags = IEventHandle::FlagTrackDelivery;
+        if (RunScriptActor.NodeId() != SelfId().NodeId()) {
+            flags |= IEventHandle::FlagSubscribeOnSession;
+            SubscribedOnSession = RunScriptActor.NodeId();
+        }
+        Send(RunScriptActor, new TEvKqp::TEvCancelScriptExecutionRequest(), flags);
+        CancelSent = true;
+    }
+
+    void Handle(TEvKqp::TEvCancelScriptExecutionResponse::TPtr& ev) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+        Reply(ev->Get()->Record.GetStatus(), std::move(issues));
+    }
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) { // The actor probably had finished before our cancel message arrived.
+            Register(new TCheckLeaseStatusActor(Request->Get()->Database, ExecutionId)); // Check if the operation has finished.
+        } else {
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver request to destination");
+        }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver request to destination");
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
+        Send(Request->Sender, new TEvCancelScriptExecutionOperationResponse(status, std::move(issues)));
+        PassAway();
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message) {
+        NYql::TIssues issues;
+        issues.AddIssue(message);
+        Reply(status, std::move(issues));
+    }
+
+    void PassAway() override {
+        if (SubscribedOnSession) {
+            Send(TActivationContext::InterconnectProxy(*SubscribedOnSession), new TEvents::TEvUnsubscribe());
+        }
+        NActors::TActorBootstrapped<TCancelScriptExecutionOperationActor>::PassAway();
+    }
+
+private:
+    TEvCancelScriptExecutionOperation::TPtr Request;
+    TString ExecutionId;
+    NActors::TActorId RunScriptActor;
+    TMaybe<ui32> SubscribedOnSession;
+    bool CancelSent = false;
+};
+
 } // anonymous namespace
 
 NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev) {
@@ -975,6 +1182,10 @@ NActors::IActor* CreateGetScriptExecutionOperationActor(TEvGetScriptExecutionOpe
 
 NActors::IActor* CreateListScriptExecutionOperationsActor(TEvListScriptExecutionOperations::TPtr ev) {
     return new TListScriptExecutionOperationsActor(std::move(ev));
+}
+
+NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev) {
+    return new TCancelScriptExecutionOperationActor(std::move(ev));
 }
 
 } // namespace NKikimr::NKqp

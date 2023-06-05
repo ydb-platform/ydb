@@ -1749,6 +1749,21 @@ public:
         Cleanup(IsFatalError(ydbStatus));
     }
 
+    void Handle(TEvKqp::TEvCancelQueryRequest::TPtr& ev) {
+        {
+            auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>();
+            abort->Record.SetStatusCode(NYql::NDqProto::StatusIds::CANCELLED);
+            abort->Record.AddIssues()->set_message("Canceled");
+            Send(SelfId(), abort.Release());
+        }
+
+        {
+            auto resp = MakeHolder<TEvKqp::TEvCancelQueryResponse>();
+            resp->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+            Send(ev->Sender, resp.Release(), 0, ev->Cookie);
+        }
+    }
+
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
@@ -1757,6 +1772,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
+                hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
@@ -1785,6 +1801,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
+                hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
@@ -1815,6 +1832,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
+                hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
@@ -1844,6 +1862,7 @@ public:
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(NGRpcService::TEvClientLost, HandleNoop);
+                hFunc(TEvKqp::TEvCancelQueryRequest, HandleNoop);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);

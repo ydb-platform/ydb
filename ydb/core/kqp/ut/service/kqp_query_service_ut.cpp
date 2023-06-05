@@ -302,6 +302,40 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
         UNIT_ASSERT_EQUAL(ops, listedOps);
     }
+
+    Y_UNIT_TEST(CancelScriptExecution) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+        std::vector<NYdb::TAsyncStatus> cancelFutures(3);
+        // Check races also
+        for (auto& f : cancelFutures) {
+            f = opClient.Cancel(scriptExecutionOperation.Id());
+        }
+
+        for (auto& f : cancelFutures) {
+            auto cancelStatus = f.ExtractValueSync();
+            UNIT_ASSERT_C(cancelStatus.GetStatus() == NYdb::EStatus::SUCCESS || cancelStatus.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED, cancelStatus.GetIssues().ToString());
+        }
+
+        auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT(op.Ready());
+        UNIT_ASSERT(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled);
+        UNIT_ASSERT_EQUAL(op.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT(op.Status().GetStatus() == NYdb::EStatus::SUCCESS || op.Status().GetStatus() == NYdb::EStatus::CANCELLED);
+
+        // Check cancel for completed query
+        auto cancelStatus = opClient.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(cancelStatus.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED, cancelStatus.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

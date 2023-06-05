@@ -23,6 +23,7 @@ namespace NKqp {
     XX(DB_KQP_REQ_QUERY_OTHER, OtherQueryRequests) \
     XX(DB_KQP_CLOSE_SESSION_REQ, CloseSessionRequests) \
     XX(DB_KQP_PING_SESSION_REQ, PingSessionRequests) \
+    XX(DB_KQP_CANCEL_QUERY_REQ, CancelQueryRequests) \
     XX(DB_KQP_REQUEST_BYTES, RequestBytes) \
     XX(DB_KQP_QUERY_BYTES, QueryBytes) \
     XX(DB_KQP_PARAMS_BYTES, ParametersBytes) \

@@ -35,6 +35,10 @@ struct TKqpEvents {
         EvFetchScriptResultsRequest,
         EvFetchScriptResultsResponse,
         EvKqpProxyPublishRequest,
+        EvCancelScriptExecutionRequest,
+        EvCancelScriptExecutionResponse,
+        EvCancelQueryRequest,
+        EvCancelQueryResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -128,6 +132,9 @@ struct TKqpScriptExecutionEvents {
         EvGetScriptExecutionOperationResponse,
         EvListScriptExecutionOperations,
         EvListScriptExecutionOperationsResponse,
+        EvCancelScriptExecutionOperation,
+        EvCancelScriptExecutionOperationResponse,
+        EvScriptExecutionFinished,
     };
 };
 

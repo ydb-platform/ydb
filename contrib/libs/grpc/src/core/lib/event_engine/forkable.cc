@@ -60,6 +60,7 @@ void PostforkParent() {
 }
 
 void PostforkChild() {
+  y_absl::ResetDeadlockGraphMu();
   grpc_core::MutexLock lock(g_mu.get());
   for (auto* forkable : *g_forkables) {
     forkable->PostforkChild();

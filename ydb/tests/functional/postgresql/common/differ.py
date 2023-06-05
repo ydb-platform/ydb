@@ -16,7 +16,7 @@ class Differ:
     __reErr = re.compile(b'(^ERROR: [^\n]+)(?:\nLINE \\d+: [^\n]+(?:\n\\s*\\^\\s*)?)?(?:\n(?:HINT|DETAIL|CONTEXT): [^\n]+)*(?:\n|$)',
                          re.MULTILINE)
 
-    __reYdbErr = re.compile(b'(^psql:[^\n]+\nIssues: \n)(?: *<main>:[^\n]+\n)*( *<main>:(\\d+:\\d+:)? Error: ([^\n]+)\n)\n?(?:\n|$)', re.MULTILINE)
+    __reYdbErr = re.compile(b'(^psql:[^\n]+\nIssues: \n)(?: *<main>:[^\n]+\n)*( *<main>:(\\d+:\\d+:)? Error: ([^\n]+)\n)(?:(?:HINT|DETAIL|CONTEXT): [^\n]+\n?)*\n?(?:\n|$)', re.MULTILINE)
 
     @classmethod
     def __remove_pg_error_msgs(cls, s):

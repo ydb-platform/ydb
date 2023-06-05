@@ -588,12 +588,17 @@ TVector<TSerializedPointOrRange> ExtractRanges(const TKqpTableKeys& tableKeys,
     return ranges;
 }
 
-TShardInfo MakeVirtualTablePartition(const TKqpTableKeys& tableKeys,
+std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
     auto guard = typeEnv.BindAllocator();
+    const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
+    YQL_ENSURE(table);
+
+    const auto& keyColumnTypes = table->KeyColumnTypes;
     auto ranges = ExtractRanges(tableKeys, source, stageInfo, holderFactory, typeEnv, guard);
+
     TShardInfo result;
     for (auto& range: ranges) {
         if (!result.KeyReadRanges) {
@@ -603,7 +608,23 @@ TShardInfo MakeVirtualTablePartition(const TKqpTableKeys& tableKeys,
         result.KeyReadRanges->Add(std::move(range));
     }
 
-    return result;
+    ui64 shard = 0;
+    if (!ranges.empty()) {
+        auto& range = source.GetReverse() ? ranges.back() : ranges[0];
+        TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
+            ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
+            : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
+
+        if (readPartitions) {
+            auto& partition = source.GetReverse() ? readPartitions.back() : readPartitions[0];
+            shard = partition.PartitionInfo->ShardId;
+        }
+    }
+
+    return {shard, result};
 }
 
 

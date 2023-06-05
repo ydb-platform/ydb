@@ -16,6 +16,10 @@
 
 #include "src/core/lib/security/authorization/rbac_policy.h"
 
+#include <algorithm>
+#include <utility>
+
+#include "y_absl/memory/memory.h"
 #include "y_absl/strings/str_format.h"
 #include "y_absl/strings/str_join.h"
 

@@ -1,0 +1,3 @@
+ydb-core-blobstorage-dsproxy-ut_2
+ydb-core-blobstorage-dsproxy-ut_3
+ydb-core-blobstorage-dsproxy-ut_4

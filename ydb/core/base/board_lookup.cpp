@@ -64,7 +64,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     TVector<TReplica> Replicas;
 
-    TMap<TActorId, TEvStateStorage::TEvBoardInfo::TInfoEntry> Info;
+    TMap<TActorId, TEvStateStorage::TBoardInfoEntry> Info;
     THashMap<TActorId, THashSet<ui32>> InfoReplicas;
 
     ui32 WaitForReplicasToSuccess;
@@ -103,11 +103,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     void NotAvailable() {
         if (CurrentStateFunc() != &TThis::StateSubscribe) {
-            Send(Owner, new TEvStateStorage::TEvBoardInfo(TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path));
+            Send(Owner, new TEvStateStorage::TEvBoardInfo(
+                TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path, StateStorageGroupId));
         } else {
             Send(Owner,
                 new TEvStateStorage::TEvBoardInfoUpdate(
-                    TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path
+                    TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path, StateStorageGroupId
                 )
             );
         }
@@ -119,7 +120,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             if ((!Subscriber && Stats.HasInfo == WaitForReplicasToSuccess) ||
                     (Subscriber && Stats.HasInfo + Stats.NoInfo == WaitForReplicasToSuccess)) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(
-                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
                 reply->InfoEntries = std::move(Info);
                 Send(Owner, std::move(reply));
                 if (Subscriber) {
@@ -213,7 +214,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         if (CurrentStateFunc() == &TThis::StateSubscribe) {
-            std::optional<TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate> update;
+            std::optional<TEvStateStorage::TBoardInfoEntry> update;
             if (info.GetDropped()) {
                 if (!replicas.empty()) {
                     return;
@@ -230,7 +231,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             }
             if (update.has_value()) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
                 reply->Updates = { { oid, std::move(update.value()) } };
                 Send(Owner, std::move(reply));
             }
@@ -279,7 +280,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             ++Stats.HasInfo;
 
             bool isStateSubscribe = (CurrentStateFunc() == &TThis::StateSubscribe);
-            TMap<TActorId, TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate> updates;
+            TMap<TActorId, TEvStateStorage::TBoardInfoEntry> updates;
 
             for (const auto &x : record.GetInfo()) {
                 const TActorId oid = ActorIdFromProto(x.GetOwner());
@@ -298,7 +299,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
             if (isStateSubscribe && !updates.empty()) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
                 reply->Updates = std::move(updates);
                 Send(Owner, std::move(reply));
             }
@@ -446,7 +447,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     void ClearInfosByReplica(ui32 replicaIdx) {
         bool isStateSubscribe = (CurrentStateFunc() == &TThis::StateSubscribe);
-        TMap<TActorId, TEvStateStorage::TEvBoardInfoUpdate::TInfoEntryUpdate> updates;
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry> updates;
 
         const auto& replica = Replicas[replicaIdx];
         for (auto infoId : replica.Infos) {
@@ -466,7 +467,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
         if (isStateSubscribe && !updates.empty()) {
             auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
+                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
             reply->Updates = std::move(updates);
             Send(Owner, std::move(reply));
         }

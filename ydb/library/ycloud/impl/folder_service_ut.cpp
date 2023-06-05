@@ -42,7 +42,9 @@ Y_UNIT_TEST_SUITE(TFolderServiceTest) {
         runtime->Send(new IEventHandle(folderService->SelfId(), sender, request.Release()));
         auto result = runtime->GrabEdgeEvent<NCloud::TEvFolderService::TEvListFolderResponse>(handle);
         UNIT_ASSERT(result); // error because no service is listening
-        UNIT_ASSERT_EQUAL(result->Status.Msg, "failed to connect to all addresses");
+        // grpc core code prints full information about error code,
+        // but let's check only the fact that we received error.
+        UNIT_ASSERT_STRING_CONTAINS(result->Status.Msg, "failed to connect to all addresses; last error:");
 
         // Folder Service Mock
         TFolderServiceMock folderServiceMock;

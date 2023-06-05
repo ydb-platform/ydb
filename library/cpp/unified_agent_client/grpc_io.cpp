@@ -1,5 +1,6 @@
 #include "grpc_io.h"
 
+#include <contrib/libs/grpc/src/core/lib/iomgr/exec_ctx.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 #include <contrib/libs/grpc/src/core/lib/surface/completion_queue.h>
 #include <contrib/libs/grpc/include/grpc/impl/codegen/log.h>
@@ -36,7 +37,7 @@ namespace NUnifiedAgent {
         grpc_core::ExecCtx execCtx;
         IOCallback->Ref();
         Y_VERIFY(grpc_cq_begin_op(CompletionQueue.cq(), this));
-        grpc_cq_end_op(CompletionQueue.cq(), this, nullptr,
+        grpc_cq_end_op(CompletionQueue.cq(), this, GRPC_ERROR_NONE,
                        [](void* self, grpc_cq_completion*) {
                            Y_VERIFY(static_cast<TGrpcNotification*>(self)->InQueue.exchange(false));
                        },

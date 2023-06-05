@@ -66,11 +66,10 @@ const TBatch& TBlobIterator::GetBatch()
     return Batch;
 }
 
-void CheckBlob(const TKey& key, const TString& blob)
+void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
 {
     for (TBlobIterator it(key, blob, false); it.IsValid(); it.Next());
 }
-
 
 void TClientBlob::SerializeTo(TBuffer& res) const
 {
@@ -856,7 +855,7 @@ std::optional<std::pair<TKey, TString>> TPartitionedBlob::Add(TClientBlob&& blob
         Y_VERIFY(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
         HeadSize = 0;
         BlobsSize = 0;
-        CheckBlob(key, valueD);
+        TClientBlob::CheckBlob(key, valueD);
         FormedBlobs.emplace_back(key, valueD.size());
         Blobs.clear();
 

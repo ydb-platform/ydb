@@ -17,15 +17,25 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <utility>
+
+#include "y_absl/strings/string_view.h"
+
 #include <grpc/impl/codegen/grpc_types.h>
 
+#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/cpp_impl_of.h"
+#include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/resource_quota/memory_quota.h"
 #include "src/core/lib/resource_quota/thread_quota.h"
 
 namespace grpc_core {
 
 class ResourceQuota;
+
 using ResourceQuotaRefPtr = RefCountedPtr<ResourceQuota>;
 
 class ResourceQuota : public RefCounted<ResourceQuota>,
@@ -37,12 +47,19 @@ class ResourceQuota : public RefCounted<ResourceQuota>,
   ResourceQuota(const ResourceQuota&) = delete;
   ResourceQuota& operator=(const ResourceQuota&) = delete;
 
+  static y_absl::string_view ChannelArgName() { return GRPC_ARG_RESOURCE_QUOTA; }
+
   MemoryQuotaRefPtr memory_quota() { return memory_quota_; }
 
   const RefCountedPtr<ThreadQuota>& thread_quota() { return thread_quota_; }
 
   // The default global resource quota
   static ResourceQuotaRefPtr Default();
+
+  static int ChannelArgsCompare(const ResourceQuota* a,
+                                const ResourceQuota* b) {
+    return QsortCompare(a, b);
+  }
 
  private:
   MemoryQuotaRefPtr memory_quota_;

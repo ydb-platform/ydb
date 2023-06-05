@@ -20,29 +20,39 @@
 
 #include <string.h>
 
-#include <util/generic/string.h>
-#include <util/string/cast.h>
+#include <functional>
+#include <type_traits>  // IWYU pragma: keep
+#include <utility>
 
-#include "y_absl/strings/str_cat.h"
+#include "y_absl/status/status.h"
+#include "y_absl/status/statusor.h"
 
+#include <grpc/grpc_security.h>
+#include <grpc/grpc_security_constants.h>
 #include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
+#include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/channel_stack.h"
+#include "src/core/lib/channel/context.h"
 #include "src/core/lib/channel/promise_based_filter.h"
-#include "src/core/lib/gpr/string.h"
-#include "src/core/lib/iomgr/error.h"
-#include "src/core/lib/profiling/timers.h"
+#include "src/core/lib/channel/status_util.h"
+#include "src/core/lib/gprpp/debug_location.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/promise/arena_promise.h"
+#include "src/core/lib/promise/context.h"
+#include "src/core/lib/promise/detail/basic_seq.h"
 #include "src/core/lib/promise/promise.h"
+#include "src/core/lib/promise/seq.h"
 #include "src/core/lib/promise/try_seq.h"
+#include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/security/context/security_context.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/security_connector/security_connector.h"
 #include "src/core/lib/security/transport/auth_filters.h"
-#include "src/core/lib/slice/slice_internal.h"
-#include "src/core/lib/slice/slice_string_helpers.h"
-#include "src/core/lib/surface/call.h"
+#include "src/core/lib/slice/slice.h"
+#include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"
 
 #define MAX_CREDENTIALS_METADATA_COUNT 4
@@ -99,8 +109,8 @@ ClientAuthFilter::ClientAuthFilter(
     RefCountedPtr<grpc_auth_context> auth_context)
     : args_{std::move(security_connector), std::move(auth_context)} {}
 
-ArenaPromise<y_absl::StatusOr<ClientInitialMetadata>>
-ClientAuthFilter::GetCallCredsMetadata(ClientInitialMetadata initial_metadata) {
+ArenaPromise<y_absl::StatusOr<CallArgs>> ClientAuthFilter::GetCallCredsMetadata(
+    CallArgs call_args) {
   auto* ctx = static_cast<grpc_client_security_context*>(
       GetContext<grpc_call_context_element>()[GRPC_CONTEXT_SECURITY].value);
   grpc_call_credentials* channel_call_creds =
@@ -109,8 +119,7 @@ ClientAuthFilter::GetCallCredsMetadata(ClientInitialMetadata initial_metadata) {
 
   if (channel_call_creds == nullptr && !call_creds_has_md) {
     /* Skip sending metadata altogether. */
-    return Immediate(
-        y_absl::StatusOr<ClientInitialMetadata>(std::move(initial_metadata)));
+    return Immediate(y_absl::StatusOr<CallArgs>(std::move(call_args)));
   }
 
   RefCountedPtr<grpc_call_credentials> creds;
@@ -149,12 +158,27 @@ ClientAuthFilter::GetCallCredsMetadata(ClientInitialMetadata initial_metadata) {
         "transfer call credential."));
   }
 
-  return creds->GetRequestMetadata(std::move(initial_metadata), &args_);
+  auto client_initial_metadata = std::move(call_args.client_initial_metadata);
+  return TrySeq(
+      Seq(creds->GetRequestMetadata(std::move(client_initial_metadata), &args_),
+          [](y_absl::StatusOr<ClientMetadataHandle> new_metadata) mutable {
+            if (!new_metadata.ok()) {
+              return y_absl::StatusOr<ClientMetadataHandle>(
+                  MaybeRewriteIllegalStatusCode(new_metadata.status(),
+                                                "call credentials"));
+            }
+            return new_metadata;
+          }),
+      [call_args =
+           std::move(call_args)](ClientMetadataHandle new_metadata) mutable {
+        call_args.client_initial_metadata = std::move(new_metadata);
+        return Immediate<y_absl::StatusOr<CallArgs>>(
+            y_absl::StatusOr<CallArgs>(std::move(call_args)));
+      });
 }
 
-ArenaPromise<TrailingMetadata> ClientAuthFilter::MakeCallPromise(
-    ClientInitialMetadata initial_metadata,
-    NextPromiseFactory next_promise_factory) {
+ArenaPromise<ServerMetadataHandle> ClientAuthFilter::MakeCallPromise(
+    CallArgs call_args, NextPromiseFactory next_promise_factory) {
   auto* legacy_ctx = GetContext<grpc_call_context_element>();
   if (legacy_ctx[GRPC_CONTEXT_SECURITY].value == nullptr) {
     legacy_ctx[GRPC_CONTEXT_SECURITY].value =
@@ -167,24 +191,25 @@ ArenaPromise<TrailingMetadata> ClientAuthFilter::MakeCallPromise(
       legacy_ctx[GRPC_CONTEXT_SECURITY].value)
       ->auth_context = args_.auth_context;
 
-  auto* host = initial_metadata->get_pointer(HttpAuthorityMetadata());
+  auto* host =
+      call_args.client_initial_metadata->get_pointer(HttpAuthorityMetadata());
   if (host == nullptr) {
-    return next_promise_factory(std::move(initial_metadata));
+    return next_promise_factory(std::move(call_args));
   }
   return TrySeq(args_.security_connector->CheckCallHost(
                     host->as_string_view(), args_.auth_context.get()),
-                GetCallCredsMetadata(std::move(initial_metadata)),
+                GetCallCredsMetadata(std::move(call_args)),
                 next_promise_factory);
 }
 
 y_absl::StatusOr<ClientAuthFilter> ClientAuthFilter::Create(
-    const grpc_channel_args* args, ChannelFilter::Args) {
-  grpc_security_connector* sc = grpc_security_connector_find_in_args(args);
+    const ChannelArgs& args, ChannelFilter::Args) {
+  auto* sc = args.GetObject<grpc_security_connector>();
   if (sc == nullptr) {
     return y_absl::InvalidArgumentError(
         "Security connector missing from client auth filter args");
   }
-  grpc_auth_context* auth_context = grpc_find_auth_context_in_args(args);
+  auto* auth_context = args.GetObject<grpc_auth_context>();
   if (auth_context == nullptr) {
     return y_absl::InvalidArgumentError(
         "Auth context missing from client auth filter args");
@@ -195,9 +220,8 @@ y_absl::StatusOr<ClientAuthFilter> ClientAuthFilter::Create(
       auth_context->Ref());
 }
 
-}  // namespace grpc_core
-
-const grpc_channel_filter grpc_client_auth_filter =
-    grpc_core::MakePromiseBasedFilter<grpc_core::ClientAuthFilter,
-                                      grpc_core::FilterEndpoint::kClient>(
+const grpc_channel_filter ClientAuthFilter::kFilter =
+    MakePromiseBasedFilter<ClientAuthFilter, FilterEndpoint::kClient>(
         "client-auth-filter");
+
+}  // namespace grpc_core

@@ -17,6 +17,17 @@
  */
 #include <grpc/support/port_platform.h>
 
+#include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+
+#include "y_absl/base/thread_annotations.h"
+#include "y_absl/memory/memory.h"
+
+#include "src/core/lib/gprpp/sync.h"
+#include "src/core/lib/iomgr/closure.h"
+#include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/iomgr/iomgr_fwd.h"
 #include "src/core/lib/iomgr/port.h"
 #if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
 
@@ -27,17 +38,9 @@
 
 #include "y_absl/strings/str_cat.h"
 
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/string_util.h>
-#include <grpc/support/time.h>
-
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h"
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h"
-#include "src/core/lib/address_utils/sockaddr_utils.h"
-#include "src/core/lib/gpr/string.h"
 #include "src/core/lib/iomgr/ev_posix.h"
-#include "src/core/lib/iomgr/iomgr_internal.h"
 
 namespace grpc_core {
 

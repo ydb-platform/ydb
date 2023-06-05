@@ -131,10 +131,35 @@ bool FillTxControl(const Ydb::Query::TransactionControl& from, Ydb::Table::Trans
     return true;
 }
 
+Ydb::Table::QueryStatsCollection::Mode GetCollectStatsMode(Ydb::Query::StatsMode mode) {
+    switch (mode) {
+        case Ydb::Query::StatsMode::STATS_MODE_NONE:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+        case Ydb::Query::StatsMode::STATS_MODE_FULL:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+        default:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED;
+    }
+}
+
 bool NeedReportStats(const Ydb::Query::ExecuteQueryRequest& req) {
     switch (req.exec_mode()) {
         case Ydb::Query::EXEC_MODE_EXPLAIN:
             return true;
+
+        case Ydb::Query::EXEC_MODE_EXECUTE:
+            switch (req.stats_mode()) {
+                case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+                case Ydb::Query::StatsMode::STATS_MODE_FULL:
+                case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+                    return true;
+                default:
+                    return false;
+            }
 
         default:
             return false;
@@ -176,6 +201,8 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     if (!FillQueryContent(req, kqpRequest, issues)) {
         return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
     }
+
+    kqpRequest.MutableRequest()->SetCollectStats(GetCollectStatsMode(req.stats_mode()));
 
     return {Ydb::StatusIds::SUCCESS, {}};
 }

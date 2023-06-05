@@ -28,12 +28,20 @@ target_sources(grpc-third_party-upb PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/naive.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-neon.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/third_party/utf8_range/range2-sse.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/arena.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/array.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode_fast.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/def.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/encode.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/extension_registry.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/json_decode.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/json_encode.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/map.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/mini_table.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/msg.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/reflection.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/status.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/table.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/text_encode.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/upb.c

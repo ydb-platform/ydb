@@ -17,7 +17,15 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stddef.h>
+
+#include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+#include <vector>
+
 #include "src/core/lib/security/authorization/authorization_engine.h"
+#include "src/core/lib/security/authorization/evaluate_args.h"
 #include "src/core/lib/security/authorization/matchers.h"
 #include "src/core/lib/security/authorization/rbac_policy.h"
 

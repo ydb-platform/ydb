@@ -117,6 +117,8 @@ void TQueueLeader::BecomeWorking() {
     for (auto&& [reqIdAndShard, reqInfo] : ChangeMessageVisibilityRequests_) {
         ProcessChangeMessageVisibilityBatch(reqInfo);
     }
+
+    Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvLeaderStarted());
 }
 
 STATEFN(TQueueLeader::StateInit) {
@@ -175,6 +177,10 @@ STATEFN(TQueueLeader::StateWorking) {
 
 void TQueueLeader::PassAway() {
     LOG_SQS_INFO("Queue " << TLogQueueName(UserName_, QueueName_) << " leader is dying");
+
+    if (CurrentStateFunc() != &TThis::StateWorking) {
+        Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvLeaderStarted());  
+    }
 
     for (auto& req : GetConfigurationRequests_) {
         AnswerFailed(req);
@@ -278,7 +284,6 @@ void TQueueLeader::HandleState(const TSqsEvents::TEvExecuted::TRecord& reply) {
     LOG_SQS_DEBUG("Handle state for " << TLogQueueName(UserName_, QueueName_));
     Y_VERIFY(UpdateStateRequestStartedAt != TInstant::Zero());
 
-    bool success = reply.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete;
     if (reply.GetStatus() == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         using NKikimr::NClient::TValue;
         const TValue val(TValue::Create(reply.GetExecutionEngineEvaluatedResponse()));
@@ -314,7 +319,7 @@ void TQueueLeader::HandleState(const TSqsEvents::TEvExecuted::TRecord& reply) {
                     new TSqsEvents::TEvReloadStateResponse(
                         UserName_,
                         QueueName_,
-                        success ? UpdateStateRequestStartedAt : TInstant::Zero()
+                        UpdateStateRequestStartedAt
                     )
                 );
             }

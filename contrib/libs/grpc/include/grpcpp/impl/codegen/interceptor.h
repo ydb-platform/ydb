@@ -21,13 +21,17 @@
 
 // IWYU pragma: private, include <grpcpp/support/interceptor.h>
 
+#include <map>
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 
 #include <grpc/impl/codegen/grpc_types.h>
-#include <grpcpp/impl/codegen/byte_buffer.h>
 #include <grpcpp/impl/codegen/config.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
 #include <grpcpp/impl/codegen/metadata_map.h>
+#include <grpcpp/impl/codegen/string_ref.h>
+#include <grpcpp/support/byte_buffer.h>
 
 namespace grpc {
 

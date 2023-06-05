@@ -18,10 +18,14 @@
 
 #include "src/core/ext/filters/client_channel/lb_policy/address_filtering.h"
 
+#include <stddef.h>
+
+#include <algorithm>
+#include <utility>
+
+#include "y_absl/memory/memory.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_join.h"
-
-#include "src/core/lib/channel/channel_args.h"
 
 #define GRPC_ARG_HIERARCHICAL_PATH "grpc.internal.address.hierarchical_path"
 

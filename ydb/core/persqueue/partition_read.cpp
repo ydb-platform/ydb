@@ -744,7 +744,7 @@ void TPartition::OnReadRequestFinished(TReadInfo&& info, ui64 answerSize) {
     auto userInfo = UsersInfoStorage->GetIfExists(info.User);
     Y_VERIFY(userInfo);
 
-    if (Config.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
+    if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY) {
         return;
     }
 

@@ -1,4 +1,4 @@
-name: PR check
+name: PR-check
 on: 
   pull_request_target:
     branches:
@@ -6,6 +6,8 @@ on:
       - 'stable-*'
     paths-ignore:
       - 'ydb/docs/**'
+      - '.github/**'
+      - '*'
     types:
       - 'opened'
       - 'synchronize'

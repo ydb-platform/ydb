@@ -705,6 +705,37 @@ public:
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
     }
 
+    void Handle(TEvKqp::TEvCancelQueryRequest::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        auto& request = event.GetRequest();
+
+        auto traceId = event.GetTraceId();
+        TKqpRequestInfo requestInfo(traceId);
+        auto sessionId = request.GetSessionId();
+        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvCancelQueryRequest);
+        const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
+        auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
+        KQP_PROXY_LOG_D("Received cancel query request, request_id: " << requestId << ", trace_id: " << traceId);
+        Counters->ReportCancelQuery(dbCounters, request.ByteSize());
+
+        PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
+
+        TActorId targetId;
+        if (sessionInfo) {
+            targetId = sessionInfo->WorkerId;
+            LocalSessions->StopIdleCheck(sessionInfo);
+        } else {
+            targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
+            if (!targetId) {
+                return;
+            }
+        }
+
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
+            << ", targetId: " << targetId << ", sessionId: " << sessionId);
+    }
+
     template<typename TEvent>
     void ForwardEvent(TEvent ev) {
         ui64 requestId = ev->Cookie;
@@ -1120,6 +1151,8 @@ public:
             hFunc(TEvKqp::TEvProcessResponse, ForwardEvent);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
+            hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
+            hFunc(TEvKqp::TEvCancelQueryResponse, ForwardEvent);
             hFunc(TEvKqp::TEvCloseSessionResponse, Handle);
             hFunc(TEvKqp::TEvPingSessionResponse, ForwardEvent);
             hFunc(TEvKqp::TEvInitiateShutdownRequest, Handle);
@@ -1131,6 +1164,7 @@ public:
             hFunc(TEvPrivate::TEvScriptExecutionsTablesCreationFinished, Handle);
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
+            hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1334,6 +1368,10 @@ private:
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
         Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
+    }
+
+    void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
+        Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
     }
 
 private:

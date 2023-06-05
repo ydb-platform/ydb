@@ -29,6 +29,14 @@ enum class EExecMode {
     Execute = 50,
 };
 
+enum class EStatsMode {
+    Unspecified = 0,
+    None = 10,
+    Basic = 20,
+    Full = 30,
+    Profile = 40,
+};
+
 enum class EExecStatus {
     Unspecified = 0,
     Starting = 10,
@@ -88,6 +96,7 @@ using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
+    FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
 };
 
 class TExecuteQueryResult : public TStatus {

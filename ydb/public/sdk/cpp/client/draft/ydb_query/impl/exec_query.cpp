@@ -186,6 +186,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 {
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
+    request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
     request.mutable_query_content()->set_text(query);
 
     if (txControl.HasTx()) {

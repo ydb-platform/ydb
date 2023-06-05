@@ -16,7 +16,8 @@ target_link_libraries(ydb-core-local_pgwire PUBLIC
   yutil
   cpp-actors-core
   yql-public-udf
-  core-kqp-common
+  kqp-common-events
+  kqp-common-simple
   core-kqp-executer_actor
   ydb-core-grpc_services
   core-grpc_services-local_rpc

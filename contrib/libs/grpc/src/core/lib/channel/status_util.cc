@@ -20,6 +20,10 @@
 
 #include "src/core/lib/channel/status_util.h"
 
+#include <string.h>
+
+#include "y_absl/strings/str_cat.h"
+
 #include "src/core/lib/gpr/useful.h"
 
 struct status_string_entry {
@@ -107,3 +111,28 @@ bool grpc_status_code_from_int(int status_int, grpc_status_code* status) {
   *status = static_cast<grpc_status_code>(status_int);
   return true;
 }
+
+namespace grpc_core {
+
+y_absl::Status MaybeRewriteIllegalStatusCode(y_absl::Status status,
+                                           y_absl::string_view source) {
+  switch (status.code()) {
+    // The set of disallowed codes, as per
+    // https://github.com/grpc/proposal/blob/master/A54-restrict-control-plane-status-codes.md.
+    case y_absl::StatusCode::kInvalidArgument:
+    case y_absl::StatusCode::kNotFound:
+    case y_absl::StatusCode::kAlreadyExists:
+    case y_absl::StatusCode::kFailedPrecondition:
+    case y_absl::StatusCode::kAborted:
+    case y_absl::StatusCode::kOutOfRange:
+    case y_absl::StatusCode::kDataLoss: {
+      return y_absl::InternalError(
+          y_absl::StrCat("Illegal status code from ", source,
+                       "; original status: ", status.ToString()));
+    }
+    default:
+      return status;
+  }
+}
+
+}  // namespace grpc_core

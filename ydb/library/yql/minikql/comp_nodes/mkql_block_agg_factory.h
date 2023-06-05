@@ -44,9 +44,9 @@ public:
 
 class IBlockAggregatorCombineKeys : public IBlockAggregatorBase {
 public:
-    virtual void InitKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
+    virtual void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
-    virtual void UpdateKey(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
+    virtual void UpdateKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
     virtual std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) = 0;
 
@@ -57,9 +57,9 @@ public:
 
 class IBlockAggregatorFinalizeKeys : public IBlockAggregatorBase {
 public:
-    virtual void LoadState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
+    virtual void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
-    virtual void UpdateState(void* state, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
+    virtual void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) = 0;
 
     virtual std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) = 0;
 

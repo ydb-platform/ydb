@@ -235,7 +235,9 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
 
     // Portion genarated without PrimaryKeyBorders and loaded with indexInfo.IsCompositeIndexKey()
     // We should have no such portions for ForceColumnTablesCompositeMarks feature
-    Y_VERIFY(Meta.IndexKeyStart && Meta.IndexKeyEnd);
+    if (rec.ColumnId == Meta.FirstPkColumn) {
+        Y_VERIFY(Meta.IndexKeyStart && Meta.IndexKeyEnd);
+    }
 }
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {

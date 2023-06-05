@@ -16,23 +16,27 @@
  *
  */
 
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+
+#include "y_absl/status/status.h"
+#include "y_absl/status/statusor.h"
+
 #include <grpc/grpc.h>
+#include <grpcpp/support/config.h>
 #include <grpcpp/support/validate_service_config.h>
 
+#include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/service_config/service_config_impl.h"
 
 namespace grpc {
 namespace experimental {
 TString ValidateServiceConfigJSON(const TString& service_config_json) {
   grpc_init();
-  grpc_error_handle error = GRPC_ERROR_NONE;
-  grpc_core::ServiceConfigImpl::Create(/*args=*/nullptr,
-                                       service_config_json.c_str(), &error);
+  auto service_config = grpc_core::ServiceConfigImpl::Create(
+      grpc_core::ChannelArgs(), service_config_json.c_str());
   TString return_value;
-  if (error != GRPC_ERROR_NONE) {
-    return_value = grpc_error_std_string(error);
-    GRPC_ERROR_UNREF(error);
-  }
+  if (!service_config.ok()) return_value = service_config.status().ToString();
   grpc_shutdown();
   return return_value;
 }

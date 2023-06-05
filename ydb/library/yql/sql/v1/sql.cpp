@@ -9192,6 +9192,7 @@ private:
     void AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
+    bool ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & result, const TRule_alter_table_store_action & actions);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
@@ -10164,6 +10165,29 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             AddStatementToBlocks(blocks, BuildRevokePermissions(pos, service, cluster, permissions, schemaPathes, roleNames, Ctx.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore38:
+        {
+            // ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
+            auto& node = core.GetAlt_sql_stmt_core38().GetRule_alter_table_store_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            const TString& typeId = "TABLESTORE";
+            std::map<TString, TDeferredAtom> kv;
+            if (!ParseTableStoreFeatures(kv, node.GetRule_alter_table_store_action4())) {
+                return false;
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
         default:
@@ -11735,6 +11759,73 @@ bool TSqlTranslation::ParseObjectFeatures(std::map<TString, TDeferredAtom>& resu
         }
     } else {
         return false;
+    }
+    return true;
+}
+namespace {
+
+    static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& transaction) {
+        const bool nullable = !columnSchema.HasBlock4() || !columnSchema.GetBlock4().HasBlock1();
+        const TString columnName(Id(columnSchema.GetRule_an_id_schema1(), transaction));
+        TString columnType;
+
+        auto& typeBind = columnSchema.GetRule_type_name_or_bind2();
+        switch (typeBind.Alt_case()) {
+            case TRule_type_name_or_bind::kAltTypeNameOrBind1:
+            {
+                auto& typeNameOrBind = typeBind.GetAlt_type_name_or_bind1().GetRule_type_name1();
+                if (typeNameOrBind.Alt_case() != TRule_type_name::kAltTypeName2) {
+                    return false;
+                }
+                auto& alt = typeNameOrBind.GetAlt_type_name2();
+                auto& block = alt.GetBlock1();
+                auto& simpleType = block.GetAlt2().GetRule_type_name_simple1();
+                columnType = Id(simpleType.GetRule_an_id_pure1(), transaction);
+                if (columnType.empty()) {
+                    return false;
+                }
+                break;
+            }
+            case TRule_type_name_or_bind::kAltTypeNameOrBind2:
+                return false;
+            default:
+                Y_FAIL("You should change implementation according to grammar changes");
+        }
+
+        result["NAME"] = TDeferredAtom(pos, columnName);
+        YQL_ENSURE(columnType, "Unknown column type");
+        result["TYPE"] = TDeferredAtom(pos, columnType);
+        if (!nullable) {
+            result["NOT_NULL"] = TDeferredAtom(pos, "true");    
+        }
+        return true;
+    }
+}
+
+bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & result, const TRule_alter_table_store_action & actions) {
+    switch (actions.Alt_case()) {
+        case TRule_alter_table_store_action::kAltAlterTableStoreAction1: {
+            // ADD COLUMN
+            const auto& addRule = actions.GetAlt_alter_table_store_action1().GetRule_alter_table_add_column1();
+            if (!BuildColumnFeatures(result, addRule.GetRule_column_schema3(), Ctx.Pos(), *this)) {
+                return false;
+            }
+            result["ACTION"] = TDeferredAtom(Ctx.Pos(), "NEW_COLUMN");
+            break;
+        }
+        case TRule_alter_table_store_action::kAltAlterTableStoreAction2: {
+            // DROP COLUMN
+            const auto& dropRule = actions.GetAlt_alter_table_store_action2().GetRule_alter_table_drop_column1();
+            TString columnName = Id(dropRule.GetRule_an_id3(), *this);
+            if (!columnName) {
+                return false;
+            }
+            result["NAME"] = TDeferredAtom(Ctx.Pos(), columnName);
+            result["ACTION"] = TDeferredAtom(Ctx.Pos(), "DROP_COLUMN");
+            break;
+        }
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
     }
     return true;
 }

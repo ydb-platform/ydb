@@ -3,6 +3,10 @@
 namespace NKikimr::NPQ {
 
 ui64 TopicPartitionReserveSize(const NKikimrPQ::TPQTabletConfig& config) {
+    if (!config.HasMeteringMode()) {
+        // Only for federative and dedicated installations
+        return 0;
+    }
     if (NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == config.GetMeteringMode()) {
         return 0;
     }
@@ -13,6 +17,10 @@ ui64 TopicPartitionReserveSize(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
+    if (!config.HasMeteringMode()) {
+        // Only for federative and dedicated installations
+        return 0;
+    }
     if (NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == config.GetMeteringMode()) {
         return 0;
     }

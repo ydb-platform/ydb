@@ -356,6 +356,7 @@ extern __thread PGDLLIMPORT ErrorContextCallback *error_context_stack;
 #endif
 
 extern __thread PGDLLIMPORT sigjmp_buf *PG_exception_stack;
+extern __thread PGDLLIMPORT bool yql_error_report_active;
 
 
 /* Stuff that error handlers might want to use */
@@ -399,6 +400,9 @@ typedef struct ErrorData
 	/* context containing associated non-constant strings */
 	struct MemoryContextData *assoc_context;
 } ErrorData;
+
+extern void yql_prepare_error(const char* msg);
+extern void yql_raise_error();
 
 extern void EmitErrorReport(void);
 extern ErrorData *CopyErrorData(void);

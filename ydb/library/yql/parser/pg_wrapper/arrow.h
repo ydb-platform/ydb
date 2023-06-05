@@ -54,33 +54,51 @@ struct TPgIndirectFunc {
 };
 
 template <bool IsFixed>
-void SaveNullableDatum(const NullableDatum& from, NullableDatum& to, bool isCString) {
-    bool wasNull = to.isnull;
-    to.isnull = from.isnull;
-    if (!to.isnull) {
-        if constexpr (IsFixed) {
-            to.value = from.value;
-        } else {
-            if (!wasNull) {
-                if (to.value == from.value) {
-                    return;
-                }
-
-                pfree((void*)to.value);
-            }
-
-            auto length = isCString ? strlen((const char*)from.value) : GetFullVarSize((const text*)from.value);
-            to.value = (Datum)palloc(length);
-            memcpy((void*)to.value, (const void*)from.value, length);
-        }
+Datum CloneDatumToAggContext(Datum src, bool isCString) {
+    if constexpr (IsFixed) {
+        return src;
     } else {
-        if (!wasNull) {
-            if constexpr (!IsFixed) {
-                pfree((void*)to.value);
-                to.value = 0;
-            }
-        }
+        Y_ENSURE(NKikimr::NMiniKQL::TlsAllocState->CurrentContext);
+        auto length = isCString ? 1 + strlen((const char*)src) : GetFullVarSize((const text*)src);
+        auto ret = (Datum)palloc(length);
+        memcpy((void*)ret, (const void*)src, length);
+        return ret;
     }
+}
+
+template <bool IsFixed>
+void CopyState(NullableDatum src, NullableDatum& dst) {
+    if constexpr (IsFixed) {
+        dst = src;
+    } else {
+        if (src.isnull == dst.isnull && src.value == dst.value) {
+            return;
+        }
+
+        if (!dst.isnull) {
+            pfree((void*)dst.value);
+        }
+
+        dst = src;
+    }
+}
+
+template <bool IsFixed>
+void SaveToAggContext(NullableDatum& d, bool isCString) {
+    if constexpr (IsFixed) {
+        return;
+    }
+
+    if (d.isnull) {
+        return;
+    }
+
+    // arrow Scalars/Arrays have null memory context
+    if (NUdf::GetMemoryContext((void*)d.value)) {
+        return;
+    }
+
+    d.value = CloneDatumToAggContext<false>(d.value, isCString);
 }
 
 template <typename TArgsPolicy>
@@ -110,7 +128,7 @@ struct TInputArgsAccessor {
                             Scalars[j].value = (Datum)*static_cast<const ui64*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data());
                         } else {
                             auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
-                            Scalars[j].value = (Datum)buffer->data();
+                            Scalars[j].value = (Datum)(buffer->data() + sizeof(void*));
                         }
                     }
                 } else {
@@ -153,7 +171,7 @@ void FillScalarItem(const arrow::Scalar& scalar, NullableDatum& d) {
             d.isnull = true;
         } else {
             d.isnull = false;
-            d.value = (Datum)item.AsStringRef().Data();
+            d.value = (Datum)(item.AsStringRef().Data() + sizeof(void*));
         }
     }
 }
@@ -176,7 +194,7 @@ void FillArrayItem(const arrow::ArrayData& array, size_t i, NullableDatum& d) {
             d.isnull = true;
         } else {
             d.isnull = false;
-            d.value = (Datum)item.AsStringRef().Data();
+            d.value = (Datum)(item.AsStringRef().Data() + sizeof(void*));
         }
     }
 }
@@ -215,7 +233,6 @@ struct TDefaultArgsPolicy {
 };
 
 extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
-extern "C" void WithPgTry(const TString& funcName, const std::function<void()>& func);
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
 struct TGenericExec {
@@ -257,10 +274,7 @@ struct TGenericExec {
         Y_ENSURE(state.flinfo.fn_strict == IsStrict);
         Y_ENSURE(state.IsFixedResult == IsFixedResult);
         TArenaMemoryContext arena;
-        WithPgTry(state.Name, [&]() {
-            Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
-        });
-
+        Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
         return arrow::Status::OK();
     }
 
@@ -272,7 +286,7 @@ struct TGenericExec {
                     NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, true>(batch, length, state, builder);
                 } else {
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, true>(batch, length, state, builder);
                 }
             } else {
@@ -280,7 +294,7 @@ struct TGenericExec {
                     NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, false>(batch, length, state, builder);
                 } else {
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, false>(batch, length, state, builder);
                 }
             }
@@ -362,7 +376,7 @@ struct TGenericExec {
                         if (v) {
                             d.value = (Datum)inputArgsAccessor.FixedArrays[j][i];
                         } else {
-                            d.value = (Datum)(inputArgsAccessor.StringOffsetsArrays[j][i] + inputArgsAccessor.StringDataArrays[j]);
+                            d.value = (Datum)(sizeof(void*) + inputArgsAccessor.StringOffsetsArrays[j][i] + inputArgsAccessor.StringDataArrays[j]);
                         }
                     }
 
@@ -419,9 +433,10 @@ struct TGenericExec {
                 if (fcinfo->isnull) {
                     builder.Add(NUdf::TBlockItem{});
                 } else {
-                    auto ptr = (const char*)ret;
+                    auto ptr = (char*)ret;
                     auto len = state.IsCStringResult ? 1 + strlen(ptr) : VARHDRSZ + VARSIZE((const text*)ptr);
-                    builder.Add(NUdf::TBlockItem(NUdf::TStringRef(ptr, len)));
+                    NUdf::ZeroMemoryContext(ptr);
+                    builder.Add(NUdf::TBlockItem(NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
                 }
             }
     SkipCall:;
@@ -439,6 +454,108 @@ template <bool IsStrict, bool IsFixedResult>
 TExecFunc MakeIndirectExec(PGFunction pgFunc) {
     return TGenericExec<TPgIndirectFunc, IsStrict, IsFixedResult>(TPgIndirectFunc(pgFunc));
 }
+
+template <bool IsFixed, typename TArgsPolicy>
+NullableDatum GetInputValue(const TInputArgsAccessor<TArgsPolicy>& accessor, ui32 j, ui64 row) {
+    static_assert(!TArgsPolicy::VarArgs);
+    if (accessor.IsScalar[j]) {
+        return accessor.Scalars[j];
+    } else {
+        NullableDatum d;
+        ui64 fullIndex = (row + accessor.Offsets[j]) & accessor.ValidOffsetMask[j];
+        d.isnull = ((accessor.ValidMasks[j][fullIndex >> 3] >> (fullIndex & 0x07)) & 1) == 0;
+
+        if constexpr (IsFixed) {
+            d.value = (Datum)accessor.FixedArrays[j][row];
+        } else {
+            d.value = (Datum)(sizeof(void*) + accessor.StringOffsetsArrays[j][row] + accessor.StringDataArrays[j]);
+        }
+
+        return d;
+    }
+}
+
+template <bool IsFixed>
+NullableDatum GetInputValueSlow(const std::vector<arrow::Datum>& values, ui32 j, ui64 row) {
+    NullableDatum d;
+    if (values[j].is_scalar()) {
+        if constexpr (IsFixed) {
+            FillScalarItem<true, true>(*values[j].scalar(), d);
+        } else {
+            FillScalarItem<true, false>(*values[j].scalar(), d);
+        }
+    } else {
+        if constexpr (IsFixed) {
+            FillArrayItem<true, true>(*values[j].array(), row, d);
+        } else {
+            FillArrayItem<true, false>(*values[j].array(), row, d);
+        }
+    }
+
+    return d;
+}
+
+template <bool IsFixed, bool IsCString, bool HasFunc, typename TFunc, bool IsStrict, typename TBuilder>
+class TAggColumnBuilder : public NKikimr::NMiniKQL::IAggColumnBuilder {
+public:
+    TAggColumnBuilder(const TString& name, TFunc func, ui64 size, FmgrInfo* funcInfo, const std::shared_ptr<arrow::DataType>& dataType,
+        NKikimr::NMiniKQL::TComputationContext& ctx)
+        : Name_(name)
+        , Func_(func)
+        , FuncInfo_(funcInfo)
+        , Builder_(NKikimr::NMiniKQL::TTypeInfoHelper(), dataType, ctx.ArrowMemoryPool, size)
+        , Ctx_(ctx)
+    {
+    }
+
+    void Add(const void* state) final {
+        auto typedState = (NullableDatum*)state;
+        auto ret = *typedState;
+        if constexpr (HasFunc) {
+            if (!IsStrict || !typedState->isnull) {
+                LOCAL_FCINFO(callInfo, 1);
+                callInfo->flinfo = FuncInfo_;
+                callInfo->nargs = 1;
+                callInfo->fncollation = DEFAULT_COLLATION_OID;
+                callInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+                callInfo->isnull = false;
+                callInfo->args[0].isnull = typedState->isnull;
+                callInfo->args[0].value = typedState->value;
+                ret.value = Func_(callInfo);
+                ret.isnull = callInfo->isnull;
+            }
+        }
+
+        if (ret.isnull) {
+            Builder_.Add(NYql::NUdf::TBlockItem());
+        } else {
+            if constexpr (IsFixed) {
+                Builder_.Add(NYql::NUdf::TBlockItem(ui64(ret.value)));
+            } else if constexpr (IsCString) {
+                auto ptr = (char*)ret.value;
+                ui32 len = 1 + strlen(ptr);
+                NUdf::ZeroMemoryContext(ptr);
+                Builder_.Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
+            } else {
+                auto ptr = (char*)ret.value;
+                ui32 len = GetFullVarSize((const text*)ptr);
+                NUdf::ZeroMemoryContext(ptr);
+                Builder_.Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef(ptr - sizeof(void*), len + sizeof(void*))));
+            }
+        }
+    }
+
+    NUdf::TUnboxedValue Build() final {
+        return Ctx_.HolderFactory.CreateArrowBlock(Builder_.Build(true));
+    }
+
+private:
+    const TString Name_;
+    const TFunc Func_;
+    FmgrInfo* FuncInfo_;
+    TBuilder Builder_;
+    NKikimr::NMiniKQL::TComputationContext& Ctx_;
+};
 
 template <typename TTransFunc, bool IsTransStrict, typename TTransArgsPolicy,
     typename TCombineFunc, bool IsCombineStrict, typename TCombineArgsPolicy,
@@ -458,61 +575,89 @@ public:
     {}
 
 private:
-    template <bool HasFilter>
-    class TCombineAllAggregator : public NKikimr::NMiniKQL::TCombineAllTag::TBase {
-    public:
-        using TBase = NKikimr::NMiniKQL::TCombineAllTag::TBase;
-        TCombineAllAggregator(TTransFunc transFunc, TSerializeFunc serializeFunc, const std::vector<ui32>& argsColumns,
+    template <typename TAggregatorBase>
+    class TCombineAggregatorBase: public TAggregatorBase {
+    protected:
+        TCombineAggregatorBase(TTransFunc transFunc, TSerializeFunc serializeFunc, const std::vector<ui32>& argsColumns,
             std::optional<ui32> filterColumn, const NPg::TAggregateDesc& aggDesc, NKikimr::NMiniKQL::TComputationContext& ctx)
-            : TBase(sizeof(NullableDatum), std::optional<ui32>(), ctx)
-            , TransFunc(transFunc)
-            , SerializeFunc(serializeFunc)
-            , ArgsColumns(argsColumns)
-            , FilterColumn(filterColumn)
-            , AggDesc(aggDesc)
+            : TAggregatorBase(sizeof(NullableDatum), filterColumn, ctx)
+            , TransFunc_(transFunc)
+            , SerializeFunc_(serializeFunc)
+            , ArgsColumns_(argsColumns)
+            , AggDesc_(aggDesc)
         {
             if (!HasInitValue && IsTransStrict) {
-                Y_ENSURE(AggDesc.ArgTypes.size() == 1);
+                Y_ENSURE(AggDesc_.ArgTypes.size() == 1);
             }
             
-            Y_ENSURE(HasFilter == FilterColumn.has_value());
-
-            const auto& transDesc = NPg::LookupProc(AggDesc.TransFuncId);
+            const auto& transDesc = NPg::LookupProc(AggDesc_.TransFuncId);
             for (ui32 i = 1; i < transDesc.ArgTypes.size(); ++i) {
-                IsFixedArg.push_back(NPg::LookupType(transDesc.ArgTypes[i]).PassByValue);
+                IsFixedArg_.push_back(NPg::LookupType(transDesc.ArgTypes[i]).PassByValue);
             }
 
-            Zero(TransFuncInfo);
-            fmgr_info(AggDesc.TransFuncId, &TransFuncInfo);
-            Y_ENSURE(TransFuncInfo.fn_addr);
-            auto nargs = NPg::LookupProc(AggDesc.TransFuncId).ArgTypes.size();
+            Zero(TransFuncInfo_);
+            fmgr_info(AggDesc_.TransFuncId, &TransFuncInfo_);
+            Y_ENSURE(TransFuncInfo_.fn_addr);
+            auto nargs = NPg::LookupProc(AggDesc_.TransFuncId).ArgTypes.size();
             if constexpr (HasSerialize) {
-                Zero(SerializeFuncInfo);
-                fmgr_info(AggDesc.SerializeFuncId, &SerializeFuncInfo);
-                Y_ENSURE(SerializeFuncInfo.fn_addr);
+                Zero(SerializeFuncInfo_);
+                fmgr_info(AggDesc_.SerializeFuncId, &SerializeFuncInfo_);
+                Y_ENSURE(SerializeFuncInfo_.fn_addr);
             }
+
             if constexpr (HasInitValue) {
-                Zero(InFuncInfo);
-                const auto& transTypeDesc = NPg::LookupType(AggDesc.TransTypeId);
+                Zero(InFuncInfo_);
+                const auto& transTypeDesc = NPg::LookupType(AggDesc_.TransTypeId);
                 auto inFuncId = transTypeDesc.InFuncId;
                 if (transTypeDesc.TypeId == transTypeDesc.ArrayTypeId) {
                     inFuncId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
                 }
 
-                TypeIOParam = MakeTypeIOParam(transTypeDesc);
-                fmgr_info(inFuncId, &InFuncInfo);
-                Y_ENSURE(InFuncInfo.fn_addr);
+                TypeIOParam_ = MakeTypeIOParam(transTypeDesc);
+                fmgr_info(inFuncId, &InFuncInfo_);
+                Y_ENSURE(InFuncInfo_.fn_addr);
+
+                LOCAL_FCINFO(inCallInfo, 3);
+                inCallInfo->flinfo = &this->InFuncInfo_;
+                inCallInfo->nargs = 3;
+                inCallInfo->fncollation = DEFAULT_COLLATION_OID;
+                inCallInfo->isnull = false;
+                inCallInfo->args[0] = { (Datum)this->AggDesc_.InitValue.c_str(), false };
+                inCallInfo->args[1] = { ObjectIdGetDatum(this->TypeIOParam_), false };
+                inCallInfo->args[2] = { Int32GetDatum(-1), false };
+
+                auto state = this->InFuncInfo_.fn_addr(inCallInfo);
+                Y_ENSURE(!inCallInfo->isnull);
+                PreparedInitValue_ = AnyDatumToPod(state, IsTransTypeFixed);
             }
+        }
+
+        const TTransFunc TransFunc_;
+        const TSerializeFunc SerializeFunc_;
+        const std::vector<ui32> ArgsColumns_;
+        const NPg::TAggregateDesc& AggDesc_;
+        std::vector<bool> IsFixedArg_;
+        FmgrInfo TransFuncInfo_;
+        FmgrInfo SerializeFuncInfo_;
+        FmgrInfo InFuncInfo_;
+        ui32 TypeIOParam_ = 0;
+        NKikimr::NUdf::TUnboxedValue PreparedInitValue_;
+    };
+
+    template <bool HasFilter>
+    class TCombineAllAggregator : public TCombineAggregatorBase<NKikimr::NMiniKQL::TCombineAllTag::TBase> {
+    public:
+        using TBase = TCombineAggregatorBase<NKikimr::NMiniKQL::TCombineAllTag::TBase>;
+        TCombineAllAggregator(TTransFunc transFunc, TSerializeFunc serializeFunc, const std::vector<ui32>& argsColumns,
+            std::optional<ui32> filterColumn, const NPg::TAggregateDesc& aggDesc, NKikimr::NMiniKQL::TComputationContext& ctx)
+            : TBase(transFunc, serializeFunc, argsColumns, filterColumn, aggDesc, ctx)
+        {
+            Y_ENSURE(HasFilter == filterColumn.has_value());
         }
 
     private:
         void DestroyState(void* state) noexcept final {
-            auto typedState = (NullableDatum*)state;
-            if constexpr (!IsTransTypeFixed) {
-                if (!typedState->isnull) {
-                    pfree((void*)typedState->value);
-                }
-            }
+            Y_UNUSED(state);
         }
 
         void InitState(void* state) final {
@@ -521,29 +666,17 @@ private:
             typedState->isnull = true;
             typedState->value = 0;
             if constexpr (HasInitValue) {
-                WithPgTry(AggDesc.Name, [&]() {
-                    LOCAL_FCINFO(inCallInfo, 3);
-                    inCallInfo->flinfo = &InFuncInfo;
-                    inCallInfo->nargs = 3;
-                    inCallInfo->fncollation = DEFAULT_COLLATION_OID;
-                    inCallInfo->isnull = false;
-                    inCallInfo->args[0] = { (Datum)AggDesc.InitValue.c_str(), false };
-                    inCallInfo->args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-                    inCallInfo->args[2] = { Int32GetDatum(-1), false };
-
-                    auto state = InFuncInfo.fn_addr(inCallInfo);
-                    Y_ENSURE(!inCallInfo->isnull);
-                    typedState->value = state;
-                    typedState->isnull = false;
-                });
+                auto datum = IsTransTypeFixed ? ScalarDatumFromPod(this->PreparedInitValue_) : PointerDatumFromPod(this->PreparedInitValue_);
+                typedState->isnull = false;
+                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(datum, this->AggDesc_.TransTypeId == CSTRINGOID);
             }
         }
 
         void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
             auto typedState = (NullableDatum*)state;
             std::vector<arrow::Datum> values;
-            values.reserve(ArgsColumns.size());
-            for (auto col : ArgsColumns) {
+            values.reserve(this->ArgsColumns_.size());
+            for (auto col : this->ArgsColumns_) {
                 values.push_back(NKikimr::NMiniKQL::TArrowBlock::From(columns[col]).GetDatum());
             }
 
@@ -564,34 +697,37 @@ private:
 
             const ui8* filterBitmap = nullptr;
             if constexpr(HasFilter) {
-                const auto& filterDatum = NKikimr::NMiniKQL::TArrowBlock::From(columns[*FilterColumn]).GetDatum();
+                const auto& filterDatum = NKikimr::NMiniKQL::TArrowBlock::From(columns[*this->FilterColumn_]).GetDatum();
                 const auto& filterArray = filterDatum.array();
                 Y_ENSURE(filterArray->GetNullCount() == 0);
                 filterBitmap = filterArray->template GetValues<uint8_t>(1);
             }
 
-            WithPgTry(AggDesc.Name, [&]() {
-                if (hasNulls) {
-                    if (hasScalars) {
-                        AddManyImpl<true, true>(typedState, values, batchLength, filterBitmap);
-                    } else {
-                        AddManyImpl<true, false>(typedState, values, batchLength, filterBitmap);
-                    }
+            if (hasNulls) {
+                if (hasScalars) {
+                    AddManyImpl<true, true>(typedState, values, batchLength, filterBitmap);
                 } else {
-                    if (hasScalars) {
-                        AddManyImpl<false, true>(typedState, values, batchLength, filterBitmap);
-                    } else {
-                        AddManyImpl<false, false>(typedState, values, batchLength, filterBitmap);
-                    }
+                    AddManyImpl<true, false>(typedState, values, batchLength, filterBitmap);
                 }
-            });
+            } else {
+                if (hasScalars) {
+                    AddManyImpl<false, true>(typedState, values, batchLength, filterBitmap);
+                } else {
+                    AddManyImpl<false, false>(typedState, values, batchLength, filterBitmap);
+                }
+            }
         }
 
         template <bool HasNulls, bool HasScalars>
         void AddManyImpl(NullableDatum* typedState, const std::vector<arrow::Datum>& values, ui64 batchLength, const ui8* filterBitmap) {
             LOCAL_FCINFO(transCallInfo, FUNC_MAX_ARGS);
-            transCallInfo->flinfo = &TransFuncInfo;
-            transCallInfo->nargs = 1;
+            transCallInfo->flinfo = &this->TransFuncInfo_;
+            if constexpr (!TTransArgsPolicy::VarArgs) {
+                transCallInfo->nargs = TTransArgsPolicy::IsFixedArg.size();
+            } else {
+                transCallInfo->nargs = 1 + values.size();
+            }
+
             transCallInfo->fncollation = DEFAULT_COLLATION_OID;
             transCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
 
@@ -627,7 +763,7 @@ private:
                             if (v) {
                                 d.value = (Datum)inputArgsAccessor.FixedArrays[j][i];
                             } else {
-                                d.value = (Datum)(inputArgsAccessor.StringOffsetsArrays[j][i] + inputArgsAccessor.StringDataArrays[j]);
+                                d.value = (Datum)(sizeof(void*) + inputArgsAccessor.StringOffsetsArrays[j][i] + inputArgsAccessor.StringDataArrays[j]);
                             }
                         }
 
@@ -644,13 +780,13 @@ private:
                     for (size_t j = 0; j < values.size(); ++j) {
                         NullableDatum d;
                         if (HasScalars && values[j].is_scalar()) {
-                            if (IsFixedArg[j]) {
+                            if (this->IsFixedArg_[j]) {
                                 FillScalarItem<HasNulls, true>(*values[j].scalar(), d);
                             } else {
                                 FillScalarItem<HasNulls, false>(*values[j].scalar(), d);
                             }
                         } else {
-                            if (IsFixedArg[j]) {
+                            if (this->IsFixedArg_[j]) {
                                 FillArrayItem<HasNulls, true>(*values[j].array(), i, d);
                             } else {
                                 FillArrayItem<HasNulls, false>(*values[j].array(), i, d);
@@ -673,13 +809,14 @@ private:
                 }
 
                 transCallInfo->isnull = false;
-                ret = TransFunc(transCallInfo);
+                ret = this->TransFunc_(transCallInfo);
                 transCallInfo->args[0].value = ret;
                 transCallInfo->args[0].isnull = transCallInfo->isnull;
 SkipCall:;
             }
 
-            SaveNullableDatum<IsTransTypeFixed>(transCallInfo->args[0], *typedState, AggDesc.TransTypeId == CSTRINGOID);
+            CopyState<IsTransTypeFixed>(transCallInfo->args[0], *typedState);
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
         }
 
         NUdf::TUnboxedValue FinishOne(const void* state) final {
@@ -690,27 +827,25 @@ SkipCall:;
 
             if constexpr (HasSerialize) {
                 NUdf::TUnboxedValue ret;
-                WithPgTry(AggDesc.Name, [&]() {
-                    LOCAL_FCINFO(serializeCallInfo, 1);
-                    serializeCallInfo->flinfo = &SerializeFuncInfo;
-                    serializeCallInfo->nargs = 1;
-                    serializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
-                    serializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
-                    serializeCallInfo->isnull = false;
-                    serializeCallInfo->args[0].isnull = false;
-                    serializeCallInfo->args[0].value = typedState->value;
-                    auto ser = SerializeFunc(serializeCallInfo);
-                    Y_ENSURE(!serializeCallInfo->isnull);
-                    if constexpr (IsSerializedTypeFixed) {
-                        ret = ScalarDatumToPod(ser);
-                    } else {
-                        ret = PointerDatumToPod(ser);
-                        if (ser == typedState->value) {
-                            typedState->value = 0;
-                            typedState->isnull = true;
-                        }
+                LOCAL_FCINFO(serializeCallInfo, 1);
+                serializeCallInfo->flinfo = &this->SerializeFuncInfo_;
+                serializeCallInfo->nargs = 1;
+                serializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
+                serializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+                serializeCallInfo->isnull = false;
+                serializeCallInfo->args[0].isnull = false;
+                serializeCallInfo->args[0].value = typedState->value;
+                auto ser = this->SerializeFunc_(serializeCallInfo);
+                Y_ENSURE(!serializeCallInfo->isnull);
+                if constexpr (IsSerializedTypeFixed) {
+                    ret = ScalarDatumToPod(ser);
+                } else {
+                    ret = PointerDatumToPod(ser);
+                    if (ser == typedState->value) {
+                        typedState->value = 0;
+                        typedState->isnull = true;
                     }
-                });
+                }
 
                 return ret;
             } else {
@@ -724,18 +859,311 @@ SkipCall:;
                 }
             }
         }
+    };
 
-        const TTransFunc TransFunc;
-        const TSerializeFunc SerializeFunc;
-        const std::vector<ui32> ArgsColumns;
-        const std::optional<ui32> FilterColumn;
-        const NPg::TAggregateDesc& AggDesc;
-        std::vector<bool> IsFixedArg;
-        bool IsTransTypeCString;
-        FmgrInfo TransFuncInfo;
-        FmgrInfo SerializeFuncInfo;
-        FmgrInfo InFuncInfo;
-        ui32 TypeIOParam = 0;
+    class TCombineKeysAggregator : public TCombineAggregatorBase<NKikimr::NMiniKQL::TCombineKeysTag::TBase> {
+    public:
+        using TBase = TCombineAggregatorBase<NKikimr::NMiniKQL::TCombineKeysTag::TBase>;
+        TCombineKeysAggregator(TTransFunc transFunc, TSerializeFunc serializeFunc, const std::vector<ui32>& argsColumns,
+            const NPg::TAggregateDesc& aggDesc, NKikimr::NMiniKQL::TComputationContext& ctx)
+            : TBase(transFunc, serializeFunc, argsColumns, std::optional<ui32>(), aggDesc, ctx)
+            , SerializedType_(HasSerialize ? NPg::LookupProc(this->AggDesc_.SerializeFuncId).ResultType : this->AggDesc_.TransTypeId)
+        {
+            Values_.reserve(this->IsFixedArg_.size());
+        }
+
+        void DestroyState(void* state) noexcept final {
+            Y_UNUSED(state);
+        }
+
+        void PrepareBatch(ui64 batchNum, const NKikimr::NUdf::TUnboxedValue* columns) {
+            Values_.clear();
+            for (auto col : this->ArgsColumns_) {
+                Values_.push_back(NKikimr::NMiniKQL::TArrowBlock::From(columns[col]).GetDatum());
+            }
+
+            InputArgsAccessor_.Bind(Values_, 1);
+            BatchNum_ = batchNum;
+        }
+        
+        void InitKey(void* state, ui64 batchNum, const NKikimr::NUdf::TUnboxedValue* columns, ui64 row) final {
+            new(state) NullableDatum();
+            auto typedState = (NullableDatum*)state;
+            typedState->isnull = true;
+            typedState->value = 0;
+            if constexpr (HasInitValue) {
+                auto datum = IsTransTypeFixed ? ScalarDatumFromPod(this->PreparedInitValue_) : PointerDatumFromPod(this->PreparedInitValue_);
+                typedState->isnull = false;
+                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(datum, this->AggDesc_.TransTypeId == CSTRINGOID);
+            }
+
+            UpdateKey(state, batchNum, columns, row);
+        }
+
+        void UpdateKey(void* state, ui64 batchNum, const NKikimr::NUdf::TUnboxedValue* columns, ui64 row) final {
+            auto typedState = (NullableDatum*)state;
+            if (batchNum != BatchNum_) {
+                PrepareBatch(batchNum, columns);
+            }
+
+            LOCAL_FCINFO(transCallInfo, FUNC_MAX_ARGS);
+            transCallInfo->flinfo = &this->TransFuncInfo_;
+            if constexpr (!TTransArgsPolicy::VarArgs) {
+                transCallInfo->nargs = TTransArgsPolicy::IsFixedArg.size();
+            } else {
+                transCallInfo->nargs = 1 + Values_.size();
+            }
+
+            transCallInfo->fncollation = DEFAULT_COLLATION_OID;
+            transCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+
+            transCallInfo->args[0] = *typedState;
+
+            Datum ret;
+            if constexpr (!TTransArgsPolicy::VarArgs) {
+                if (!constexpr_for_tuple([&](auto const& j, auto const& v) {
+                    if (j == 0) {
+                        return true;
+                    }
+
+                    NullableDatum d;
+                    if (v) {
+                        d = GetInputValue<true>(InputArgsAccessor_, j, row);
+                    } else {
+                        d = GetInputValue<false>(InputArgsAccessor_, j, row);
+                    }
+
+                    if (IsTransStrict && d.isnull) {
+                        return false;
+                    }
+
+                    transCallInfo->args[j] = d;
+                    return true;
+                }, TTransArgsPolicy::IsFixedArg)) {
+                    return;
+                }
+            } else {
+                for (size_t j = 0; j < Values_.size(); ++j) {
+                    NullableDatum d;
+                    if (this->IsFixedArg_[j]) {
+                        d = GetInputValueSlow<true>(Values_, j, row);
+                    } else {
+                        d = GetInputValueSlow<false>(Values_, j, row);
+                    }
+
+                    if (IsTransStrict && d.isnull) {
+                        return;
+                    }
+
+                    transCallInfo->args[1 + j] = d;
+                }
+            }
+
+            if (!HasInitValue && IsTransStrict) {
+                if (transCallInfo->args[0].isnull) {
+                    typedState->isnull = false;
+                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(transCallInfo->args[1].value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                    return;
+                }
+            }
+
+            transCallInfo->isnull = false;
+            ret = this->TransFunc_(transCallInfo);
+
+            CopyState<IsTransTypeFixed>({ret, transCallInfo->isnull}, *typedState);
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);            
+        }
+
+        std::unique_ptr<NKikimr::NMiniKQL::IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
+            if constexpr (IsSerializedTypeFixed) {
+                return std::make_unique<TAggColumnBuilder<true, false, HasSerialize, TSerializeFunc, true, NYql::NUdf::TFixedSizeArrayBuilder<ui64, true>>>(
+                    this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::uint64(), this->Ctx_);
+            } else {
+                if (SerializedType_ == CSTRINGOID) {
+                    return std::make_unique<TAggColumnBuilder<false, true, HasSerialize, TSerializeFunc, true, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true, NYql::NUdf::EPgStringType::CString>>>(
+                        this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::binary(), this->Ctx_);
+                } else {
+                    return std::make_unique<TAggColumnBuilder<false, false, HasSerialize, TSerializeFunc, true, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true, NYql::NUdf::EPgStringType::Text>>>(
+                        this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::binary(), this->Ctx_);
+                }
+            }
+        }
+
+        const ui32 SerializedType_;
+        ui64 BatchNum_ = Max<ui64>();
+        std::vector<arrow::Datum> Values_;
+        TInputArgsAccessor<TTransArgsPolicy> InputArgsAccessor_;
+    };
+
+    class TFinalizeKeysAggregator : public NKikimr::NMiniKQL::TFinalizeKeysTag::TBase {
+    public:
+        using TBase = NKikimr::NMiniKQL::TFinalizeKeysTag::TBase;
+        TFinalizeKeysAggregator(TDeserializeFunc deserializeFunc, TCombineFunc combineFunc, TFinalFunc finalFunc,
+            ui32 stateColumn, const NPg::TAggregateDesc& aggDesc, NKikimr::NMiniKQL::TComputationContext& ctx)
+            : TBase(sizeof(NullableDatum), std::optional<ui32>(), ctx)
+            , DeserializeFunc_(deserializeFunc)
+            , CombineFunc_(combineFunc)
+            , FinalFunc_(finalFunc)
+            , StateColumn_(stateColumn)
+            , AggDesc_(aggDesc)
+            , SerializedType_(HasSerialize ? NPg::LookupProc(this->AggDesc_.SerializeFuncId).ResultType : this->AggDesc_.TransTypeId)
+            , FinalType_(HasFinal ? NPg::LookupProc(this->AggDesc_.FinalFuncId).ResultType : this->AggDesc_.TransTypeId)
+        {
+            Values_.reserve(1);
+        }
+
+        void DestroyState(void* state) noexcept final {
+            Y_UNUSED(state);
+        }
+
+        void PrepareBatch(ui64 batchNum, const NUdf::TUnboxedValue* columns) {
+            Values_.clear();
+            Values_.push_back(NKikimr::NMiniKQL::TArrowBlock::From(columns[StateColumn_]).GetDatum());
+            if constexpr (HasDeserialize) {
+                DeserializeAccessor_.Bind(Values_, 0);
+            } else {
+                CombineAccessor_.Bind(Values_, 1);
+            }
+
+            BatchNum_ = batchNum;
+        }
+
+        void Deserialize(Datum ser, NullableDatum& result) {
+            LOCAL_FCINFO(deserializeCallInfo, 1);
+            deserializeCallInfo->flinfo = &this->DeserializeFuncInfo_;
+            deserializeCallInfo->nargs = 1;
+            deserializeCallInfo->fncollation = DEFAULT_COLLATION_OID;
+            deserializeCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+            deserializeCallInfo->isnull = false;
+            deserializeCallInfo->args[0].isnull = false;
+            deserializeCallInfo->args[0].value = ser;
+            result.value = this->DeserializeFunc_(deserializeCallInfo);
+            result.isnull = deserializeCallInfo->isnull;
+        }
+
+        void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+            new(state) NullableDatum();
+            auto typedState = (NullableDatum*)state;
+            typedState->isnull = true;
+            typedState->value = 0;
+            if (BatchNum_ != batchNum) {
+                PrepareBatch(batchNum, columns);
+            }
+
+            NullableDatum d;
+            if constexpr (HasDeserialize && !TDeserializeArgsPolicy::VarArgs) {
+                d = GetInputValue<IsSerializedTypeFixed>(DeserializeAccessor_, 0, row);
+            } else if constexpr (!HasDeserialize && !TCombineArgsPolicy::VarArgs) {
+                d = GetInputValue<IsSerializedTypeFixed>(CombineAccessor_, 1, row);
+            } else {
+                d = GetInputValueSlow<IsSerializedTypeFixed>(Values_, 0, row);
+            }
+
+            if (d.isnull) {
+                return;
+            }
+
+            if constexpr (!HasDeserialize) {
+                typedState->isnull = false;
+                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+            } else {
+                Deserialize(d.value, *typedState);
+            }
+
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
+        }
+
+        void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
+            auto typedState = (NullableDatum*)state;
+            if (BatchNum_ != batchNum) {
+                PrepareBatch(batchNum, columns);
+            }
+
+            NullableDatum d;
+            if constexpr (HasDeserialize && !TDeserializeArgsPolicy::VarArgs) {
+                d = GetInputValue<IsSerializedTypeFixed>(DeserializeAccessor_, 0, row);
+            } else if constexpr (!HasDeserialize && !TCombineArgsPolicy::VarArgs) {
+                d = GetInputValue<IsSerializedTypeFixed>(CombineAccessor_, 1, row);
+            } else {
+                d = GetInputValueSlow<IsSerializedTypeFixed>(Values_, 0, row);
+            }
+
+            if (IsCombineStrict && d.isnull) {
+                return;
+            }
+
+            NullableDatum deser;
+            if (d.isnull) {
+                deser.isnull = true;
+                deser.value = 0;
+            } else {
+                if constexpr (!HasDeserialize) {
+                    if (IsCombineStrict && typedState->isnull) {
+                        typedState->isnull = false;
+                        typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                        return;
+                    }
+
+                    deser = d;
+                } else {
+                    Deserialize(d.value, deser);
+                    if (IsCombineStrict && typedState->isnull) {
+                        *typedState = deser;
+                        return;
+                    }
+                }
+            }
+
+            LOCAL_FCINFO(combineCallInfo, 2);
+            combineCallInfo->flinfo = &this->CombineFuncInfo_;
+            combineCallInfo->nargs = 2;
+            combineCallInfo->fncollation = DEFAULT_COLLATION_OID;
+            combineCallInfo->context = (Node*)NKikimr::NMiniKQL::TlsAllocState->CurrentContext;
+            combineCallInfo->isnull = false;
+            combineCallInfo->args[0] = *typedState;
+            combineCallInfo->args[1] = deser;
+            auto ret = this->CombineFunc_(combineCallInfo);
+            if constexpr (!HasDeserialize) {                
+                if (!combineCallInfo->isnull && ret == d.value) {
+                    typedState->isnull = false;
+                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                    return;
+                }
+            }
+
+            CopyState<IsTransTypeFixed>({ret, combineCallInfo->isnull}, *typedState);
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
+        }
+
+        std::unique_ptr<NKikimr::NMiniKQL::IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
+            if constexpr (IsFinalTypeFixed) {
+                return std::make_unique<TAggColumnBuilder<true, false, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TFixedSizeArrayBuilder<ui64, true>>>(
+                    this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::uint64(), this->Ctx_);
+            } else {
+                if (FinalType_ == CSTRINGOID) {
+                    return std::make_unique<TAggColumnBuilder<false, true, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true>>>(
+                        this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::binary(), this->Ctx_);
+                } else {
+                    return std::make_unique<TAggColumnBuilder<false, false, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true>>>(
+                        this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::binary(), this->Ctx_);
+                }
+            }
+        }
+
+        const TDeserializeFunc DeserializeFunc_;
+        const TCombineFunc CombineFunc_;
+        const TFinalFunc FinalFunc_;
+        const ui32 StateColumn_;
+        const NPg::TAggregateDesc& AggDesc_;
+        const ui32 SerializedType_;
+        const ui32 FinalType_;
+        ui64 BatchNum_ = Max<ui64>();
+        std::vector<arrow::Datum> Values_;
+        TInputArgsAccessor<TDeserializeArgsPolicy> DeserializeAccessor_;
+        TInputArgsAccessor<TCombineArgsPolicy> CombineAccessor_;
+        FmgrInfo DeserializeFuncInfo_;
+        FmgrInfo CombineFuncInfo_;
+        FmgrInfo FinalFuncInfo_;
     };
 
     class TPreparedCombineAllAggregator : public NKikimr::NMiniKQL::IPreparedBlockAggregator<NKikimr::NMiniKQL::IBlockAggregatorCombineAll>{
@@ -766,6 +1194,52 @@ SkipCall:;
         const NPg::TAggregateDesc& AggDesc;
     };
 
+    class TPreparedCombineKeysAggregator : public NKikimr::NMiniKQL::IPreparedBlockAggregator<NKikimr::NMiniKQL::IBlockAggregatorCombineKeys>{
+    public:
+        TPreparedCombineKeysAggregator(TTransFunc transFunc, TSerializeFunc serializeFunc, const std::vector<ui32>& argsColumns,
+            const NPg::TAggregateDesc& aggDesc)
+            : IPreparedBlockAggregator(sizeof(NullableDatum))
+            , TransFunc(transFunc)
+            , SerializeFunc(serializeFunc)
+            , ArgsColumns(argsColumns)
+            , AggDesc(aggDesc)
+        {}
+
+    private:
+        std::unique_ptr<NKikimr::NMiniKQL::IBlockAggregatorCombineKeys> Make(NKikimr::NMiniKQL::TComputationContext& ctx) const {
+            return std::make_unique<TCombineKeysAggregator>(TransFunc, SerializeFunc, ArgsColumns, AggDesc, ctx);
+        }
+
+        const TTransFunc TransFunc;
+        const TSerializeFunc SerializeFunc;
+        const std::vector<ui32> ArgsColumns;
+        const NPg::TAggregateDesc& AggDesc;
+    };
+
+    class TPreparedFinalizeKeysAggregator : public NKikimr::NMiniKQL::IPreparedBlockAggregator<NKikimr::NMiniKQL::IBlockAggregatorFinalizeKeys>{
+    public:
+        TPreparedFinalizeKeysAggregator(TDeserializeFunc deserializeFunc, TCombineFunc combineFunc, TFinalFunc finalFunc, ui32 stateColumn,
+            const NPg::TAggregateDesc& aggDesc)
+            : IPreparedBlockAggregator(sizeof(NullableDatum))
+            , DeserializeFunc(deserializeFunc)
+            , CombineFunc(combineFunc)
+            , FinalFunc(finalFunc)
+            , StateColumn(stateColumn)
+            , AggDesc(aggDesc)
+        {}
+
+    private:
+        std::unique_ptr<NKikimr::NMiniKQL::IBlockAggregatorFinalizeKeys> Make(NKikimr::NMiniKQL::TComputationContext& ctx) const {
+            return std::make_unique<TFinalizeKeysAggregator>(DeserializeFunc, CombineFunc, FinalFunc, StateColumn, AggDesc, ctx);
+        }
+
+        const TDeserializeFunc DeserializeFunc;
+        const TCombineFunc CombineFunc;
+        const TFinalFunc FinalFunc;
+        const ui32 StateColumn;
+        const NPg::TAggregateDesc& AggDesc;
+    };
+
 public:
     std::unique_ptr<NKikimr::NMiniKQL::IPreparedBlockAggregator<NKikimr::NMiniKQL::IBlockAggregatorCombineAll>> PrepareCombineAll(
         std::optional<ui32> filterColumn,
@@ -777,13 +1251,13 @@ public:
     std::unique_ptr<NKikimr::NMiniKQL::IPreparedBlockAggregator<NKikimr::NMiniKQL::IBlockAggregatorCombineKeys>> PrepareCombineKeys(
         const std::vector<ui32>& argsColumns,
         const NPg::TAggregateDesc& aggDesc) {
-        ythrow yexception() << "Not implemented";
+        return std::make_unique<TPreparedCombineKeysAggregator>(TransFunc, SerializeFunc, argsColumns, aggDesc);
     }
 
     std::unique_ptr<NKikimr::NMiniKQL::IPreparedBlockAggregator<NKikimr::NMiniKQL::IBlockAggregatorFinalizeKeys>> PrepareFinalizeKeys(
         ui32 stateColumn,
         const NPg::TAggregateDesc& aggDesc) {
-        ythrow yexception() << "Not implemented";
+        return std::make_unique<TPreparedFinalizeKeysAggregator>(DeserializeFunc, CombineFunc, FinalFunc, stateColumn, aggDesc);
     }
 
 private:

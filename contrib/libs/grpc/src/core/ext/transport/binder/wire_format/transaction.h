@@ -86,6 +86,9 @@ class Transaction {
   y_absl::string_view GetMessageData() const { return message_data_; }
   y_absl::string_view GetStatusDesc() const { return status_desc_; }
 
+  Transaction(const Transaction&) = delete;
+  void operator=(const Transaction&) = delete;
+
  private:
   int tx_code_;
   bool is_client_;

@@ -21,7 +21,16 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/ext/xds/certificate_provider_factory.h"
+#include <util/generic/string.h>
+#include <util/string/cast.h>
+
+#include <grpc/grpc_security.h>
+
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/gprpp/time.h"
+#include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/json/json.h"
+#include "src/core/lib/security/certificate_provider/certificate_provider_factory.h"
 
 namespace grpc_core {
 

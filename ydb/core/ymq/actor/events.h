@@ -134,6 +134,7 @@ struct TSqsEvents {
         EvForceReloadState,
         EvReloadStateRequest,
         EvReloadStateResponse,
+        EvLeaderStarted,
 
         EvEnd,
     };
@@ -965,6 +966,9 @@ struct TSqsEvents {
             Record.MutableWho()->SetQueueName(queue);
             Record.SetReloadedAtMs(reloadedAt.MilliSeconds());
         }
+    };
+
+    struct TEvLeaderStarted : public NActors::TEventLocal<TEvLeaderStarted, EvLeaderStarted> {
     };
 };
 

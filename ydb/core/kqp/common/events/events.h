@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/shutdown/events.h>
 #include <ydb/public/api/protos/draft/ydb_query.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -31,6 +32,9 @@ struct TEvKqp {
 
     struct TEvPingSessionRequest : public TEventPB<TEvPingSessionRequest,
         NKikimrKqp::TEvPingSessionRequest, TKqpEvents::EvPingSessionRequest> {};
+
+    struct TEvCancelQueryRequest : public TEventPB<TEvCancelQueryRequest,
+        NKikimrKqp::TEvCancelQueryRequest, TKqpEvents::EvCancelQueryRequest> {};
 
 
     using TEvCompileRequest = NPrivateEvents::TEvCompileRequest;
@@ -77,6 +81,9 @@ struct TEvKqp {
     struct TEvPingSessionResponse : public TEventPB<TEvPingSessionResponse,
         NKikimrKqp::TEvPingSessionResponse, TKqpEvents::EvPingSessionResponse> {};
 
+    struct TEvCancelQueryResponse : public TEventPB<TEvCancelQueryResponse,
+        NKikimrKqp::TEvCancelQueryResponse, TKqpEvents::EvCancelQueryResponse> {};
+
     struct TEvKqpProxyPublishRequest :
         public TEventLocal<TEvKqpProxyPublishRequest, TKqpEvents::EvKqpProxyPublishRequest> {};
 
@@ -118,6 +125,29 @@ struct TEvKqp {
     };
 
     struct TEvFetchScriptResultsResponse : public TEventPB<TEvFetchScriptResultsResponse, NKikimrKqp::TEvFetchScriptResultsResponse, TKqpEvents::EvFetchScriptResultsResponse> {
+    };
+
+    struct TEvCancelScriptExecutionRequest : public TEventPB<TEvCancelScriptExecutionRequest, NKikimrKqp::TEvCancelScriptExecutionRequest, TKqpEvents::EvCancelScriptExecutionRequest> {
+    };
+
+    struct TEvCancelScriptExecutionResponse : public TEventPB<TEvCancelScriptExecutionResponse, NKikimrKqp::TEvCancelScriptExecutionResponse, TKqpEvents::EvCancelScriptExecutionResponse> {
+        TEvCancelScriptExecutionResponse() = default;
+
+        explicit TEvCancelScriptExecutionResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
+            Record.SetStatus(status);
+            NYql::IssuesToMessage(issues, Record.MutableIssues());
+        }
+
+        TEvCancelScriptExecutionResponse(Ydb::StatusIds::StatusCode status, const TString& message)
+            : TEvCancelScriptExecutionResponse(status, TextToIssues(message))
+        {}
+
+    private:
+        static NYql::TIssues TextToIssues(const TString& message) {
+            NYql::TIssues issues;
+            issues.AddIssue(message);
+            return issues;
+        }
     };
 };
 

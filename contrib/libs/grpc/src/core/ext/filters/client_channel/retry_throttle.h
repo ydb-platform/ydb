@@ -21,12 +21,18 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stdint.h>
+
 #include <map>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
-#include "src/core/lib/gprpp/memory.h"
+#include "y_absl/base/thread_annotations.h"
+
+#include <grpc/support/atm.h>
+
 #include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
 
 namespace grpc_core {

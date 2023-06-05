@@ -329,6 +329,11 @@ TMark TNodeRef::BeginMark() const {
         fy_document_iterator_body_next(it.get()),
         deleter);
     auto* mark = fy_event_start_mark(ev.get());
+
+    if (!mark) {
+        ythrow yexception() << "can't get begin mark for a node";
+    }
+
     return TMark{
         mark->input_pos,
         mark->line,
@@ -370,6 +375,9 @@ TMark TNodeRef::EndMark() const {
     fy_document_iterator_node_start(it.get(), Node_);
 
     auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> prevEv(
+        nullptr,
+        deleter);
     std::unique_ptr<fy_event, decltype(deleter)> ev(
         fy_document_iterator_body_next(it.get()),
         deleter);
@@ -396,12 +404,21 @@ TMark TNodeRef::EndMark() const {
                 --openBrackets;
             }
             if (fy_event_get_node_style(cur.get()) != FYNS_BLOCK) {
+                prevEv.reset(ev.release());
                 ev.reset(cur.release());
             }
         }
     }
 
-    const auto* mark = fy_event_end_mark(ev.get());
+    auto* mark = fy_event_end_mark(ev.get());
+
+    if (!mark && prevEv) {
+        mark = fy_event_end_mark(prevEv.get());
+    }
+
+    if (!mark) {
+        ythrow yexception() << "can't get end mark for a node";
+    }
 
     return TMark{
         mark->input_pos,
@@ -638,6 +655,9 @@ void TMapping::Remove(const TNodePairRef& toRemove) {
     ENSURE_NODE_NOT_EMPTY(Node_);
     ENSURE_NODE_NOT_EMPTY(toRemove);
     NDetail::RethrowOnError(fy_node_mapping_remove(Node_, toRemove.Pair_), Node_);
+    fy_node_free(fy_node_pair_key(toRemove.Pair_));
+    fy_node_free(fy_node_pair_value(toRemove.Pair_));
+    free(toRemove.Pair_);
 }
 
 TMappingIterator TMapping::Remove(const TMappingIterator& toRemove) {

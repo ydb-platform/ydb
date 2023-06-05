@@ -78,7 +78,7 @@ inline Datum PointerDatumFromPod(const NKikimr::NUdf::TUnboxedValuePod& value) {
 }
 
 inline Datum PointerDatumFromItem(const NKikimr::NUdf::TBlockItem& value) {
-    return (Datum)value.AsStringRef().Data();
+    return (Datum)(value.AsStringRef().Data() + sizeof(void*));
 }
 
 inline ui32 GetFullVarSize(const text* s) {

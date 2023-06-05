@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 namespace NKikimr {
@@ -167,6 +168,62 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
     }
 
+    Y_UNIT_TEST(ExecStats) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$value").Uint32(10).Build()
+            .Build();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Basic);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM TwoShard WHERE Key < $value;
+        )", TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        UNIT_ASSERT(result.GetStats().Defined());
+        UNIT_ASSERT(!result.GetStats()->GetPlan().Defined());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    }
+
+    Y_UNIT_TEST(ExecStatsPlan) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$value").Uint32(10).Build()
+            .Build();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Full);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM TwoShard WHERE Key < $value;
+        )", TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        UNIT_ASSERT(result.GetStats().Defined());
+        UNIT_ASSERT(result.GetStats()->GetPlan().Defined());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+
+        auto stages = FindPlanStages(plan);
+
+        i64 totalTasks = 0;
+        for (const auto& stage : stages) {
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
+    }
+
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
         NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
@@ -244,6 +301,40 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
         UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
         UNIT_ASSERT_EQUAL(ops, listedOps);
+    }
+
+    Y_UNIT_TEST(CancelScriptExecution) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+        std::vector<NYdb::TAsyncStatus> cancelFutures(3);
+        // Check races also
+        for (auto& f : cancelFutures) {
+            f = opClient.Cancel(scriptExecutionOperation.Id());
+        }
+
+        for (auto& f : cancelFutures) {
+            auto cancelStatus = f.ExtractValueSync();
+            UNIT_ASSERT_C(cancelStatus.GetStatus() == NYdb::EStatus::SUCCESS || cancelStatus.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED, cancelStatus.GetIssues().ToString());
+        }
+
+        auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT(op.Ready());
+        UNIT_ASSERT(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled);
+        UNIT_ASSERT_EQUAL(op.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT(op.Status().GetStatus() == NYdb::EStatus::SUCCESS || op.Status().GetStatus() == NYdb::EStatus::CANCELLED);
+
+        // Check cancel for completed query
+        auto cancelStatus = opClient.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(cancelStatus.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED, cancelStatus.GetIssues().ToString());
     }
 }
 

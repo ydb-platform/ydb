@@ -723,17 +723,20 @@ protected:
 
         const auto& snapshot = GetSnapshot();
 
-        auto addPartiton = [&](TMaybe<ui64> shardId, const TShardInfo& shardInfo, TMaybe<ui64> maxInFlightShards = Nothing()) {
+        auto addPartiton = [&](
+            ui64 taskLocation,
+            TMaybe<ui64> shardId,
+            const TShardInfo& shardInfo,
+            TMaybe<ui64> maxInFlightShards = Nothing())
+        {
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.ExecuterId = this->SelfId();
-            if (shardId) {
-                if (auto ptr = ShardIdToNodeId.FindPtr(*shardId)) {
-                    task.Meta.NodeId = *ptr;
-                } else {
-                    task.Meta.ShardId = *shardId;
-                }
+            if (auto ptr = ShardIdToNodeId.FindPtr(taskLocation)) {
+                task.Meta.NodeId = *ptr;
+            } else {
+                task.Meta.ShardId = taskLocation;
             }
 
             NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
@@ -806,17 +809,17 @@ protected:
         };
 
         if (source.GetSequentialInFlightShards()) {
-            auto shardInfo = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+            auto [startShard, shardInfo] = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
             if (shardInfo.KeyReadRanges) {
-                addPartiton({}, shardInfo, source.GetSequentialInFlightShards());
-                return {};
+                addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
+                return Nothing();
             } else {
                 return 0;
             }
         } else {
             THashMap<ui64, TShardInfo> partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
             for (auto& [shardId, shardInfo] : partitions) {
-                addPartiton(shardId, shardInfo, {});
+                addPartiton(shardId, shardId, shardInfo, {});
             }
             return partitions.size();
         }

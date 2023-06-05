@@ -463,6 +463,10 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
         changefeed->set_virtual_timestamps(stream.GetVirtualTimestamps());
         changefeed->set_aws_region(stream.GetAwsRegion());
 
+        if (const auto value = stream.GetResolvedTimestampsIntervalMs()) {
+            changefeed->mutable_resolved_timestamps_interval()->set_seconds(TDuration::MilliSeconds(value).Seconds());
+        }
+
         switch (stream.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
         case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
@@ -506,6 +510,10 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     out.SetName(in.name());
     out.SetVirtualTimestamps(in.virtual_timestamps());
     out.SetAwsRegion(in.aws_region());
+
+    if (in.has_resolved_timestamps_interval()) {
+        out.SetResolvedTimestampsIntervalMs(TDuration::Seconds(in.resolved_timestamps_interval().seconds()).MilliSeconds());
+    }
 
     switch (in.mode()) {
     case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:

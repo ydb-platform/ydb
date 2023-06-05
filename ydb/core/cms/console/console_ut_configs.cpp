@@ -3954,6 +3954,15 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
+        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        TAutoPtr<IEventHandle> handle;
+        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().cluster(), "");
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().version(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().volatile_configs_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().volatile_configs(0).config(), VOLATILE_YAML_CONFIG_1_1);
+
         CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
 

@@ -187,7 +187,7 @@ namespace NFq {
 template<class TEvent, class TRequest, class TAuditDetailsObj>
 class TAuditEventSenderActor : public NActors::TActorBootstrapped<TAuditEventSenderActor<TEvent, TRequest, TAuditDetailsObj>> {
     using Base = NActors::TActorBootstrapped<TAuditEventSenderActor<TEvent, TRequest, TAuditDetailsObj>>;
-    using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr&>;
+    using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr&>;
 
 public:
     TAuditEventSenderActor(
@@ -249,22 +249,21 @@ public:
         Base::Send(NKikimr::NFolderService::FolderServiceActorId(), CreateRequest().release(), 0, 0);
     }
 
-    std::unique_ptr<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest> CreateRequest() {
-        auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest>();
-        request->Request.set_folder_id(ExtraInfo.FolderId);
+    std::unique_ptr<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest> CreateRequest() {
+        auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest>();
+        request->FolderId = ExtraInfo.FolderId;
         request->Token = ExtraInfo.Token;
         return request;
     }
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse, Handle);
+        hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse, Handle);
     )
 
-    void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) {
-        const auto& response = ev->Get()->Response;
+    void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
         const auto& status = ev->Get()->Status;
-        if (!status.Ok() || !response.has_folder()) {
+        if (!status.Ok() || ev->Get()->CloudId.empty()) {
             auto& status = ev->Get()->Status;
             auto delay = RetryState->GetNextRetryDelay(ev);
             if (delay) {
@@ -286,7 +285,7 @@ private:
         AuditServiceSensors->ReportCloudIdResolvedSuccess();
 
         LOG_YQ_AUDIT_SERVICE_TRACE("EventId: " << *EventId << " cloud id resolved");
-        const auto cloudId = ev->Get()->Response.folder().cloud_id();
+        const auto cloudId = ev->Get()->CloudId;
         CloudEvent.mutable_event_metadata()->set_cloud_id(cloudId);
         SendAndComplete();
     }
@@ -330,10 +329,9 @@ private:
     }
 
     static const IRetryPolicy::TPtr& GetRetryPolicy() {
-        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) {
-            const auto& response = ev->Get()->Response;
+        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
             const auto& status = ev->Get()->Status;
-            return !status.Ok() || !response.has_folder() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
+            return !status.Ok() || ev->Get()->CloudId.empty() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
         }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
         return policy;
     }

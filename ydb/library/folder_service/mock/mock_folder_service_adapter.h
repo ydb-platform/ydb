@@ -6,5 +6,5 @@
 
 namespace NKikimr::NFolderService {
 
-NActors::IActor* CreateMockFolderServiceActor(const NKikimrProto::NFolderService::TFolderServiceConfig& config);
+NActors::IActor* CreateMockFolderServiceAdapterActor(const NKikimrProto::NFolderService::TFolderServiceConfig& config);
 }

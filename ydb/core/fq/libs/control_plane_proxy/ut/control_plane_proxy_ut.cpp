@@ -24,7 +24,7 @@
 #include <ydb/core/base/path.h>
 
 #include <ydb/library/folder_service/folder_service.h>
-#include <ydb/library/folder_service/mock/mock_folder_service.h>
+#include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <util/system/env.h>
 
@@ -384,7 +384,7 @@ private:
             ControlPlaneProxyActorId(),
             TActorSetupCmd(controlPlaneProxy, TMailboxType::Simple, 0));
 
-        auto folderService = NKikimr::NFolderService::CreateMockFolderServiceActor(NKikimrProto::NFolderService::TFolderServiceConfig{});
+        auto folderService = NKikimr::NFolderService::CreateMockFolderServiceAdapterActor(NKikimrProto::NFolderService::TFolderServiceConfig{});
         runtime->AddLocalService(
             NKikimr::NFolderService::FolderServiceActorId(),
             TActorSetupCmd(folderService, TMailboxType::Simple, 0),

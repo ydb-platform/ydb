@@ -30,7 +30,6 @@ TIndexationCounters::TIndexationCounters(const TString& module)
     CompactionDuration = TBase::GetHistogram("CompactionDuration", NMonitoring::ExponentialHistogram(18, 2, 20));
     HistogramCompactionInputBytes = TBase::GetHistogram("CompactionInput/Bytes", NMonitoring::ExponentialHistogram(18, 2, 1024));
     CompactionInputBytes = TBase::GetDeriviative("CompactionInput/Bytes");
-    CompactionInputSize = TBase::GetHistogram("CompactionInput/Bytes", NMonitoring::ExponentialHistogram(18, 2, 1024));
     CompactionExceptions = TBase::GetDeriviative("Exceptions/Count");
     CompactionFails = TBase::GetDeriviative("CompactionFails/Count");
 

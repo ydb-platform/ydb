@@ -7,12 +7,13 @@ namespace NKikimr::NOlap {
 
 class TInsertionSummary {
 private:
+    friend class TPathInfo;
+
     const NColumnShard::TInsertTableCounters Counters;
     YDB_READONLY(i64, CommittedSize, 0);
     YDB_READONLY(i64, InsertedSize, 0);
     std::map<ui64, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
-    friend class TPathInfo;
     void RemovePriority(const TPathInfo& pathInfo) noexcept;
     void AddPriority(const TPathInfo& pathInfo) noexcept;
 

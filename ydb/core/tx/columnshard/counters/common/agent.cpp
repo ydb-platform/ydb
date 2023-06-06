@@ -52,4 +52,10 @@ std::shared_ptr<NKikimr::NColumnShard::TValueAggregationClient> TValueAggregatio
     return std::make_shared<TValueAggregationClient>(selfPtr);
 }
 
+i64* TValueAggregationAgent::RegisterValue(const i64 zeroValue /*= 0*/) {
+    TGuard<TMutex> g(Mutex);
+    Values.emplace_back(zeroValue);
+    return &Values.back();
+}
+
 }

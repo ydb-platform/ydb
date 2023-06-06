@@ -37,17 +37,16 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlobFinish;
     NMonitoring::TDynamicCounters::TCounterPtr TooSmallBlobStart;
 
-    NMonitoring::THistogramPtr CompactionInputSize;
     NMonitoring::THistogramPtr CompactionDuration;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionExceptions;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionFails;
 
     TIndexationCounters(const TString& module);
 
-//    void CompactionInputSize(const ui64 size) const {
-//        HistogramCompactionInputBytes->Collect(size);
-//        CompactionInputBytes->Add(size);
-//    }
+    void CompactionInputSize(const ui64 size) const {
+        HistogramCompactionInputBytes->Collect(size);
+        CompactionInputBytes->Add(size);
+    }
 };
 
 }

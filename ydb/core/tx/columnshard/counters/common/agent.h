@@ -22,8 +22,6 @@ public:
 
 class TValueAggregationAgent: TNonCopyable {
 private:
-    friend class TRegularSignalBuilderActor;
-    friend class TValueAggregationClient;
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalSum;
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMin;
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMax;
@@ -34,15 +32,10 @@ private:
     bool CalcAggregations(i64& minValue, i64& maxValue) const;
     std::optional<TSignalAggregations> GetAggregations() const;
 
-    i64* RegisterValue(const i64 zeroValue = 0) {
-        TGuard<TMutex> g(Mutex);
-        Values.emplace_back(zeroValue);
-        return &Values.back();
-    }
-
 public:
     TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner);
 
+    i64* RegisterValue(const i64 zeroValue = 0);
     void ResendStatus() const;
 
     std::shared_ptr<TValueAggregationClient> GetClient(std::shared_ptr<TValueAggregationAgent> selfPtr);

@@ -29,6 +29,11 @@ public:
         , Output(output)
     {
         Input->SetGetter(std::bind(&TChopperFlowWrapper::Getter, this, std::bind(&TChopperFlowWrapper::RefState, this, std::placeholders::_1), std::placeholders::_1));
+        const auto codegenInput = dynamic_cast<ICodegeneratorExternalNode*>(Input);
+        MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
+        codegenInput->SetValueGetterBuilder([this](const TCodegenContext& ctx) {
+            return GenerateHandler(ctx.Codegen);
+        });
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -41,11 +46,12 @@ public:
                 KeyArg->SetValue(ctx, Key->GetValue(ctx));
             }
         } else if (EState::Skip == EState(state.Get<ui64>())) {
-            do if (auto next = Flow->GetValue(ctx); next.IsSpecial())
-                return next.Release();
-            else
-                ItemArg->SetValue(ctx, std::move(next));
-            while (!Chop->GetValue(ctx).Get<bool>());
+            do {
+                if (auto next = Flow->GetValue(ctx); next.IsSpecial())
+                    return next.Release();
+                else
+                    ItemArg->SetValue(ctx, std::move(next));
+            } while (!Chop->GetValue(ctx).Get<bool>());
 
             KeyArg->SetValue(ctx, Key->GetValue(ctx));
             state = NUdf::TUnboxedValuePod(ui64(EState::Next));
@@ -58,13 +64,15 @@ public:
                 switch (EState(state.Get<ui64>())) {
                     case EState::Work:
                     case EState::Next:
-                        do if (auto next = Flow->GetValue(ctx); next.IsSpecial()) {
-                            if (next.IsYield()) {
-                                state = NUdf::TUnboxedValuePod(ui64(EState::Skip));
+                        do {
+                            if (auto next = Flow->GetValue(ctx); next.IsSpecial()) {
+                                if (next.IsYield()) {
+                                    state = NUdf::TUnboxedValuePod(ui64(EState::Skip));
+                                }
+                                return next.Release();
+                            } else {
+                                ItemArg->SetValue(ctx, std::move(next));
                             }
-                            return next.Release();
-                        } else {
-                            ItemArg->SetValue(ctx, std::move(next));
                         } while (!Chop->GetValue(ctx).Get<bool>());
                     case EState::Chop:
                         KeyArg->SetValue(ctx, Key->GetValue(ctx));
@@ -181,8 +189,6 @@ public:
         MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
         MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
         MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
-
-        codegenInput->SetValueGetter(GenerateHandler(ctx.Codegen));
 
         auto& context = ctx.Codegen->GetContext();
 

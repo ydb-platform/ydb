@@ -893,6 +893,48 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
        );
         UNIT_ASSERT(!fullscan.IsDefined());
     }
+
+    Y_UNIT_TEST(MkqlSwitch) {
+        auto kikimr = DefaultKikimrRunner();
+
+        TStreamExecScanQuerySettings settings;
+        settings.Explain(true);
+        auto db = kikimr.GetTableClient();
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TwoKeys` (
+                Key1 Int32,
+                Key2 Int32,
+                Value Int32,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto result = session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/TwoKeys` (Key1, Key2, Value) VALUES
+                (1, 1, 1),
+                (2, 1, 2),
+                (3, 2, 3),
+                (4, 2, 4),
+                (1000, 100, 5),
+                (1001, 101, 6),
+                (1002, 102, 7),
+                (1003, 103, 8);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            $values = SELECT Key1, Key2, Value FROM `/Root/TwoKeys` WHERE Value > 5;
+            $cnt = SELECT count(*) FROM $values;
+            $sum = SELECT sum(Key1) FROM $values WHERE Key1 > 1;
+
+            SELECT $cnt + $sum;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

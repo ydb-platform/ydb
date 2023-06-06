@@ -1,8 +1,12 @@
+#include <contrib/libs/fmt/include/fmt/format.h>
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
 
 using namespace NSQLTranslation;
 
@@ -197,6 +201,25 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                 (let world (CommitAll! world)) 
                 (return world))
         )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(VariableShowStmt) {
+        auto res = PgSqlToYql("Show server_version_num");
+        UNIT_ASSERT(res.Root);
+
+        TString program = fmt::format(R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let output (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"server_version_num" (Void) (lambda '() (PgConst '"{}" (PgType 'text)))))))))) '('set_ops '('push))))) 
+                (let result_sink (DataSink 'result))
+                (let world (Write! world result_sink (Key) output '('('type) '('autoref)))) 
+                (let world (Commit! world result_sink)) 
+                (let world (CommitAll! world)) 
+                (return world)
+            )
+        )", NYql::GetPostgresServerVersionNum());
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }

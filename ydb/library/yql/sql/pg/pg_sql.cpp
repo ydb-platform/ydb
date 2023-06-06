@@ -1,7 +1,9 @@
 #include "util/charset/utf8.h"
 #include "utils.h"
 #include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/parser/pg_wrapper/parser.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -285,6 +287,8 @@ public:
             return ParseVariableSetStmt(CAST_NODE(VariableSetStmt, node)) != nullptr;
         case T_DeleteStmt:
             return ParseDeleteStmt(CAST_NODE(DeleteStmt, node)) != nullptr;
+        case T_VariableShowStmt:
+            return ParseVariableShowStmt(CAST_NODE(VariableShowStmt, node)) != nullptr;
         case T_TransactionStmt:
             return true;
         default:
@@ -1516,6 +1520,50 @@ public:
                 )
             )
         ));
+        return Statements.back();
+    }
+    
+    TMaybe<TString> GetConfigVariable(const TString& varName) {
+        if (varName == "server_version") {
+            return GetPostgresServerVersionStr();
+        }
+        if (varName == "server_version_num") {
+            return GetPostgresServerVersionNum();
+        }
+        return {};
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseVariableShowStmt(const VariableShowStmt* value) {
+        const auto varName = to_lower(TString(value->name));
+
+        const auto varValue = GetConfigVariable(varName);
+        if (!varValue) {
+            AddError("unrecognized configuration parameter \"" + varName + "\"");
+            return nullptr;
+        }
+
+        const auto columnName = QAX(varName);
+        const auto varValueNode = 
+            L(A("PgConst"), QAX(*varValue), L(A("PgType"), QA("text")));
+
+        const auto lambda = L(A("lambda"), QL(), varValueNode);
+        const auto res = QL(L(A("PgResultItem"), columnName, L(A("Void")), lambda));
+
+        const auto setItem = L(A("PgSetItem"), QL(QL(QA("result"), res)));
+        const auto setItems = QL(QA("set_items"), QL(setItem));
+        const auto setOps = QL(QA("set_ops"), QVL(QA("push")));
+        const auto selectOptions = QL(setItems, setOps);
+
+        const auto output = L(A("PgSelect"), selectOptions);
+        Statements.push_back(L(A("let"), A("output"), output));
+        Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
+
+        const auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
+        Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
+            A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
+        Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
+            A("world"), A("result_sink"))));
         return Statements.back();
     }
 

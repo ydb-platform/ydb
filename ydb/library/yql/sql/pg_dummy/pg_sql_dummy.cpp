@@ -436,4 +436,11 @@ TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId
     throw yexception() << "PG types are not supported";
 }
 
+TString GetPostgresServerVersionNum() {
+    return "-1";
+}
+TString GetPostgresServerVersionStr() {
+    return "pg_sql_dummy";
+}
+
 } // namespace NKikimr::NPg

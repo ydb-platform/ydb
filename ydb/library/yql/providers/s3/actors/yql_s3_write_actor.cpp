@@ -498,10 +498,11 @@ private:
         hFunc(TEvPrivate::TEvUploadFinished, Handle);
     )
 
-    void SendData(TUnboxedValueVector&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(TUnboxedValueBatch&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
         std::unordered_set<TS3FileWriteActor*> processedActors;
-        for (const auto& v : data) {
-            const auto& key = MakePartitionKey(v);
+        YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+        data.ForEachRow([&](const auto& row) {
+            const auto& key = MakePartitionKey(row);
             const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (insertedNew || keyIt->second.empty() || keyIt->second.back()->IsFinishing()) {
             auto fileWrite = std::make_unique<TS3FileWriteActor>(
@@ -516,7 +517,7 @@ private:
                 RegisterWithSameMailbox(fileWrite.release());
             }
 
-            const NUdf::TUnboxedValue& value = Keys.empty() ? v : *v.GetElements();
+            const NUdf::TUnboxedValue& value = Keys.empty() ? row : *row.GetElements();
             TS3FileWriteActor* actor = keyIt->second.back();
             if (value) {
                 actor->AddData(TString(value.AsStringRef()));
@@ -525,7 +526,7 @@ private:
                 actor->Seal();
             }
             processedActors.insert(actor);
-        }
+        });
 
         for (TS3FileWriteActor* actor : processedActors) {
             actor->Go();

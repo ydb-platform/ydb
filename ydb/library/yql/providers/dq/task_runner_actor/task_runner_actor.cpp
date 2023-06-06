@@ -247,7 +247,7 @@ private:
     void AsyncInputPush(
         ui64 cookie,
         ui64 index,
-        NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
+        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
         i64 space,
         bool finish) override
     {
@@ -255,9 +255,10 @@ private:
         auto selfId = SelfId();
 
         TVector<TString> strings;
-        for (auto& row : batch) {
-            strings.emplace_back(row.AsStringRef());
-        }
+        YQL_ENSURE(!batch.IsWide());
+        batch.ForEachRow([&strings](const auto& value) {
+            strings.emplace_back(value.AsStringRef());
+        });
 
         Invoker->Invoke([strings=std::move(strings),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
             try {
@@ -363,7 +364,7 @@ private:
 
     void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
-        NKikimr::NMiniKQL::TUnboxedValueVector batch;
+        NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         for (auto& row: ev->Get()->Strings) {
             batch.emplace_back(NKikimr::NMiniKQL::MakeString(row));
         }

@@ -55,6 +55,7 @@ public:
         , BasicStats(ChannelId)
         , ProfileStats(settings.CollectProfileStats ? &BasicStats : nullptr)
         , Packer(OutputType)
+        , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
         , HolderFactory(holderFactory)
         , TransportVersion(settings.TransportVersion)
@@ -81,7 +82,18 @@ public:
         return Storage->IsFull();
     }
 
-    void Push(NUdf::TUnboxedValue&& value) override {
+    virtual void Push(NUdf::TUnboxedValue&& value) override {
+        YQL_ENSURE(!OutputType->IsMulti());
+        DoPush(&value, 1);
+    }
+
+    virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
+        YQL_ENSURE(OutputType->IsMulti());
+        YQL_ENSURE(Width == width);
+        DoPush(values, width);
+    }
+
+    void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
         TProfileGuard guard(ProfileStats ? &ProfileStats->SerializationTime : nullptr);
         if (!BasicStats.FirstRowIn) {
             BasicStats.FirstRowIn = TInstant::Now();
@@ -97,8 +109,15 @@ public:
             return;
         }
 
-        Packer.AddItem(value);
-        value = {};
+        if (OutputType->IsMulti()) {
+            Packer.AddWideItem(values, width);
+        } else {
+            Packer.AddItem(*values);
+        }
+        for (ui32 i = 0; i < width; ++i) {
+            values[i] = {};
+        }
+
         ChunkRowCount++;
         BasicStats.RowsIn++;
 
@@ -265,7 +284,7 @@ public:
             ChunkRowCount = 0;
         }
 
-        NKikimr::NMiniKQL::TUnboxedValueVector rows;
+        NKikimr::NMiniKQL::TUnboxedValueBatch rows(OutputType);
         for (;;) {
             NDqProto::TData chunk;
             if (!this->Pop(chunk)) {
@@ -275,11 +294,17 @@ public:
             Packer.UnpackBatch(buf, HolderFactory, rows);
         }
 
-        for (auto& row : rows) {
-            Packer.AddItem(row);
+        if (OutputType->IsMulti()) {
+            rows.ForEachRowWide([this](const auto* values, ui32 width) {
+                Packer.AddWideItem(values, width);
+            });
+        } else {
+            rows.ForEachRow([this](const auto& value) {
+                Packer.AddItem(value);
+            });
         }
 
-        data.SetRows(rows.size());
+        data.SetRows(rows.RowCount());
         auto buffer = Packer.FinishAndPull();
         data.MutableRaw()->reserve(buffer.Size());
         buffer.CopyTo(*data.MutableRaw());
@@ -330,6 +355,7 @@ private:
     TDqOutputChannelStats BasicStats;
     TDqOutputChannelStats* ProfileStats = nullptr;
     NKikimr::NMiniKQL::TValuePackerTransport<FastPack> Packer;
+    const ui32 Width;
     const IDqChannelStorage::TPtr Storage;
     const NMiniKQL::THolderFactory& HolderFactory;
     const NDqProto::EDataTransportVersion TransportVersion;

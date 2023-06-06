@@ -1086,7 +1086,7 @@ public:
     }
 
     i64 GetAsyncInputData(
-        NKikimr::NMiniKQL::TUnboxedValueVector& resultVector,
+        NKikimr::NMiniKQL::TUnboxedValueBatch& resultBatch,
         TMaybe<TInstant>&,
         bool& finished,
         i64 freeSpace) override
@@ -1096,6 +1096,8 @@ public:
             StartTableScan();
             return 0;
         }
+
+        YQL_ENSURE(!resultBatch.IsWide(), "Wide stream is not supported");
 
         CA_LOG_D(TStringBuilder() << " enter getasyncinputdata results size " << Results.size());
         ui64 bytes = 0;
@@ -1120,7 +1122,7 @@ public:
 
             for (; result.ProcessedRows < result.PackedRows; ++result.ProcessedRows) {
                 NMiniKQL::TBytesStatistics rowSize = GetRowSize((*batch)[result.ProcessedRows].GetElements());
-                resultVector.push_back(std::move((*batch)[result.ProcessedRows]));
+                resultBatch.push_back(std::move((*batch)[result.ProcessedRows]));
                 ProcessedRowCount += 1;
                 bytes += rowSize.AllocatedBytes;
                 if (ProcessedRowCount == Settings.GetItemsLimit()) {
@@ -1129,7 +1131,7 @@ public:
                     return bytes;
                 }
             }
-            CA_LOG_D(TStringBuilder() << "returned " << resultVector.size() << " rows; processed " << ProcessedRowCount << " rows");
+            CA_LOG_D(TStringBuilder() << "returned " << resultBatch.RowCount() << " rows; processed " << ProcessedRowCount << " rows");
 
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {

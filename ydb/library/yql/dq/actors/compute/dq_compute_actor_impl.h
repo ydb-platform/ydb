@@ -1080,7 +1080,7 @@ protected:
         return TaskRunner->BindAllocator();
     }
 
-    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) {
+    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) {
         source.Buffer->Push(std::move(batch), space);
         if (finished) {
             source.Buffer->Finish();
@@ -1420,7 +1420,7 @@ private:
     ui32 SendDataChunkToAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo, ui64 bytes) {
         auto sink = outputInfo.Buffer;
 
-        NKikimr::NMiniKQL::TUnboxedValueVector dataBatch;
+        NKikimr::NMiniKQL::TUnboxedValueBatch dataBatch(sink->GetOutputType());
         NDqProto::TCheckpoint checkpoint;
 
         const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
@@ -1646,14 +1646,14 @@ protected:
         const i64 freeSpace = AsyncInputFreeSpace(info);
         if (freeSpace > 0) {
             TMaybe<TInstant> watermark;
-            NKikimr::NMiniKQL::TUnboxedValueVector batch;
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             Y_VERIFY(info.AsyncInput);
             bool finished = false;
             const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, freeSpace);
             CA_LOG_T("Poll async input " << inputIndex
                 << ". Buffer free space: " << freeSpace
                 << ", read from async input: " << space << " bytes, "
-                << batch.size() << " rows, finished: " << finished);
+                << batch.RowCount() << " rows, finished: " << finished);
 
             if (!batch.empty()) {
                 // If we have read some data, we must run such reading again
@@ -1662,7 +1662,7 @@ protected:
                 ContinueExecute();
             }
 
-            DqComputeActorMetrics.ReportAsyncInputData(inputIndex, batch.size(), watermark);
+            DqComputeActorMetrics.ReportAsyncInputData(inputIndex, batch.RowCount(), watermark);
 
             if (watermark) {
                 const auto inputWatermarkChanged = WatermarksTracker.NotifyAsyncInputWatermarkReceived(

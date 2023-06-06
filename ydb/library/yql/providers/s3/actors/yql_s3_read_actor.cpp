@@ -838,10 +838,9 @@ private:
         }
     }
 
-    i64 GetAsyncInputData(TUnboxedValueVector& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         i64 total = 0LL;
         if (!Blocks.empty()) {
-            buffer.reserve(buffer.size() + Blocks.size());
             do {
                 auto& content = std::get<IHTTPGateway::TContent>(Blocks.front());
                 const auto size = content.size();
@@ -2462,7 +2461,7 @@ private:
         LOG_D("TS3StreamReadActor", "Memory usage. Ready blocks: " << Blocks.size() << ". Ready blocks total size: " << blocksTotalSize);
     }
 
-    i64 GetAsyncInputData(TUnboxedValueVector& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
+    i64 GetAsyncInputData(TUnboxedValueBatch& output, TMaybe<TInstant>&, bool& finished, i64 free) final {
         ReportMemoryUsage();
 
         i64 total = 0LL;

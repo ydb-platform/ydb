@@ -7,21 +7,29 @@ namespace NYql::NDq {
 using namespace NKikimr::NMiniKQL;
 
 TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf columnName) {
-    YQL_ENSURE(type->GetKind() == TType::EKind::Struct);
-    const auto& structType = static_cast<const TStructType&>(*type);
-
-    auto columnIndex = structType.FindMemberIndex(columnName);
-    if (!columnIndex) {
-        return {};
+    TType* memberType = nullptr;
+    ui32 idx;
+    if (type->GetKind() == TType::EKind::Multi) {
+        const auto& multiType = static_cast<const TMultiType&>(*type);
+        YQL_ENSURE(TryFromString(columnName, idx), "Expecting number as column name");
+        YQL_ENSURE(idx < multiType.GetElementsCount(), "Invalid column index");
+        memberType = multiType.GetElementType(idx);
+    } else {
+        YQL_ENSURE(type->GetKind() == TType::EKind::Struct);
+        const auto& structType = static_cast<const TStructType&>(*type);
+        auto columnIndex = structType.FindMemberIndex(columnName);
+        if (!columnIndex) {
+             return {};
+        }
+        memberType = structType.GetMemberType(*columnIndex);
+        idx = *columnIndex;
     }
-
-    auto memberType = structType.GetMemberType(*columnIndex);
 
     if (memberType->GetKind() == TType::EKind::Optional) {
         memberType = static_cast<TOptionalType&>(*memberType).GetItemType();
     }
 
-    return TColumnInfo{TString(columnName), *columnIndex, memberType};
+    return TColumnInfo{TString(columnName), idx, memberType};
 }
 
 TColumnInfo GetColumnInfo(const TType* type, TStringBuf columnName) {

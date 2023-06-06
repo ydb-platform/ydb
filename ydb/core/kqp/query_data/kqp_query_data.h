@@ -80,7 +80,7 @@ struct TKqpExecuterTxResult {
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
     ui32 QueryResultIndex = 0;
-    NKikimr::NMiniKQL::TUnboxedValueVector Rows;
+    NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
 
     explicit TKqpExecuterTxResult(
         bool isStream,

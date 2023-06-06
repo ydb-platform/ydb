@@ -203,8 +203,10 @@ private:
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         i64 totalDataSize = 0;
+
+        YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
         totalDataSize = PackResults(batch, freeSpace);
         auto status = FetchLookupKeys();
@@ -366,16 +368,10 @@ private:
         }
     }
 
-    ui64 PackResults(NKikimr::NMiniKQL::TUnboxedValueVector& batch, i64 freeSpace) {
+    ui64 PackResults(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         i64 totalSize = 0;
         bool sizeLimitExceeded = false;
         batch.clear();
-
-        size_t rowsCount = 0;
-        for (const auto& result : Results) {
-            rowsCount += result.ReadResult->Get()->GetRowsCount();
-        }
-        batch.reserve(rowsCount);
 
         while (!Results.empty() && !sizeLimitExceeded) {
             auto& result = Results.front();

@@ -46,6 +46,225 @@ using TUnboxedValueDeque = std::deque<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::
 using TKeyPayloadPair = std::pair<NUdf::TUnboxedValue, NUdf::TUnboxedValue>;
 using TKeyPayloadPairVector = std::vector<TKeyPayloadPair, TMKQLAllocator<TKeyPayloadPair>>;
 
+class TUnboxedValueBatch {
+    // TUnboxedValueBatch represents column values for RowCount rows
+    // If wide encoding is used and each row contains Width columns, Values consists of Width * RowCount items:
+    //         first Width elements correspond to first row,
+    //         second Width elements - to second row, etc
+    // For narrow encoding, each row is represented as a single item (a struct) - so Width is equal to 1
+private:
+    using TBottomType = TUnboxedValueVector;
+    using TTopType = std::deque<TBottomType>;
+
+public:
+    using value_type = NUdf::TUnboxedValue;
+
+    explicit TUnboxedValueBatch(const TType* rowType = nullptr)
+        : Width_((rowType && rowType->IsMulti()) ? static_cast<const TMultiType*>(rowType)->GetElementsCount() : 1u)
+        , IsWide_(rowType && rowType->IsMulti())
+        , PageSize_(GetPageSize(Width_))
+    {
+    }
+
+    TUnboxedValueBatch(const TUnboxedValueBatch& other) = default;
+    TUnboxedValueBatch& operator=(const TUnboxedValueBatch& other) = default;
+
+    TUnboxedValueBatch(TUnboxedValueBatch&& other)
+        : Width_(other.Width_)
+        , IsWide_(other.IsWide_)
+        , PageSize_(other.PageSize_)
+        , Values_(std::move(other.Values_))
+        , RowOffset_(other.RowOffset_)
+        , RowCount_(other.RowCount_)
+    {
+        other.clear();
+    }
+
+    inline void clear() {
+        Values_.clear();
+        RowOffset_ = RowCount_ = 0;
+    }
+
+    inline bool empty() const {
+        return RowCount_ == 0;
+    }
+
+    inline void swap(TUnboxedValueBatch& other) {
+        std::swap(Width_, other.Width_);
+        std::swap(PageSize_, other.PageSize_);
+        std::swap(Values_, other.Values_);
+        std::swap(RowOffset_, other.RowOffset_);
+        std::swap(RowCount_, other.RowCount_);
+    }
+
+    template<typename... TArgs>
+    void emplace_back(TArgs&&... args) {
+        MKQL_ENSURE(!IsWide(), "emplace_back() should not be used for wide batch");
+        if (Values_.empty() || Values_.back().size() == Values_.back().capacity()) {
+            Values_.emplace_back();
+            Values_.back().reserve(PageSize_);
+        }
+        Values_.back().emplace_back(std::forward<TArgs>(args)...);
+        RowCount_++;
+    }
+
+    inline void push_back(const value_type& row) {
+        emplace_back(row);
+    }
+
+    inline void push_back(value_type&& row) {
+        emplace_back(std::move(row));
+    }
+
+    template<typename TFunc>
+    auto ForEachRow(const TFunc& cb) const {
+        MKQL_ENSURE(!IsWide(), "ForEachRowWide() should be used instead");
+        return DoForEachRow<const NUdf::TUnboxedValue, const TUnboxedValueBatch>(this,
+            [&cb](const NUdf::TUnboxedValue* values, ui32 width) {
+                Y_VERIFY_DEBUG(width == 1);
+                Y_VERIFY_DEBUG(values);
+                return cb(*values);
+            });
+    }
+
+    template<typename TFunc>
+    auto ForEachRow(const TFunc& cb) {
+        MKQL_ENSURE(!IsWide(), "ForEachRowWide() should be used instead");
+        return DoForEachRow<NUdf::TUnboxedValue, TUnboxedValueBatch>(this,
+            [&cb](NUdf::TUnboxedValue* values, ui32 width) {
+                Y_VERIFY_DEBUG(width == 1);
+                Y_VERIFY_DEBUG(values);
+                return cb(*values);
+            });
+    }
+
+    template<typename TFunc>
+    auto ForEachRowWide(const TFunc& cb) const {
+        MKQL_ENSURE(IsWide(), "ForEachRow() should be used instead");
+        return DoForEachRow<const NUdf::TUnboxedValue, const TUnboxedValueBatch>(this, cb);
+    }
+
+    template<typename TFunc>
+    auto ForEachRowWide(const TFunc& cb) {
+        MKQL_ENSURE(IsWide(), "ForEachRow() should be used instead");
+        return DoForEachRow<NUdf::TUnboxedValue, TUnboxedValueBatch>(this, cb);
+    }
+
+    inline TMaybe<ui32> Width() const {
+        return IsWide_ ? Width_ : TMaybe<ui32>{};
+    }
+
+    inline bool IsWide() const {
+        return IsWide_;
+    }
+
+    inline ui64 RowCount() const {
+        return RowCount_;
+    }
+
+    const value_type* Head() const {
+        MKQL_ENSURE(RowCount_, "Head() on empty batch");
+        return Width_ ? &Values_.front()[RowOffset_ * Width_] : nullptr;
+    }
+
+    value_type* Head() {
+        MKQL_ENSURE(RowCount_, "Head() on empty batch");
+        return Width_ ? &Values_.front()[RowOffset_ * Width_] : nullptr;
+    }
+
+    inline void Pop(size_t rowCount = 1) {
+        MKQL_ENSURE(rowCount <= RowCount_, "Invalid arg");
+        ui64 newStartOffset = (RowOffset_ + rowCount) * Width_;
+        while (newStartOffset >= PageSize_) {
+            MKQL_ENSURE_S(!Values_.empty());
+            Values_.pop_front();
+            newStartOffset -= PageSize_;
+        }
+
+        RowOffset_ = Width_ ? newStartOffset / Width_ : 0;
+        RowCount_ -= rowCount;
+    }
+
+    template<typename TFunc>
+    void PushRow(const TFunc& producer) {
+        ReserveNextRow();
+        for (ui32 i = 0; i < Width_; ++i) {
+            Values_.back().emplace_back(producer(i));
+        }
+        ++RowCount_;
+    }
+
+    void PushRow(NUdf::TUnboxedValue* values, ui32 width) {
+        Y_VERIFY_DEBUG(width == Width_);
+        ReserveNextRow();
+        for (ui32 i = 0; i < Width_; ++i) {
+            Values_.back().emplace_back(std::move(values[i]));
+        }
+        ++RowCount_;
+    }
+
+private:
+    static const size_t DesiredPageSize = 1024;
+    static inline size_t GetPageSize(size_t width) {
+        if (!width) {
+            return DesiredPageSize;
+        }
+        size_t pageSize = DesiredPageSize + width - 1;
+        return pageSize - pageSize % width;
+    }
+
+    inline void ReserveNextRow() {
+        bool full = Width_ && (Values_.empty() || Values_.back().size() == PageSize_);
+        if (full) {
+            Values_.emplace_back();
+            Values_.back().reserve(PageSize_);
+        }
+    }
+
+    template<typename TValue, typename TParent, typename TFunc>
+    static auto DoForEachRow(TParent* parent, const TFunc& cb) {
+        using TReturn = typename std::result_of<TFunc(TValue*, ui32)>::type;
+
+        auto currTop = parent->Values_.begin();
+
+        Y_VERIFY_DEBUG(parent->PageSize_ > parent->RowOffset_);
+        Y_VERIFY_DEBUG(parent->Width_ == 0 || (parent->PageSize_ - parent->RowOffset_) % parent->Width_ == 0);
+
+        size_t valuesOnPage = parent->PageSize_ - parent->RowOffset_;
+
+        TValue* values = (parent->Width_ && parent->RowCount_) ? currTop->data() + parent->RowOffset_ : nullptr;
+        for (size_t i = 0; i < parent->RowCount_; ++i) {
+            if constexpr (std::is_same_v<TReturn, bool>) {
+                if (!cb(values, parent->Width_)) {
+                    return false;
+                }
+            } else {
+                static_assert(std::is_same_v<TReturn, void>, "Callback should either return bool or void");
+                cb(values, parent->Width_);
+            }
+            values += parent->Width_;
+            valuesOnPage -= parent->Width_;
+            if (!valuesOnPage) {
+                valuesOnPage = parent->PageSize_;
+                ++currTop;
+                values = currTop->data();
+            }
+        }
+
+        if constexpr (std::is_same_v<TReturn, bool>) {
+            return true;
+        }
+    }
+
+    ui32 Width_;
+    bool IsWide_;
+    size_t PageSize_;
+
+    TTopType Values_;
+    ui64 RowOffset_ = 0;
+    ui64 RowCount_ = 0;
+};
+
 inline int CompareValues(NUdf::EDataSlot type, bool asc, bool isOptional, const NUdf::TUnboxedValuePod& lhs, const NUdf::TUnboxedValuePod& rhs) {
     int cmp;
     if (isOptional) {

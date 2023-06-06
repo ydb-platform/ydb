@@ -75,7 +75,7 @@ struct IDqComputeActorAsyncInput {
     // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
     virtual i64 GetAsyncInputData(
-        NKikimr::NMiniKQL::TUnboxedValueVector& batch,
+        NKikimr::NMiniKQL::TUnboxedValueBatch& batch,
         TMaybe<TInstant>& watermark,
         bool& finished,
         i64 freeSpace) = 0;
@@ -149,7 +149,7 @@ struct IDqComputeActorAsyncOutput {
     // Could throw YQL errors.
     // Checkpoint (if any) is supposed to be ordered after batch,
     // and finished flag is supposed to be ordered after checkpoint.
-    virtual void SendData(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, i64 dataSize,
+    virtual void SendData(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) = 0;
 
     // Checkpointing.

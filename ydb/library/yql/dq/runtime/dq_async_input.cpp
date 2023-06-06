@@ -17,7 +17,7 @@ public:
         return InputIndex;
     }
 
-    void Push(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, i64 space) override {
+    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
         Y_VERIFY(!batch.empty() || !space);
         if (!batch.empty()) {
             AddBatch(std::move(batch), space);

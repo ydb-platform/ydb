@@ -24,7 +24,7 @@ using TRuntimePtr = std::unique_ptr<NActors::TTestActorRuntime>;
 using TCallback = std::function<void(TFakeActor&)>;
 template<typename T>
 using TReadValueParser = std::function<std::vector<T>(const NUdf::TUnboxedValue&)>;
-using TWriteValueProducer = std::function<NKikimr::NMiniKQL::TUnboxedValueVector(NKikimr::NMiniKQL::THolderFactory&)>;
+using TWriteValueProducer = std::function<NKikimr::NMiniKQL::TUnboxedValueBatch(NKikimr::NMiniKQL::THolderFactory&)>;
 
 namespace {
     struct TEvPrivate {
@@ -191,15 +191,15 @@ struct TFakeCASetup {
         NThreading::TFuture<bool> nextDataFuture;
         Execute([&result, &parser, freeSpace, &nextDataFutureOut, this](TFakeActor& actor) {
             TMaybe<TInstant> watermark;
-            NKikimr::NMiniKQL::TUnboxedValueVector buffer;
+            NKikimr::NMiniKQL::TUnboxedValueBatch buffer;
             bool finished = false;
             actor.DqAsyncInput->GetAsyncInputData(buffer, watermark, finished, freeSpace);
 
-            for (const auto& uv : buffer) {
-                for (const auto item : parser(uv)) {
+            buffer.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                for (const auto item : parser(value)) {
                     result.emplace_back(item);
                 }
-            }
+            });
 
             if (watermark) {
                 result.emplace_back(*watermark);

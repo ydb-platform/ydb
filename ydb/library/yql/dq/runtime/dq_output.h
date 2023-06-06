@@ -43,6 +43,7 @@ public:
     virtual bool IsFull() const = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
+    virtual void WidePush(NUdf::TUnboxedValue* values, ui32 count) = 0;
     virtual void Push(NDqProto::TWatermark&& watermark) = 0;
     // Push checkpoint. Checkpoints may be pushed to channel even after it is finished.
     virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;

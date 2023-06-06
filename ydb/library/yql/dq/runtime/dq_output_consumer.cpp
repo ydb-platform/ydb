@@ -27,6 +27,12 @@ public:
         return AnyOf(Consumers, [](const auto& consumer) { return consumer->IsFull(); });
     }
 
+    void WideConsume(TUnboxedValue* values, ui32 count) override {
+        Y_UNUSED(values);
+        Y_UNUSED(count);
+        YQL_ENSURE(false, "WideConsume is not supported");
+    }
+
     void Consume(TUnboxedValue&& value) override {
         if (Consumers.size() == 1) {
             Consumers[0]->Consume(std::move(value));
@@ -68,6 +74,10 @@ public:
         Output->Push(std::move(value));
     }
 
+    void WideConsume(TUnboxedValue* values, ui32 count) override {
+        Output->WidePush(values, count);
+    }
+
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         Output->Push(std::move(checkpoint));
     }
@@ -84,6 +94,7 @@ class TDqOutputHashPartitionConsumer : public IDqOutputConsumer {
 private:
     mutable bool IsWaitingFlag = false;
     mutable TUnboxedValue WaitingValue;
+    mutable TUnboxedValueVector WideWaitingValues;
     mutable IDqOutput::TPtr OutputWaiting;
 protected:
     void DrainWaiting() const {
@@ -102,15 +113,21 @@ protected:
     }
 public:
     TDqOutputHashPartitionConsumer(TVector<IDqOutput::TPtr>&& outputs,
-        TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
+        TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
+        TMaybe<ui32> outputWidth)
         : Outputs(std::move(outputs))
         , KeyColumnIndices(std::move(keyColumnIndices))
         , ValueHashers(KeyColumnIndices.size(), NUdf::IHash::TPtr{})
+        , OutputWidth(outputWidth)
     {
         MKQL_ENSURE_S(keyColumnTypes.size() == KeyColumnIndices.size());
 
         for (auto i = 0U; i < keyColumnTypes.size(); i++) {
             ValueHashers[i] = MakeHashImpl(keyColumnTypes[i]);
+        }
+
+        if (outputWidth.Defined()) {
+            WideWaitingValues.resize(*outputWidth);
         }
     }
 
@@ -120,6 +137,7 @@ public:
     }
 
     void Consume(TUnboxedValue&& value) final {
+        YQL_ENSURE(!OutputWidth.Defined());
         ui32 partitionIndex = GetHashPartitionIndex(value);
         if (Outputs[partitionIndex]->IsFull()) {
             YQL_ENSURE(!IsWaitingFlag);
@@ -128,6 +146,21 @@ public:
             WaitingValue = std::move(value);
         } else {
             Outputs[partitionIndex]->Push(std::move(value));
+        }
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) final {
+        YQL_ENSURE(OutputWidth.Defined() && count == OutputWidth);
+        ui32 partitionIndex = GetHashPartitionIndex(values);
+        if (Outputs[partitionIndex]->IsFull()) {
+            YQL_ENSURE(!IsWaitingFlag);
+            IsWaitingFlag = true;
+            OutputWaiting = Outputs[partitionIndex];
+            for (ui32 i = 0; i < count; ++i) {
+                WideWaitingValues[i] = std::move(values[i]);
+            }
+        } else {
+            Outputs[partitionIndex]->WidePush(values, count);
         }
     }
 
@@ -155,6 +188,17 @@ private:
         return hash % Outputs.size();
     }
 
+    size_t GetHashPartitionIndex(const TUnboxedValue* values) {
+        ui64 hash = 0;
+
+        for (size_t keyId = 0; keyId < KeyColumnIndices.size(); keyId++) {
+            MKQL_ENSURE_S(KeyColumnIndices[keyId] < OutputWidth);
+            hash = CombineHashes(hash, HashColumn(keyId, values[KeyColumnIndices[keyId]]));
+        }
+
+        return hash % Outputs.size();
+    }
+
     ui64 HashColumn(size_t keyId, const TUnboxedValue& value) const {
         if (!value.HasValue()) {
             return 0;
@@ -166,21 +210,35 @@ private:
     TVector<IDqOutput::TPtr> Outputs;
     TVector<ui32> KeyColumnIndices;
     TVector<NUdf::IHash::TPtr> ValueHashers;
+    const TMaybe<ui32> OutputWidth;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs)
-        : Outputs(std::move(outputs)) {}
+    TDqOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth)
+        : Outputs(std::move(outputs))
+        , OutputWidth(outputWidth)
+        , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
+    {
+    }
 
     bool IsFull() const override {
         return AnyOf(Outputs, [](const auto& output) { return output->IsFull(); });
     }
 
     void Consume(TUnboxedValue&& value) final {
+        YQL_ENSURE(!OutputWidth.Defined());
         for (auto& output : Outputs) {
             TUnboxedValue copy{ value };
             output->Push(std::move(copy));
+        }
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) final {
+        YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
+        for (auto& output : Outputs) {
+            std::copy(values, values + count, Tmp.begin());
+            output->WidePush(Tmp.data(), count);
         }
     }
 
@@ -198,6 +256,8 @@ public:
 
 private:
     TVector<IDqOutput::TPtr> Outputs;
+    const TMaybe<ui32> OutputWidth;
+    TUnboxedValueVector Tmp;
 };
 
 } // namespace
@@ -212,14 +272,14 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output) {
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
-    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
+    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices, TMaybe<ui32> outputWidth)
 {
     return MakeIntrusive<TDqOutputHashPartitionConsumer>(std::move(outputs), std::move(keyColumnTypes),
-        std::move(keyColumnIndices));
+        std::move(keyColumnIndices), outputWidth);
 }
 
-IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs) {
-    return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs));
+IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
+    return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
 }
 
 } // namespace NYql::NDq

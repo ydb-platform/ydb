@@ -13,18 +13,17 @@ private:
     void PushImpl(NDqProto::TData&& data) {
         const i64 space = data.GetRaw().size();
 
-        NKikimr::NMiniKQL::TUnboxedValueVector buffer;
-        buffer.reserve(data.GetRows());
-
+        NKikimr::NMiniKQL::TUnboxedValueBatch batch(InputType);
         if (Y_UNLIKELY(ProfileStats)) {
             auto startTime = TInstant::Now();
-            DataSerializer.Deserialize(data, InputType, buffer);
+            DataSerializer.Deserialize(data, InputType, batch);
             ProfileStats->DeserializationTime += (TInstant::Now() - startTime);
         } else {
-            DataSerializer.Deserialize(data, InputType, buffer);
+            DataSerializer.Deserialize(data, InputType, batch);
         }
 
-        AddBatch(std::move(buffer), space);
+        YQL_ENSURE(batch.RowCount() == data.GetRows());
+        AddBatch(std::move(batch), space);
     }
 
     void DeserializeAllData() {
@@ -73,7 +72,7 @@ public:
     }
 
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
         if (Batches.empty()) {
             DeserializeAllData();
         }

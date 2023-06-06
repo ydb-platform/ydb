@@ -122,12 +122,12 @@ public:
 
 public:
     void SendData(
-        NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
+        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
         i64 dataSize,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-        SINK_LOG_T("SendData. Batch: " << batch.size()
+        SINK_LOG_T("SendData. Batch: " << batch.RowCount()
             << ". Checkpoint: " << checkpoint.Defined()
             << ". Finished: " << finished);
         Y_UNUSED(dataSize);
@@ -138,17 +138,18 @@ public:
 
         CreateSessionIfNotExists();
 
-        for (const NUdf::TUnboxedValue& item : batch) {
-            if (!item.IsBoxed()) {
+        Y_VERIFY(!batch.IsWide(), "Wide batch is not supported");
+        if (!batch.ForEachRow([&](const auto& value) {
+            if (!value.IsBoxed()) {
                 Fail("Struct with single field was expected");
-                return;
+                return false;
             }
 
-            const NUdf::TUnboxedValue dataCol = item.GetElement(0);
+            const NUdf::TUnboxedValue dataCol = value.GetElement(0);
 
             if (!dataCol.IsString() && !dataCol.IsEmbedded()) {
                 Fail(TStringBuilder() << "Non string value could not be written to YDS stream");
-                return;
+                return false;
             }
 
             TString data(dataCol.AsStringRef());
@@ -160,11 +161,14 @@ public:
             if (messageSize > MaxMessageSize) {
                 Fail(TStringBuilder() << "Max message size for YDS is " << MaxMessageSize
                     << " bytes but received message with size of " << messageSize << " bytes");
-                return;
+                return false;
             }
 
             FreeSpace -= messageSize;
             Buffer.push(std::move(data));
+            return true;
+        })) {
+            return;
         }
 
         if (checkpoint) {

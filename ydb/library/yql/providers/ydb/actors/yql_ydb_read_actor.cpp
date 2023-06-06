@@ -126,10 +126,9 @@ private:
         TActorBootstrapped<TYdbReadActor>::PassAway();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         i64 total = 0LL;
         if (!Blocks.empty()) {
-            buffer.reserve(buffer.size() + Blocks.size());
             do {
                 const auto size = Blocks.front().size();
                 buffer.emplace_back(NKikimr::NMiniKQL::MakeString(Blocks.front()));

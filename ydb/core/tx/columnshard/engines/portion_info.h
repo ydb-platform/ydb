@@ -49,6 +49,7 @@ public:
     virtual const TSnapshot& GetSnapshot() const = 0;
 
     std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
+    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const TString& dataSchemaStr, TString& strError) const;
 };
 
 class TSnapshotSchema: public ISnapshotSchema {

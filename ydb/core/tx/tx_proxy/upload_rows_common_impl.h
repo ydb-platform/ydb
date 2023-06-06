@@ -729,22 +729,13 @@ private:
         const auto& description = entry.ColumnTableInfo->Description;
         const auto& schema = description.GetSchema();
 
-#if 1 // TODO: do we need this restriction?
-        if ((size_t)schema.GetColumns().size() != KeyColumnPositions.size() + ValueColumnPositions.size()) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                "Column count in the request doesn't match column count in the schema", ctx);
-            return {};
-        }
-#endif
         std::vector<TString> outColumns;
         outColumns.reserve(YdbSchema.size());
 
         for (size_t i = 0; i < (size_t)schema.GetColumns().size(); ++i) {
             auto columnId = schema.GetColumns(i).GetId();
             if (!Id2Position.count(columnId)) {
-                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                    "Column id in the request doesn't match column id in the schema", ctx);
-                return {};
+                continue;
             }
             size_t position = Id2Position[columnId];
             outColumns.push_back(YdbSchema[position].first);

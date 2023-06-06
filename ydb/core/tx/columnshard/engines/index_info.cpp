@@ -129,67 +129,6 @@ std::vector<TNameTypeInfo> TIndexInfo::GetColumns(const std::vector<ui32>& ids) 
     return NOlap::GetColumns(*this, ids);
 }
 
-std::shared_ptr<arrow::RecordBatch> TIndexInfo::PrepareForInsert(const TString& data, const TString& metadata,
-                                                                 TString& strError) const {
-    std::shared_ptr<arrow::Schema> schema = ArrowSchema();
-    std::shared_ptr<arrow::Schema> differentSchema;
-    if (metadata.size()) {
-        differentSchema = NArrow::DeserializeSchema(metadata);
-        if (!differentSchema) {
-            strError = "DeserializeSchema() failed";
-            return {};
-        }
-    }
-
-    auto batch = NArrow::DeserializeBatch(data, (differentSchema ? differentSchema : schema));
-    if (!batch) {
-        strError = "DeserializeBatch() failed";
-        return {};
-    }
-    if (batch->num_rows() == 0) {
-        strError = "empty batch";
-        return {};
-    }
-
-    // Correct schema
-    if (differentSchema) {
-        batch = NArrow::ExtractColumns(batch, ArrowSchema());
-        if (!batch) {
-            strError = "cannot correct schema";
-            return {};
-        }
-    }
-
-    if (!batch->schema()->Equals(ArrowSchema())) {
-        strError = "unexpected schema for insert batch: '" + batch->schema()->ToString() + "'";
-        return {};
-    }
-
-    // Check PK is NOT NULL
-    for (auto& field : SortingKey->fields()) {
-        auto column = batch->GetColumnByName(field->name());
-        if (!column) {
-            strError = "missing PK column '" + field->name() + "'";
-            return {};
-        }
-        if (NArrow::HasNulls(column)) {
-            strError = "PK column '" + field->name() + "' contains NULLs";
-            return {};
-        }
-    }
-
-    auto status = batch->ValidateFull();
-    if (!status.ok()) {
-        strError = status.ToString();
-        return {};
-    }
-
-    Y_VERIFY(SortingKey);
-    batch = NArrow::SortBatch(batch, SortingKey);
-    Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortingKey));
-    return batch;
-}
-
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema() const {
     if (!Schema) {
         std::vector<ui32> ids;

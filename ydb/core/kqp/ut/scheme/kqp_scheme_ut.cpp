@@ -4821,6 +4821,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
         }
 
+        void InsertBulk(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const EStatus opStatus = EStatus::SUCCESS) {
+            Y_UNUSED(opStatus);
+            NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+            auto batch = updates.BuildArrow();
+            helper.SendDataViaActorSystem(table.GetName(), batch);
+        }
+
         void ReadData(const TString& query, const TString& expected) {
             auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -4926,6 +4933,34 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             testHelper.InsertData(testTable, tableInserter, {}, EStatus::SCHEME_ERROR);
         }
+    }
+
+    Y_UNIT_TEST(AddColumnOldSchemeBulkUpsert) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.InsertBulk(testTable, tableInserter, EStatus::SUCCESS);
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
     }
 
     Y_UNIT_TEST(AddColumnOnSchemeChange) {

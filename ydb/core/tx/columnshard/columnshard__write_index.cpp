@@ -344,7 +344,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             LOG_S_DEBUG("WriteIndex (" << blobs.size() << " blobs) at tablet " << TabletID());
 
             Y_VERIFY(!blobs.empty());
-            ctx.Register(CreateWriteActor(TabletID(), NOlap::TIndexInfo::BuildDefault(), ctx.SelfID,
+            auto snapshotSchema = std::make_shared<NOlap::TSnapshotSchema>(NOlap::TIndexInfo::BuildDefault(), NOlap::TSnapshot::Zero());
+            ctx.Register(CreateWriteActor(TabletID(), snapshotSchema, ctx.SelfID,
                 BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
         }
     } else {

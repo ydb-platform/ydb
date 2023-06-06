@@ -27,10 +27,10 @@ extern bool gAllowLogBatchingDefaultValue;
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
 IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
 IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                          TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline = TInstant::Max());
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                          TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline = TInstant::Max());
 IActor* CreateReadActor(ui64 tabletId,

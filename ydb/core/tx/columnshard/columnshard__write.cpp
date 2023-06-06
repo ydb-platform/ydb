@@ -224,7 +224,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         ++WritesInFly; // write started
 
         const auto& snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
-        ctx.Register(CreateWriteActor(TabletID(), snapshotSchema->GetIndexInfo(), ctx.SelfID,
+        ctx.Register(CreateWriteActor(TabletID(), snapshotSchema, ctx.SelfID,
             BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
     }
 

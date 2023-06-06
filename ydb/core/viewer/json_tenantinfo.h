@@ -165,6 +165,10 @@ public:
         NKikimrViewer::TTenant& tenant = TenantByPath[path];
         tenant.SetName(path);
         tenant.SetState(getTenantStatusResult.state());
+        if (getTenantStatusResult.has_required_shared_resources()) {
+            tenant.SetType(NKikimrViewer::Shared);
+            RequestSchemeCacheNavigate(path);
+        }
         for (const Ydb::Cms::StorageUnits& unit : getTenantStatusResult.allocated_resources().storage_units()) {
             NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddAllocated();
             resource.SetType("storage");
@@ -420,7 +424,13 @@ public:
                     tenant = std::move(itTenantByPath->second);
                     TenantByPath.erase(itTenantByPath);
                 }
-                tenant.MergeFrom(tenantBySubDomainKey);
+                if (tenant.GetType() == NKikimrViewer::UnknownTenantType) {
+                    tenant.MergeFrom(tenantBySubDomainKey);
+                } else {
+                    auto oldType = tenant.GetType();
+                    tenant.MergeFrom(tenantBySubDomainKey);
+                    tenant.SetType(oldType);
+                }
                 if (!tenant.GetId()) {
                     tenant.SetId(GetDomainId(subDomainKey));
                 }

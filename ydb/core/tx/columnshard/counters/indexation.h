@@ -1,12 +1,16 @@
 #pragma once
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include "common/owner.h"
 
 namespace NKikimr::NColumnShard {
 
-class TIndexationCounters {
+class TIndexationCounters: public TCommonCountersOwner {
 private:
-    ::NMonitoring::TDynamicCounterPtr SubGroup;
+    using TBase = TCommonCountersOwner;
+    NMonitoring::THistogramPtr HistogramCompactionInputBytes;
 public:
+    NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
+
     NMonitoring::TDynamicCounters::TCounterPtr ReadBytes;
     NMonitoring::TDynamicCounters::TCounterPtr AnalizeCompactedPortions;
     NMonitoring::TDynamicCounters::TCounterPtr AnalizeInsertedPortions;
@@ -39,6 +43,11 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionFails;
 
     TIndexationCounters(const TString& module);
+
+//    void CompactionInputSize(const ui64 size) const {
+//        HistogramCompactionInputBytes->Collect(size);
+//        CompactionInputBytes->Add(size);
+//    }
 };
 
 }

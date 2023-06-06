@@ -9,8 +9,6 @@
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
-
 #include <util/charset/wide.h>
 #include <util/generic/vector.h>
 #include <util/stream/format.h>
@@ -28,6 +26,7 @@
 using namespace NKikimr;
 using namespace NUdf;
 
+namespace {
 #define STRING_UDF(udfName, function)                       \
     SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) { \
         const TString input(args[0].AsStringRef());         \
@@ -370,25 +369,13 @@ using namespace NUdf;
         return valueBuilder->NewString(JoinSeq(delimeter, items));
     }
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TLevensteinDistance, ui64(TAutoMap<char*>, TAutoMap<char*>)) {
+    SIMPLE_STRICT_UDF(TLevensteinDistance, ui64(TAutoMap<char*>, TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const TStringBuf left(args[0].AsStringRef());
         const TStringBuf right(args[1].AsStringRef());
         const ui64 result = NLevenshtein::Distance(left, right);
         return TUnboxedValuePod(result);
     }
-
-    struct TLevensteinDistanceKernelExec : public TBinaryKernelExec<TLevensteinDistanceKernelExec> {
-    template <typename TSink>
-        static void Process(TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
-            const std::string_view left(arg1.AsStringRef());
-            const std::string_view right(arg2.AsStringRef());
-            const ui64 result = NLevenshtein::Distance(left, right);
-            sink(TBlockItem(result));
-        }
-    };
-
-    END_SIMPLE_ARROW_UDF(TLevensteinDistance, TLevensteinDistanceKernelExec::Do);
 
     static constexpr ui64 padLim = 1000000;
 
@@ -572,5 +559,6 @@ using namespace NUdf;
         TPrec,
         TToByteList,
         TFromByteList)
+}
 
 REGISTER_MODULES(TStringModule)

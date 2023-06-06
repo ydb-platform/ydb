@@ -4,10 +4,11 @@
 #include "index_info.h"
 #include "portion_info.h"
 #include "db_wrapper.h"
-#include "insert_table.h"
 #include "columns_table.h"
+#include "compaction_info.h"
 #include "granules_table.h"
 #include "predicate/filter.h"
+#include "insert_table/data.h"
 
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -17,11 +18,12 @@ namespace NKikimr::NOlap {
 struct TPredicate;
 
 struct TCompactionLimits {
-    static constexpr const ui32 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
-    static constexpr const ui32 MAX_BLOB_SIZE = 8 * 1024 * 1024; // some BlobStorage constant
+    static constexpr const ui64 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
+    static constexpr const ui64 MAX_BLOB_SIZE = 8 * 1024 * 1024; // some BlobStorage constant
     static constexpr const ui64 EVICT_HOT_PORTION_BYTES = 1 * 1024 * 1024;
     static constexpr const ui64 DEFAULT_EVICTION_BYTES = 64 * 1024 * 1024;
     static constexpr const ui64 MAX_BLOBS_TO_DELETE = 10000;
+    static constexpr const ui64 OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID = 1024 * MAX_BLOB_SIZE;
 
     ui32 GoodBlobSize{MIN_GOOD_BLOB_SIZE};
     ui32 GranuleBlobSplitSize{MAX_BLOB_SIZE};
@@ -112,72 +114,6 @@ private:
     NArrow::TReplaceKey Border;
 
     static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
-};
-
-class ICompactionObjectCallback {
-public:
-    virtual ~ICompactionObjectCallback() = default;
-    virtual void OnCompactionStarted(const bool inGranule) = 0;
-    virtual void OnCompactionFinished() = 0;
-    virtual void OnCompactionFailed(const TString& reason) = 0;
-    virtual void OnCompactionCanceled(const TString& reason) = 0;
-    virtual TString DebugString() const = 0;
-};
-
-struct TCompactionInfo {
-private:
-    std::shared_ptr<ICompactionObjectCallback> CompactionObject;
-    mutable bool StatusProvided = false;
-    const bool InGranuleFlag = false;
-public:
-    TCompactionInfo(std::shared_ptr<ICompactionObjectCallback> compactionObject, const bool inGranule)
-        : CompactionObject(compactionObject)
-        , InGranuleFlag(inGranule)
-    {
-        Y_VERIFY(compactionObject);
-        CompactionObject->OnCompactionStarted(InGranuleFlag);
-    }
-
-    bool InGranule() const {
-        return InGranuleFlag;
-    }
-
-    template <class T>
-    const T& GetObject() const {
-        auto result = dynamic_cast<const T*>(CompactionObject.get());
-        Y_VERIFY(result);
-        return *result;
-    }
-
-    void CompactionFinished() const {
-        Y_VERIFY(!StatusProvided);
-        StatusProvided = true;
-        CompactionObject->OnCompactionFinished();
-    }
-
-    void CompactionCanceled(const TString& reason) const {
-        Y_VERIFY(!StatusProvided);
-        StatusProvided = true;
-        CompactionObject->OnCompactionCanceled(reason);
-    }
-
-    void CompactionFailed(const TString& reason) const {
-        Y_VERIFY(!StatusProvided);
-        StatusProvided = true;
-        CompactionObject->OnCompactionFailed(reason);
-    }
-
-    ~TCompactionInfo() {
-        Y_VERIFY_DEBUG(StatusProvided);
-        if (!StatusProvided) {
-            CompactionObject->OnCompactionFailed("compaction unexpectedly finished");
-        }
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TCompactionInfo& info) {
-        out << (info.InGranuleFlag ? "in granule" : "split granule") << " compaction of granule: " << info.CompactionObject->DebugString();
-        return out;
-    }
 };
 
 struct TPortionEvictionFeatures {
@@ -632,7 +568,9 @@ public:
     virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetIndexInfo().GetSortingKey(); }
     virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetIndexInfo().GetIndexKey(); }
     virtual const THashSet<ui64>* GetOverloadedGranules(ui64 /*pathId*/) const { return nullptr; }
-    virtual bool HasOverloadedGranules() const { return false; }
+    bool HasOverloadedGranules(const ui64 pathId) const {
+        return GetOverloadedGranules(pathId) != nullptr;
+    }
 
     virtual TString SerializeMark(const NArrow::TReplaceKey& key) const = 0;
     virtual NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const = 0;

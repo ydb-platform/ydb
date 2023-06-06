@@ -8,6 +8,7 @@
 #include "blob_manager.h"
 #include "tables_manager.h"
 #include "inflight_request_tracker.h"
+#include "counters/columnshard.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -163,6 +164,7 @@ class TColumnShard
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
 
+    void OverloadWriteFail(const TString& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
@@ -383,6 +385,8 @@ private:
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
 
+    const TCSCounters CSCounters;
+
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;
@@ -425,14 +429,6 @@ private:
         ui64 writesLimit = Settings.OverloadWritesInFly;
         return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
            (writesLimit && WritesInFly > writesLimit);
-    }
-
-    bool InsertTableOverloaded() const {
-        return InsertTable && InsertTable->HasOverloaded();
-    }
-
-    bool IndexOverloaded() const {
-        return TablesManager.IndexOverloaded();
     }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);

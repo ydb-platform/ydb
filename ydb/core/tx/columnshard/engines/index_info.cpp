@@ -1,5 +1,4 @@
 #include "index_info.h"
-#include "insert_table.h"
 #include "column_engine.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>

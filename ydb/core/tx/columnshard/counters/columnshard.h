@@ -60,12 +60,12 @@ public:
         OverloadShardCount->Add(1);
     }
 
-    void SkipIndexationInputDutToSplitCompaction(const ui64 size) const {
+    void SkipIndexationInputDueToSplitCompaction(const ui64 size) const {
         SkipIndexationInputDueToSplitCompactionBytes->Add(size);
         SkipIndexationInputDueToSplitCompactionCount->Add(1);
     }
 
-    void SkipIndexationInputDutToGranuleOverload(const ui64 size) const {
+    void SkipIndexationInputDueToGranuleOverload(const ui64 size) const {
         SkipIndexationInputDueToGranuleOverloadBytes->Add(size);
         SkipIndexationInputDueToGranuleOverloadCount->Add(1);
     }

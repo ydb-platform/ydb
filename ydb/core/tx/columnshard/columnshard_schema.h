@@ -5,7 +5,7 @@
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/core/tx/columnshard/engines/insert_table.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/granules_table.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
 
@@ -464,9 +464,7 @@ struct Schema : NIceDb::Schema {
 
     static bool InsertTable_Load(NIceDb::TNiceDb& db,
                                  const IBlobGroupSelector* dsGroupSelector,
-                                 THashMap<TWriteId, TInsertedData>& inserted,
-                                 THashMap<ui64, TSet<TInsertedData>>& committed,
-                                 THashMap<TWriteId, TInsertedData>& aborted,
+                                 NOlap::TInsertTableAccessor& insertTable,
                                  const TInstant& loadTime) {
         auto rowset = db.Table<InsertTable>().GreaterOrEqual(0, 0, 0, 0, "").Select();
         if (!rowset.IsReady())
@@ -502,13 +500,13 @@ struct Schema : NIceDb::Schema {
 
             switch (recType) {
                 case EInsertTableIds::Inserted:
-                    inserted.emplace(TWriteId{data.WriteTxId}, std::move(data));
+                    insertTable.AddInserted(TWriteId{ data.WriteTxId }, std::move(data));
                     break;
                 case EInsertTableIds::Committed:
-                    committed[data.PathId].emplace(data);
+                    insertTable.AddCommitted(std::move(data));
                     break;
                 case EInsertTableIds::Aborted:
-                    aborted.emplace(TWriteId{data.WriteTxId}, std::move(data));
+                    insertTable.AddAborted(TWriteId{ data.WriteTxId }, std::move(data));
                     break;
             }
 

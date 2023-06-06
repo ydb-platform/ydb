@@ -201,8 +201,6 @@ public:
         return GranulesStorage->GetOverloaded(pathId);
     }
 
-    bool HasOverloadedGranules() const override { return GranulesStorage->HasOverloadedGranules(); }
-
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
         if (UseCompositeMarks()) {
             return TMark::SerializeComposite(key, MarkSchema());

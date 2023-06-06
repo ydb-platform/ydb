@@ -47,7 +47,9 @@ public:
         auto it = Agents.find(signalName);
         if (it == Agents.end()) {
             it = Agents.emplace(signalName, std::make_shared<TValueAggregationAgent>(signalName, signalsOwner)).first;
-            NActors::TActivationContext::Register(new TRegularSignalBuilderActor(it->second));
+            if (NActors::TlsActivationContext) {
+                NActors::TActivationContext::Register(new TRegularSignalBuilderActor(it->second));
+            }
         }
         return it->second;
     }

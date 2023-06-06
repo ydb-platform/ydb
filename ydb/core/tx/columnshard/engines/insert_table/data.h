@@ -1,8 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/blob.h>
-#include <util/generic/set.h>
-
-#include "defs.h"
+#include <ydb/core/tx/columnshard/engines/defs.h>
 
 namespace NKikimr::NOlap {
 
@@ -134,52 +132,6 @@ public:
     const TUnifiedBlobId& GetBlobId() const {
         return BlobId;
     }
-};
-
-class IDbWrapper;
-
-/// Use one table for inserted and commited blobs:
-/// !Commited => {ShardOrPlan, WriteTxId} are {MetaShard, WriteId}
-///  Commited => {ShardOrPlan, WriteTxId} are {PlanStep, TxId}
-class TInsertTable {
-public:
-    static constexpr const TDuration WaitCommitDelay = TDuration::Hours(24);
-    static constexpr const TDuration CleanDelay = TDuration::Minutes(10);
-
-    struct TCounters {
-        ui64 Rows{};
-        ui64 Bytes{};
-        ui64 RawBytes{};
-    };
-
-    bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
-    TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard,
-                     const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);
-    void Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds);
-    THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
-    THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
-    void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
-    void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
-    std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot) const;
-    bool Load(IDbWrapper& dbTable, const TInstant& loadTime);
-    const TCounters& GetCountersPrepared() const { return StatsPrepared; }
-    const TCounters& GetCountersCommitted() const { return StatsCommitted; }
-
-    size_t InsertedSize() const { return Inserted.size(); }
-    const THashMap<ui64, TSet<TInsertedData>>& GetCommitted() const { return CommittedByPathId; }
-    const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Aborted; }
-    void SetOverloaded(ui64 pathId, bool overload);
-    bool IsOverloaded(ui64 pathId) const { return PathsOverloaded.contains(pathId); }
-    bool HasOverloaded() const { return !PathsOverloaded.empty(); }
-
-private:
-    THashMap<TWriteId, TInsertedData> Inserted;
-    THashMap<ui64, TSet<TInsertedData>> CommittedByPathId;
-    THashMap<TWriteId, TInsertedData> Aborted;
-    THashSet<ui64> PathsOverloaded;
-    mutable TInstant LastCleanup;
-    TCounters StatsPrepared;
-    TCounters StatsCommitted;
 };
 
 }

@@ -242,6 +242,10 @@ public:
         return Portions;
     }
 
+    ui64 GetPathId() const {
+        return Record.PathId;
+    }
+
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
         Y_VERIFY(it != Portions.end());

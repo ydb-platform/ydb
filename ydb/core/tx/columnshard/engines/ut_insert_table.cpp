@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
 #include "db_wrapper.h"
-#include "insert_table.h"
+#include "insert_table/insert_table.h"
 
 namespace NKikimr {
 
@@ -18,9 +18,7 @@ public:
     void EraseCommitted(const TInsertedData&) override {}
     void EraseAborted(const TInsertedData&) override {}
 
-    bool Load(THashMap<TWriteId, TInsertedData>&,
-              THashMap<ui64, TSet<TInsertedData>>&,
-              THashMap<TWriteId, TInsertedData>&,
+    bool Load(TInsertTableAccessor&,
               const TInstant&) override
     {
         return true;
@@ -78,9 +76,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         ui64 txId = 42;
         insertTable.Commit(dbTable, planStep, txId, metaShard, {TWriteId{writeId}}, [](ui64){ return true; });
 
-        auto committed = insertTable.GetCommitted();
-        UNIT_ASSERT_EQUAL(committed.size(), 1);
-        UNIT_ASSERT_EQUAL(committed.begin()->second.size(), 1);
+        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().size(), 1);
+        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().begin()->second.size(), 1);
+        UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
 
         // read old snapshot
         blobs = insertTable.Read(tableId, TSnapshot::Zero());

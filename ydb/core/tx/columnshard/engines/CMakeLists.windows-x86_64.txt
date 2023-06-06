@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(insert_table)
 add_subdirectory(predicate)
 add_subdirectory(reader)
 add_subdirectory(storage)
@@ -34,6 +35,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-reader
   columnshard-engines-predicate
   columnshard-engines-storage
+  columnshard-engines-insert_table
   formats-arrow-compression
   core-tx-program
   udf-service-exception_policy
@@ -42,8 +44,8 @@ target_link_libraries(tx-columnshard-engines PUBLIC
 target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/compaction_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/indexed_read_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_logic_logs.cpp

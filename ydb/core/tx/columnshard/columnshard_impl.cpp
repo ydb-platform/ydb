@@ -619,8 +619,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
             // Preventing conflicts between indexing and compaction leads to election between them.
             // Indexing vs compaction probability depends on index and insert table overload status.
             // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
-            const ui32 mask = InsertTableOverloaded() ? 0xF : (IndexOverloaded() ? 0x1 : 0x3);
-            const bool preferIndexing = BackgroundActivation & mask;
+            const bool preferIndexing = RandomNumber<ui32>(1000) < 750;
 
             if (preferIndexing) {
                 if (activity.HasIndexation()) {
@@ -680,27 +679,26 @@ bool TColumnShard::SetupIndexation() {
     std::vector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     THashMap<ui64, ui64> overloadedPathGranules;
-    for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
-        auto* pMap = TablesManager.GetPrimaryIndexSafe().GetOverloadedGranules(pathId);
-        if (pMap) {
-            overloadedPathGranules[pathId] = pMap->size();
-        }
-        InsertTable->SetOverloaded(pathId, !!pMap);
-        for (auto& data : committed) {
-            ui32 dataSize = data.BlobSize();
-            Y_VERIFY(dataSize);
+    for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
+        for (auto* pathInfo : it->second) {
+            const bool granulesOverloaded = TablesManager.GetPrimaryIndex()->HasOverloadedGranules(pathInfo->GetPathId());
+            for (auto& data : pathInfo->GetCommitted()) {
+                ui32 dataSize = data.BlobSize();
+                Y_VERIFY(dataSize);
 
-            size += dataSize;
-            if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
-                continue;
+                size += dataSize;
+                if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
+                    continue;
+                }
+                if (granulesOverloaded) {
+                    ++ignored;
+                    CSCounters.SkipIndexationInputDueToGranuleOverload(dataSize);
+                    continue;
+                }
+                ++blobs;
+                bytesToIndex += dataSize;
+                dataToIndex.push_back(&data);
             }
-            if (pMap) {
-                ++ignored;
-                continue;
-            }
-            ++blobs;
-            bytesToIndex += dataSize;
-            dataToIndex.push_back(&data);
         }
     }
 

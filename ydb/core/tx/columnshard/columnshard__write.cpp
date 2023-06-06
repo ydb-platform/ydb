@@ -124,6 +124,25 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     ctx.Send(Ev->Get()->GetSource(), Result.release());
 }
 
+void TColumnShard::OverloadWriteFail(const TString& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    IncCounter(COUNTER_WRITE_FAIL);
+    IncCounter(COUNTER_WRITE_OVERLOAD);
+
+    const auto& record = Proto(ev->Get());
+    const auto& data = record.GetData();
+    const ui64 tableId = record.GetTableId();
+    const ui64 metaShard = record.GetTxInitiator();
+    const ui64 writeId = record.GetWriteId();
+    const TString& dedupId = record.GetDedupId();
+
+    LOG_S_INFO("Write (overload) " << data.size() << " bytes into pathId " << tableId
+        << "overload reason: [" << overloadReason << "]"
+        << " at tablet " << TabletID());
+
+    auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+        TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+    ctx.Send(ev->Get()->GetSource(), result.release());
+}
 
 // EvWrite -> WriteActor (attach BlobId without proto changes) -> EvWrite
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -131,13 +150,13 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
     OnYellowChannels(*ev->Get());
 
-    auto& record = Proto(ev->Get());
-    auto& data = record.GetData();
-    ui64 tableId = record.GetTableId();
-    ui64 metaShard = record.GetTxInitiator();
-    ui64 writeId = record.GetWriteId();
-    TString dedupId = record.GetDedupId();
-    auto putStatus = ev->Get()->GetPutStatus();
+    const auto& record = Proto(ev->Get());
+    const auto& data = record.GetData();
+    const ui64 tableId = record.GetTableId();
+    const ui64 metaShard = record.GetTxInitiator();
+    const ui64 writeId = record.GetWriteId();
+    const TString dedupId = record.GetDedupId();
+    const auto putStatus = ev->Get()->GetPutStatus();
 
     bool isWritable = TablesManager.IsWritableTable(tableId);
     bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !TablesManager.HasPrimaryIndex() || !isWritable;
@@ -175,28 +194,24 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         --WritesInFly; // write successed
         Y_VERIFY(putStatus == NKikimrProto::OK);
         Execute(new TTxWrite(this, ev), ctx);
-    } else if (isOutOfSpace || InsertTable->IsOverloaded(tableId) || ShardOverloaded()) {
+    } else if (isOutOfSpace) {
         IncCounter(COUNTER_WRITE_FAIL);
-
-        if (isOutOfSpace) {
-            IncCounter(COUNTER_OUT_OF_SPACE);
-            LOG_S_ERROR("Write (out of disk space) " << data.size() << " bytes into pathId " << tableId
-                << " at tablet " << TabletID());
-        } else {
-            bool tableOverload = InsertTable->IsOverloaded(tableId);
-            IncCounter(COUNTER_WRITE_OVERLOAD);
-            if (!tableOverload) {
-                IncCounter(COUNTER_WRITE_OVERLOAD_SHARD);
-            }
-
-            LOG_S_INFO("Write (overload) " << data.size() << " bytes into pathId " << tableId
-                << (ShardOverloaded() ? " [shard]" : "") << (tableOverload? " [table]" : "")
-                << " at tablet " << TabletID());
-        }
+        IncCounter(COUNTER_OUT_OF_SPACE);
+        LOG_S_ERROR("Write (out of disk space) " << data.size() << " bytes into pathId " << tableId
+            << " at tablet " << TabletID());
 
         auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
             TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
         ctx.Send(ev->Get()->GetSource(), result.release());
+    } else if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
+        CSCounters.OnOverloadInsertTable(data.size());
+        OverloadWriteFail("insert_table", ev, ctx);
+    } else if (TablesManager.IsOverloaded(tableId)) {
+        CSCounters.OnOverloadGranule(data.size());
+        OverloadWriteFail("granule", ev, ctx);
+    } else if (ShardOverloaded()) {
+        CSCounters.OnOverloadShard(data.size());
+        OverloadWriteFail("shard", ev, ctx);
     } else {
         if (record.HasLongTxId()) {
             // TODO: multiple blobs in one longTx ({longTxId, dedupId} -> writeId)

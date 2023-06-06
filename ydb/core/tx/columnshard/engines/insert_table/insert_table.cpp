@@ -1,22 +1,54 @@
-#include "defs.h"
 #include "insert_table.h"
-#include "db_wrapper.h"
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NOlap {
+
+void TInsertTable::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept {
+    if (!load) {
+        Counters.Inserted.Add(dataSize);
+    }
+    pathInfo.AddInsertedSize(dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
+    ++StatsPrepared.Rows;
+    StatsPrepared.Bytes += dataSize;
+}
+
+void TInsertTable::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept {
+    Counters.Inserted.Erase(dataSize);
+    pathInfo.AddInsertedSize(-1 * (i64)dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
+    Y_VERIFY(--StatsPrepared.Rows >= 0);
+    StatsPrepared.Bytes += dataSize;
+}
+
+void TInsertTable::OnNewCommitted(const ui64 dataSize, const bool load) noexcept {
+    if (!load) {
+        Counters.Committed.Add(dataSize);
+    }
+    ++StatsCommitted.Rows;
+    StatsCommitted.Bytes += dataSize;
+}
+
+void TInsertTable::OnEraseCommitted(TPathInfo& /*pathInfo*/, const ui64 dataSize) noexcept {
+    Counters.Committed.Erase(dataSize);
+    Y_VERIFY(--StatsCommitted.Rows >= 0);
+    StatsCommitted.Bytes -= dataSize;
+}
 
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     TWriteId writeId{data.WriteTxId};
     if (Inserted.contains(writeId)) {
+        Counters.Inserted.SkipAdd(data.BlobSize());
         return false;
     }
 
     dbTable.Insert(data);
-    ui32 dataSize = data.BlobSize();
+    const ui32 dataSize = data.BlobSize();
+    const ui64 pathId = data.PathId;
     if (Inserted.emplace(writeId, std::move(data)).second) {
-        StatsPrepared.Rows = Inserted.size();
-        StatsPrepared.Bytes += dataSize;
+        OnNewInserted(Summary.GetPathInfo(pathId), dataSize);
+    } else {
+        Counters.Inserted.SkipAdd(dataSize);
     }
     return true;
 }
@@ -40,25 +72,25 @@ TInsertTable::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep,
 
         dbTable.EraseInserted(*data);
 
-        ui32 dataSize = data->BlobSize();
-
+        const ui64 dataSize = data->BlobSize();
+        const ui64 pathId = data->PathId;
+        auto* pathInfo = Summary.GetPathInfoOptional(pathId);
         // There could be commit after drop: propose, drop, plan
-        if (pathExists(data->PathId)) {
+        if (pathInfo && pathExists(pathId)) {
             data->Commit(planStep, txId);
             dbTable.Commit(*data);
 
-            if (CommittedByPathId[data->PathId].emplace(std::move(*data)).second) {
-                ++StatsCommitted.Rows;
-                StatsCommitted.Bytes += dataSize;
+            if (pathInfo->AddCommitted(std::move(*data))) {
+                OnNewCommitted(dataSize);
             }
         } else {
              dbTable.Abort(*data);
+             Counters.Aborted.Add(data->BlobSize());
              Aborted.emplace(writeId, std::move(*data));
         }
 
-        if (Inserted.erase(writeId)) {
-            StatsPrepared.Rows = Inserted.size();
-            StatsPrepared.Bytes -= dataSize;
+        if (pathInfo && Inserted.erase(writeId)) {
+            OnEraseInserted(*pathInfo, dataSize);
         }
     }
 
@@ -72,14 +104,17 @@ void TInsertTable::Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWr
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
         if (auto* data = Inserted.FindPtr(writeId)) {
+            Counters.Aborted.Add(data->BlobSize());
             dbTable.EraseInserted(*data);
             dbTable.Abort(*data);
 
-            ui32 dataSize = data->BlobSize();
+            const ui64 pathId = data->PathId;
+            const ui32 dataSize = data->BlobSize();
             Aborted.emplace(writeId, std::move(*data));
             if (Inserted.erase(writeId)) {
-                StatsPrepared.Rows = Inserted.size();
-                StatsPrepared.Bytes -= dataSize;
+                OnEraseInserted(Summary.GetPathInfo(pathId), dataSize);
+            } else {
+                Counters.Inserted.SkipErase(dataSize);
             }
         }
     }
@@ -107,20 +142,19 @@ THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
 THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
     // Committed -> Aborted (for future cleanup)
 
-    TSet<TInsertedData> committed = std::move(CommittedByPathId[pathId]);
-    CommittedByPathId.erase(pathId);
-
-    StatsCommitted.Rows -= committed.size();
-    for (auto& data : committed) {
-        StatsCommitted.Bytes -= data.BlobSize();
-
+    auto pathInfo = Summary.ExtractPathInfo(pathId);
+    if (!pathInfo) {
+        return {};
+    }
+    for (auto& data : pathInfo->GetCommitted()) {
         dbTable.EraseCommitted(data);
-
+        OnEraseCommitted(*pathInfo, data.BlobSize());
         TInsertedData copy = data;
         copy.Undo();
         dbTable.Abort(copy);
 
         TWriteId writeId{copy.WriteTxId};
+        Counters.Aborted.Add(copy.BlobSize());
         Aborted.emplace(writeId, std::move(copy));
     }
 
@@ -137,14 +171,17 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
 }
 
 void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data) {
-    if (!CommittedByPathId.contains(data.PathId)) {
+    TPathInfo* pathInfo = Summary.GetPathInfoOptional(data.PathId);
+    if (!pathInfo) {
+        Counters.Committed.SkipErase(data.BlobSize());
         return;
     }
 
     dbTable.EraseCommitted(data);
-    if (CommittedByPathId[data.PathId].erase(data)) {
-        --StatsCommitted.Rows;
-        StatsCommitted.Bytes -= data.BlobSize();
+    if (pathInfo->EraseCommitted(data)) {
+        OnEraseCommitted(*pathInfo, data.BlobSize());
+    } else {
+        Counters.Committed.SkipErase(data.BlobSize());
     }
 }
 
@@ -155,15 +192,14 @@ void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) 
     }
 
     dbTable.EraseAborted(data);
+    Counters.Aborted.Erase(data.BlobSize());
     Aborted.erase(writeId);
 }
 
 bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
-    Inserted.clear();
-    CommittedByPathId.clear();
-    Aborted.clear();
+    Clear();
 
-    if (!dbTable.Load(Inserted, CommittedByPathId, Aborted, loadTime)) {
+    if (!dbTable.Load(*this, loadTime)) {
         return false;
     }
 
@@ -172,15 +208,13 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
     StatsPrepared = {};
     StatsCommitted = {};
 
-    StatsPrepared.Rows = Inserted.size();
     for (auto& [_, data] : Inserted) {
-        StatsPrepared.Bytes += data.BlobSize();
+        OnNewInserted(Summary.GetPathInfo(data.PathId), data.BlobSize());
     }
 
-    for (auto& [_, set] : CommittedByPathId) {
-        StatsCommitted.Rows += set.size();
-        for (auto& data : set) {
-            StatsCommitted.Bytes += data.BlobSize();
+    for (auto& [pathId, pathInfo] : Summary.GetPathInfo()) {
+        for (auto& data : pathInfo.GetCommitted()) {
+            OnNewCommitted(data.BlobSize());
         }
     }
 
@@ -188,29 +222,21 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
 }
 
 std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot) const {
-    const auto* committed = CommittedByPathId.FindPtr(pathId);
-    if (!committed) {
+    const TPathInfo* pInfo = Summary.GetPathInfoOptional(pathId);
+    if (!pInfo) {
         return {};
     }
 
     std::vector<TCommittedBlob> ret;
-    ret.reserve(committed->size());
+    ret.reserve(pInfo->GetCommitted().size());
 
-    for (const auto& data : *committed) {
+    for (const auto& data : pInfo->GetCommitted()) {
         if (std::less_equal<TSnapshot>()(data.GetSnapshot(), snapshot)) {
             ret.emplace_back(TCommittedBlob(data.BlobId, data.GetSnapshot(), data.GetSchemaSnapshot()));
         }
     }
 
     return ret;
-}
-
-void TInsertTable::SetOverloaded(ui64 pathId, bool overload) {
-    if (overload) {
-        PathsOverloaded.insert(pathId);
-    } else {
-        PathsOverloaded.erase(pathId);
-    }
 }
 
 }

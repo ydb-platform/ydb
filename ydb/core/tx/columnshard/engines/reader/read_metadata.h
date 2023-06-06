@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/counters.h>
 #include <ydb/core/tx/columnshard/columnshard__scan.h>
 #include <ydb/core/tx/columnshard/columnshard_common.h>
+#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/predicate/predicate.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>

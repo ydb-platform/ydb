@@ -1009,6 +1009,7 @@ private:
 
         struct TStatisticsNode {
             std::map<TString, TStatisticsNode> Children;
+            TString Name;
             i64 Avg;
             i64 Count;
             i64 Min;
@@ -1017,6 +1018,29 @@ private:
             void Write(NYson::TYsonWriter& writer) {
                 writer.OnBeginMap();
                 if (Children.empty()) {
+                    if (Name.EndsWith("Us")) { // TDuration
+                        writer.OnKeyedItem("sum");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Sum).ToString());
+                        writer.OnKeyedItem("count");
+                        writer.OnInt64Scalar(Count);
+                        writer.OnKeyedItem("avg");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Avg).ToString());
+                        writer.OnKeyedItem("max");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Max).ToString());
+                        writer.OnKeyedItem("min");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Min).ToString());
+                    } else if (Name.EndsWith("Ms")) { // TInstant
+                        writer.OnKeyedItem("sum");
+                        writer.OnStringScalar("N/A");
+                        writer.OnKeyedItem("count");
+                        writer.OnInt64Scalar(Count);
+                        writer.OnKeyedItem("avg");
+                        writer.OnStringScalar(TInstant::MilliSeconds(Avg).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnKeyedItem("max");
+                        writer.OnStringScalar(TInstant::MilliSeconds(Max).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnKeyedItem("min");
+                        writer.OnStringScalar(TInstant::MilliSeconds(Min).FormatLocalTime("%H:%M:%S.%ms"));
+                    } else {
                         writer.OnKeyedItem("sum");
                         writer.OnInt64Scalar(Sum);
                         writer.OnKeyedItem("count");
@@ -1027,6 +1051,7 @@ private:
                         writer.OnInt64Scalar(Max);
                         writer.OnKeyedItem("min");
                         writer.OnInt64Scalar(Min);
+                    }
                 } else {
                     for (auto& [name, child]: Children) {
                         writer.OnKeyedItem(name);
@@ -1063,6 +1088,7 @@ private:
 
             node = &node->Children[name];
 
+            node->Name = name;
             node->Sum = metric.GetSum();
             node->Count = metric.GetCount();
             node->Avg = metric.GetAvg();

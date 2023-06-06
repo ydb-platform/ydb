@@ -83,6 +83,30 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
         });
     }
 
+    Y_UNIT_TEST(TestStartsWith) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockOptBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockOptBoolType);
+        });
+    }
+
+    Y_UNIT_TEST(TestEndsWith) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockOptBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::EndsWith, blockStringType, blockStringType, blockOptBoolType);
+        });
+    }
+
+    Y_UNIT_TEST(TestStringContains) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockOptBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockOptBoolType);
+        });
+    }
+
     Y_UNIT_TEST(TestUdf) {
         TestOne([](auto& b,auto& ctx) {
             auto blockOptStringType = ctx.template MakeType<TBlockExprType>(

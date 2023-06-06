@@ -49,6 +49,15 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     case EBinaryOp::Div:
         Items_.emplace_back(Pb_.BlockFunc("Div", returnType, { arg1, arg2 }));
         break;
+    case EBinaryOp::StartsWith:
+        Items_.emplace_back(Pb_.BlockFunc("StartsWith", returnType, { arg1, arg2 }));
+        break;
+    case EBinaryOp::EndsWith:
+        Items_.emplace_back(Pb_.BlockFunc("EndsWith", returnType, { arg1, arg2 }));
+        break;
+    case EBinaryOp::StringContains:
+        Items_.emplace_back(Pb_.BlockFunc("StringContains", returnType, { arg1, arg2 }));
+        break;    
     }
 
     return Items_.size() - 1;

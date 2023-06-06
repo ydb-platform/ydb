@@ -159,6 +159,7 @@ public:
     void Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr &ev);
     void Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
+    void Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
 
@@ -175,6 +176,8 @@ public:
             // Events from clients
             hFuncTraced(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
             hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
+            // Resolve
+            hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -197,6 +200,8 @@ public:
             hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
             hFuncTraced(TEvConsole::TEvConfigNotificationResponse, Handle);
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            // Resolve
+            hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
 
             // Ignore these console requests until we get rid of persistent subscriptions-related code
             IgnoreFunc(TEvConsole::TEvAddConfigSubscriptionResponse);
@@ -909,6 +914,19 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
         subscription->UpdateInProcessYamlVersion = std::nullopt;
         subscription->UpdateInProcess = nullptr;
     }
+}
+
+
+void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
+    auto Response = MakeHolder<TEvConsole::TEvGetNodeLabelsResponse>();
+
+    for (const auto& [label, value] : Labels) {
+        auto *labelSer = Response->Record.MutableResponse()->add_labels();
+        labelSer->set_label(label);
+        labelSer->set_value(value);
+    }
+
+    Send(ev->Sender, Response.Release());
 }
     
 IActor *CreateConfigsDispatcher(

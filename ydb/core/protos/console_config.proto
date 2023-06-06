@@ -3,6 +3,7 @@ import "ydb/core/protos/config.proto";
 import "ydb/core/protos/console_base.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/draft/ydb_dynamic_config.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";
@@ -236,13 +237,20 @@ message TConfigureResponse {
     repeated TAffectedConfig AffectedConfigs = 3;
 }
 
-message TApplyConfigRequest {
-    optional Ydb.DynamicConfig.ApplyConfigRequest Request = 1;
+message TSetYamlConfigRequest {
+    optional Ydb.DynamicConfig.SetConfigRequest Request = 1;
     optional bytes UserToken = 2;
 }
 
-message TApplyConfigResponse {
-    optional Ydb.DynamicConfig.ApplyConfigResponse Response = 1;
+message TSetYamlConfigResponse {
+}
+
+message TReplaceYamlConfigRequest {
+    optional Ydb.DynamicConfig.ReplaceConfigRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TReplaceYamlConfigResponse {
 }
 
 message TDropConfigRequest {
@@ -251,7 +259,6 @@ message TDropConfigRequest {
 }
 
 message TDropConfigResponse {
-    optional Ydb.DynamicConfig.DropConfigResponse Response = 1;
 }
 
 message TAddVolatileConfigRequest {
@@ -260,7 +267,6 @@ message TAddVolatileConfigRequest {
 }
 
 message TAddVolatileConfigResponse {
-    optional Ydb.DynamicConfig.AddVolatileConfigResponse Response = 1;
 }
 
 message TGetAllConfigsRequest {
@@ -269,7 +275,25 @@ message TGetAllConfigsRequest {
 }
 
 message TGetAllConfigsResponse {
-    optional Ydb.DynamicConfig.GetConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.GetConfigResult Response = 1;
+}
+
+message TGetNodeLabelsRequest {
+    optional Ydb.DynamicConfig.GetNodeLabelsRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TGetNodeLabelsResponse {
+    optional Ydb.DynamicConfig.GetNodeLabelsResult Response = 1;
+}
+
+message TGetAllMetadataRequest {
+    optional Ydb.DynamicConfig.GetMetadataRequest Request = 1;
+    optional bytes UserToken = 2;
+}
+
+message TGetAllMetadataResponse {
+    optional Ydb.DynamicConfig.GetMetadataResult Response = 1;
 }
 
 message TRemoveVolatileConfigRequest {
@@ -278,7 +302,6 @@ message TRemoveVolatileConfigRequest {
 }
 
 message TRemoveVolatileConfigResponse {
-    optional Ydb.DynamicConfig.RemoveVolatileConfigResponse Response = 1;
 }
 
 message TResolveConfigRequest {
@@ -287,7 +310,7 @@ message TResolveConfigRequest {
 }
 
 message TResolveConfigResponse {
-    optional Ydb.DynamicConfig.ResolveConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.ResolveConfigResult Response = 1;
 }
 
 message TResolveAllConfigRequest {
@@ -296,10 +319,21 @@ message TResolveAllConfigRequest {
 }
 
 message TResolveAllConfigResponse {
-    optional Ydb.DynamicConfig.ResolveAllConfigResponse Response = 1;
+    optional Ydb.DynamicConfig.ResolveAllConfigResult Response = 1;
 }
 
 message TGetYamlConfigRequest {
+}
+
+message TUnauthorized {
+}
+
+message TDisabled {
+}
+
+message TGenericError {
+    repeated Ydb.Issue.IssueMessage Issues = 1;
+    optional Ydb.StatusIds.StatusCode YdbStatus = 2;
 }
 
 message TVolatileYamlConfig {
@@ -550,6 +584,7 @@ message TToggleConfigValidatorRequest {
 message TToggleConfigValidatorResponse {
     optional TStatus Status = 1;
 }
+
 enum EValidationLevel {
     // Validation is disabled.
     VALIDATE_NONE = 0;

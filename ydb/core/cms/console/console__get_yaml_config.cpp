@@ -9,40 +9,24 @@ using namespace NKikimrConsole;
 class TConfigsManager::TTxGetYamlConfig : public TTransactionBase<TConfigsManager> {
 public:
     TTxGetYamlConfig(TConfigsManager *self,
-                  TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
+                     TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
     {
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &) override
+    bool Execute(TTransactionContext &, const TActorContext &) override
     {
-        NIceDb::TNiceDb db(txc.DB);
-
-        auto rowset = db.Table<Schema::YamlConfig>()
-            .Reverse()
-            .Select<Schema::YamlConfig::TColumns>();
-
-        if (!rowset.IsReady())
-            return false;
-
         Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
-        auto *op = Response->Record.MutableResponse()->mutable_operation();
-        op->set_status(Ydb::StatusIds::SUCCESS);
-        op->set_ready(true);
 
-        Response->Record.MutableResponse()->set_cluster(Self->ClusterName);
-        Response->Record.MutableResponse()->set_version(Self->YamlVersion);
+        Response->Record.MutableResponse()->mutable_identity()->set_cluster(Self->ClusterName);
+        Response->Record.MutableResponse()->mutable_identity()->set_version(Self->YamlVersion);
+        Response->Record.MutableResponse()->set_config(Self->YamlConfig);
 
-        if (!rowset.EndOfSet()) {
-            auto config = rowset.template GetValue<Schema::YamlConfig::Config>();
-            Response->Record.MutableResponse()->set_config(config);
-
-            for (auto &[id, cfg] : Self->VolatileYamlConfigs) {
-                auto *config = Response->Record.MutableResponse()->add_volatile_configs();
-                config->set_id(id);
-                config->set_config(cfg);
-            }
+        for (auto &[id, cfg] : Self->VolatileYamlConfigs) {
+            auto *config = Response->Record.MutableResponse()->add_volatile_configs();
+            config->set_id(id);
+            config->set_config(cfg);
         }
 
         return true;

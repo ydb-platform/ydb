@@ -109,9 +109,11 @@ private:
     class TTxUpdateLastProvidedConfig;
     class TTxGetLogTail;
     class TTxLogCleanup;
-    class TTxApplyYamlConfig;
+    class TTxReplaceYamlConfig;
+    class TTxSetYamlConfig;
     class TTxDropYamlConfig;
     class TTxGetYamlConfig;
+    class TTxGetYamlMetadata;
 
     ITransaction *CreateTxAddConfigSubscription(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev);
     ITransaction *CreateTxCleanupSubscriptions(TEvInterconnect::TEvNodesInfo::TPtr &ev);
@@ -123,9 +125,11 @@ private:
     ITransaction *CreateTxUpdateLastProvidedConfig(TEvConsole::TEvConfigNotificationResponse::TPtr &ev);
     ITransaction *CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxLogCleanup();
-    ITransaction *CreateTxApplyYamlConfig(TEvConsole::TEvApplyConfigRequest::TPtr &ev);
+    ITransaction *CreateTxReplaceYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxSetYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
     ITransaction *CreateTxDropYamlConfig(TEvConsole::TEvDropConfigRequest::TPtr &ev);
     ITransaction *CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev);
+    ITransaction *CreateTxGetYamlMetadata(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev);
 
     void Handle(TEvConsole::TEvAddConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &ev, const TActorContext &ctx);
@@ -136,13 +140,16 @@ private:
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvToggleConfigValidatorRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetLogTailRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvResolveConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvConsole::TEvApplyConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvPrivate::TEvStateLoaded::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvCleanupSubscriptions::TPtr &ev, const TActorContext &ctx);
@@ -154,13 +161,7 @@ private:
         if (CheckRights(ev->Get()->Record.GetUserToken())) {
             Handle(ev, ctx);
         } else {
-            auto req = MakeHolder<typename std::decay_t<decltype(*ev->Get())>::TResponse>();
-            auto *op = req->Record.MutableResponse()->mutable_operation();
-            op->set_status(Ydb::StatusIds::UNAUTHORIZED);
-            op->set_ready(true);
-            auto issue = op->add_issues();
-            issue->set_severity(NYql::TSeverityIds::S_ERROR);
-            issue->set_message("User must have administrator rights");
+            auto req = MakeHolder<TEvConsole::TEvUnauthorized>();
             ctx.Send(ev->Sender, req.Release());
         }
     }
@@ -183,10 +184,13 @@ private:
             HFunc(TEvConsole::TEvResolveConfigRequest, Handle);
             HFunc(TEvConsole::TEvResolveAllConfigRequest, Handle);
             HFunc(TEvConsole::TEvGetAllConfigsRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvGetNodeLabelsRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvGetAllMetadataRequest, HandleWithRights);
             HFunc(TEvConsole::TEvAddVolatileConfigRequest, HandleWithRights);
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
-            HFuncTraced(TEvConsole::TEvApplyConfigRequest, HandleWithRights);
+            HFuncTraced(TEvConsole::TEvReplaceYamlConfigRequest, HandleWithRights);
+            HFuncTraced(TEvConsole::TEvSetYamlConfigRequest, HandleWithRights);
             HFuncTraced(TEvConsole::TEvDropConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsProvider);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsProvider);

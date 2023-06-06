@@ -210,11 +210,11 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
             if (addColumnNames.contains(columnDiff.GetName())) {
-                errors.AddError(NKikimrScheme::StatusMultipleModifications, TStringBuilder() << "column '" << columnDiff.GetName() << "' have to be either add or update");
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' have to be either add or update");
                 return false;
             }
             if (alterColumnNames.contains(columnDiff.GetName())) {
-                errors.AddError(NKikimrScheme::StatusMultipleModifications, TStringBuilder() << "column '" << columnDiff.GetName() << "' duplication for update");
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' duplication for update");
                 return false;
             }
             alterColumnNames.emplace(columnDiff.GetName());

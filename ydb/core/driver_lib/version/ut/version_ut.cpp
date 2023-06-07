@@ -1,14 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include "version.h"
-
-class TCompatibilityInfoTest {
-public:
-    TCompatibilityInfoTest() = delete;
-
-    static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent) {
-        TCompatibilityInfo::Reset(newCurrent);
-    }
-};
+#include <ydb/core/driver_lib/version/version.h>
+#include "ut_helpers.h"
 
 Y_UNIT_TEST_SUITE(VersionParser) {
     Y_UNIT_TEST(Basic) {

@@ -5337,6 +5337,11 @@ namespace {
         } else if (name == "some") {
             input->SetTypeAnn(lambda->GetTypeAnn());
         } else if (name.StartsWith("pg_")) {
+            if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+                lambda = ConvertToMultiLambda(lambda, ctx.Expr);
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
             auto func = name;
             func.SkipPrefix("pg_");
             TVector<ui32> argTypes;

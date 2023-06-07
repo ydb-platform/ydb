@@ -1707,6 +1707,16 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow, const
         extractor = ctx.NewLambda(pos, std::move(arguments), std::move(aggFuncArgs));
     }
 
+    if (optCtx.Types->PgEmitAggApply && !onWindow) {
+        return ctx.Builder(pos)
+            .Callable("AggApply")
+                .Atom(0, TString("pg_") + func)
+                .Add(1, type)
+                .Add(2, extractor)
+            .Seal()
+            .Build();
+    }
+
     return ctx.Builder(pos)
         .Callable(TString(onWindow ? "PgWindowTraits" : "PgAggregationTraits") + (distinctColumnName ? "Tuple" : ""))
             .Atom(0, func)

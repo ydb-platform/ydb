@@ -773,6 +773,14 @@ namespace {
                     Types.OptLLVM = "OFF";
                 }
             }
+            else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types.PgEmitAggApply = (name == "PgEmitAggApply");
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

@@ -6087,5 +6087,23 @@ bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotation
     return true;
 }
 
+TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext& ctx) {
+    Y_ENSURE(lambda->ChildrenSize() == 2);
+    auto tupleTypeSize = lambda->GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
+    auto newArg = ctx.NewArgument(lambda->Pos(), "row");
+    auto newBody = ctx.ReplaceNode(lambda->TailPtr(), lambda->Head().Head(), newArg);
+    TExprNode::TListType bodies;
+    for (ui32 i = 0; i < tupleTypeSize; ++i) {
+        bodies.push_back(ctx.Builder(lambda->Pos())
+            .Callable("Nth")
+                .Add(0, newBody)
+                .Atom(1, ToString(i))
+            .Seal()
+            .Build());
+    }
+
+    return ctx.NewLambda(lambda->Pos(), ctx.NewArguments(lambda->Pos(), { newArg }), std::move(bodies));
+}
+
 
 } // NYql

@@ -1,5 +1,7 @@
 #include "tabbed_table.h"
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 #include "common.h"
 #include "print_utils.h"
 
@@ -47,7 +49,8 @@ void TAdaptiveTabbedTable::InitializeColumnInfo(size_t maxCols, size_t minColumn
 }
 
 void TAdaptiveTabbedTable::CalculateColumns() {
-    size_t lineLength = TermWidth();
+    auto terminalWidth = GetTerminalWidth();
+    size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     size_t max_length = 0;
     for (auto entry : Entries) {
         if (entry.Name.length() > max_length) {

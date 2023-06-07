@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <util/generic/queue.h>
 
@@ -108,7 +109,7 @@ int TCommandYql::Run(TConfig& config) {
             TConfig& Config;
         };
 
-    
+
         TTerminalOutput::Print("\033[32mYDB Interactive CLI \033[0m");
         TTerminalOutput::Print("\033[31m(experimental, no compatibility guarantees)\033[0m\n\n");
         TInteractiveCli::TConfig interactiveCfg;
@@ -123,7 +124,7 @@ int TCommandYql::Run(TConfig& config) {
 
         return EXIT_SUCCESS;
     } else {
-        return RunCommand(config, Script);    
+        return RunCommand(config, Script);
     }
 }
 
@@ -142,15 +143,15 @@ int TCommandYql::RunCommand(TConfig& config, const TString &script) {
         ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
             ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && 
+        while (!IsInterrupted() &&
             GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
-            
+
             auto asyncResult = client.StreamExecuteYqlScript(
                     script,
                     paramBuilder->Build(),
                     FillSettings(settings)
             );
-            
+
             auto result = asyncResult.GetValueSync();
             ThrowOnError(result);
             if (!PrintResponse(result)) {

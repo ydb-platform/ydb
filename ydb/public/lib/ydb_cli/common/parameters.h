@@ -23,8 +23,6 @@ enum class EBatchMode {
     Adaptive /* "adaptive" */
 };
 
-bool IsStdinInteractive();
-
 class TCommandWithParameters : public TCommandWithExamples {
 protected:
     void ParseParameters(TClientCommand::TConfig& config);

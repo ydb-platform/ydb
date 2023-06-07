@@ -35,7 +35,7 @@ public:
 void BackupFolder(TDriver driver, const TString& database, const TString& relDbPath, TFsPath folderPath,
         const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy = false, bool savePartialResult = false,
-        bool preservePoolKinds = false);
+        bool preservePoolKinds = false, bool ordered = false);
 
 struct TRestoreFolderParams {
     bool OnlyCheck = false;

@@ -22,12 +22,6 @@ get_built_tool_path(
   enum_parser
 )
 get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency
   tools/rescompiler/bin
@@ -99,11 +93,6 @@ generate_enum_serilization(ydb-core-cms
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/node_checkers.h
   INCLUDE_HEADERS
   ydb/core/cms/node_checkers.h
-)
-generate_enum_serilization(ydb-core-cms
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/erasure_checkers.h
-  INCLUDE_HEADERS
-  ydb/core/cms/erasure_checkers.h
 )
 
 add_global_library_for(ydb-core-cms.global ydb-core-cms)

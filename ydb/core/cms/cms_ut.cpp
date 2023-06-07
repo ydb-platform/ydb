@@ -729,6 +729,92 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
     }
 
+    Y_UNIT_TEST(Notifications)
+    {
+        TCmsTestEnv env(8);
+        env.AdvanceCurrentTime(TDuration::Minutes(20));
+
+        // User is not specified.
+        env.CheckNotification(TStatus::WRONG_REQUEST, "", env.GetCurrentTime(),
+                              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+        // Too old.
+        env.CheckNotification(TStatus::WRONG_REQUEST, "user", env.GetCurrentTime() - TDuration::Minutes(10),
+                              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+        // Store notification user-1.
+        auto id1 = env.CheckNotification
+            (TStatus::OK, "user", env.GetCurrentTime() + TDuration::Minutes(10),
+             MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(1, 0)));
+
+        // OK to replace the same device before notification start time.
+        env.CheckPermissionRequest("user", false, true, true, true, TStatus::ALLOW,
+                                   MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(1, 0)));
+
+        // Intersects with notification.
+        env.CheckPermissionRequest("user", false, true, true, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 10 * 60000000, env.PDiskName(1, 0)));
+
+        // Store notification user-2.
+        auto id2 = env.CheckNotification(TStatus::OK, "user", env.GetCurrentTime(),
+                                         MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(2, 0)));
+        // Store notificaiton user1-3.
+        auto id3 = env.CheckNotification(TStatus::OK, "user1", env.GetCurrentTime(),
+                                         MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(3, 0)));
+        // Get notification with no user.
+        env.CheckGetNotification("", id1, TStatus::WRONG_REQUEST);
+        // Get user-1.
+        env.CheckGetNotification("user", id1, TStatus::OK);
+        // Get with wrong user.
+        env.CheckGetNotification("user1", id1, TStatus::WRONG_REQUEST);
+        // Get with wrong id.
+        env.CheckGetNotification("user", "wrong-id", TStatus::WRONG_REQUEST);
+        // List notifications for user.
+        env.CheckListNotifications("user", TStatus::OK, 2);
+        // List notifications for user1.
+        env.CheckListNotifications("user1", TStatus::OK, 1);
+        // List with no user.
+        env.CheckListNotifications("", TStatus::WRONG_REQUEST, 0);
+        // Reject notification with no user.
+        env.CheckRejectNotification("", id1, TStatus::WRONG_REQUEST);
+        // Reject notification with wrong user.
+        env.CheckRejectNotification("user1", id1, TStatus::WRONG_REQUEST);
+        // Reject user-1 (dry run)
+        env.CheckRejectNotification("user", id1, TStatus::OK, true);
+        // Get user-1.
+        env.CheckGetNotification("user", id1, TStatus::OK);
+        // Reject user1-3.
+        env.CheckRejectNotification("user1", id3, TStatus::OK);
+        // Reject user-2.
+        env.CheckRejectNotification("user", id2, TStatus::OK);
+        // List notifications for user.
+        env.CheckListNotifications("user", TStatus::OK, 1);
+        // List notifications for user1.
+        env.CheckListNotifications("user1", TStatus::OK, 0);
+        // Get rejected user1-3.
+        env.CheckGetNotification("user1", id3, TStatus::WRONG_REQUEST);
+        // Get rejected user-2.
+        env.CheckGetNotification("user", id2, TStatus::WRONG_REQUEST);
+        // Get user-1.
+        env.CheckGetNotification("user", id1, TStatus::OK);
+   }
+
+    Y_UNIT_TEST(PermissionDuration) {
+        TCmsTestEnv env(8);
+
+        // Store notification user-1.
+        auto id1 = env.CheckNotification
+            (TStatus::OK, "user", env.GetCurrentTime() + TDuration::Minutes(10),
+             MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(1, 0)));
+
+        // Intersects with notification.
+        const TDuration _10minutes = TDuration::Minutes(10);
+        env.CheckPermissionRequest("user", false, true, true, true, _10minutes, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), _10minutes.MicroSeconds(), env.PDiskName(1, 0)));
+
+        // OK with default duration.
+        env.CheckPermissionRequest("user", false, true, true, true, TStatus::ALLOW,
+                                   MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(1, 0)));
+    }
+
     Y_UNIT_TEST(ActionWithZeroDuration) {
         TCmsTestEnv env(8);
 
@@ -1223,6 +1309,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.RestartCms();
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
@@ -1230,12 +1317,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TFakeNodeWhiteboardService::Info[env.GetNodeId(7)].Connected = false;
         TFakeNodeWhiteboardService::Info[env.GetNodeId(4)].Connected = false;
         TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.RestartCms();
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
 
         // 2dc disabled
         TFakeNodeWhiteboardService::Info[env.GetNodeId(7)].Connected = true;
+        env.RestartCms();
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
@@ -1245,6 +1334,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(5)].Connected = false;
+        env.RestartCms();
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));

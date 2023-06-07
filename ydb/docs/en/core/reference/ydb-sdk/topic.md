@@ -1,3 +1,4 @@
+<!-- This file is not tracked by the automatic translation system. Edits to the RU-version must be made yourself. -->
 # Working with topics
 
 This article provides examples of how to use the {{ ydb-short-name }} SDK to work with [topics](../../concepts/topic.md).
@@ -398,7 +399,11 @@ To read message batches, use the following code:
 
 {% endlist %}
 
-#### Reading with a commit {#commit}
+### Reading with a commit {#commit}
+
+Confirmation of message processing (commit) informs the server that the message from the topic has been processed by the recipient and does not need to be sent anymore. When using acknowledged reading, it is necessary to confirm all received messages without skipping any. Message commits on the server occur after confirming a consecutive interval of messages "without gaps," and the confirmations themselves can be sent in any order.
+
+For example, if messages 1, 2, 3 are received from the server, the program processes them in parallel and sends confirmations in the following order: 1, 3, 2. In this case, message 1 will be committed first, and messages 2 and 3 will be committed only after the server receives confirmation of the processing of message 2.
 
 To commit messages one by one, use the following code:
 

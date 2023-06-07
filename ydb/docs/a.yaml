@@ -49,7 +49,7 @@ ci:
         - on: pr
   releases:
     release-docs:
-      title: Release YDB internal and tech docs
+      title: Release YDB internal, tech and corp docs
       flow: release-docs
       auto: true
       filters:
@@ -73,7 +73,7 @@ ci:
           title: Deploy docs
           task: common/docs/deploy
           input:
-            targets: kikimr/docs/ru/docs_oss;kikimr/docs/ru/docs_tech;kikimr/docs/ru/docs_yfm # путь до вашего проекта от корня Аркадии
+            targets: kikimr/docs/ru/docs_oss;kikimr/docs/ru/docs_tech;kikimr/docs/ru/docs_yfm;kikimr/docs-corp # путь до вашего проекта от корня Аркадии
             arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
             notify: true # отставлять комментарий к ПР с ссылкой на выложенную документацию
 

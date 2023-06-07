@@ -4092,11 +4092,11 @@ public:
         }
 
         TActorSetupCmd profilerSetup(CreateProfilerActor(nullptr, "."), TMailboxType::Simple, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(nodeId), profilerSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(nodeId), std::move(profilerSetup)));
 
         const TActorId nameserviceId = GetNameserviceActorId();
         TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
 
         return setup;
     }
@@ -4140,8 +4140,8 @@ public:
                 NActors::CreateStderrBackend(),
                 counters.GetSubgroup("counters", "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
-        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
-        setup->LocalServices.push_back(loggerActorPair);
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, std::move(loggerActorCmd));
+        setup->LocalServices.push_back(std::move(loggerActorPair));
 
         return logSettings;
     }
@@ -4191,7 +4191,7 @@ public:
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
             dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), args.EnablePutBatching, DefaultEnableVPatch)};
         TActorSetupCmd bsproxySetup(proxyActor.release(), TMailboxType::Revolving, 3);
-        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, bsproxySetup));
+        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, std::move(bsproxySetup)));
 
         TTempDir tempDir;
         NPDisk::TKey mainKey = 123;
@@ -4231,7 +4231,7 @@ public:
                 TActorSetupCmd pDiskSetup(
                     CreatePDisk(pDiskConfig.Get(), mainKeys, counters),
                     TMailboxType::Revolving, 0);
-                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, pDiskSetup));
+                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pdiskId, std::move(pDiskSetup)));
 
                 TVDiskConfig::TBaseInfo baseInfo(
                     env->VDiskIds[i],
@@ -4255,13 +4255,13 @@ public:
 
                 IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters);
                 TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);
-                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->VDisks[i], vDiskSetup));
+                setup2->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->VDisks[i], std::move(vDiskSetup)));
             }
         }
 
         TActorSetupCmd proxyTestSetup(new T(env->ProxyId, bsInfo.Get(), env, args.Parametrs),
                 TMailboxType::Revolving, 0);
-        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyTestId, proxyTestSetup));
+        setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyTestId, std::move(proxyTestSetup)));
 
         //////////////////////////////////////////////////////////////////////////////
         GetServiceCounters(counters, "utils");

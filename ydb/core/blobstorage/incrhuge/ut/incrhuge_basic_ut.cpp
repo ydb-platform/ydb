@@ -67,7 +67,7 @@ public:
         ui64 pDiskCategory = 0;
         TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(Path, PDiskGuid, 1, pDiskCategory);
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), MainKey, Counters), TMailboxType::Revolving, 0);
-        setup->LocalServices.emplace_back(PDiskId, pDiskSetup);
+        setup->LocalServices.emplace_back(PDiskId, std::move(pDiskSetup));
 
         TActorId pdiskActorId;
         if (counter) {
@@ -92,7 +92,7 @@ public:
 
         KeeperId = MakeIncrHugeKeeperId(1);
         TActorSetupCmd keeperSetup(CreateIncrHugeKeeper(settings), TMailboxType::Revolving, 0);
-        setup->LocalServices.emplace_back(KeeperId, keeperSetup);
+        setup->LocalServices.emplace_back(KeeperId, std::move(keeperSetup));
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // LOGGER
@@ -116,7 +116,7 @@ public:
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor{logSettings, NActors::CreateStderrBackend(),
             Counters};
         NActors::TActorSetupCmd loggerActorCmd{loggerActor, NActors::TMailboxType::Simple, 2};
-        setup->LocalServices.emplace_back(loggerActorId, loggerActorCmd);
+        setup->LocalServices.emplace_back(loggerActorId, std::move(loggerActorCmd));
         AppData.reset(new TAppData(0, 1, 2, 1, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr));
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         AppData->IoContextFactory = IoContext.get();

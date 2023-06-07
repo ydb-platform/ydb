@@ -42,6 +42,26 @@ const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
 namespace NActors {
     struct THeSingleSystemEnv { };
 
+    struct TTestActorSetupCmd { // like TActorSetupCmd, but not owning the Actor
+        TTestActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId)
+            : MailboxType(mailboxType)
+            , PoolId(poolId)
+            , Actor(actor)
+        {
+        }
+
+       TTestActorSetupCmd(TActorSetupCmd cmd)
+            : MailboxType(cmd.MailboxType)
+            , PoolId(cmd.PoolId)
+            , Actor(cmd.Actor.release())
+        {
+        }
+
+        TMailboxType::EType MailboxType;
+        ui32 PoolId;
+        IActor* Actor;
+    };
+
     struct TEventMailboxId {
         TEventMailboxId()
             : NodeId(0)
@@ -236,7 +256,7 @@ namespace NActors {
         TMonotonic GetCurrentMonotonicTime() const;
         void UpdateCurrentTime(TInstant newTime);
         void AdvanceCurrentTime(TDuration duration);
-        void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0);
+        void AddLocalService(const TActorId& actorId, TActorSetupCmd cmd, ui32 nodeIndex = 0);
         virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
@@ -574,7 +594,7 @@ namespace NActors {
             TIntrusivePtr<NInterconnect::TPollerThreads> Poller;
             volatile ui64* ActorSystemTimestamp;
             volatile ui64* ActorSystemMonotonic;
-            TVector<std::pair<TActorId, TActorSetupCmd> > LocalServices;
+            TVector<std::pair<TActorId, TTestActorSetupCmd>> LocalServices;
             TMap<TActorId, IActor*> LocalServicesActors;
             TMap<IActor*, TActorId> ActorToActorId;
             THolder<TMailboxTable> MailboxTable;

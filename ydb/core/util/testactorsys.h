@@ -109,8 +109,8 @@ class TTestActorSystem {
     TActorId CurrentRecipient;
     ui32 CurrentNodeId = 0;
     ui64 EventsProcessed = 0;
-    std::unordered_map<ui32, TPerNodeInfo> PerNodeInfo;
     TSingleThreadInterconnectMock InterconnectMock;
+    std::unordered_map<ui32, TPerNodeInfo> PerNodeInfo;
     std::set<TActorId> LoggerActorIds;
 
     static thread_local TTestActorSystem *CurrentTestActorSystem;
@@ -237,15 +237,14 @@ public:
 
         // we create this actor for correct service lookup through ActorSystem
         setup->LocalServices.emplace_back(LoggerSettings_->LoggerActorId, TActorSetupCmd(
-            new TEdgeActor(__FILE__, __LINE__), TMailboxType::Simple, 0));
+            std::make_unique<TEdgeActor>(__FILE__, __LINE__), TMailboxType::Simple, 0));
 
         auto common = MakeIntrusive<TInterconnectProxyCommon>();
         auto& proxyActors = setup->Interconnect.ProxyActors;
         proxyActors.resize(MaxNodeId + 1);
         for (const auto& [peerNodeId, peerInfo] : PerNodeInfo) {
             if (peerNodeId != nodeId) {
-                proxyActors[peerNodeId] = TActorSetupCmd(InterconnectMock.CreateProxyActor(nodeId, peerNodeId,
-                    common).release(), TMailboxType::Simple, 0);
+                proxyActors[peerNodeId] = TActorSetupCmd(InterconnectMock.CreateProxyActor(nodeId, peerNodeId, common), TMailboxType::Simple, 0);
             }
         }
 

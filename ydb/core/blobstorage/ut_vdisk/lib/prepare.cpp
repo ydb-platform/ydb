@@ -164,7 +164,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
         const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     mainKey, counters), TMailboxType::Revolving, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, pDiskSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, std::move(pDiskSetup)));
     }
 }
 
@@ -215,7 +215,7 @@ void TAllVDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, NKikimr::TBlob
         TVDiskInstance &vdisk = VDisks[i];
         if (vdisk.Initialized) {
             TActorSetupCmd vdiskSetup(CreateVDisk(vdisk.Cfg.Get(), groupInfo, counters), TMailboxType::Revolving, 0);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(vdisk.ActorID, vdiskSetup));
+            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(vdisk.ActorID, std::move(vdiskSetup)));
         }
     }
 }
@@ -302,7 +302,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
 
     const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
+    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
 
     ui64 initOwnerRound = 1;
     // setup pdisks
@@ -360,8 +360,8 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
                                                                    NActors::CreateStderrBackend(),
                                                                    Counters->GetSubgroup("logger", "counters"));
     NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 0);
-    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
-    setup1->LocalServices.push_back(loggerActorPair);
+    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, std::move(loggerActorCmd));
+    setup1->LocalServices.push_back(std::move(loggerActorPair));
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// MONITORING SETTINGS /////////////////////////////////

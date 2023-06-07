@@ -589,17 +589,22 @@ void TColumnShard::ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly) {
 
     UpdateBlobMangerCounters();
     if (BlobManager->CanCollectGarbage(cleanupOnly)) {
+        BlobManager->GetCounters().StartCollection->Add(1);
         Execute(CreateTxRunGc(), ctx);
+    } else {
+        BlobManager->GetCounters().SkipCollection->Add(1);
     }
 }
 
 void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivity activity) {
     if (periodic) {
         if (LastPeriodicBackActivation > TInstant::Now() - ActivationPeriod) {
+            CSCounters.OnTooEarly();
             return;
         }
         LastPeriodicBackActivation = TInstant::Now();
     }
+    CSCounters.OnStartBackground();
 
     SendPeriodicStats();
 
@@ -612,39 +617,14 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     // Schedule either indexing or compaction.
     if (activity.HasIndexation() || activity.HasCompaction()) {
         [&] {
-            if (ActiveIndexing || ActiveCompaction > 0) {
-                LOG_S_DEBUG("Indexing or compaction already in progress at tablet " << TabletID());
+            if (BackgroundController.IsIndexingActive()) {
                 return;
             }
-            // Preventing conflicts between indexing and compaction leads to election between them.
-            // Indexing vs compaction probability depends on index and insert table overload status.
-            // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
-            const bool preferIndexing = RandomNumber<ui32>(1000) < 750;
-
-            if (preferIndexing) {
-                if (activity.HasIndexation()) {
-                    if (SetupIndexation()) {
-                        BackgroundActivation++;
-                        return;
-                    }
-                }
-                if (activity.HasCompaction()) {
-                    if (SetupCompaction()) {
-                        return;
-                    }
-                }
-            } else {
-                if (activity.HasCompaction()) {
-                    if (SetupCompaction()) {
-                        BackgroundActivation++;
-                        return;
-                    }
-                }
-                if (activity.HasIndexation()) {
-                    if (SetupIndexation()) {
-                        return;
-                    }
-                }
+            if (activity.HasCompaction()) {
+                SetupCompaction();
+            }
+            if (activity.HasIndexation()) {
+                SetupIndexation();
             }
         }();
     }
@@ -671,16 +651,17 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     }
 }
 
-bool TColumnShard::SetupIndexation() {
+void TColumnShard::SetupIndexation() {
+    CSCounters.OnSetupIndexation();
     ui32 blobs = 0;
     ui32 ignored = 0;
     ui64 size = 0;
     ui64 bytesToIndex = 0;
     std::vector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
-    THashMap<ui64, ui64> overloadedPathGranules;
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
+            const bool hasSplitCompaction = BackgroundController.HasSplitCompaction(pathInfo->GetPathId());
             const bool granulesOverloaded = TablesManager.GetPrimaryIndex()->HasOverloadedGranules(pathInfo->GetPathId());
             for (auto& data : pathInfo->GetCommitted()) {
                 ui32 dataSize = data.BlobSize();
@@ -695,17 +676,16 @@ bool TColumnShard::SetupIndexation() {
                     CSCounters.SkipIndexationInputDueToGranuleOverload(dataSize);
                     continue;
                 }
+                if (hasSplitCompaction) {
+                    ++ignored;
+                    CSCounters.SkipIndexationInputDueToSplitCompaction(dataSize);
+                    continue;
+                }
                 ++blobs;
                 bytesToIndex += dataSize;
                 dataToIndex.push_back(&data);
             }
         }
-    }
-
-    for (auto& [p, cnt] : overloadedPathGranules) {
-        ui64 pathId(p);
-        ui64 count(cnt);
-        LOG_S_INFO("Overloaded granules (" << count << ") for pathId " << pathId << " at tablet " << TabletID());
     }
 
     if (bytesToIndex < (ui64)Limits.MinInsertBytes && blobs < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
@@ -715,9 +695,10 @@ bool TColumnShard::SetupIndexation() {
         // Force small indexations sometimes to keep BatchCache smaller
         if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
             ++SkippedIndexations;
-            return false;
+            return;
         }
     }
+    CSCounters.IndexationInput(bytesToIndex);
     SkippedIndexations = 0;
 
     LOG_S_DEBUG("Prepare indexing " << bytesToIndex << " bytes in " << dataToIndex.size() << " batches of committed "
@@ -739,11 +720,11 @@ bool TColumnShard::SetupIndexation() {
     auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(CompactionLimits.Get(), std::move(data));
     if (!indexChanges) {
         LOG_S_NOTICE("Cannot prepare indexing at tablet " << TabletID());
-        return false;
+        return;
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    ActiveIndexing = true;
+    BackgroundController.StartIndexing();
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
     if (Tiers) {
@@ -751,17 +732,16 @@ bool TColumnShard::SetupIndexation() {
     }
 
     ActorContext().Send(IndexingActor, std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev)));
-    return true;
 }
 
-bool TColumnShard::SetupCompaction() {
-    std::vector<std::unique_ptr<TEvPrivate::TEvCompaction>> events;
+void TColumnShard::SetupCompaction() {
+    CSCounters.OnSetupCompaction();
 
-    while (ActiveCompaction < TSettings::MAX_ACTIVE_COMPACTIONS) {
+    while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto limits = CompactionLimits.Get();
         auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits);
         if (!compactionInfo) {
-            if (events.empty()) {
+            if (!BackgroundController.GetCompactionsCount()) {
                 LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
             }
             break;
@@ -769,38 +749,41 @@ bool TColumnShard::SetupCompaction() {
 
         LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
 
+        auto& g = compactionInfo->GetObject<NOlap::TGranuleMeta>();
+        if (compactionInfo->InGranule()) {
+            CSCounters.OnInternalCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
+        } else {
+            CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
+        }
+
         ui64 outdatedStep = GetOutdatedStep();
+        const NOlap::TPlanCompactionInfo planInfo = compactionInfo->GetPlanCompaction();
         auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(outdatedStep, 0), limits);
         if (!indexChanges) {
-            if (events.empty()) {
+            if (!BackgroundController.GetCompactionsCount()) {
                 LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
             }
             break;
         }
 
+        BackgroundController.StartCompaction(planInfo);
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-        ActiveCompaction++;
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
             Settings.CacheDataAfterCompaction);
         if (Tiers) {
             ev->SetTiering(Tiers->GetTiering());
         }
 
-        events.push_back(std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager));
+        ActorContext().Send(CompactionActor, std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager));
     }
 
-    LOG_S_DEBUG("Compaction events " << events.size() << " ActiveCompaction " << ActiveCompaction << " at tablet " << TabletID());
-
-    for (auto& ev : events) {
-        ActorContext().Send(CompactionActor, std::move(ev));
-    }
-
-    return events.size() != 0;
+    LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());
 }
 
 std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls,
                                                                 bool force) {
-    if (ActiveTtl) {
+    CSCounters.OnSetupTtl();
+    if (BackgroundController.IsTtlActive()) {
         LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
         return {};
     }
@@ -814,7 +797,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         if (Tiers) {
             eviction = Tiers->GetTiering(); // TODO: pathIds
         }
-        TablesManager.AddTtls(eviction, TInstant::Now(), force);
+        TablesManager.AddTtls(eviction, AppData()->TimeProvider->Now(), force);
     }
 
     if (eviction.empty()) {
@@ -842,14 +825,15 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
 
-    ActiveTtl = true;
+    BackgroundController.StartTtl();
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     ev->SetTiering(eviction);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
 
 std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
-    if (ActiveCleanup) {
+    CSCounters.OnSetupCleanup();
+    if (BackgroundController.IsCleanupActive()) {
         LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
         return {};
     }
@@ -899,7 +883,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 
-    ActiveCleanup = true;
+    BackgroundController.StartCleanup();
     return ev;
 }
 

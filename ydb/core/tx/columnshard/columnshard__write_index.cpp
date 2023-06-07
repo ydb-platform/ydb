@@ -169,9 +169,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     // Eviction to S3. TTxExportFinish will delete src blob when dst blob get EEvictState::EXTERN state.
                 } else if (!protectedBlobs.contains(blobId)) {
                     // We could drop the blob immediately
-                    if (!blobsToDrop.contains(blobId)) {
+                    if (blobsToDrop.emplace(blobId).second) {
                         LOG_S_TRACE("Delete evicted blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
-                        blobsToDrop.insert(blobId);
                     }
 
                 }
@@ -181,9 +180,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             for (const auto& portionInfo : changes->PortionsToDrop) {
                 for (const auto& rec : portionInfo.Records) {
                     const auto& blobId = rec.BlobRange.BlobId;
-                    if (!blobsToDrop.contains(blobId)) {
+                    if (blobsToDrop.emplace(blobId).second) {
                         LOG_S_TRACE("Delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
-                        blobsToDrop.insert(blobId);
                     }
                 }
                 Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
@@ -258,6 +256,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     }
 
     Self->FinishWriteIndex(ctx, Ev, ok, blobsWritten, bytesWritten);
+    Self->EnqueueProgressTx(ctx);
     return true;
 }
 
@@ -291,19 +290,17 @@ void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWri
    TablesManager.MutablePrimaryIndex().FreeLocks(changes);
 
     if (changes->IsInsert()) {
-        ActiveIndexing = false;
+        BackgroundController.FinishIndexing();
 
         IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
         IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
         IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
         IncCounter(COUNTER_INDEXING_TIME, ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCompaction()) {
-        ActiveCompaction--;
-
         Y_VERIFY(changes->CompactionInfo);
-        bool inGranule = changes->CompactionInfo->InGranule();
+        BackgroundController.FinishCompaction(changes->CompactionInfo->GetPlanCompaction());
 
-        if (inGranule) {
+        if (changes->CompactionInfo->InGranule()) {
             IncCounter(ok ? COUNTER_COMPACTION_SUCCESS : COUNTER_COMPACTION_FAIL);
             IncCounter(COUNTER_COMPACTION_BLOBS_WRITTEN, blobsWritten);
             IncCounter(COUNTER_COMPACTION_BYTES_WRITTEN, bytesWritten);
@@ -314,11 +311,11 @@ void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWri
         }
         IncCounter(COUNTER_COMPACTION_TIME, ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCleanup()) {
-        ActiveCleanup = false;
+        BackgroundController.FinishCleanup();
 
         IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
-        ActiveTtl = false;
+        BackgroundController.FinishTtl();
 
         IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
         IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);

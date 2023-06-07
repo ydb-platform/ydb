@@ -102,7 +102,7 @@ public:
             return changes;
         }
 
-        static std::shared_ptr<TChanges> BuildClenupChanges(const TMark& defaultMark, const TSnapshot& initSnapshot, const TCompactionLimits& limits) {
+        static std::shared_ptr<TChanges> BuildCleanupChanges(const TMark& defaultMark, const TSnapshot& initSnapshot, const TCompactionLimits& limits) {
             auto changes = std::make_shared<TChanges>(TColumnEngineChanges::CLEANUP, defaultMark, limits, TPrivateTag());
             changes->InitSnapshot = initSnapshot;
             return changes;
@@ -197,7 +197,7 @@ public:
         return VersionedIndex;
     }
 
-    const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
+    const THashSet<ui64>* GetOverloadedGranules(const ui64 pathId) const override {
         return GranulesStorage->GetOverloaded(pathId);
     }
 
@@ -239,7 +239,7 @@ public:
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
-                      const TSnapshot& snapshot) override;
+                      const TSnapshot& snapshot) noexcept override;
 
     void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) override;
 
@@ -286,7 +286,7 @@ private:
     /// Set of empty granules.
     /// Just for providing count of empty granules.
     THashSet<ui64> EmptyGranules;
-    THashSet<ui64> CleanupGranules;
+    TSet<TPortionAddress> CleanupPortions;
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
@@ -314,7 +314,7 @@ private:
         PathGranules.clear();
         PathStats.clear();
         EmptyGranules.clear();
-        CleanupGranules.clear();
+        CleanupPortions.clear();
         Counters.Clear();
 
         LastPortion = 0;
@@ -325,7 +325,7 @@ private:
     bool LoadGranules(IDbWrapper& db);
     bool LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs);
     bool LoadCounters(IDbWrapper& db);
-    bool ApplyChanges(IDbWrapper& db, const TChanges& changes, const TSnapshot& snapshot, bool apply);
+    bool ApplyChanges(IDbWrapper& db, const TChanges& changes, const TSnapshot& snapshot, bool apply) noexcept;
 
     void EraseGranule(ui64 pathId, ui64 granule, const TMark& mark);
 

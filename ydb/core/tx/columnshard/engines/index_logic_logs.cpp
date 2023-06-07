@@ -92,11 +92,11 @@ public:
         , Batch(batch)
         , Schema(schema)
     {
-        if (granuleMeta && granuleMeta->GetSummary().GetOther().GetRecordsCount()) {
-            SortedColumnIds = granuleMeta->GetSummary().GetColumnIdsSortedBySizeDescending();
+        if (granuleMeta && granuleMeta->GetAdditiveSummary().GetOther().GetRecordsCount()) {
+            SortedColumnIds = granuleMeta->GetHardSummary().GetColumnIdsSortedBySizeDescending();
             const auto biggestColumn = SortedColumnIds.front();
             Y_VERIFY(biggestColumn.GetPackedBlobsSize());
-            const double expectedPackedRecordSize = 1.0 * biggestColumn.GetPackedBlobsSize() / granuleMeta->GetSummary().GetOther().GetRecordsCount();
+            const double expectedPackedRecordSize = 1.0 * biggestColumn.GetPackedBlobsSize() / granuleMeta->GetAdditiveSummary().GetOther().GetRecordsCount();
             BaseStepRecordsCount = ExpectedBlobSize / expectedPackedRecordSize;
             for (ui32 i = 1; i < SortedColumnIds.size(); ++i) {
                 Y_VERIFY(SortedColumnIds[i - 1].GetPackedBlobsSize() >= SortedColumnIds[i].GetPackedBlobsSize());
@@ -360,16 +360,9 @@ TConclusion<std::vector<TString>> TIndexationLogic::DoApply(std::shared_ptr<TCol
         changes->AddPathIfNotExists(pathId);
 
         // We could merge data here cause tablet limits indexing data portions
-#if 0
-        auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortDescription()); // insert: no replace
-        Y_VERIFY(merged);
-        Y_VERIFY_DEBUG(NArrow::IsSorted(merged, indexInfo.GetReplaceKey()));
-#else
         auto merged = NArrow::CombineSortedBatches(batches, resultSchema->GetIndexInfo().SortReplaceDescription());
         Y_VERIFY(merged);
         Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, resultSchema->GetIndexInfo().GetReplaceKey()));
-
-#endif
 
         auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {

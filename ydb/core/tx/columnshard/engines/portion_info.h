@@ -221,6 +221,23 @@ struct TPortionMeta {
     }
 };
 
+class TPortionAddress {
+private:
+    YDB_READONLY(ui64, GranuleId, 0);
+    YDB_READONLY(ui64, PortionId, 0);
+public:
+    TPortionAddress(const ui64 granuleId, const ui64 portionId)
+        : GranuleId(granuleId)
+        , PortionId(portionId)
+    {
+
+    }
+
+    bool operator<(const TPortionAddress& item) const {
+        return std::tie(GranuleId, PortionId) < std::tie(item.GranuleId, item.PortionId);
+    }
+};
+
 struct TPortionInfo {
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
@@ -236,6 +253,18 @@ struct TPortionInfo {
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumRecords() const { return Records.size(); }
+
+    bool CheckForCleanup(const TSnapshot& snapshot) const {
+        if (!CheckForCleanup()) {
+            return false;
+        }
+
+        return GetXSnapshot() < snapshot;
+    }
+
+    bool CheckForCleanup() const {
+        return !IsActive();
+    }
 
     bool AllowEarlyFilter() const {
         return Meta.Produced == TPortionMeta::COMPACTED
@@ -259,6 +288,12 @@ struct TPortionInfo {
         Y_VERIFY(!Empty());
         auto& rec = Records[0];
         return rec.Granule;
+    }
+
+    TPortionAddress GetAddress() const {
+        Y_VERIFY(!Empty());
+        auto& rec = Records[0];
+        return TPortionAddress(rec.Granule, rec.Portion);
     }
 
     void SetGranule(ui64 granule) {

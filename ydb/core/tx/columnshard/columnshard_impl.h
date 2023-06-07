@@ -331,6 +331,72 @@ private:
         }
     };
 
+    class TBackgroundController {
+    private:
+        using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
+        bool ActiveIndexing = false;
+        TCurrentCompaction ActiveCompactionInfo;
+        bool ActiveCleanup = false;
+        bool ActiveTtl = false;
+    public:
+        void StartCompaction(const NOlap::TPlanCompactionInfo& info) {
+            Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
+        }
+        void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
+            Y_VERIFY(ActiveCompactionInfo.erase(info.GetPathId()));
+        }
+        const TCurrentCompaction& GetActiveCompaction() const {
+            return ActiveCompactionInfo;
+        }
+        ui32 GetCompactionsCount() const {
+            return ActiveCompactionInfo.size();
+        }
+
+        void StartIndexing() {
+            Y_VERIFY(!ActiveIndexing);
+            ActiveIndexing = true;
+        }
+        void FinishIndexing() {
+            Y_VERIFY(ActiveIndexing);
+            ActiveIndexing = false;
+        }
+        bool IsIndexingActive() const {
+            return ActiveIndexing;
+        }
+
+        void StartCleanup() {
+            Y_VERIFY(!ActiveCleanup);
+            ActiveCleanup = true;
+        }
+        void FinishCleanup() {
+            Y_VERIFY(ActiveCleanup);
+            ActiveCleanup = false;
+        }
+        bool IsCleanupActive() const {
+            return ActiveCleanup;
+        }
+
+        void StartTtl() {
+            Y_VERIFY(!ActiveTtl);
+            ActiveTtl = true;
+        }
+        void FinishTtl() {
+            Y_VERIFY(ActiveTtl);
+            ActiveTtl = false;
+        }
+        bool IsTtlActive() const {
+            return ActiveTtl;
+        }
+
+        bool HasSplitCompaction(const ui64 pathId) const {
+            auto it = ActiveCompactionInfo.find(pathId);
+            if (it == ActiveCompactionInfo.end()) {
+                return false;
+            }
+            return !it->second.IsInternal();
+        }
+    };
+
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 
@@ -353,7 +419,6 @@ private:
     ui64 WritesInFly = 0;
     ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
-    ui64 BackgroundActivation = 0;
     ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
     TString OwnerPath;
 
@@ -401,11 +466,8 @@ private:
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
-    bool ActiveIndexing = false;
-    ui32 ActiveCompaction = 0;
-    bool ActiveCleanup = false;
-    bool ActiveTtl = false;
     ui32 ActiveEvictions = 0;
+    TBackgroundController BackgroundController;
     std::unique_ptr<TBlobManager> BlobManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TSettings Settings;
@@ -465,8 +527,8 @@ private:
 
     void ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly = false);
 
-    bool SetupIndexation();
-    bool SetupCompaction();
+    void SetupIndexation();
+    void SetupCompaction();
     std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {},
                                                       bool force = false);
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();

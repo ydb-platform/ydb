@@ -70,28 +70,23 @@ std::deque<TGranule::TBatchForMerge> TGranule::SortBatchesByPK(const bool revers
     ui32 currentPoolId = 0;
     std::map<TSortableBatchPosition, ui32> poolIds;
     for (auto&& i : batches) {
-        if (!i.GetFrom() && !i.GetTo()) {
+        if (!i.GetFrom()) {
             continue;
         }
-        if (i.GetFrom()) {
-            auto it = poolIds.rbegin();
-            for (; it != poolIds.rend(); ++it) {
-                if (it->first.Compare(*i.GetFrom()) < 0) {
-                    break;
-                }
+        auto it = poolIds.rbegin();
+        for (; it != poolIds.rend(); ++it) {
+            if (it->first.Compare(*i.GetFrom()) < 0) {
+                break;
             }
-            if (it != poolIds.rend()) {
-                i.SetPoolId(it->second);
-                if (i.GetTo()) {
-                    poolIds.erase(it->first);
-                    poolIds.emplace(*i.GetTo(), *i.GetPoolId());
-                } else {
-                    poolIds.erase(it->first);
-                }
-            } else if (i.GetTo()) {
-                i.SetPoolId(++currentPoolId);
-                poolIds.emplace(*i.GetTo(), *i.GetPoolId());
-            }
+        }
+        if (it != poolIds.rend()) {
+            i.SetPoolId(it->second);
+            poolIds.erase(it->first);
+        } else {
+            i.SetPoolId(++currentPoolId);
+        }
+        if (i.GetTo()) {
+            poolIds.emplace(*i.GetTo(), *i.GetPoolId());
         }
     }
     return batches;

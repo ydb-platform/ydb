@@ -172,7 +172,7 @@ ui64 TBatch::GetUsefulBytes(const ui64 bytes) const {
 }
 
 std::shared_ptr<TSortableBatchPosition> TBatch::GetFirstPK(const bool reverse, const TIndexInfo& indexInfo) const {
-    if (!FirstPK || !LastPK) {
+    if (!FirstPK || !ReverseFirstPK) {
         std::shared_ptr<TSortableBatchPosition> from;
         std::shared_ptr<TSortableBatchPosition> to;
         GetPKBorders(reverse, indexInfo, from, to);
@@ -186,8 +186,8 @@ std::shared_ptr<TSortableBatchPosition> TBatch::GetFirstPK(const bool reverse, c
 
 void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::shared_ptr<TSortableBatchPosition>& from, std::shared_ptr<TSortableBatchPosition>& to) const {
     auto indexKey = indexInfo.GetIndexKey();
+    Y_VERIFY(PortionInfo->Valid());
     if (!FirstPK) {
-        Y_VERIFY(PortionInfo->Valid());
         const NArrow::TReplaceKey& minRecord = PortionInfo->IndexKeyStart();
         auto batch = minRecord.ToBatch(indexKey);
         Y_VERIFY(batch);
@@ -195,7 +195,6 @@ void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::
         ReverseLastPK = std::make_shared<TSortableBatchPosition>(batch, 0, indexKey->field_names(), true);
     }
     if (!LastPK) {
-        Y_VERIFY(PortionInfo->Valid());
         const NArrow::TReplaceKey& maxRecord = PortionInfo->IndexKeyEnd();
         auto batch = maxRecord.ToBatch(indexKey);
         Y_VERIFY(batch);

@@ -14,4 +14,8 @@ void TValueAggregationClient::Set(const i64 value) const {
     *ValuePtr = value;
 }
 
+TValueAggregationClient::~TValueAggregationClient() {
+    Set(0);
+}
+
 }

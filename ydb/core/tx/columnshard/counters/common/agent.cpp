@@ -11,14 +11,16 @@ TValueAggregationAgent::TValueAggregationAgent(const TString& signalName, const 
 
 }
 
-bool TValueAggregationAgent::CalcAggregations(i64& minValue, i64& maxValue) const {
+bool TValueAggregationAgent::CalcAggregations(i64& sum, i64& minValue, i64& maxValue) const {
     const ui32 count = Values.size();
     if (!count) {
         return false;
     }
+    sum = 0;
     minValue = Values.front();
     maxValue = Values.front();
     for (ui32 i = 0; i < count; ++i) {
+        sum += Values[i];
         if (minValue > Values[i]) {
             minValue = Values[i];
         }
@@ -30,12 +32,13 @@ bool TValueAggregationAgent::CalcAggregations(i64& minValue, i64& maxValue) cons
 }
 
 std::optional<NKikimr::NColumnShard::TSignalAggregations> TValueAggregationAgent::GetAggregations() const {
+    i64 sum;
     i64 min;
     i64 max;
-    if (!CalcAggregations(min, max)) {
+    if (!CalcAggregations(sum, min, max)) {
         return {};
     }
-    return TSignalAggregations(SumValue, min, max);
+    return TSignalAggregations(sum, min, max);
 }
 
 void TValueAggregationAgent::ResendStatus() const {

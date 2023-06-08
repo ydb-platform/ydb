@@ -946,7 +946,7 @@ bool TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec, bool apply) {
         Y_VERIFY(PathGranules[rec.PathId].emplace(mark, rec.Granule).second);
 
         // Allocate granule info and ensure that there is no granule with same id inserted before.
-        Y_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage)).second);
+        Y_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second);
     } else {
         // Granule with same id already exists.
         if (Granules.contains(rec.Granule)) {

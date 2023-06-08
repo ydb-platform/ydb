@@ -11,6 +11,7 @@ private:
     i64* ValuePtr = nullptr;
 public:
     TValueAggregationClient(std::shared_ptr<TValueAggregationAgent> owner);
+    ~TValueAggregationClient();
 
     void Set(const i64 value) const;
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 
@@ -30,27 +31,10 @@ public:
     }
 };
 
-class TDataClassSummary {
+class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
-    i64 PortionsSize = 0;
-    i64 MaxColumnsSize = 0;
-    i64 PortionsCount = 0;
-    i64 RecordsCount = 0;
     friend class TGranuleMeta;
 public:
-    i64 GetPortionsSize() const {
-        return PortionsSize;
-    }
-    i64 GetRecordsCount() const {
-        return RecordsCount;
-    }
-    i64 GetMaxColumnsSize() const {
-        return MaxColumnsSize;
-    }
-    i64 GetPortionsCount() const {
-        return PortionsCount;
-    }
-
     void AddPortion(const TPortionInfo& info) {
         const auto sizes = info.BlobsSizes();
         PortionsSize += sizes.first;
@@ -219,9 +203,11 @@ private:
     TCompactionPriorityInfo CompactionPriorityInfo;
     mutable bool AllowInsertionFlag = false;
     std::shared_ptr<TGranulesStorage> Owner;
+    const NColumnShard::TGranuleDataCounters Counters;
 
     void OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter);
     void OnAfterChangePortion();
+    void OnAdditiveSummaryChange() const;
 public:
     const TGranuleHardSummary& GetHardSummary() const {
         if (!HardSummaryCache) {
@@ -229,12 +215,7 @@ public:
         }
         return *HardSummaryCache;
     }
-    const TGranuleAdditiveSummary& GetAdditiveSummary() const {
-        if (!AdditiveSummaryCache) {
-            RebuildAdditiveMetrics();
-        }
-        return *AdditiveSummaryCache;
-    }
+    const TGranuleAdditiveSummary& GetAdditiveSummary() const;
     TCompactionPriority GetCompactionPriority() const {
         return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary());
     }
@@ -304,9 +285,11 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner)
+    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
         : Owner(owner)
-        , Record(rec) {
+        , Counters(counters)
+        , Record(rec)
+    {
     }
 
     ui64 GetGranuleId() const {

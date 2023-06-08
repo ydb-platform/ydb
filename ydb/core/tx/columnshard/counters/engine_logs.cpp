@@ -6,6 +6,7 @@ namespace NKikimr::NColumnShard {
 
 TEngineLogsCounters::TEngineLogsCounters()
     : TBase("EngineLogs")
+    , GranuleDataAgent("EngineLogs")
 {
     OverloadGranules = TBase::GetValue("Granules/Overload");
     CompactOverloadGranulesSelection = TBase::GetDeriviative("Granules/Selection/Overload/Count");

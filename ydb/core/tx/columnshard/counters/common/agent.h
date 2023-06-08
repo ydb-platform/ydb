@@ -26,10 +26,9 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMin;
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMax;
     std::deque<i64> Values;
-    i64 SumValue;
     TMutex Mutex;
 
-    bool CalcAggregations(i64& minValue, i64& maxValue) const;
+    bool CalcAggregations(i64& sum, i64& minValue, i64& maxValue) const;
     std::optional<TSignalAggregations> GetAggregations() const;
 
 public:

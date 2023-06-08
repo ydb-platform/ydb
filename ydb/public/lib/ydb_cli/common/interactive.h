@@ -7,5 +7,11 @@ namespace NConsoleClient {
 
 bool AskYesOrNo();
 
+bool IsStdinInteractive();
+
+bool IsStdoutInteractive();
+
+std::optional<size_t> GetTerminalWidth();
+
 }
 }

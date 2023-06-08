@@ -1,6 +1,8 @@
 #include "command.h"
 #include "normalize_path.h"
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -95,7 +97,9 @@ TClientCommand::TClientCommand(const TString& name, const std::initializer_list<
     HideOption("svnrevision");
     Opts.AddHelpOption('h');
     ChangeOptionDescription("help", "Print usage");
-    Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(TermWidth())));
+    auto terminalWidth = GetTerminalWidth();
+    size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
+    Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
 }
 
 ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {

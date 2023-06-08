@@ -35,21 +35,10 @@ jobs:
       run: |
         wget https://github.com/allure-framework/allurectl/releases/latest/download/allurectl_linux_386 -O ~/allurectl
         chmod +x ~/allurectl
-    - name: Checkout ccache
-      uses: actions/checkout@v3
-      with:
-        repository: ccache/ccache
-        path: ccache
-    - name: Build ccache
+    - name: install ccache
       shell: bash
       run: |
-        pwd
-        cd ccache
-        mkdir build && cd build
-        cmake -DCMAKE_BUILD_TYPE=Release ..
-        make -j32
-        make install
-        mkdir -p ~/.ccache
-        echo 'remote_storage = http://${{secrets.rc_auth}}${{vars.REMOTE_CACHE_URL}}' > /root/.ccache/ccache.conf
-        echo 'max_size = 50G' >> /root/.ccache/ccache.conf
-        ccache -p
+        export CCACHE_VERSION=4.8.1
+        curl -L https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/ccache-${CCACHE_VERSION}-linux-x86_64.tar.xz \
+          | tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${CCACHE_VERSION}-linux-x86_64/ccache
+        ls -la /usr/local/bin/ccache

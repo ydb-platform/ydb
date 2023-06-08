@@ -219,15 +219,25 @@ struct TYdbPqNoRetryState : NYdb::NPersQueue::IRetryPolicy::IRetryState {
 struct TYdbPqTestRetryPolicy : IRetryPolicy {
     TYdbPqTestRetryPolicy(const TDuration& delay = TDuration::MilliSeconds(2000))
         : Delay(delay)
-    {}
+    {
+        Cerr << "====TYdbPqTestRetryPolicy()\n";
+    }
 
     IRetryState::TPtr CreateRetryState() const override {
+        Cerr << "====CreateRetryState\n";
         if (AtomicSwap(&OnFatalBreakDown, 0)) {
             return std::make_unique<TYdbPqNoRetryState>();
         }
-        if (AtomicGet(Initialized_)) {
+        if (AtomicGet(Initialized_)) 
+        {
+            Cerr << "====CreateRetryState Initialized\n";
             auto res = AtomicSwap(&OnBreakDown, 0);
             UNIT_ASSERT(res);
+            for (size_t i = 0; i < 100; i++) {
+                if (AtomicGet(CurrentRetries) == 0)
+                    break;
+                Sleep(TDuration::MilliSeconds(100));
+            }
             UNIT_ASSERT(AtomicGet(CurrentRetries) == 0);
         }
         auto retryCb = [this]() mutable {this->RetryDone();};
@@ -254,6 +264,13 @@ struct TYdbPqTestRetryPolicy : IRetryPolicy {
         }
     }
     void ExpectBreakDown() {
+        // Either TYdbPqTestRetryPolicy() or Initialize() should be called beforehand in order to set OnBreakDown=0
+        Cerr << "====ExpectBreakDown\n";
+        for (size_t i = 0; i < 100; i++) {
+            if (AtomicGet(OnBreakDown) == 0)
+                break;
+            Sleep(TDuration::MilliSeconds(100));
+        }
         UNIT_ASSERT(AtomicGet(OnBreakDown) == 0);
         AtomicSet(CurrentRetries, 0);
         AtomicSet(OnBreakDown, 1);
@@ -289,7 +306,7 @@ struct TYdbPqTestRetryPolicy : IRetryPolicy {
         repairFuture.Wait();
     }
 
-    void Initialized() {
+    void Initialize() {
         AtomicSet(Initialized_, 1);
         AtomicSet(CurrentRetries, 0);
     }

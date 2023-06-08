@@ -731,16 +731,18 @@ public:
         runtime->DispatchEvents(options);
     }
 
-    ui32 TopicCreated(const TString& name, ui64 cacheSize = 0) {
+    ui32 GetTopicVersionFromMetadata(const TString& name, ui64 cacheSize = 0) {
         TAutoPtr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest()->MutableCmdGetTopicMetadata();
         req->AddTopic(name);
-
+        
+        Cerr << "GetTopicVersionFromMetadata request: " << name << Endl;
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SyncCall(request, reply);
-        Cerr << "Topic created - response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cerr << "GetTopicVersionFromMetadata response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
         if (status != NBus::MESSAGE_OK)
             return 0;
+
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
         const NMsgBusProxy::TBusResponse* response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
         UNIT_ASSERT(response);
@@ -766,12 +768,12 @@ public:
         return topicInfo.GetConfig().GetVersion();
     }
 
-    ui32 TopicRealCreated(const TString& name) {
+    ui32 GetTopicVersionFromPath(const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + name);
-        Cerr << res->Record << "\n";
-        return res->Record.GetPathDescription().GetPersQueueGroup().GetAlterVersion();
+        ui32 version = res->Record.GetPathDescription().GetPersQueueGroup().GetAlterVersion();
+        Cerr << "GetTopicVersionFromPath: " << " record " <<  res->Record  << " name " << name << " version" << version << "\n";
+        return version;
     }
-
 
     void RestartBalancerTablet(TTestActorRuntime* runtime, const TString& topic) {
         TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + topic);
@@ -855,11 +857,12 @@ public:
         ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
     }
 
-
     void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
                              const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"},
                              const TMaybe<TString>& account = Nothing(), bool expectFail = false
     ) {
+        Cerr << "CreateTopicNoLegacy: " << name << Endl;
+
         TString path = name;
         if (UseConfigTables && !path.StartsWith("/Root") && !account.Defined()) {
             path = TStringBuilder() << "/Root/PQ/" << name;
@@ -906,15 +909,13 @@ public:
         } while (true);
     }
 
-    void CreateTopic(
-            const TRequestCreatePQ& createRequest,
-            bool doWait = true
+    void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true
     ) {
         const TInstant start = TInstant::Now();
 
         THolder<NMsgBusProxy::TBusPersQueue> request = createRequest.GetRequest();
 
-        ui32 prevVersion = TopicCreated(createRequest.Topic);
+        ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
         TAutoPtr<NBus::TBusMessage> reply;
         const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply);
         UNIT_ASSERT(response);
@@ -922,11 +923,11 @@ public:
                                    TStringBuilder() << "proxy failure: " << response->Record.DebugString());
 
         AddTopic(createRequest.Topic);
-        while (doWait && TopicRealCreated(createRequest.Topic) != prevVersion + 1) {
+        while (doWait && GetTopicVersionFromPath(createRequest.Topic) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (doWait && TopicCreated(createRequest.Topic, prevVersion) != prevVersion + 1) {
+        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
@@ -984,7 +985,7 @@ public:
         TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
         THolder<NMsgBusProxy::TBusPersQueue> request = requestDescr.GetRequest();
 
-        ui32 prevVersion = TopicCreated(name);
+        ui32 prevVersion = GetTopicVersionFromMetadata(name);
 
         TAutoPtr<NBus::TBusMessage> reply;
         const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
@@ -994,11 +995,11 @@ public:
 
         const TInstant start = TInstant::Now();
         AlterTopic();
-        while (TopicCreated(name, cacheSize) != prevVersion + 1) {
+        while (GetTopicVersionFromMetadata(name, cacheSize) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (TopicRealCreated(name) != prevVersion + 1) {
+        while (GetTopicVersionFromPath(name) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
@@ -1394,10 +1395,12 @@ private:
 
 public:
     void AddTopic(const TString& topic, const TMaybe<TString>& dc = Nothing()) {
+        Cerr << "AddTopic: " << topic << Endl;
         return AddOrRemoveTopic(topic, true, dc);
     }
 
     void RemoveTopic(const TString& topic) {
+        Cerr << "RemoveTopic: " << topic << Endl;
         return AddOrRemoveTopic(topic, false);
     }
 

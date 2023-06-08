@@ -50,12 +50,20 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&ConsumerThreadCount);
+    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
+        .DefaultValue(50)
+        .StoreResult(&Percentile);
 
     config.IsNetworkIntensive = true;
 }
 
-void TCommandWorkloadTopicRunRead::Parse(TConfig& config) {
+void TCommandWorkloadTopicRunRead::Parse(TConfig& config) 
+{
     TClientCommand::Parse(config);
+
+    if (Percentile >= 100) {
+        throw TMisuseException() << "--percentile should be less than 100.";
+    }
 }
 
 int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
@@ -63,7 +71,7 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
     Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(0, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(0, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
 
     std::vector<std::future<void>> threads;

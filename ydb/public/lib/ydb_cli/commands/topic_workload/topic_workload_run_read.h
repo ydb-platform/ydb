@@ -17,7 +17,8 @@ namespace NYdb {
 
         private:
             size_t Seconds;
-
+            ui8 Percentile;
+            
             ui32 ConsumerThreadCount;
             ui32 ConsumerCount;
 

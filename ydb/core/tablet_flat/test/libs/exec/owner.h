@@ -76,6 +76,8 @@ namespace NFake {
                     logl << "Got kill req for Tablet " << Info->TabletID;
 
                 Send(Agent, new TEvents::TEvPoison);
+            } else if (eh->CastAsLocal<TEvTablet::TEvReady>()) {
+
             } else {
                 Y_Fail("Unexpected event " << eh->GetTypeName());
             }

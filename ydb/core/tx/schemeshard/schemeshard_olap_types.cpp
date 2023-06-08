@@ -184,12 +184,14 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        TSet<TString> addColumnNames;
-        if (alterRequest.DropColumnsSize()) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, "Drop columns method not supported for tablestore and table");
-            return false;
+        for (const auto& column: alterRequest.GetDropColumns()) {
+            if (!DropColumns.emplace(column.GetName()).second) {
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, "Duplicated column for drop");
+                return false;
+            }
         }
-
+        
+        TSet<TString> addColumnNames;
         for (auto& columnSchema : alterRequest.GetAddColumns()) {
             TOlapColumnAdd column({});
             if (!column.ParseFromRequest(columnSchema, errors)) {
@@ -278,6 +280,7 @@ namespace NKikimr::NSchemeShard {
                 }
             }
         }
+
         if (KeyColumnIds.empty()) {
             auto it = orderedKeyColumnIds.begin();
             for (ui32 i = 0; i < orderedKeyColumnIds.size(); ++i, ++it) {
@@ -289,6 +292,22 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
         }
+
+        for (const auto& columnName : schemaUpdate.GetDropColumns()) {
+            auto columnInfo = GetColumnByName(columnName);
+            if (!columnInfo) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown column for drop: " << columnName);
+                return false;
+            }
+
+            if (columnInfo->IsKeyColumn()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot remove pk column: " << columnName);
+                return false;
+            }
+            ColumnsByName.erase(columnName);
+            Columns.erase(columnInfo->GetId());
+        }
+
         ++Version;
         return true;
     }

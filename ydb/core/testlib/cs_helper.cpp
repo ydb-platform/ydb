@@ -59,7 +59,7 @@ void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirN
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch) const {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus) const {
     auto* runtime = Server.GetRuntime();
 
     UNIT_ASSERT(batch);
@@ -87,7 +87,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
             }
             Cerr << "\n";
         }
-        UNIT_ASSERT_VALUES_EQUAL(op.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
         });
 
     TDispatchOptions options;

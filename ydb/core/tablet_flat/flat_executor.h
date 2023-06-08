@@ -598,7 +598,7 @@ class TExecutor
 
     // Compaction read support
 
-    void PostponeCompactionRead(TCompactionReadState* state, TPageCollectionReadEnv* env);
+    void PostponeCompactionRead(TCompactionReadState* state);
     size_t UnpinCompactionReadPages(TCompactionReadState* state);
     void PlanCompactionReadActivation();
     void Handle(TEvPrivate::TEvActivateCompactionRead::TPtr& ev, const TActorContext& ctx);

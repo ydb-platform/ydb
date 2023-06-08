@@ -1,3 +1,5 @@
+#include "tpch.h"
+
 #include <util/string/split.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
@@ -7,13 +9,9 @@
 #include <util/folder/path.h>
 
 #include <library/cpp/json/json_writer.h>
-#include <library/cpp/http/simple/http_client.h>
-#include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include "click_bench.h"
 #include "benchmark_utils.h"
 
 
@@ -24,83 +22,32 @@ using namespace NYdb::NTable;
 using namespace NYdb::NConsoleClient::BenchmarkUtils;
 
 namespace {
-
-static const char DefaultTablePath[] = "clickbench/hits";
-
-class TExternalVariable {
-private:
-    TString Id;
-    TString Value;
-public:
-    TExternalVariable() = default;
-
-    TExternalVariable(const TString& id, const TString& value)
-        : Id(id)
-        , Value(value) {
-
+    int getQueryNumber(int queryN) {
+        return queryN + 1;
     }
-
-    const TString& GetId() const {
-        return Id;
-    }
-
-    const TString& GetValue() const {
-        return Value;
-    }
-
-    bool DeserializeFromString(const TString& vStr) {
-        TStringBuf sb(vStr.data(), vStr.size());
-        TStringBuf l, r;
-        if (!sb.TrySplit('=', l, r)) {
-            Cerr << "Incorrect variables format: have to be a=b, but really have: " << sb << Endl;
-            return false;
-        }
-        Id = l;
-        Value = r;
-        return true;
-    }
-};
-
 }
 
-TVector<TString> TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
+
+TVector<TString> TTpchCommandRun::GetQueries() const {
     TVector<TString> queries;
-    if (ExternalQueries) {
-        queries = StringSplitter(ExternalQueries).Split(';').ToList<TString>();
-    } else if (ExternalQueriesFile) {
-        TFileInput fInput(ExternalQueriesFile);
-        queries = StringSplitter(fInput.ReadAll()).Split(';').ToList<TString>();
-    } else if (ExternalQueriesDir) {
-        TFsPath queriesDir(ExternalQueriesDir);
-        TVector<TString> queriesList;
-        queriesDir.ListNames(queriesList);
-        std::sort(queriesList.begin(), queriesList.end());
-        for (auto&& i : queriesList) {
-            const TString expectedFileName = "q" + ::ToString(queries.size()) + ".sql";
-            Y_VERIFY(i == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [0, N - 1], where N is requests count");
-            TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
-            queries.emplace_back(fInput.ReadAll());
-        }
-    } else {
-        queries = StringSplitter(NResource::Find("click_bench_queries.sql")).Split(';').ToList<TString>();
-    }
-    auto strVariables = StringSplitter(ExternalVariablesString).Split(';').SkipEmpty().ToList<TString>();
-    TVector<TExternalVariable> vars;
-    for (auto&& i : strVariables) {
-        TExternalVariable v;
-        Y_VERIFY(v.DeserializeFromString(i));
-        vars.emplace_back(v);
-    }
-    vars.emplace_back("table", "`" + fullTablePath + "`");
-    for (auto&& i : queries) {
-        for (auto&& v : vars) {
-            SubstGlobal(i, "{" + v.GetId() + "}", v.GetValue());
-        }
+    TFsPath queriesDir(ExternalQueriesDir);
+    TVector<TString> queriesList;
+    queriesDir.ListNames(queriesList);
+    std::sort(queriesList.begin(), queriesList.end(), [](const TString& l, const TString& r) {
+        auto leftNum = l.substr(1);
+        auto rightNum = r.substr(1);
+        return std::stoi(leftNum) < std::stoi(rightNum);
+        });
+    for (auto&& queryFileName : queriesList) {
+        const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
+        Y_VERIFY(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
+        TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
+        queries.emplace_back(fInput.ReadAll());
     }
     return queries;
 }
 
-bool TClickBenchCommandRun::RunBench(TConfig& config)
+bool TTpchCommandRun::RunBench(TConfig& config)
 {
     TOFStream outFStream{OutFilePath};
 
@@ -115,7 +62,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
-    const TVector<TString> qtokens = GetQueries(FullTablePath(config.Database, Table));
+    const TVector<TString> qtokens = GetQueries();
     bool allOkay = true;
 
     std::map<ui32, TTestInfo> QueryRuns;
@@ -132,7 +79,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         std::vector<TDuration> timings;
         timings.reserve(IterationsCount);
 
-        Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
+        Cout << Sprintf("Query%02u", getQueryNumber(queryN)) << ":" << Endl;
         Cerr << "Query text:\n" << Endl;
         Cerr << query << Endl << Endl;
 
@@ -148,12 +95,12 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
                 timings.emplace_back(duration);
                 ++successIteration;
                 if (successIteration == 1) {
-                    outFStream << queryN << ": " << Endl
+                    outFStream << getQueryNumber(queryN) << ": " << Endl
                         << res.first << res.second << Endl << Endl;
                 }
             } else {
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ": " << query << Endl
+                Cerr << getQueryNumber(queryN) << ": " << query << Endl
                      << res.first << res.second << Endl;
                 Sleep(TDuration::Seconds(1));
             }
@@ -167,7 +114,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Y_VERIFY(success);
         auto& testInfo = inserted->second;
 
-        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f |", queryN,
+        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f |", getQueryNumber(queryN),
             testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
             testInfo.Mean * 0.001, testInfo.Std * 0.001) << Endl;
         if (collectJsonSensors) {
@@ -215,7 +162,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 }
 
 
-TString TClickBenchCommandRun::PatchQuery(const TStringBuf& original) const {
+TString TTpchCommandRun::PatchQuery(const TStringBuf& original) const {
     TString result(original.data(), original.size());
 
     if (!QuerySettings.empty()) {
@@ -235,7 +182,7 @@ TString TClickBenchCommandRun::PatchQuery(const TStringBuf& original) const {
 }
 
 
-bool TClickBenchCommandRun::NeedRun(const ui32 queryIdx) const {
+bool TTpchCommandRun::NeedRun(const ui32 queryIdx) const {
     if (QueriesToRun.size() && !QueriesToRun.contains(queryIdx)) {
         return false;
     }
@@ -246,22 +193,21 @@ bool TClickBenchCommandRun::NeedRun(const ui32 queryIdx) const {
 }
 
 
-TClickBenchCommandInit::TClickBenchCommandInit()
-    : TYdbCommand("init", {"i"}, "Initialize table")
+TTpchCommandInit::TTpchCommandInit()
+    : TYdbCommand("init", {"i"}, "Initialize tables")
 {}
 
-void TClickBenchCommandInit::Config(TConfig& config) {
+void TTpchCommandInit::Config(TConfig& config) {
     NYdb::NConsoleClient::TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.Opts->AddLongOption('p', "path", "Table name to work with")
+    config.Opts->AddLongOption('p', "path", "Folder name to create tables in")
         .Optional()
-        .RequiredArgument("NAME")
-        .DefaultValue(DefaultTablePath)
+        .DefaultValue("")
         .Handler1T<TStringBuf>([this](TStringBuf arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
             }
-            Table = arg;
+            TablesPath = arg;
         });
     config.Opts->AddLongOption("store", "Storage type."
             " Options: row, column\n"
@@ -270,14 +216,33 @@ void TClickBenchCommandInit::Config(TConfig& config) {
         .DefaultValue("row").StoreResult(&StoreType);
 };
 
-int TClickBenchCommandInit::Run(TConfig& config) {
+void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
+    if (StoreType == "column") {
+        SubstGlobal(createSql, "{partition_customer}", "PARTITION BY HASH(c_custkey)");
+        SubstGlobal(createSql, "{partition_lineitem}", "PARTITION BY HASH(l_orderkey)");
+        SubstGlobal(createSql, "{partition_nation}", "PARTITION BY HASH(n_nationkey)");
+        SubstGlobal(createSql, "{partition_orders}", "PARTITION BY HASH(o_orderkey)");
+        SubstGlobal(createSql, "{partition_part}", "PARTITION BY HASH(p_partkey)");
+        SubstGlobal(createSql, "{partition_partsupp}", "PARTITION BY HASH(ps_partkey)");
+        SubstGlobal(createSql, "{partition_region}", "PARTITION BY HASH(r_regionkey)");
+        SubstGlobal(createSql, "{partition_supplier}", "PARTITION BY HASH(s_suppkey)");
+    } else {
+        SubstGlobal(createSql, "{partition_customer}", "");
+        SubstGlobal(createSql, "{partition_lineitem}", "");
+        SubstGlobal(createSql, "{partition_nation}", "");
+        SubstGlobal(createSql, "{partition_orders}", "");
+        SubstGlobal(createSql, "{partition_part}", "");
+        SubstGlobal(createSql, "{partition_partsupp}", "");
+        SubstGlobal(createSql, "{partition_region}", "");
+        SubstGlobal(createSql, "{partition_supplier}", "");
+    }
+}
+
+int TTpchCommandInit::Run(TConfig& config) {
     StoreType = to_lower(StoreType);
-    TString partitionBy = "";
     TString storageType = "";
     TString notNull = "";
     if (StoreType == "column") {
-        //partitionBy = "PARTITION BY HASH(CounterID)"; Not enough cardinality in CounterID column @sa KIKIMR-16478
-        partitionBy = "PARTITION BY HASH(EventTime)";
         storageType = "STORE = COLUMN,";
         notNull = "NOT NULL";
     } else if (StoreType != "row") {
@@ -286,58 +251,50 @@ int TClickBenchCommandInit::Run(TConfig& config) {
 
     auto driver = CreateDriver(config);
 
-    TString createSql = NResource::Find("click_bench_schema.sql");
+    TString createSql = NResource::Find("tpch_schema.sql");
     TTableClient client(driver);
 
-    SubstGlobal(createSql, "{table}", FullTablePath(config.Database, Table));
     SubstGlobal(createSql, "{notnull}", notNull);
-    SubstGlobal(createSql, "{partition}", partitionBy);
+    SubstGlobal(createSql, "{path}", TablesPath);
     SubstGlobal(createSql, "{store}", storageType);
+    SetPartitionByCols(createSql);
 
     ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();
     }));
 
-    Cout << "Table created." << Endl;
+    Cout << "Tables are created." << Endl;
     driver.Stop(true);
     return 0;
 };
 
-TClickBenchCommandClean::TClickBenchCommandClean()
-    : TYdbCommand("clean", {}, "Drop table")
+TTpchCommandClean::TTpchCommandClean()
+    : TYdbCommand("clean", {}, "Drop tables")
 {}
 
-void TClickBenchCommandClean::Config(TConfig& config) {
+void TTpchCommandClean::Config(TConfig& config) {
     NYdb::NConsoleClient::TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.Opts->AddLongOption('p', "path", "Table name to work with")
-        .Optional()
-        .RequiredArgument("NAME")
-        .DefaultValue(DefaultTablePath)
-        .Handler1T<TStringBuf>([this](TStringBuf arg) {
-            if (arg.StartsWith('/')) {
-                ythrow NLastGetopt::TUsageException() << "Path must be relative";
-            }
-            Table = arg;
-        });
 };
 
-int TClickBenchCommandClean::Run(TConfig& config) {
+int TTpchCommandClean::Run(TConfig& config) {
     auto driver = CreateDriver(config);
+    TTableClient client(driver);
 
     static const char DropDdlTmpl[] = "DROP TABLE `%s`;";
     char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
-    TString fullPath = FullTablePath(config.Database, Table);
-    int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
-    if (res < 0) {
-        Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
-        return -1;
-    }
-    TTableClient client(driver);
+    for (auto& table : Tables) {
+        TString fullPath = FullTablePath(config.Database, table);
+        int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
+        if (res < 0) {
+            Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
+            return -1;
+        }
 
-    ThrowOnError(client.RetryOperationSync([dropDdl](TSession session) {
-        return session.ExecuteSchemeQuery(dropDdl).GetValueSync();
-    }));
+        ThrowOnError(client.RetryOperationSync([dropDdl](TSession session) {
+            return session.ExecuteSchemeQuery(dropDdl).GetValueSync();
+        }));
+    }
 
     Cout << "Clean succeeded." << Endl;
     driver.Stop(true);
@@ -345,11 +302,11 @@ int TClickBenchCommandClean::Run(TConfig& config) {
 };
 
 
-TClickBenchCommandRun::TClickBenchCommandRun()
+TTpchCommandRun::TTpchCommandRun()
     : TYdbCommand("run", {"b"}, "Perform benchmark")
 {}
 
-void TClickBenchCommandRun::Config(TConfig& config) {
+void TTpchCommandRun::Config(TConfig& config) {
     TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("output", "Save queries output to file")
@@ -369,29 +326,8 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     config.Opts->AddLongOption("query-settings", "Query settings.")
         .DefaultValue("")
         .AppendTo(&QuerySettings);
-    config.Opts->AddLongOption("ext-queries-file", "File with external queries. Separated by ';'")
-        .DefaultValue("")
-        .StoreResult(&ExternalQueriesFile);
     config.Opts->AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
-        .DefaultValue("")
         .StoreResult(&ExternalQueriesDir);
-    TString externalVariables;
-    config.Opts->AddLongOption("ext-query-variables", "v1_id=v1_value;v2_id=v2_value;...; applied for queries {v1_id} -> v1_value")
-        .DefaultValue("")
-        .StoreResult(&ExternalVariablesString);
-    config.Opts->AddLongOption("table", "Table to work with")
-        .Optional()
-        .RequiredArgument("NAME")
-        .DefaultValue(DefaultTablePath)
-        .Handler1T<TStringBuf>([this](TStringBuf arg) {
-            if (arg.StartsWith('/')) {
-                ythrow NLastGetopt::TUsageException() << "Path must be relative";
-            }
-            Table = arg;
-        });
-    config.Opts->AddLongOption('q', "ext-query", "String with external queries. Separated by ';'")
-        .DefaultValue("")
-        .StoreResult(&ExternalQueries);
 
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {
         for (const auto& token : StringSplitter(line).Split(',').SkipEmpty()) {
@@ -411,12 +347,12 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     };
 
     auto includeOpt = config.Opts->AddLongOption("include",
-        "Run only specified queries (ex.: 0,1,2,3,5-10,20)")
+        "Run only specified queries (ex.: 1,2,3,5-10,20)")
         .Optional()
         .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
             QueriesToRun.clear();
             fillTestCases(line, [this](ui32 q) {
-                QueriesToRun.insert(q);
+                QueriesToRun.insert(q-1);
             });
         });
     auto excludeOpt = config.Opts->AddLongOption("exclude",
@@ -432,17 +368,17 @@ void TClickBenchCommandRun::Config(TConfig& config) {
 };
 
 
-int TClickBenchCommandRun::Run(TConfig& config) {
+int TTpchCommandRun::Run(TConfig& config) {
     const bool okay = RunBench(config);
     return !okay;
 };
 
-TCommandClickBench::TCommandClickBench()
-    : TClientCommandTree("clickbench", {}, "ClickBench workload (ClickHouse OLAP test)")
+TCommandTpch::TCommandTpch()
+    : TClientCommandTree("tpch", {}, "TPC-H workload")
 {
-    AddCommand(std::make_unique<TClickBenchCommandRun>());
-    AddCommand(std::make_unique<TClickBenchCommandInit>());
-    AddCommand(std::make_unique<TClickBenchCommandClean>());
+    AddCommand(std::make_unique<TTpchCommandRun>());
+    AddCommand(std::make_unique<TTpchCommandInit>());
+    AddCommand(std::make_unique<TTpchCommandClean>());
 }
 
 } // namespace NYdb::NConsoleClient

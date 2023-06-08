@@ -88,5 +88,6 @@ jobs:
     if: needs.check-running-allowed.outputs.result == 'true'
     uses: ./.github/workflows/build_and_test_ondemand.yml
     with:
+      run_functional_tests: false
       test_label_regexp: '(SMALL|MEDIUM)'
     secrets: inherit

@@ -1,6 +1,6 @@
--KqpFederatedQuery
--KqpScanSpilling::SelfJoin
--KqpSpillingFileTests::StartError
--RetryPolicy::TWriteSession_SeqNoShift
--TPgCodegen::PgFixedFuncBC
--TPgCodegen::PgStrFuncBC
+KqpFederatedQuery
+KqpScanSpilling::SelfJoin
+KqpSpillingFileTests::StartError
+RetryPolicy::TWriteSession_SeqNoShift
+TPgCodegen::PgFixedFuncBC
+TPgCodegen::PgStrFuncBC

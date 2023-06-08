@@ -102,7 +102,12 @@ protected:
             if (OutputWaiting->IsFull()) {
                 return;
             }
-            OutputWaiting->Push(std::move(WaitingValue));
+            if (OutputWidth.Defined()) {
+                YQL_ENSURE(OutputWidth == WideWaitingValues.size());
+                OutputWaiting->WidePush(WideWaitingValues.data(), *OutputWidth);
+            } else {
+                OutputWaiting->Push(std::move(WaitingValue));
+            }
             IsWaitingFlag = false;
         }
     }

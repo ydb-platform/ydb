@@ -101,9 +101,10 @@ public:
         , SortCols(std::move(sortCols))
         , Stats(stats)
     {
-        CurrentBuffers.resize(Inputs.size());
+        CurrentBuffers.reserve(Inputs.size());
         CurrentItemIndexes.reserve(Inputs.size());
         for (ui32 idx = 0; idx < Inputs.size(); ++idx) {
+            CurrentBuffers.emplace_back(Inputs[idx]->GetInputType());
             CurrentItemIndexes.emplace_back(TUnboxedValuesIterator<IsWide>(*this, Inputs[idx], CurrentBuffers[idx]));
         }
         for (auto& sortCol : SortCols) {

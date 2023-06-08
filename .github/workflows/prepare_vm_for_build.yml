@@ -28,7 +28,7 @@ jobs:
         echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
         sudo apt-get update
         sudo apt-get -y install python-is-python3 git cmake python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev parallel
-        sudo pip3 install conan==1.59 pytest==7.1.3 grpcio grpcio-tools PyHamcrest tornado xmltodict pyarrow
+        sudo pip3 install conan==1.59 pytest==7.1.3 pytest-timeout grpcio grpcio-tools PyHamcrest tornado xmltodict pyarrow
     - name: Install AllureCtl
       if: false
       shell: bash

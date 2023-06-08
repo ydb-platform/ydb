@@ -6,14 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-testing-gbenchmark_main)
-target_link_libraries(cpp-testing-gbenchmark_main PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-benchmark
-  cpp-testing-hook
-)
-target_sources(cpp-testing-gbenchmark_main PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/testing/gbenchmark_main/main.cpp
-)
+add_subdirectory(benchmark)

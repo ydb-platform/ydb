@@ -14,6 +14,7 @@ items:
 - { name: Скан запросы,                           href: scan_query.md }
 - { name: Ограничения базы данных,                href: limits-ydb.md }
 - { name: Многоверсионное управление конкурентным доступом (MVCC), href: mvcc.md }
+- { name: Реализация облачных полномочий через права YDB, href: iam-roles-to-ydb-permissions.md }
 - name: Кластер YDB
   items:
   - name: Обзор

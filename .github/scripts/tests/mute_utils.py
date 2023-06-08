@@ -13,13 +13,14 @@ class MutedTestCheck:
     def populate(self, fn):
         with open(fn, "r") as fp:
             for line in fp:
-                if line.startswith("-"):
-                    line = line[1:].rstrip()
-                    if "::" in line:
-                        cls, method = line.split("::", maxsplit=1)
-                        self.methods.add((cls, method))
-                    else:
-                        self.classes.add(line)
+                line = line.strip()
+                if not line:
+                    continue
+                if "::" in line:
+                    cls, method = line.split("::", maxsplit=1)
+                    self.methods.add((cls, method))
+                else:
+                    self.classes.add(line)
 
     def __call__(self, cls, method=None):
         if cls in self.classes:

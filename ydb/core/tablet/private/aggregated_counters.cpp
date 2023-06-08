@@ -602,7 +602,8 @@ void TAggregatedLabeledCounters::FromProto(
     const NKikimrLabeledCounters::TTabletLabeledCounters& labeledCounters) const {
     for (const auto& counter : labeledCounters.GetLabeledCounter()) {
         const ui32 nameId{counter.GetNameId()};
-        if (strlen(Names[nameId]) != 0) {
+
+        if (nameId < Size() && strlen(Names[nameId]) != 0) {
             // TODO: ASDFGS if CT_TIMELAG -> ctx.Now() - counters.GetValue
             const bool derived = counter.GetType() == TLabeledCounterOptions::CT_DERIV;
             auto namedCounter = group->GetNamedCounter("name", Names[nameId], derived);

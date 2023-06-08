@@ -81,6 +81,8 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
     if (op->IsAborted()) {
         // Make sure we confirm aborts with a commit
         op->SetWaitCompletionFlag(true);
+    } else if (DataShard.IsFollower()) {
+        // It doesn't matter whether we wait or not
     } else if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
         auto res = PromoteImmediatePostExecuteEdges(op.Get(), txc);
 

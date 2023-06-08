@@ -453,4 +453,5 @@ enum ETxTypes {
     TXTYPE_CDC_STREAM_SCAN_RUN  = 75                      [(TxTypeOpts) = {Name: "TTxCdcStreamScanRun"}];
     TXTYPE_CDC_STREAM_SCAN_PROGRESS = 76                  [(TxTypeOpts) = {Name: "TTxCdcStreamScanProgress"}];
     TXTYPE_FIND_WRITE_CONFLICTS = 77                      [(TxTypeOpts) = {Name: "TTxFindWriteConflicts"}];
+    TXTYPE_UPDATE_FOLLOWER_READ_EDGE = 78                 [(TxTypeOpts) = {Name: "TxUpdateFollowerReadEdge"}];
 }

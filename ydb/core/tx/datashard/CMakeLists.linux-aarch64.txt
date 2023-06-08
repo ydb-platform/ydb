@@ -270,6 +270,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/finalize_build_index_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/finish_propose_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/follower_edge.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/initiate_build_index_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/key_conflicts.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/load_and_wait_in_rs_unit.cpp

@@ -2312,7 +2312,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TestReadKey(NKikimrTxDataShard::CELLVEC, true);
     }
 
-    Y_UNIT_TEST(ShouldNotReadMvccFromFollower) {
+    Y_UNIT_TEST(ShouldNotReadFutureMvccFromFollower) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -2326,7 +2326,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
     Y_UNIT_TEST(ShouldReadHeadFromFollower) {
@@ -2791,24 +2791,27 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvMediatorTimecast::EvUpdate: {
+                    auto* update = event->Get<TEvMediatorTimecast::TEvUpdate>();
+                    lastStep = update->Record.GetTimeBarrier();
+                    Cerr << "... observed TEvUpdate(" << lastStep << ")" << Endl;
                     if (captureTimecast) {
-                        auto update = event->Get<TEvMediatorTimecast::TEvUpdate>();
-                        lastStep = update->Record.GetTimeBarrier();
                         Cerr << "---- dropped EvUpdate ----" << Endl;
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
                 }
                 case TEvMediatorTimecast::EvWaitPlanStep: {
+                    auto* waitEvent = event->Get<TEvMediatorTimecast::TEvWaitPlanStep>();
+                    Cerr << "... observed TEvWaitPlanStep(" << waitEvent->PlanStep << ")" << Endl;
                     if (captureWaitNotify) {
-                        auto waitEvent = event->Get<TEvMediatorTimecast::TEvWaitPlanStep>();
                         waitPlanStep = waitEvent->PlanStep;
                     }
                     break;
                 }
                 case TEvMediatorTimecast::EvNotifyPlanStep: {
+                    auto* notifyEvent = event->Get<TEvMediatorTimecast::TEvNotifyPlanStep>();
+                    Cerr << "... observed TEvNotifyPlanStep(" << notifyEvent->PlanStep << ")" << Endl;
                     if (captureWaitNotify) {
-                        auto notifyEvent = event->Get<TEvMediatorTimecast::TEvNotifyPlanStep>();
                         notifyPlanStep = notifyEvent->PlanStep;
                     }
                     break;
@@ -2835,7 +2838,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         captureWaitNotify = true;
 
         // future snapshot
-        snapshot = TRowVersion(lastStep + 1000, Max<ui64>());
+        snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
         auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
@@ -2845,7 +2848,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         auto readResult1 = helper.SendRead("table-1", request1.release());
 
-        waitFor([&]{ return notifyPlanStep != 0; }, "intercepted TEvNotifyPlanStep");
+        waitFor([&]{ return notifyPlanStep >= snapshot.Step; }, TStringBuilder() << "intercepted TEvNotifyPlanStep for snapshot " << snapshot);
         UNIT_ASSERT_VALUES_EQUAL(waitPlanStep, snapshot.Step);
         UNIT_ASSERT_VALUES_EQUAL(notifyPlanStep, snapshot.Step);
 
@@ -2917,24 +2920,27 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvMediatorTimecast::EvUpdate: {
+                    auto* update = event->Get<TEvMediatorTimecast::TEvUpdate>();
+                    lastStep = update->Record.GetTimeBarrier();
+                    Cerr << "... observed TEvUpdate(" << lastStep << ")" << Endl;
                     if (captureTimecast) {
-                        auto update = event->Get<TEvMediatorTimecast::TEvUpdate>();
-                        lastStep = update->Record.GetTimeBarrier();
                         Cerr << "---- dropped EvUpdate ----" << Endl;
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
                 }
                 case TEvMediatorTimecast::EvWaitPlanStep: {
+                    auto* waitEvent = event->Get<TEvMediatorTimecast::TEvWaitPlanStep>();
+                    Cerr << "... observed TEvWaitPlanStep(" << waitEvent->PlanStep << ")" << Endl;
                     if (captureWaitNotify) {
-                        auto waitEvent = event->Get<TEvMediatorTimecast::TEvWaitPlanStep>();
                         waitPlanStep = waitEvent->PlanStep;
                     }
                     break;
                 }
                 case TEvMediatorTimecast::EvNotifyPlanStep: {
+                    auto* notifyEvent = event->Get<TEvMediatorTimecast::TEvNotifyPlanStep>();
+                    Cerr << "... observed TEvNotifyPlanStep(" << notifyEvent->PlanStep << ")" << Endl;
                     if (captureWaitNotify) {
-                        auto notifyEvent = event->Get<TEvMediatorTimecast::TEvNotifyPlanStep>();
                         notifyPlanStep = notifyEvent->PlanStep;
                     }
                     break;
@@ -2965,7 +2971,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         captureWaitNotify = true;
 
         // future snapshot
-        snapshot = TRowVersion(lastStep + 1000, Max<ui64>());
+        snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
         auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
@@ -2975,13 +2981,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         helper.SendReadAsync("table-1", request1.release());
 
-        waitFor([&]{ return waitPlanStep != 0; }, "intercepted TEvWaitPlanStep");
+        waitFor([&]{ return waitPlanStep >= snapshot.Step; }, "intercepted TEvWaitPlanStep");
         UNIT_ASSERT_VALUES_EQUAL(waitPlanStep, snapshot.Step);
-        UNIT_ASSERT_VALUES_EQUAL(notifyPlanStep, 0);
+        UNIT_ASSERT_LT(notifyPlanStep, snapshot.Step);
 
         helper.SendCancel("table-1", 1);
 
-        waitFor([&]{ return notifyPlanStep != 0; }, "intercepted TEvNotifyPlanStep");
+        waitFor([&]{ return notifyPlanStep >= snapshot.Step; }, "intercepted TEvNotifyPlanStep");
         UNIT_ASSERT_VALUES_EQUAL(waitPlanStep, snapshot.Step);
         UNIT_ASSERT_VALUES_EQUAL(notifyPlanStep, snapshot.Step);
 
@@ -3522,13 +3528,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
 
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
     }
 };
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
     Y_UNIT_TEST(ShouldCalculateQuota) {
-        NDataShard::TReadIteratorState state({}, false, {});
+        NDataShard::TReadIteratorState state(TReadIteratorId({}, 0), TPathId(0, 0), {}, TRowVersion::Max(), true, {});
         state.Quota.Rows = 100;
         state.Quota.Bytes = 1000;
         state.ConsumeSeqNo(10, 100); // seqno1

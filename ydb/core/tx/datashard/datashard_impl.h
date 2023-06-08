@@ -224,6 +224,7 @@ class TDataShard
     class TTxVolatileTxAbort;
     class TTxCdcStreamScanRun;
     class TTxCdcStreamScanProgress;
+    class TTxUpdateFollowerReadEdge;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1060,6 +1061,14 @@ class TDataShard
 
             Sys_LastLoanTableTid, // 41 Last tid that we used in LoanTable
 
+            // The last step:txId that is unconditionally readable on followers
+            // without producing possibly inconsistent results. When repeatable
+            // is set leader will also never add new writes to this edge, making
+            // it possible to use the edge as a local snapshot.
+            SysMvcc_FollowerReadEdgeStep = 42,
+            SysMvcc_FollowerReadEdgeTxId = 43,
+            SysMvcc_FollowerReadEdgeRepeatable = 44,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1799,6 +1808,13 @@ public:
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;
 
+    // Calculates current follower read edge
+    std::tuple<TRowVersion, bool, ui64> CalculateFollowerReadEdge() const;
+
+    // Promotes current follower read edge
+    bool PromoteFollowerReadEdge(TTransactionContext& txc);
+    bool PromoteFollowerReadEdge();
+
     // Returns a suitable row version for performing a transaction
     TRowVersion GetMvccTxVersion(EMvccTxMode mode, TOperation* op = nullptr) const;
 
@@ -2234,6 +2250,7 @@ private:
 
     // For follower only
     struct TFollowerState {
+        ui64 LastSysUpdate = 0;
         ui64 LastSchemeUpdate = 0;
         ui64 LastSnapshotsUpdate = 0;
     };
@@ -2340,7 +2357,7 @@ private:
     };
 
     TProposeQueue ProposeQueue;
-    TVector<THolder<TEvDataShard::TEvProposeTransaction::THandle>> DelayedProposeQueue;
+    TVector<THolder<IEventHandle>> DelayedProposeQueue;
 
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
     THolder<NTabletPipe::IClientCache> PipeClientCache;
@@ -2657,6 +2674,8 @@ private:
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
+
+    bool UpdateFollowerReadEdgePending = false;
 
 public:
     auto& GetLockChangeRecords() {

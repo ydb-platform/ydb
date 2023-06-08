@@ -81,11 +81,17 @@ private:
         void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
     };
 
+    struct TFollowerDependencyTrackingLogic : public TDependencyTrackingLogic {
+        explicit TFollowerDependencyTrackingLogic(TDependencyTracker& parent)
+            : TDependencyTrackingLogic(parent) {}
+
+        void AddOperation(const TOperation::TPtr& op) const noexcept override;
+        void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
+    };
+
 public:
     TDependencyTracker(TDataShard* self)
         : Self(self)
-        , DefaultLogic(*this)
-        , MvccLogic(*this)
     { }
 
 public:
@@ -130,7 +136,7 @@ private:
     const TDependencyTrackingLogic& GetTrackingLogic() const noexcept;
 
 private:
-    TDataShard* Self;
+    TDataShard* const Self;
     // Temporary vectors for building dependencies
     TKeys TmpRead;
     TKeys TmpWrite;
@@ -158,8 +164,9 @@ private:
     TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedPlannedWrites;
     TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedImmediateWrites;
 
-    const TDefaultDependencyTrackingLogic DefaultLogic;
-    const TMvccDependencyTrackingLogic MvccLogic;
+    const TDefaultDependencyTrackingLogic DefaultLogic{ *this };
+    const TMvccDependencyTrackingLogic MvccLogic{ *this };
+    const TFollowerDependencyTrackingLogic FollowerLogic{ *this };
 };
 
 } // namespace NDataShard

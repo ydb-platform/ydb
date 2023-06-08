@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
             if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead()) {
                 UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
                     [](const NYql::TIssue& issue){
-                        return issue.GetMessage().Contains("bellow low watermark");
+                        return issue.GetMessage().Contains("has no snapshot at");
                     }), result.GetIssues().ToString());
 
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);

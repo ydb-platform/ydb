@@ -689,6 +689,8 @@ using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder1;
 
 class IFunctionTypeInfoBuilder: public IFunctionTypeInfoBuilderImpl {
 public:
+    IFunctionTypeInfoBuilder();
+    
     IFunctionTypeInfoBuilder& Implementation(
             TUniquePtr<IBoxedValue> impl) {
         ImplementationImpl(std::move(impl));

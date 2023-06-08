@@ -215,17 +215,35 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-using ITypeVisitor = ITypeVisitor6;
+class ITypeVisitor : public ITypeVisitor6 {
+protected:
+    ITypeVisitor();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-using ITypeVisitor = ITypeVisitor5;
+class ITypeVisitor : public ITypeVisitor5 {
+protected:
+    ITypeVisitor();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
-using ITypeVisitor = ITypeVisitor4;
+class ITypeVisitor : public ITypeVisitor4 {
+protected:
+    ITypeVisitor();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
-using ITypeVisitor = ITypeVisitor3;
+class ITypeVisitor : public ITypeVisitor3 {
+protected:
+    ITypeVisitor();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-using ITypeVisitor = ITypeVisitor2;
+class ITypeVisitor : public ITypeVisitor2 {
+protected:
+    ITypeVisitor();
+};
 #else
-using ITypeVisitor = ITypeVisitor1;
+class ITypeVisitor : public ITypeVisitor1 {
+protected:
+    ITypeVisitor();
+};
 #endif
 
 UDF_ASSERT_TYPE_SIZE(ITypeVisitor, 16);
@@ -320,13 +338,29 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 29)
-using ITypeInfoHelper = ITypeInfoHelper4;
+class ITypeInfoHelper : public ITypeInfoHelper4 {
+public:
+    using TPtr = TRefCountedPtr<ITypeInfoHelper>;
+    ITypeInfoHelper();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-using ITypeInfoHelper = ITypeInfoHelper3;
+class ITypeInfoHelper : public ITypeInfoHelper3 {
+public:
+    using TPtr = TRefCountedPtr<ITypeInfoHelper>;
+    ITypeInfoHelper();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-using ITypeInfoHelper = ITypeInfoHelper2;
+class ITypeInfoHelper : public ITypeInfoHelper2 {
+public:
+    using TPtr = TRefCountedPtr<ITypeInfoHelper>;
+    ITypeInfoHelper();
+};
 #else
-using ITypeInfoHelper = ITypeInfoHelper1;
+class ITypeInfoHelper : public ITypeInfoHelper1 {
+public:
+    using TPtr = TRefCountedPtr<ITypeInfoHelper>;
+    ITypeInfoHelper();
+};
 #endif
 
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper, 16);

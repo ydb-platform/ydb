@@ -98,11 +98,20 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 24)
-class IDateBuilder: public IDateBuilder3 {};
+class IDateBuilder: public IDateBuilder3 {
+protected:
+    IDateBuilder();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 7)
-class IDateBuilder: public IDateBuilder2 {};
+class IDateBuilder: public IDateBuilder2 {
+protected:
+    IDateBuilder();
+};
 #else
-class IDateBuilder: public IDateBuilder1 {};
+class IDateBuilder: public IDateBuilder1 {
+protected:
+    IDateBuilder();
+};
 #endif
 
 UDF_ASSERT_TYPE_SIZE(IDateBuilder, 8);
@@ -148,11 +157,20 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 33)
-class IPgBuilder: public IPgBuilder3 {};
+class IPgBuilder: public IPgBuilder3 {
+protected:
+    IPgBuilder();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 31)
-class IPgBuilder: public IPgBuilder2 {};
+class IPgBuilder: public IPgBuilder2 {
+protected:
+    IPgBuilder();
+};
 #else
-class IPgBuilder: public IPgBuilder1 {};
+class IPgBuilder: public IPgBuilder1 {
+protected:
+    IPgBuilder();
+};
 #endif
 
 UDF_ASSERT_TYPE_SIZE(IPgBuilder, 8);
@@ -258,19 +276,41 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
-class IValueBuilder: public IValueBuilder7 {};
+class IValueBuilder: public IValueBuilder7 {
+protected:    
+    IValueBuilder();
+};
+
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-class IValueBuilder: public IValueBuilder6 {};
+class IValueBuilder: public IValueBuilder6 {
+protected:
+    IValueBuilder();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-class IValueBuilder: public IValueBuilder5 {};
+class IValueBuilder: public IValueBuilder5 {
+protected:
+    IValueBuilder();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
-class IValueBuilder: public IValueBuilder4 {};
+class IValueBuilder: public IValueBuilder4 {
+protected:
+    IValueBuilder();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 14)
-class IValueBuilder: public IValueBuilder3 {};
+class IValueBuilder: public IValueBuilder3 {
+protected:
+    IValueBuilder();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 1)
-class IValueBuilder: public IValueBuilder2 {};
+class IValueBuilder: public IValueBuilder2 {
+protected:
+    IValueBuilder();
+};
 #else
-class IValueBuilder: public IValueBuilder1 {};
+class IValueBuilder: public IValueBuilder1 {
+protected:    
+    IValueBuilder();
+};
 #endif
 
 UDF_ASSERT_TYPE_SIZE(IValueBuilder, 8);

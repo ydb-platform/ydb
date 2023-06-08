@@ -31,6 +31,8 @@ class EmptyArguments(object):
         self.fixed_ports = False
         self.public_http_config_path = None
         self.dont_use_log_files = False
+        self.enabled_feature_flags = []
+        self.enabled_grpc_services = []
 
 
 def ensure_path_exists(path):
@@ -317,6 +319,8 @@ def deploy(arguments):
         auth_config_path=arguments.auth_config_path,
         use_log_files=not arguments.dont_use_log_files,
         default_users=default_users(),
+        extra_feature_flags=arguments.enabled_feature_flags,
+        extra_grpc_services=arguments.enabled_grpc_services,
         **optionals
     )
 

@@ -407,7 +407,7 @@ namespace NYql::NDqs {
             tasks[i].ComputeActorId = workers[i];
         }
 
-        THashMap<TStageId, std::tuple<TString, ui64, ui64>> stagePrograms = BuildAllPrograms();
+        BuildAllPrograms();
         TVector<TDqTask> plan;
         THashSet<TString> clusterNameHints;
         for (const auto& task : tasks) {
@@ -450,7 +450,7 @@ namespace NYql::NDqs {
             program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
             TString programStr;
             ui64 stageId, publicId;
-            std::tie(programStr, stageId, publicId) = stagePrograms[task.StageId];
+            std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
@@ -589,10 +589,11 @@ namespace NYql::NDqs {
 
 #undef BUILD_CONNECTION
 
-THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAllPrograms() {
+void TDqsExecutionPlanner::BuildAllPrograms() {
         using namespace NKikimr::NMiniKQL;
 
-        THashMap<TStageId, std::tuple<TString,ui64,ui64>> result;
+        StagePrograms.clear();
+
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TVector<NNodes::TExprBase> fakeReads;
@@ -623,18 +624,18 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
                 Y_VERIFY(false);
             }
 */
-            result[stageInfo.first] = std::make_tuple(
+            StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
                     ExprContext, fakeReads),
                 stageId, publicId);
         }
-
-        return result;
     }
 
     void TDqsExecutionPlanner::FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel) {
         channelDesc.SetId(channel.Id);
+        channelDesc.SetSrcStageId(std::get<2>(StagePrograms[channel.SrcStageId]));
+        channelDesc.SetDstStageId(std::get<2>(StagePrograms[channel.DstStageId]));
         channelDesc.SetSrcTaskId(channel.SrcTask);
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
@@ -785,6 +786,7 @@ THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAll
 
         auto channelDesc = outputDesc->AddChannels();
         channelDesc->SetId(1);
+        channelDesc->SetSrcStageId(1);
         channelDesc->SetSrcTaskId(2);
         channelDesc->SetDstTaskId(1);
 

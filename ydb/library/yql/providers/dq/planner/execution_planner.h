@@ -67,7 +67,7 @@ namespace NYql::NDqs {
     private:
         bool BuildReadStage(const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
         void BuildConnections(const NNodes::TDqPhyStage& stage);
-        THashMap<NDq::TStageId, std::tuple<TString,ui64,ui64>> BuildAllPrograms();
+        void BuildAllPrograms();
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
         void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
@@ -93,6 +93,7 @@ namespace NYql::NDqs {
         TVector<NDqProto::TDqTask> Tasks;
 
         THashMap<ui64, ui32> PublicIds;
+        THashMap<NDq::TStageId, std::tuple<TString,ui64,ui64>> StagePrograms;
     };
 
     // Execution planner for TRuntimeNode

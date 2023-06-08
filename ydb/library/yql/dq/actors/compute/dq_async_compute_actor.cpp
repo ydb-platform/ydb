@@ -221,10 +221,8 @@ private:
 
         outputChannel.PopStarted = true;
         ProcessOutputsState.Inflight++;
+        UpdateBlocked(outputChannel, toSend);
         if (toSend <= 0) {
-            if (Y_UNLIKELY(outputChannel.Stats)) {
-                outputChannel.Stats->BlockedByCapacity++;
-            }
             CA_LOG_T("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
                 << ". To send: " << toSend
                 << ". Free space: " << peerState.PeerFreeSpace

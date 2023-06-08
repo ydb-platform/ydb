@@ -59,8 +59,10 @@ void BuildUnionAllChannels(TGraph& graph, const typename TGraph::TStageInfoType&
         auto& originTask = graph.GetTask(originTaskId);
 
         auto& channel = graph.AddChannel();
+        channel.SrcStageId = inputStageInfo.Id;
         channel.SrcTask = originTaskId;
         channel.SrcOutputIndex = outputIndex;
+        channel.DstStageId = stageInfo.Id;
         channel.DstTask = targetTask.Id;
         channel.DstInputIndex = inputIndex;
         channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
@@ -108,8 +110,10 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
             auto& targetTask = graph.GetTask(targetTaskId);
 
             auto& channel = graph.AddChannel();
+            channel.SrcStageId = inputStageInfo.Id;
             channel.SrcTask = originTask.Id;
             channel.SrcOutputIndex = outputIndex;
+            channel.DstStageId = stageInfo.Id;
             channel.DstTask = targetTask.Id;
             channel.DstInputIndex = inputIndex;
             channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
@@ -156,8 +160,10 @@ void BuildMapChannels(TGraph& graph, const typename TGraph::TStageInfoType& stag
         auto targetTaskId = targetTasks[i];
 
         auto& channel = graph.AddChannel();
+        channel.SrcStageId = inputStageInfo.Id;
         channel.SrcTask = originTaskId;
         channel.SrcOutputIndex = outputIndex;
+        channel.DstStageId = stageInfo.Id;
         channel.DstTask = targetTaskId;
         channel.DstInputIndex = inputIndex;
         channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
@@ -207,8 +213,10 @@ void BuildBroadcastChannels(TGraph& graph, const typename TGraph::TStageInfoType
         auto targetTaskId = targetTasks[i];
 
         auto& channel = graph.AddChannel();
+        channel.SrcStageId = inputStageInfo.Id;
         channel.SrcTask = originTaskId;
         channel.SrcOutputIndex = outputIndex;
+        channel.DstStageId = stageInfo.Id;
         channel.DstTask = targetTaskId;
         channel.DstInputIndex = inputIndex;
         channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
@@ -248,8 +256,10 @@ void BuildMergeChannels(TGraph& graph, const typename TGraph::TStageInfoType& st
         auto& originTask = graph.GetTask(originTaskId);
 
         auto& channel = graph.AddChannel();
+        channel.SrcStageId = inputStageInfo.Id;
         channel.SrcTask = originTaskId;
         channel.SrcOutputIndex = outputIndex;
+        channel.DstStageId = stageInfo.Id;
         channel.DstTask = targetTask.Id;
         channel.DstInputIndex = inputIndex;
         channel.InMemory = true;

@@ -69,16 +69,19 @@ struct TGraceJoinPacker {
     ui64 TotalIntColumnsNum = 0; // Total number of int columns
     ui64 TotalStrColumnsNum = 0; // Total number of string columns
     ui64 TotalIColumnsNum = 0; // Total number of interface-based columns
-    ui64 KeyIntColumnsNum = 0;  // Total number of key int columns
+    ui64 KeyIntColumnsNum = 0;  // Total number of key int columns in original table
+    ui64 PackedKeyIntColumnsNum = 0; // Length of ui64 array containing data of all key int columns after packing
     ui64 KeyStrColumnsNum = 0; // Total number of key string columns
     ui64 KeyIColumnsNum = 0; // Total number of interface-based columns
     ui64 DataIntColumnsNum = TotalIntColumnsNum - KeyIntColumnsNum;
+    ui64 PackedDataIntColumnsNum = 0; // Length of ui64 array containing data of all non-key int columns after packing
     ui64 DataStrColumnsNum = TotalStrColumnsNum - KeyStrColumnsNum;
     ui64 DataIColumnsNum = TotalIColumnsNum - KeyIColumnsNum;
     std::vector<GraceJoin::TColTypeInterface> ColumnInterfaces;
+    bool IsAny; // Flag to support any join attribute
     inline void Pack() ; // Packs new tuple from TupleHolder and TuplePtrs to TupleIntVals, TupleStrSizes, TupleStrings
     inline void UnPack(); // Unpacks packed values from TupleIntVals, TupleStrSizes, TupleStrings into TupleHolder and TuplePtrs
-    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory);
+    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny);
 };
 
 
@@ -198,10 +201,13 @@ void TGraceJoinPacker::Pack()  {
 
         NYql::NUdf::TUnboxedValue value = *TuplePtrs[pi.ColumnIdx];
         if (!value) { // Null value
-            ui64 currNullsIdx = i / (sizeof(ui64) * 8);
-            ui64 remShift = ( i - currNullsIdx * (sizeof(ui64) * 8) );
+            ui64 currNullsIdx = (i + 1) / (sizeof(ui64) * 8);
+            ui64 remShift = ( (i + 1) - currNullsIdx * (sizeof(ui64) * 8) );
             ui64 bitMask = (0x1) << remShift;
             TupleIntVals[currNullsIdx] |= bitMask;
+            if (pi.IsKeyColumn) {
+                TupleIntVals[0] |= (0x1);
+            }
             continue;
         }
         TType* type = pi.MKQLType;
@@ -309,8 +315,8 @@ void TGraceJoinPacker::UnPack()  {
             value = NYql::NUdf::TUnboxedValue();
             continue;
         }
-        ui64 currNullsIdx = i / (sizeof(ui64) * 8);
-        ui64 remShift = ( i - currNullsIdx * (sizeof(ui64) * 8) );
+        ui64 currNullsIdx = (i + 1) / (sizeof(ui64) * 8);
+        ui64 remShift = ( (i + 1) - currNullsIdx * (sizeof(ui64) * 8) );
         ui64 bitMask = (0x1) << remShift;
         if ( TupleIntVals[currNullsIdx] & bitMask ) {
             value = NYql::NUdf::TUnboxedValue();
@@ -411,9 +417,10 @@ void TGraceJoinPacker::UnPack()  {
 }
 
 
-TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory) :
+TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny) :
                                     ColumnTypes(columnTypes)
-                                    , HolderFactory(holderFactory) {
+                                    , HolderFactory(holderFactory)
+                                    , IsAny(isAny) {
 
     ui64 nColumns = ColumnTypes.size();
     ui64 nKeyColumns = keyColumns.size();
@@ -467,7 +474,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     DataStrColumnsNum = TotalStrColumnsNum - KeyStrColumnsNum;
     DataIColumnsNum = TotalIColumnsNum - KeyIColumnsNum;
 
-    NullsBitmapSize = (nColumns / (8 * sizeof(ui64)) + 1) ;
+    NullsBitmapSize = ( (nColumns + 1)/ (8 * sizeof(ui64)) + 1) ;
 
     TupleIntVals.resize(2 * totalIntColumnsNum + NullsBitmapSize);
     TupleStrings.resize(totalStrColumnsNum);
@@ -533,8 +540,8 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         currIdx++;
     }
 
-    KeyIntColumnsNum =  (keyIntOffset + sizeof(ui64) - 1 ) / sizeof(ui64) - NullsBitmapSize;
-    DataIntColumnsNum = (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) - KeyIntColumnsNum - NullsBitmapSize;
+    PackedKeyIntColumnsNum =  (keyIntOffset + sizeof(ui64) - 1 ) / sizeof(ui64) - NullsBitmapSize;
+    PackedDataIntColumnsNum = (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) - PackedKeyIntColumnsNum - NullsBitmapSize;
   
     GraceJoin::TColTypeInterface * cti_p = nullptr;
 
@@ -542,7 +549,9 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         cti_p = ColumnInterfaces.data();
     }
 
-    TablePtr = std::make_unique<GraceJoin::TTable>(KeyIntColumnsNum, KeyStrColumnsNum, DataIntColumnsNum, DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, cti_p );
+    TablePtr = std::make_unique<GraceJoin::TTable>(
+        PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum, 
+        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny );
 
 }
 
@@ -553,12 +562,12 @@ public:
 
     TGraceJoinState(TMemoryUsageInfo* memInfo,
         IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
-        EJoinKind joinKind,  const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
+        EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
         const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory)
     :  TBase(memInfo)
-    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory))
-    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory))
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both)))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
@@ -568,6 +577,7 @@ public:
     ,   FlowLeft(flowLeft)
     ,   FlowRight(flowRight)
     ,   JoinKind(joinKind)
+    ,   AnyJoinSettings_(anyJoinSettings)
     ,   LeftKeyColumns(leftKeyColumns)
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
@@ -583,6 +593,7 @@ private:
     IComputationWideFlowNode* const FlowRight;
 
     const EJoinKind JoinKind;
+    const EAnyJoinSettings AnyJoinSettings_;
     const std::vector<ui32> LeftKeyColumns;
     const std::vector<ui32> RightKeyColumns;
     const std::vector<ui32> LeftRenames;
@@ -604,7 +615,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
     public:
         TGraceJoinWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
-        EJoinKind joinKind, std::vector<ui32>&& leftKeyColumns, std::vector<ui32>&& rightKeyColumns,
+        EJoinKind joinKind, EAnyJoinSettings anyJoinSettings,  std::vector<ui32>&& leftKeyColumns, std::vector<ui32>&& rightKeyColumns,
         std::vector<ui32>&& leftRenames, std::vector<ui32>&& rightRenames,
         std::vector<TType*>&& leftColumnsTypes, std::vector<TType*>&& rightColumnsTypes,
         std::vector<EValueRepresentation>&& outputRepresentations)
@@ -612,6 +623,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             , FlowLeft(flowLeft)
             , FlowRight(flowRight)
             , JoinKind(joinKind)
+            , AnyJoinSettings_(anyJoinSettings)
             , LeftKeyColumns(std::move(leftKeyColumns))
             , RightKeyColumns(std::move(rightKeyColumns))
             , LeftRenames(std::move(leftRenames))
@@ -718,7 +730,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
             state = ctx.HolderFactory.Create<TGraceJoinState>(
-                FlowLeft, FlowRight, JoinKind,  LeftKeyColumns, RightKeyColumns,
+                FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
                 ctx.HolderFactory);
         }
@@ -726,6 +738,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         IComputationWideFlowNode *const  FlowLeft;
         IComputationWideFlowNode *const  FlowRight;
         const EJoinKind JoinKind;
+        const EAnyJoinSettings AnyJoinSettings_;
         const std::vector<ui32> LeftKeyColumns;
         const std::vector<ui32> RightKeyColumns;
         const std::vector<ui32> LeftRenames;
@@ -880,6 +893,10 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
     const auto rightRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(6));
     const ui32 rawJoinKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
 
+//    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui32>());
+
+    const EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None;
+
     const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
     const auto flowRight = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 1));
 
@@ -915,7 +932,7 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
     }
 
     return new TGraceJoinWrapper(
-        ctx.Mutables, flowLeft, flowRight, GetJoinKind(rawJoinKind),
+        ctx.Mutables, flowLeft, flowRight, GetJoinKind(rawJoinKind), anyJoinSettings,
         std::move(leftKeyColumns), std::move(rightKeyColumns), std::move(leftRenames), std::move(rightRenames),
         std::move(leftColumnsTypes), std::move(rightColumnsTypes), std::move(outputRepresentations));
 

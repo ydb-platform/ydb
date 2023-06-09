@@ -66,13 +66,14 @@ ArenaPromise<ServerMetadataHandle> HttpServerFilter::MakeCallPromise(
     switch (*method) {
       case HttpMethodMetadata::kPost:
         break;
+      case HttpMethodMetadata::kGet:
+        break;
       case HttpMethodMetadata::kPut:
         if (allow_put_requests_) {
           break;
         }
         Y_ABSL_FALLTHROUGH_INTENDED;
       case HttpMethodMetadata::kInvalid:
-      case HttpMethodMetadata::kGet:
         return Immediate(
             ServerMetadataHandle(y_absl::UnknownError("Bad method header")));
     }

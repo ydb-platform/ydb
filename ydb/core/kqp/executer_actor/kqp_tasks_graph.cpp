@@ -670,9 +670,14 @@ void AddSnapshotInfoToTaskInputs(const TKqpTasksGraph& tasksGraph, NYql::NDqProt
             NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
             YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
 
+
             if (snapshot.IsValid()) {
                 settings.MutableSnapshot()->SetStep(snapshot.Step);
                 settings.MutableSnapshot()->SetTxId(snapshot.TxId);
+            }
+
+            if (tasksGraph.GetMeta().UseFollowers) {
+                settings.SetUseFollowers(tasksGraph.GetMeta().UseFollowers);
             }
 
             source->MutableSettings()->PackFrom(settings);

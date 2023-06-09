@@ -196,7 +196,7 @@ struct TEvCms {
     };
 
     struct TEvStoreWalleTask : public TEventLocal<TEvStoreWalleTask, EvStoreWalleTask> {
-        TWalleTaskInfo Task;
+        TTaskInfo Task;
 
         TString ToString() const override {
             return Sprintf("%s { Task: %s }", ToStringHeader().data(), Task.ToString().data());

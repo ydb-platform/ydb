@@ -42,9 +42,10 @@ namespace NUdf {
 }
 }
 
-#define UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, create_impl)            \
+#define UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType, create_impl) \
     class udfName: public ::NYql::NUdf::TBoxedValue {                                    \
-    public:                                                                                 \
+    public:                                                                              \
+        using TBlockType = blockType;                                                    \
         explicit udfName(::NYql::NUdf::IFunctionTypeInfoBuilder& builder)                \
             : Pos_(GetSourcePosition(builder))                                              \
         {                                                                                   \
@@ -93,10 +94,10 @@ namespace NUdf {
         const ::NYql::NUdf::IValueBuilder* valueBuilder,                                 \
         const ::NYql::NUdf::TUnboxedValuePod* args) const
 
-#define UDF_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName) \
-        UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, builder.Implementation(new udfName(builder));)
+#define UDF_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType) \
+        UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType, builder.Implementation(new udfName(builder));)
 
-#define UDF(udfName, typeBody) UDF_IMPL(udfName, typeBody, ;, ;, "", "")
+#define UDF(udfName, typeBody) UDF_IMPL(udfName, typeBody, ;, ;, "", "", void)
 
 #define UDF_RUN_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName)        \
     struct udfName##Members {                                                               \
@@ -181,10 +182,10 @@ namespace NUdf {
     UDF(udfName, builder.SimpleSignature<signature>().IsStrict();)
 
 #define SIMPLE_UDF_WITH_IR(udfName, signature, irResourceId, irFunctionName) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signature>();, ;, ;, irResourceId, irFunctionName)
+    UDF_IMPL(udfName, builder.SimpleSignature<signature>();, ;, ;, irResourceId, irFunctionName, void)
 
 #define SIMPLE_UDF_WITH_CREATE_IMPL(udfName, signature, create_impl) \
-    UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, ;, ;, "", "", create_impl)
+    UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, ;, ;, "", "", void, create_impl)
 
 #define SIMPLE_UDF_OPTIONS(udfName, signature, options) \
     UDF(udfName, builder.SimpleSignature<signature>(); options;)
@@ -309,16 +310,11 @@ public:
     }
 };
 
-template <typename TUdf>
-struct TUdfTraits {
-    static constexpr bool SupportsBlocks = false;
-    using TBlockUdf = void;
-};
-
 template<typename... TUdfs>
 class TSimpleUdfModuleHelper : public IUdfModule
 {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
+    Y_HAS_SUBTYPE(TBlockType);
 
 public:
     void CleanupOnTerminate() const override {
@@ -331,9 +327,11 @@ public:
             r->SetTypeAwareness();
         }
 
-        if constexpr (TUdfTraits<TUdfType>::SupportsBlocks) {
-            auto rBlocks = names.Add(TUdfTraits<TUdfType>::TBlockUdf::Name());
-            rBlocks->SetTypeAwareness();
+        if constexpr (THasTBlockType<TUdfType>::value) {
+            if constexpr (!std::is_same_v<typename TUdfType::TBlockType, void>) {
+                auto rBlocks = names.Add(TUdfType::TBlockType::Name());
+                rBlocks->SetTypeAwareness();
+            }
         }
     }
 
@@ -355,9 +353,11 @@ public:
         bool typesOnly = (flags & TFlags::TypesOnly);
         bool found = TUdfType::DeclareSignature(name, userType, builder, typesOnly);
         if (!found) {
-           if constexpr (TUdfTraits<TUdfType>::SupportsBlocks) {
-               found = TUdfTraits<TUdfType>::TBlockUdf::DeclareSignature(name, userType, builder, typesOnly);
-           }
+            if constexpr (THasTBlockType<TUdfType>::value) {
+                if constexpr (!std::is_same_v<typename TUdfType::TBlockType, void>) {
+                    found = TUdfType::TBlockType::DeclareSignature(name, userType, builder, typesOnly);
+                }
+            }
         }
 
         return found;

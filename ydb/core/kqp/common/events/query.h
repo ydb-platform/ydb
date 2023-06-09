@@ -32,7 +32,8 @@ public:
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
         bool keepSession = false,
-        bool useCancelAfter = true);
+        bool useCancelAfter = true,
+        const ::Ydb::Query::Syntax syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED);
 
     TEvQueryRequest() = default;
 
@@ -96,6 +97,10 @@ public:
 
     NKikimrKqp::EQueryType GetType() const {
         return RequestCtx ? QueryType : Record.GetRequest().GetType();
+    }
+
+    Ydb::Query::Syntax GetSyntax() const {
+        return RequestCtx ? Syntax : Record.GetRequest().GetSyntax();
     }
 
     bool HasPreparedQuery() const {
@@ -286,6 +291,7 @@ private:
     bool KeepSession = false;
     TDuration OperationTimeout;
     TDuration CancelAfter;
+    const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

@@ -65,24 +65,6 @@ private:
     ui64 TotalResponsesSize_ = 0;
 };
 
-bool FillQueryContent(const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
-    NYql::TIssues& issues)
-{
-    switch (req.query_case()) {
-        case Ydb::Query::ExecuteQueryRequest::kQueryContent:
-            if (!CheckQuery(req.query_content().text(), issues)) {
-                return false;
-            }
-
-            kqpRequest.MutableRequest()->SetQuery(req.query_content().text());
-            return true;
-
-        default:
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query option"));
-            return false;
-    }
-}
-
 bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::TransactionSettings& to,
     NYql::TIssues& issues)
 {
@@ -146,6 +128,47 @@ Ydb::Table::QueryStatsCollection::Mode GetCollectStatsMode(Ydb::Query::StatsMode
     }
 }
 
+bool ParseQueryAction(const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::EQueryAction& queryAction,
+    NYql::TIssues& issues)
+{
+    switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_VALIDATE:
+            queryAction = NKikimrKqp::QUERY_ACTION_VALIDATE;
+            return true;
+
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            queryAction = NKikimrKqp::QUERY_ACTION_EXPLAIN;
+            return true;
+
+        case Ydb::Query::EXEC_MODE_EXECUTE:
+            queryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
+            return true;
+
+        default:
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query mode"));
+            return false;
+    }
+}
+
+bool ParseQueryContent(const Ydb::Query::ExecuteQueryRequest& req, TString& query, Ydb::Query::Syntax& syntax,
+    NYql::TIssues& issues)
+{
+    switch (req.query_case()) {
+        case Ydb::Query::ExecuteQueryRequest::kQueryContent:
+            if (!CheckQuery(req.query_content().text(), issues)) {
+                return false;
+            }
+
+            query = req.query_content().text();
+            syntax = req.query_content().syntax();
+            return true;
+
+        default:
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query option"));
+            return false;
+    }
+}
+
 bool NeedReportStats(const Ydb::Query::ExecuteQueryRequest& req) {
     switch (req.exec_mode()) {
         case Ydb::Query::EXEC_MODE_EXPLAIN:
@@ -164,47 +187,6 @@ bool NeedReportStats(const Ydb::Query::ExecuteQueryRequest& req) {
         default:
             return false;
     }
-}
-
-std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
-    const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest)
-{
-    kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
-    switch (req.exec_mode()) {
-        case Ydb::Query::EXEC_MODE_VALIDATE:
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_VALIDATE);
-            break;
-        case Ydb::Query::EXEC_MODE_EXPLAIN:
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
-            break;
-        case Ydb::Query::EXEC_MODE_EXECUTE:
-            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            break;
-        default: {
-            NYql::TIssues issues;
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query mode"));
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
-        }
-    }
-
-    kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-    kqpRequest.MutableRequest()->SetKeepSession(false);
-
-    if (req.has_tx_control()) {
-        NYql::TIssues issues;
-        if (!FillTxControl(req.tx_control(), *kqpRequest.MutableRequest()->MutableTxControl(), issues)) {
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
-        }
-    }
-
-    NYql::TIssues issues;
-    if (!FillQueryContent(req, kqpRequest, issues)) {
-        return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
-    }
-
-    kqpRequest.MutableRequest()->SetCollectStats(GetCollectStatsMode(req.stats_mode()));
-
-    return {Ydb::StatusIds::SUCCESS, {}};
 }
 
 class TExecuteQueryRPC : public TActorBootstrapped<TExecuteQueryRPC> {
@@ -255,21 +237,42 @@ private:
         const auto req = Request_->GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-        SetRlPath(ev, *Request_);
-
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
+        NYql::TIssues issues;
+        NKikimrKqp::EQueryAction queryAction;
+        if (!ParseQueryAction(*req, queryAction, issues)) {
+            return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
 
-        ActorIdToProto(this->SelfId(), ev->Record.MutableRequestActorId());
-
-        auto [fillStatus, fillIssues] = FillKqpRequest(*req, ev->Record);
-        if (fillStatus != Ydb::StatusIds::SUCCESS) {
-            return ReplyFinishStream(fillStatus, std::move(fillIssues));
+        TString query;
+        Ydb::Query::Syntax syntax;
+        if (!ParseQueryContent(*req, query, syntax, issues)) {
+            return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
+
+        Ydb::Table::TransactionControl* txControl = nullptr;
+        if (req->has_tx_control()) {
+            txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(Request_->GetArena());
+            if (!FillTxControl(req->tx_control(), *txControl, issues)) {
+                return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
+            }
+        }
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+            queryAction,
+            NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+            SelfId(),
+            Request_,
+            "", // sessionId
+            std::move(query),
+            "", // queryId
+            txControl,
+            &req->parameters(),
+            GetCollectStatsMode(req->stats_mode()),
+            nullptr, // queryCachePolicy
+            nullptr, // operationParams
+            false, // keepSession
+            false, // useCancelAfter
+            syntax);
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
@@ -445,7 +448,7 @@ private:
     };
 
 private:
-    std::unique_ptr<TEvExecuteQueryRequest> Request_;
+    std::shared_ptr<TEvExecuteQueryRequest> Request_;
 
     TRpcFlowControlState FlowControl_;
     TMap<TActorId, TProducerState> StreamProducers_;

@@ -1,6 +1,5 @@
 #pragma once
 #include "settings.h"
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <util/generic/string.h>
@@ -16,11 +15,12 @@ struct TKqpQueryId {
     TString UserSid;
     TString Text;
     TKqpQuerySettings Settings;
-    NKikimrKqp::EQueryType QueryType;
+
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, NKikimrKqp::EQueryType type, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes);
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& text,
+        const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes);
 
     bool IsSql() const;
 
@@ -36,7 +36,8 @@ public:
     bool operator>=(const TKqpQueryId&) = delete;
 
     size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, QueryType, QueryParameterTypes ? QueryParameterTypes->size() : 0u);
+        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings,
+            QueryParameterTypes ? QueryParameterTypes->size() : 0u);
         return THash<decltype(tuple)>()(tuple);
     }
 };

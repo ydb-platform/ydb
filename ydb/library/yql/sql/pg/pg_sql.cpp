@@ -5,6 +5,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/parser/pg_wrapper/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
@@ -32,6 +33,8 @@ extern "C" {
 #undef TypeName
 #undef SortBy
 }
+
+constexpr auto PREPARED_PARAM_PREFIX =  "$p";
 
 namespace NSQLTranslationPG {
 
@@ -220,6 +223,11 @@ public:
             Provider = provider;
             break;
         }
+        
+        for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
+            auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
+            ParamNameToTypeOid[paramName] = Settings.PgParameterTypeOids[i];
+        }
     }
 
     void OnResult(const List* raw) {
@@ -250,11 +258,13 @@ public:
             return nullptr;
         }
 
-
         if (Settings.EndOfQueryCommit) {
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
         }
+
+        AddVariableDeclarations();
+
         Statements.push_back(L(A("return"), A("world")));
 
 
@@ -1956,6 +1966,14 @@ public:
         return L(A("If"), final.Pred, final.Value, defaultResult);
     }
 
+    TAstNode* ParseParamRefExpr(const ParamRef* value) {
+        const auto varName = PREPARED_PARAM_PREFIX + ToString(value->number);
+        if (!ParamNameToTypeOid.contains(varName)) {
+            ParamNameToTypeOid[varName] = UNKNOWNOID;
+        }
+        return A(varName);
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
         case T_A_Const: {
@@ -1993,6 +2011,9 @@ public:
         }
         case T_GroupingFunc: {
             return ParseGroupingFunc(CAST_NODE(GroupingFunc, node));
+        }
+        case T_ParamRef: {
+            return ParseParamRefExpr(CAST_NODE(ParamRef, node));
         }
         default:
             NodeNotImplemented(node);
@@ -3078,6 +3099,15 @@ public:
 
     }
 
+    void AddVariableDeclarations() {
+      for (const auto &[varName, typeOid] : ParamNameToTypeOid) {
+        const auto &typeName =
+            typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : "text";
+        const auto pgType = L(A("PgType"), QA(typeName));
+        Statements.push_back(L(A("declare"), A(varName), pgType));
+      }
+    }
+
     template <typename T>
     void NodeNotImplementedImpl(const Node* nodeptr) {
         TStringBuilder b;
@@ -3264,6 +3294,8 @@ private:
     ui32 QuerySize;
     TString Provider;
     static const THashMap<TStringBuf, TString> ProviderToInsertModeMap;
+
+    THashMap<TString, Oid> ParamNameToTypeOid;
 };
 
 const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {

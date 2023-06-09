@@ -3,6 +3,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -50,6 +51,18 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
 
 NYql::TAstParseResult PgSqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
+}
+
+using TAstNodeVisitFunc = std::function<void(const NYql::TAstNode& root)>;
+
+void VisitAstNodes(const NYql::TAstNode& root, const TAstNodeVisitFunc& visitFunc) {
+    visitFunc(root);
+    if (!root.IsList()) {
+        return;
+    }
+    for (size_t childIdx = 0; childIdx < root.GetChildrenCount(); ++childIdx) {
+        VisitAstNodes(*root.GetChild(childIdx), visitFunc);
+    }
 }
 
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
@@ -222,5 +235,85 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )", NYql::GetPostgresServerVersionNum());
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+    
+    TMap<TString, TString> GetParamNameToPgType(const NYql::TAstNode& root) {
+        TMap<TString, TString> actualParamToType;
+
+        VisitAstNodes(root, [&actualParamToType] (const NYql::TAstNode& node) {
+            bool isDeclareNode = 
+                node.IsListOfSize(3) && node.GetChild(0)->IsAtom() 
+                && node.GetChild(0)->GetContent() == "declare";
+            if (isDeclareNode) {
+                const auto varNameNode = node.GetChild(1);
+                UNIT_ASSERT(varNameNode->IsAtom());
+                const auto varName = varNameNode->GetContent();
+
+                const auto varTypeNode = node.GetChild(2);
+                UNIT_ASSERT(varTypeNode->IsListOfSize(2));
+                UNIT_ASSERT(varTypeNode->GetChild(0)->GetContent() == "PgType");
+                actualParamToType[TString(varName)] = varTypeNode->GetChild(1)->ToString();
+            }
+        });
+        
+        return actualParamToType;
+    }
+    
+    Y_UNIT_TEST(ParamRef_IntAndPoint) {
+        TTranslationSettings settings;
+        
+        settings.PgParameterTypeOids = {NYql::NPg::LookupType("int4").TypeId, NYql::NPg::LookupType("point").TypeId};
+        auto res = SqlToYqlWithMode(
+            R"(select $1 as "x", $2 as "y")",
+            NSQLTranslation::ESqlMode::QUERY, 
+            10, 
+            {}, 
+            EDebugOutput::None, 
+            false,
+            settings);
+        TMap<TString, TString> expectedParamToType {
+            {"$p1", "'int4"},
+            {"$p2", "'point"},
+        };
+        UNIT_ASSERT(res.Root);
+        const auto actualParamToTypes = GetParamNameToPgType(*res.Root);
+        UNIT_ASSERT(expectedParamToType.size() == actualParamToTypes.size());
+        UNIT_ASSERT_EQUAL(expectedParamToType, actualParamToTypes);
+    }
+
+    Y_UNIT_TEST(ParamRef_IntUnknownInt) {
+        TTranslationSettings settings;
+        settings.PgParameterTypeOids = {NYql::NPg::LookupType("int4").TypeId, NYql::NPg::LookupType("unknown").TypeId, NYql::NPg::LookupType("int4").TypeId};
+        auto res = SqlToYqlWithMode(
+            R"(select $1 as "x", $2 as "y", $3 as "z")",
+            NSQLTranslation::ESqlMode::QUERY, 
+            10, 
+            {}, 
+            EDebugOutput::None, 
+            false,
+            settings);
+        TMap<TString, TString> expectedParamToType {
+            {"$p1", "'int4"},
+            {"$p2", "'text"},
+            {"$p3", "'int4"},
+        };
+        UNIT_ASSERT(res.Root);
+        const auto actualParamToTypes = GetParamNameToPgType(*res.Root);
+        UNIT_ASSERT(expectedParamToType.size() == actualParamToTypes.size());
+        UNIT_ASSERT_EQUAL(expectedParamToType, actualParamToTypes);
+    }
+
+    Y_UNIT_TEST(ParamRef_NoTypeOids) {
+        TTranslationSettings settings;
+        settings.PgParameterTypeOids = {};
+        auto res = PgSqlToYql(R"(select $1 as "x", $2 as "y", $3 as "z")");
+        TMap<TString, TString> expectedParamToType {
+            {"$p1", "'text"},
+            {"$p2", "'text"},
+            {"$p3", "'text"},
+        };
+        UNIT_ASSERT(res.Root);
+        auto actualParamToTypes = GetParamNameToPgType(*res.Root);
+        UNIT_ASSERT_VALUES_EQUAL(expectedParamToType, actualParamToTypes);
     }
 }

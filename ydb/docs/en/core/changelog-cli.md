@@ -1,10 +1,22 @@
+<!-- This file is not tracked by the automatic translation system. Edits to the RU-version must be made yourself. -->
+
 # {{ ydb-short-name }} CLI changelog
+
+## Version 2.4.0 {#2-4-0}
+
+Released on May 24, 2023. To update to version **2.4.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Added the ability to upload multiple files in parallel with the command [ydb import file](reference/ydb-cli/export_import/_includes/import-file.md#multiple-files).
+* Added support for deleting column tables for the command [ydb scheme rmdir --recursive](reference/ydb-cli/commands/_includes/dir.md#rmdir).
+* Improved stability of the command [ydb workload topic](reference/ydb-cli/workload-topic.md).
 
 ## Version 2.3.0 {#2-3-0}
 
 Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
-**What's new:**
+**Features:**
 
 * Added the interactive mode of query execution. To switch to the interactive mode, run [ydb yql](reference/ydb-cli/yql.md) without arguments. This mode is experimental: backward compatibility is not guaranteed yet.
 * Added the [ydb index rename](reference/ydb-cli/commands/_includes/secondary_index.md#rename) command for [atomic replacement](best_practices/secondary_indexes.md#atomic-index-replacement) or renaming of a secondary index.
@@ -23,7 +35,7 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 
 Release date: March 3, 2023. To update to version **2.2.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
-**What's new:**
+**Features:**
 
 * Fixed the error that didn't allow specifying supported compression algorithms when adding a topic consumer.
 * Added support for streaming YQL scripts and queries based on options [transferred via `stdin`](reference/ydb-cli/parameterized-queries-cli.md).
@@ -47,7 +59,7 @@ Release date: December 30, 2022. To update to version **2.1.1**, select the [Dow
 
 Release date: November 18, 2022. To update to version **2.1.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
-**What's new:**
+**Features:**
 
 * You can now [create a profile non-interactively](reference/ydb-cli/profile/create.md#cmdline).
 * Added the [ydb config profile update](reference/ydb-cli/profile/create.md#update) and [ydb config profile replace](reference/ydb-cli/profile/create.md#replace) commands to update and replace profiles, respectively.
@@ -66,7 +78,7 @@ Release date: November 18, 2022. To update to version **2.1.0**, select the [Dow
 
 Release date: September 20, 2022. To update to version **2.0.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
-**What's new:**
+**Features:**
 
 * Added the ability to work with topics:
    * `ydb topic create`: Create a topic.
@@ -96,7 +108,7 @@ Release date: September 20, 2022. To update to version **2.0.0**, select the [Do
 
 Release date: June 25, 2022. To update to version **1.9.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
-**What's new:**
+**Features:**
 
 * Added the ability to compress data when exporting it to S3-compatible storage (see the `--compression` option of the [ydb export s3](reference/ydb-cli/export_import/s3_export.md) command).
 * Added the ability to manage new {{ ydb-short-name }} CLI version availability auto checks (see the `--disable-checks` and `--enable-checks` options of the [ydb version](reference/ydb-cli/version.md) command).

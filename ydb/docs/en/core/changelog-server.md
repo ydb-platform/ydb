@@ -2,7 +2,6 @@
 
 ## Version 23.1 {#23-1}
 
-
 Release date: May 5, 2023. To update to version 23.1, select the [Downloads](downloads/index.md#ydb-server) section.
 
 **Functionality:**

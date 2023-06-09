@@ -327,7 +327,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
-        UNIT_ASSERT(op.Ready());
+        UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetIssues().ToString());
+        UNIT_ASSERT_C(op.Ready(), op.Status().GetIssues().ToString());
         UNIT_ASSERT(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled);
         UNIT_ASSERT_EQUAL(op.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT(op.Status().GetStatus() == NYdb::EStatus::SUCCESS || op.Status().GetStatus() == NYdb::EStatus::CANCELLED);

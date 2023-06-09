@@ -108,6 +108,17 @@ TQueryBase::TEvQueryBasePrivate::TEvRollbackTransactionResponse::TEvRollbackTran
 {
 }
 
+TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransactionResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
+    : Status(status)
+    , Issues(std::move(issues))
+{
+}
+
+TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransactionResponse(const Ydb::Table::CommitTransactionResponse& resp)
+    : TEvCommitTransactionResponse(resp.operation().status(), IssuesFromOperation(resp.operation()))
+{
+}
+
 TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database)
     : LogComponent(logComponent)
     , Database(std::move(database))
@@ -125,6 +136,7 @@ STRICT_STFUNC(TQueryBase::StateFunc,
     hFunc(TEvQueryBasePrivate::TEvCreateSessionResult, Handle);
     hFunc(TEvQueryBasePrivate::TEvDeleteSessionResult, Handle);
     hFunc(TEvQueryBasePrivate::TEvRollbackTransactionResponse, Handle);
+    hFunc(TEvQueryBasePrivate::TEvCommitTransactionResponse, Handle);
 );
 
 void TQueryBase::Bootstrap() {
@@ -172,11 +184,11 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
             ResultSets.emplace_back(std::move(resultSet));
         }
         try {
-            OnQueryResult();
+            (this->*QueryResultHandler)();
         } catch (const std::exception& ex) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
         }
-        Y_VERIFY(Finished || RunningQuery);
+        Y_VERIFY(Finished || RunningQuery || RunningCommit);
     } else {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
     }
@@ -186,6 +198,18 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvRollbackTransactionResponse::TPt
     LOG_D("RollbackTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
 
     // Continue finish
+    if (DeleteSession) {
+        RunDeleteSession();
+    } else {
+        PassAway();
+    }
+}
+
+void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev) {
+    LOG_D("CommitTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
+
+    OnFinish(ev->Get()->Status, std::move(ev->Get()->Issues));
+
     if (DeleteSession) {
         RunDeleteSession();
     } else {
@@ -276,6 +300,23 @@ void TQueryBase::RollbackTransaction() {
     req.set_session_id(SessionId);
     req.set_tx_id(TxId);
     Subscribe<Ydb::Table::RollbackTransactionResponse, TEvQueryBasePrivate::TEvRollbackTransactionResponse>(NRpcService::DoLocalRpc<TEvRollbackTransactionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
+}
+
+void TQueryBase::CommitTransaction() {
+    RunningCommit = true;
+    Y_VERIFY(SessionId);
+    Y_VERIFY(TxId);
+    LOG_D("Commit transaction: " << TxId);
+    using TEvCommitTransactionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CommitTransactionRequest,
+        Ydb::Table::CommitTransactionResponse>;
+    Ydb::Table::CommitTransactionRequest req;
+    req.set_session_id(SessionId);
+    req.set_tx_id(TxId);
+    Subscribe<Ydb::Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(NRpcService::DoLocalRpc<TEvCommitTransactionRequest>(std::move(req), Database, Nothing(), TActivationContext::ActorSystem(), true));
+}
+
+void TQueryBase::CallOnQueryResult() {
+    OnQueryResult();
 }
 
 } // namespace NKikimr

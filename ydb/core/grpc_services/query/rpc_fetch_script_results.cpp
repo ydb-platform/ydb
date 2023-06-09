@@ -97,12 +97,12 @@ private:
         if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
             Reply(Ydb::StatusIds::NOT_FOUND, "No such execution");
         } else {
-            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver request to destination");
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver fetch request to destination");
         }
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver request to destination");
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver fetch request to destination");
     }
 
     void PassAway() override {

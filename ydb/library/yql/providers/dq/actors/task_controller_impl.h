@@ -356,18 +356,21 @@ private:
         ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(SourceCpuTimeUs)
-        ADD_COUNTER(PendingInputTimeUs)
-        ADD_COUNTER(PendingOutputTimeUs)
-        ADD_COUNTER(FinishTimeUs)
+        ADD_COUNTER(FirstRowTimeMs)
+        ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
+        ADD_COUNTER(StartTimeMs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
         ADD_COUNTER(WaitTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
+        ADD_COUNTER(PendingInputTimeUs)
+        ADD_COUNTER(PendingOutputTimeUs)
+        ADD_COUNTER(FinishTimeUs)
 
         for (const auto& ingress : s.GetIngress()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
@@ -425,7 +428,7 @@ private:
 
             if (stats.GetFirstMessageMs() && stats.GetLastMessageMs()) {
                 TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "ActiveTimeUs"),
-                    (   TInstant::MilliSeconds(stats.GetLastMessageMs()) - 
+                    (   TInstant::MilliSeconds(stats.GetLastMessageMs()) -
                         TInstant::MilliSeconds(stats.GetFirstMessageMs()) ).MicroSeconds()
                 );
             }
@@ -459,7 +462,7 @@ private:
 
             if (stats.GetFirstMessageMs() && stats.GetLastMessageMs()) {
                 TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "ActiveTimeUs"),
-                    (   TInstant::MilliSeconds(stats.GetLastMessageMs()) - 
+                    (   TInstant::MilliSeconds(stats.GetLastMessageMs()) -
                         TInstant::MilliSeconds(stats.GetFirstMessageMs()) ).MicroSeconds()
                 );
             }

@@ -964,8 +964,9 @@ protected:
         bool NeedsRefresh() const {
             switch (TokenType) {
                 case TDerived::ETokenType::Builtin:
-                case TDerived::ETokenType::Login:
                     return false;
+                case TDerived::ETokenType::Login:
+                    return true;
                 default:
                     return Signature.AccessKeyId.empty();
             }
@@ -1178,7 +1179,43 @@ protected:
     }
 
     template <typename TTokenRecord>
+    bool CanRefreshLoginTicket(const TTokenRecord& record) {
+        return record.TokenType == TDerived::ETokenType::Login && record.Error.empty();
+    }
+
+    template <typename TTokenRecord>
+    bool RefreshLoginTicket(const TString& key, TTokenRecord& record) {
+        GetDerived()->ResetTokenRecord(record);
+        const TString& database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
+        auto itLoginProvider = LoginProviders.find(database);
+        if (itLoginProvider == LoginProviders.end()) {
+            return false;
+        }
+        NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
+        const TString userSID = record.GetToken()->GetUserSID();
+        if (loginProvider.CheckUserExists(userSID)) {
+            const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(userSID);
+            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+            SetToken(key, record, new NACLib::TUserToken({
+                                    .OriginalUserToken = record.Ticket,
+                                    .UserSID = userSID,
+                                    .GroupSIDs = groups,
+                                    .AuthType = record.GetAuthType()
+                                }));
+        } else {
+            TEvTicketParser::TError error;
+            error.Message = "User not found";
+            error.Retryable = false;
+            SetError(key, record, error);
+        }
+        return true;
+    }
+
+    template <typename TTokenRecord>
     bool CanRefreshTicket(const TString& key, TTokenRecord& record) {
+        if (CanRefreshLoginTicket(record)) {
+            return RefreshLoginTicket(key, record);
+        }
         if (CanRefreshAccessServiceTicket(record)) {
             GetDerived()->ResetTokenRecord(record);
             if (record.Permissions) {

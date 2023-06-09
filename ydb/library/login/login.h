@@ -143,6 +143,7 @@ public:
     TBasicResponse CreateUser(const TCreateUserRequest& request);
     TBasicResponse ModifyUser(const TModifyUserRequest& request);
     TRemoveUserResponse RemoveUser(const TRemoveUserRequest& request);
+    bool CheckUserExists(const TString& name);
 
     TBasicResponse CreateGroup(const TCreateGroupRequest& request);
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
@@ -158,6 +159,7 @@ public:
 
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);
+    bool CheckSubjectExists(const TString& name, const ESidType::SidType& type);
     static bool CheckAllowedName(const TString& name);
 
     struct TImpl;

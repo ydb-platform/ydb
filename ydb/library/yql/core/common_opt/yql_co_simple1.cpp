@@ -3032,7 +3032,8 @@ TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowGroup node, TExprContext& ctx) 
 }
 
 bool HasPayload(const TCoAggregate& node) {
-    return node.Handlers().Size() > 0 || HasSetting(node.Settings().Ref(), "hopping");
+    return node.Handlers().Size() > 0 || HasSetting(node.Settings().Ref(), "hopping") ||
+                                         HasSetting(node.Settings().Ref(), "session");
 }
 
 TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

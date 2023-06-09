@@ -49,7 +49,9 @@ TRunActorParams::TRunActorParams(
     TInstant requestStartedAt,
     ui32 restartCount,
     const TString& jobId,
-    const Fq::Private::TaskResources& resources
+    const Fq::Private::TaskResources& resources,
+    const TString& executionId,
+    const TString& operationId
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -96,7 +98,32 @@ TRunActorParams::TRunActorParams(
     , RestartCount(restartCount)
     , JobId(jobId)
     , Resources(resources)
+    , ExecutionId(executionId)
+    , OperationId(operationId, true)
     {
     }
+
+IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
+    return out  << "Run actors params: { QueryId: " << params.QueryId
+                << " CloudId: " << params.CloudId
+                << " UserId: " << params.UserId
+                << " Owner: " << params.Owner
+                << " PreviousQueryRevision: " << params.PreviousQueryRevision
+                << " Connections: " << params.Connections.size()
+                << " Bindings: " << params.Bindings.size()
+                << " AccountIdSignatures: " << params.AccountIdSignatures.size()
+                << " QueryType: " << FederatedQuery::QueryContent::QueryType_Name(params.QueryType)
+                << " ExecuteMode: " << FederatedQuery::ExecuteMode_Name(params.ExecuteMode)
+                << " ResultId: " << params.ResultId
+                << " StateLoadMode: " << FederatedQuery::StateLoadMode_Name(params.StateLoadMode)
+                << " StreamingDisposition: " << params.StreamingDisposition
+                << " Status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(params.Status)
+                << " DqGraphs: " << params.DqGraphs.size()
+                << " DqGraphIndex: " << params.DqGraphIndex
+                << " Resource.TopicConsumers: " << params.Resources.topic_consumers().size()
+                << " ExecutionId: " << params.ExecutionId
+                << " OperationId: " << (params.OperationId.GetKind() != Ydb::TOperationId::UNUSED ? ProtoToString(params.OperationId) : "<empty>")
+                << " }";
+}
 
 } /* NFq */

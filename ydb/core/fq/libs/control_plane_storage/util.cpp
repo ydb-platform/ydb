@@ -185,6 +185,9 @@ bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request)
         || request.has_disposition()
         || request.has_resources()
         || !request.internal_issues().empty()
+        || !request.execution_id().empty()
+        || !request.operation_id().empty()
+        || !request.result_id().value().empty()
     ;
 }
 

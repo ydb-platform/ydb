@@ -1,4 +1,4 @@
-#include "proxy.h"
+#include "pinger.h"
 
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
@@ -148,7 +148,8 @@ public:
         const NConfig::TPingerConfig& config,
         TInstant deadline,
         const ::NYql::NCommon::TServiceCounters& queryCounters,
-        TInstant createdAt)
+        TInstant createdAt,
+        bool replyToSender)
         : Config(config)
         , TenantName(tenantName)
         , Scope(scope)
@@ -160,6 +161,7 @@ public:
         , QueryCounters(queryCounters)
         , CreatedAt(createdAt)
         , InternalServiceId(MakeInternalServiceActorId())
+        , ReplyToSender(replyToSender)
     {
     }
 
@@ -339,7 +341,7 @@ private:
             if (continueLeaseRequest) {
                 ScheduleNextPing();
             } else {
-                Send(Parent, new TEvents::TEvForwardPingResponse(true, action), 0, ev->Cookie);
+                Send(ReplyToSender ? ForwardRequests.front().Request->Sender : Parent, new TEvents::TEvForwardPingResponse(true, action), 0, ev->Cookie);
                 ForwardRequests.pop_front();
 
                 // Process next forward ping request.
@@ -357,7 +359,13 @@ private:
             }
             LOG_E("Ping response error: " << errorMessage << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
             auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : FederatedQuery::QUERY_ACTION_UNSPECIFIED;
-            Send(Parent, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
+            if (ReplyToSender) {
+                for (const auto& forwardRequest: ForwardRequests) {
+                    Send(forwardRequest.Request->Sender, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
+                }
+            } else {
+                Send(Parent, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
+            }
             FatalError = true;
             ForwardRequests.clear();
         }
@@ -437,6 +445,7 @@ private:
 
     TSchedulerCookieHolder SchedulerCookieHolder;
     TActorId InternalServiceId;
+    bool ReplyToSender = false;
 };
 
 IActor* CreatePingerActor(
@@ -449,7 +458,8 @@ IActor* CreatePingerActor(
     const NConfig::TPingerConfig& config,
     TInstant deadline,
     const ::NYql::NCommon::TServiceCounters& queryCounters,
-    TInstant createdAt)
+    TInstant createdAt,
+    bool replyToSender)
 {
     return new TPingerActor(
         tenantName,
@@ -461,7 +471,8 @@ IActor* CreatePingerActor(
         config,
         deadline,
         queryCounters,
-        createdAt);
+        createdAt,
+        replyToSender);
 }
 
 } /* NFq */

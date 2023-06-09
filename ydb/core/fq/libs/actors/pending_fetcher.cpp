@@ -46,11 +46,14 @@
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/common/util.h>
-#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/compute/common/config.h>
+#include <ydb/core/fq/libs/compute/ydb/actors_factory.h>
+#include <ydb/core/fq/libs/compute/ydb/ydb_run_actor.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
 #include <library/cpp/actors/core/log.h>
@@ -138,6 +141,7 @@ public:
         , TenantName(tenantName)
         , InternalServiceId(MakeInternalServiceActorId())
         , Monitoring(monitoring)
+        , ComputeConfig(config.GetCompute())
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -380,10 +384,15 @@ private:
             NProtoInterop::CastFromProto(task.request_started_at()),
             task.restart_count(),
             task.job_id().value(),
-            resources
+            resources,
+            task.execution_id(),
+            task.operation_id()
             );
 
-        auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
+        auto runActorId =
+            ComputeConfig.GetComputeType(task) == NConfig::EComputeType::YDB
+                ? Register(CreateYdbRunActor(SelfId(), queryCounters, std::move(params), CreateActorFactory(params, queryCounters)))
+                : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
         if (!task.automatic()) {
@@ -444,6 +453,7 @@ private:
     TString TenantName;
     TActorId InternalServiceId;
     NActors::TMon* Monitoring;
+    TComputeConfig ComputeConfig;
 };
 
 

@@ -114,6 +114,8 @@ message GetTaskResult {
 
         TaskResources resources = 33;
         FederatedQuery.QueryContent.QuerySyntax query_syntax = 34;
+        string operation_id = 35;
+        string execution_id = 36;
     }
     repeated Task tasks = 1;
 }
@@ -154,6 +156,8 @@ message PingTaskRequest {
     string tenant = 104;
     TaskResources resources = 33;
     repeated Ydb.Issue.IssueMessage internal_issues = 34;
+    string operation_id = 35;
+    string execution_id = 36;
 }
 
 message PingTaskResult {

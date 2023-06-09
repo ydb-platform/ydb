@@ -170,7 +170,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (request.status_code() != NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            internal.set_status_code(request.status_code());   
+            internal.set_status_code(request.status_code());
         }
 
         if (issues) {
@@ -277,6 +277,8 @@ TPingTaskParams ConstructHardPingTask(
             internal.clear_created_topic_consumers();
             // internal.clear_dq_graph(); keep for debug
             internal.clear_dq_graph_index();
+            // internal.clear_execution_id(); keep for debug
+            // internal.clear_operation_id(); keep for debug
         }
 
         if (!request.created_topic_consumers().empty()) {
@@ -291,6 +293,14 @@ TPingTaskParams ConstructHardPingTask(
             for (auto&& c : mergedConsumers) {
                 *internal.add_created_topic_consumers() = std::move(c);
             }
+        }
+
+        if (!request.execution_id().empty()) {
+            internal.set_execution_id(request.execution_id());
+        }
+
+        if (!request.operation_id().empty()) {
+            internal.set_operation_id(request.operation_id());
         }
 
         if (!request.dq_graph().empty()) {

@@ -1,22 +1,23 @@
 #pragma once
+
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
-#include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
+#include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
 
 #include <ydb/public/lib/fq/scope.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NFq {
 
@@ -66,11 +67,15 @@ struct TRunActorParams { // TODO2 : Change name
         TInstant requestStartedAt,
         ui32 restartCount,
         const TString& jobId,
-        const Fq::Private::TaskResources& resources
+        const Fq::Private::TaskResources& resources,
+        const TString& executionId,
+        const TString& operationId
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
     TRunActorParams(TRunActorParams&& params) = default;
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params);
 
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
@@ -120,6 +125,8 @@ struct TRunActorParams { // TODO2 : Change name
     const ui32 RestartCount;
     const TString JobId;
     Fq::Private::TaskResources Resources;
+    TString ExecutionId;
+    NYdb::TOperation::TOperationId OperationId;
 };
 
 } /* NFq */

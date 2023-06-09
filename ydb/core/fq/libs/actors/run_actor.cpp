@@ -49,16 +49,17 @@
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/core/fq/libs/actors/nodes_manager.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
+#include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/gateway/empty_gateway.h>
-#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/private_client/events.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
 #include <ydb/core/fq/libs/rate_limiter/utils/path.h>
@@ -1249,7 +1250,7 @@ private:
         if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
            LOG_E("StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
         }
-        
+
         if (statusCode != NYql::NDqProto::StatusIds::SUCCESS) {
             // Error
             ResignQuery(statusCode);

@@ -5,6 +5,7 @@ package NFq.NConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/fq/libs/config/protos/storage.proto";
+import "ydb/public/api/protos/draft/fq.proto";
 
 ////////////////////////////////////////////////////////////
 
@@ -12,12 +13,34 @@ message TInPlaceCompute {
 }
 
 message TYdbCompute {
-    TYdbStorageConfig Connection = 1;
+    bool Enable = 1;
+    TYdbStorageConfig Connection = 2;
+}
+
+enum EComputeType {
+    UNKNOWN = 0;
+    IN_PLACE = 1;
+    YDB = 2;
+}
+
+message TComputeMappingRuleKey {
+    oneof key {
+        FederatedQuery.QueryContent.QueryType QueryType = 1;
+        // FederatedQuery.QueryContent.EngineType EngineType = 2;
+    }
+}
+
+message TComputeMappingRule {
+    repeated TComputeMappingRuleKey Key = 1;
+    EComputeType Compute = 2;
+}
+
+message TComputeMapping {
+    repeated TComputeMappingRule Rule = 1;
 }
 
 message TComputeConfig {
-    oneof type {
-        TInPlaceCompute InPlace = 1;
-        TYdbCompute Ydb = 2;
-    }
+    TInPlaceCompute InPlace = 1;
+    TYdbCompute Ydb = 2;
+    TComputeMapping ComputeMapping = 3;
 }

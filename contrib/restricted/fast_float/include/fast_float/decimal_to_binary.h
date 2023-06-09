@@ -48,9 +48,9 @@ namespace detail {
  * where
  *   p = log(5**q)/log(2) = q * log(5)/log(2)
  *
- * For negative values of q in (-400,0), we have that 
+ * For negative values of q in (-400,0), we have that
  *  f = (((152170 + 65536) * q ) >> 16);
- * is equal to 
+ * is equal to
  *   -ceil(p) + q
  * where
  *   p = log(5**-q)/log(2) = -q * log(5)/log(2)

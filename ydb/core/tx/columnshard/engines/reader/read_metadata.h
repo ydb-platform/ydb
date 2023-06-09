@@ -138,6 +138,7 @@ private:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     std::vector<ui32> AllColumns;
     std::vector<ui32> ResultColumnsIds;
+    std::shared_ptr<NIndexedReader::IOrderPolicy> DoBuildSortingPolicy() const;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 

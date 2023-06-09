@@ -29,7 +29,7 @@ void TPathInfo::AddInsertedSize(const i64 size, const ui64 overloadLimit) {
     Y_VERIFY(InsertedSize >= 0);
     Summary->InsertedSize += size;
     Y_VERIFY(Summary->InsertedSize >= 0);
-    PathIdCounters.Committed.OnPathIdDataInfo(InsertedSize, 0);
+    PathIdCounters.Inserted.OnPathIdDataInfo(InsertedSize, 0);
     SetInsertedOverload((ui64)InsertedSize > overloadLimit);
 }
 

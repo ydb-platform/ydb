@@ -165,7 +165,7 @@ void TGranuleMeta::OnAdditiveSummaryChange() const {
     if (AdditiveSummaryCache) {
         Counters.OnCompactedData(AdditiveSummaryCache->GetOther());
         Counters.OnInsertedData(AdditiveSummaryCache->GetInserted());
-        Counters.OnFullData(AdditiveSummaryCache->GetGranuleSize(), AdditiveSummaryCache->GetActivePortionsCount());
+        Counters.OnFullData(AdditiveSummaryCache->GetOther() + AdditiveSummaryCache->GetInserted());
     }
 }
 

@@ -41,11 +41,6 @@ public:
         PortionsSize->Set(dataInfo.GetPortionsSize());
         PortionsCount->Set(dataInfo.GetPortionsCount());
     }
-
-    void OnPortionsInfo(const ui64 size, const ui32 chunks) const {
-        PortionsSize->Set(size);
-        PortionsCount->Set(chunks);
-    }
 };
 
 class TAgentDataClassCounters: public TCommonCountersOwner {
@@ -79,8 +74,8 @@ public:
     {
     }
 
-    void OnFullData(const ui64 size, const ui32 chunksCount) const {
-        FullData.OnPortionsInfo(size, chunksCount);
+    void OnFullData(const TBaseGranuleDataClassSummary& dataInfo) const {
+        FullData.OnPortionsInfo(dataInfo);
     }
 
     void OnInsertedData(const TBaseGranuleDataClassSummary& dataInfo) const {

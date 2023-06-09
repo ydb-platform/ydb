@@ -21,6 +21,7 @@ void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition
     Y_VERIFY(point);
     Y_VERIFY(point->IsSameSchema(SortSchema));
     Y_VERIFY(++ControlPoints == 1);
+
     SortHeap.emplace_back(TBatchIterator(*point));
     if (SortHeap.size() > 1) {
         Y_VERIFY(SortHeap.front().GetKeyColumns().Compare(SortHeap.back().GetKeyColumns()) != std::partial_ordering::greater);

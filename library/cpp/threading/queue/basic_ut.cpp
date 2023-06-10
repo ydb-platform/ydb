@@ -30,7 +30,7 @@ public:
 
         popped = queue.Pop();
         UNIT_ASSERT_VALUES_EQUAL(popped, nullptr);
-    };
+    }
 
     void OnePushOnePop_Repeat1M() {
         TQueueType queue;

@@ -963,4 +963,4 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
         UNIT_ASSERT_VALUES_EQUAL(list1.ToJson(), list2.ToJson());
         UNIT_ASSERT_VALUES_EQUAL(list2.ToJson(), list3.ToJson());
     }
-};
+}

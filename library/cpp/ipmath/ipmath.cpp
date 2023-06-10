@@ -319,11 +319,11 @@ TIpAddressRange::TIterator TIpAddressRange::End() const {
 
 TIpAddressRange::TIpAddressRangeBuilder TIpAddressRange::From(TIpv6Address from) {
     return TIpAddressRangeBuilder{from};
-};
+}
 
 TIpAddressRange::TIpAddressRangeBuilder TIpAddressRange::From(const TString& from) {
     return TIpAddressRangeBuilder{from};
-};
+}
 
 bool operator==(const TIpAddressRange& lhs, const TIpAddressRange& rhs) {
     return lhs.Start_ == rhs.Start_ && lhs.End_ == rhs.End_;

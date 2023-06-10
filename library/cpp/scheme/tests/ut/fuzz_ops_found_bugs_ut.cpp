@@ -9,4 +9,4 @@ Y_UNIT_TEST_SUITE(TTestSchemeFuzzOpsFoundBugs) {
     Y_UNIT_TEST(TestBug1) {
         FuzzOps(HexDecode("98040129000525"), true);
     }
-};
+}

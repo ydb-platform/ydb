@@ -232,4 +232,4 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
         UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[{a:1},{a:1,b:2,d:2},{b:2}]}");
     }
 
-};
+}

@@ -33,4 +33,3 @@ Y_UNIT_TEST(TestAcquireReleaseReuse) {
     // when the factory dies we should see no leaks
 }
 }
-;

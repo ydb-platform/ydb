@@ -158,4 +158,4 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
         UNIT_ASSERT(NSc::TValue::FromJson(duplicatedKeys).IsDict());
         UNIT_ASSERT(NSc::TValue::FromJson(duplicatedKeys, NSc::TValue::JO_PARSER_DISALLOW_DUPLICATE_KEYS).IsNull());
     }
-};
+}

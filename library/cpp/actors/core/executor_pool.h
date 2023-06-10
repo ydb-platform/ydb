@@ -115,7 +115,7 @@ namespace NActors {
 
         virtual ui32 GetThreadCount() const {
             return 1;
-        };
+        }
 
         virtual void SetThreadCount(ui32 threads) {
             Y_UNUSED(threads);

@@ -57,6 +57,9 @@ protected:
         return (TFeatures)EFeatures::CanInterrupt & (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;
     }
 
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "type=PKSortingWithLimit;granules_count=" << GranulesOutOrder.size() << ";limit=" << CurrentItemsLimit << ";";
+    }
 public:
     virtual std::set<ui32> GetFilterStageColumns() override {
         std::set<ui32> result = ReadMetadata->GetEarlyFilterColumnIds();

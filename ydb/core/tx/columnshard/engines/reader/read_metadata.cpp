@@ -226,6 +226,7 @@ NIndexedReader::IOrderPolicy::TPtr TReadMetadata::DoBuildSortingPolicy() const {
 
 std::shared_ptr<NIndexedReader::IOrderPolicy> TReadMetadata::BuildSortingPolicy() const {
     auto result = DoBuildSortingPolicy();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sorting_policy_constructed")("info", result->DebugString());
     NYDBTest::TControllers::GetColumnShardController()->OnSortingPolicy(result);
     return result;
 }

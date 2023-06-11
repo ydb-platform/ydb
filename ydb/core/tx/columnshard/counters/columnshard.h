@@ -36,13 +36,13 @@ private:
     std::shared_ptr<TValueAggregationClient> SplitCompactionGranulePortionsCount;
 public:
     void OnInternalCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
-        InternalCompactionGranuleBytes->Set(bytes);
-        InternalCompactionGranulePortionsCount->Set(portionsCount);
+        InternalCompactionGranuleBytes->SetValue(bytes);
+        InternalCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
     void OnSplitCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
-        SplitCompactionGranuleBytes->Set(bytes);
-        SplitCompactionGranulePortionsCount->Set(portionsCount);
+        SplitCompactionGranuleBytes->SetValue(bytes);
+        SplitCompactionGranulePortionsCount->SetValue(portionsCount);
     }
 
     void OnOverloadInsertTable(const ui64 size) const {

@@ -37,7 +37,7 @@ std::shared_ptr<TValueAggregationAgent> TCommonCountersOwner::GetValueAutoAggreg
 
 std::shared_ptr<TValueAggregationClient> TCommonCountersOwner::GetValueAutoAggregationsClient(const TString& name) const {
     std::shared_ptr<TValueAggregationAgent> agent = NPrivate::TAggregationsController::GetAggregation(name, *this);
-    return std::make_shared<TValueAggregationClient>(agent);
+    return agent->GetClient(agent);
 }
 
 }

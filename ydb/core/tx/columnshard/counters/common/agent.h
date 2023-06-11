@@ -25,7 +25,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalSum;
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMin;
     ::NMonitoring::TDynamicCounters::TCounterPtr ValueSignalMax;
-    std::deque<i64> Values;
+    std::list<TValueAggregationClient*> Values;
     TMutex Mutex;
 
     bool CalcAggregations(i64& sum, i64& minValue, i64& maxValue) const;
@@ -33,9 +33,8 @@ private:
 
 public:
     TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner);
-
-    i64* RegisterValue(const i64 zeroValue = 0);
     void ResendStatus() const;
+    void UnregisterClient(std::list<TValueAggregationClient*>::iterator it);
 
     std::shared_ptr<TValueAggregationClient> GetClient(std::shared_ptr<TValueAggregationAgent> selfPtr);
 };

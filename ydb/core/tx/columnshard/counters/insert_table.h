@@ -8,35 +8,35 @@ namespace NKikimr::NColumnShard {
 class TPathIdClientCounters {
 private:
     using TBase = TCommonCountersOwner;
-    const std::shared_ptr<TValueAggregationClient> PathIdCommittedBytes;
-    const std::shared_ptr<TValueAggregationClient> PathIdCommittedChunks;
+    const std::shared_ptr<TValueAggregationClient> PathIdBytes;
+    const std::shared_ptr<TValueAggregationClient> PathIdChunks;
 public:
     TPathIdClientCounters(std::shared_ptr<TValueAggregationClient> pathIdCommittedBytes, std::shared_ptr<TValueAggregationClient> pathIdCommittedChunks)
-        : PathIdCommittedBytes(pathIdCommittedBytes)
-        , PathIdCommittedChunks(pathIdCommittedChunks) {
+        : PathIdBytes(pathIdCommittedBytes)
+        , PathIdChunks(pathIdCommittedChunks) {
     }
 
     void OnPathIdDataInfo(const ui64 bytes, const ui32 chunks) const {
-        PathIdCommittedBytes->Set(bytes);
-        PathIdCommittedChunks->Set(chunks);
+        PathIdBytes->SetValue(bytes);
+        PathIdChunks->SetValue(chunks);
     }
 };
 
 class TPathIdInfoCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
-    const std::shared_ptr<TValueAggregationAgent> PathIdCommittedBytes;
-    const std::shared_ptr<TValueAggregationAgent> PathIdCommittedChunks;
+    const std::shared_ptr<TValueAggregationAgent> PathIdBytes;
+    const std::shared_ptr<TValueAggregationAgent> PathIdChunks;
 public:
     TPathIdInfoCounters(const TString& countersName, const TString& dataName)
         : TBase(countersName)
-        , PathIdCommittedBytes(TBase::GetValueAutoAggregations("PathId/" + dataName + "/Bytes"))
-        , PathIdCommittedChunks(TBase::GetValueAutoAggregations("PathId/" + dataName + "/Chunks"))
+        , PathIdBytes(TBase::GetValueAutoAggregations("PathId/" + dataName + "/Bytes"))
+        , PathIdChunks(TBase::GetValueAutoAggregations("PathId/" + dataName + "/Chunks"))
     {
     }
 
     TPathIdClientCounters GetClient() const {
-        return TPathIdClientCounters(PathIdCommittedBytes->GetClient(PathIdCommittedBytes), PathIdCommittedChunks->GetClient(PathIdCommittedChunks));
+        return TPathIdClientCounters(PathIdBytes->GetClient(PathIdBytes), PathIdChunks->GetClient(PathIdChunks));
     }
 };
 

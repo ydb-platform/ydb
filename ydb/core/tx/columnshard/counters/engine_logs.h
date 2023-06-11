@@ -38,8 +38,8 @@ public:
     }
 
     void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
-        PortionsSize->Set(dataInfo.GetPortionsSize());
-        PortionsCount->Set(dataInfo.GetPortionsCount());
+        PortionsSize->SetValue(dataInfo.GetPortionsSize());
+        PortionsCount->SetValue(dataInfo.GetPortionsCount());
     }
 };
 

@@ -12,20 +12,20 @@ TValueAggregationAgent::TValueAggregationAgent(const TString& signalName, const 
 }
 
 bool TValueAggregationAgent::CalcAggregations(i64& sum, i64& minValue, i64& maxValue) const {
-    const ui32 count = Values.size();
-    if (!count) {
+    if (Values.empty()) {
         return false;
     }
     sum = 0;
-    minValue = Values.front();
-    maxValue = Values.front();
-    for (ui32 i = 0; i < count; ++i) {
-        sum += Values[i];
-        if (minValue > Values[i]) {
-            minValue = Values[i];
+    minValue = Values.front()->GetValue();
+    maxValue = Values.front()->GetValue();
+    for (auto&& i : Values) {
+        const i64 v = i->GetValue();
+        sum += v;
+        if (minValue > v) {
+            minValue = v;
         }
-        if (maxValue < Values[i]) {
-            maxValue = Values[i];
+        if (maxValue < v) {
+            maxValue = v;
         }
     }
     return true;
@@ -52,13 +52,16 @@ void TValueAggregationAgent::ResendStatus() const {
 }
 
 std::shared_ptr<NKikimr::NColumnShard::TValueAggregationClient> TValueAggregationAgent::GetClient(std::shared_ptr<TValueAggregationAgent> selfPtr) {
-    return std::make_shared<TValueAggregationClient>(selfPtr);
+    TGuard<TMutex> g(Mutex);
+    auto it = Values.emplace(Values.end(), nullptr);
+    auto result = std::make_shared<TValueAggregationClient>(selfPtr, it);
+    *it = result.get();
+    return result;
 }
 
-i64* TValueAggregationAgent::RegisterValue(const i64 zeroValue /*= 0*/) {
+void TValueAggregationAgent::UnregisterClient(std::list<TValueAggregationClient*>::iterator it) {
     TGuard<TMutex> g(Mutex);
-    Values.emplace_back(zeroValue);
-    return &Values.back();
+    Values.erase(it);
 }
 
 }

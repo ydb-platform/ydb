@@ -3,19 +3,15 @@
 
 namespace NKikimr::NColumnShard {
 
-TValueAggregationClient::TValueAggregationClient(std::shared_ptr<TValueAggregationAgent> owner)
+TValueAggregationClient::TValueAggregationClient(std::shared_ptr<TValueAggregationAgent> owner, std::list<TValueAggregationClient*>::iterator it)
     : Owner(owner)
-    , ValuePtr(Owner->RegisterValue(0))
+    , PositionIterator(it)
 {
 
 }
 
-void TValueAggregationClient::Set(const i64 value) const {
-    *ValuePtr = value;
-}
-
 TValueAggregationClient::~TValueAggregationClient() {
-    Set(0);
+    Owner->UnregisterClient(PositionIterator);
 }
 
 }

@@ -67,10 +67,19 @@ jobs:
 
   prepare-vm:
     name: Prepare runner
-    uses: ./.github/workflows/prepare_vm_for_build.yml
     needs: provide-runner
-    with:
-      runner_label: ${{ needs.provide-runner.outputs.label }}
+    runs-on: [ self-hosted, "${{ needs.provide-runner.outputs.label }}" ]
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        if: github.event.pull_request.head.sha != ''
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Checkout
+        uses: actions/checkout@v3
+        if: github.event.pull_request.head.sha == ''
+      - name: Prepare VM
+        uses: ./.github/actions/prepare_vm
 
   main:
     name: Build and test

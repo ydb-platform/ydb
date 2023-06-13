@@ -54,7 +54,7 @@ ci:
       auto: true
       filters:
       - sub-paths: ['**']
-      - abs-paths: [kikimr/docs/**]
+      - abs-paths: [kikimr/docs/**, kikimr/docs-corp/**]
 
       stages:
       - id: build

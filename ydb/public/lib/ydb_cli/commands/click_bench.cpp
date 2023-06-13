@@ -161,12 +161,6 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             } catch (...) {
                 res = std::make_pair<TString, TString>("", CurrentExceptionMessage());
             }
-            if (prevResult != res.first && !qInfo.IsCorrectResult(res.first)) {
-                outFStream << queryN << ": UNEXPECTED DIFF: " << Endl
-                    << "RESULT: " << Endl << res.first << Endl
-                    << "EXPECTATION: " << Endl << qInfo.GetExpectedResult() << Endl;
-                prevResult = res.first;
-            }
             auto duration = TInstant::Now() - t1;
 
             Cout << "\titeration " << i << ":\t";

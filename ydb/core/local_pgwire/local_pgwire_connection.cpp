@@ -24,8 +24,9 @@ extern NActors::IActor* CreatePgwireKqpProxy(
     std::unordered_map<TString, TString> params
 );
 
-NActors::IActor* CreatePgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
-NActors::IActor* CreatePgwireKqpProxyDescribe(std::unordered_map<TString, TString> params,  NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TString& script);
+NActors::IActor* CreatePgwireKqpProxyQuery(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
+NActors::IActor* CreatePgwireKqpProxyDescribe(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TParsedStatement& statement);
+NActors::IActor* CreatePgwireKqpProxyExecute(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute, const TParsedStatement& statement);
 
 class TPgYdbConnection : public TActor<TPgYdbConnection> {
     using TBase = TActor<TPgYdbConnection>;
@@ -33,12 +34,13 @@ class TPgYdbConnection : public TActor<TPgYdbConnection> {
     std::unordered_map<TString, TString> ConnectionParams;
     std::unordered_map<TString, TParsedStatement> ParsedStatements;
     TString CurrentStatement;
-    Ydb::StatusIds QueryStatus;
-    std::unordered_map<ui32, NYdb::TResultSet> ResultSets;
+    TConnectionState Connection;
+    std::deque<TAutoPtr<IEventHandle>> Events;
+    ui32 Inflight = 0;
 
 public:
     TPgYdbConnection(std::unordered_map<TString, TString> params)
-        : TActor<TPgYdbConnection>(&TPgYdbConnection::StateWork)
+        : TActor<TPgYdbConnection>(&TPgYdbConnection::StateSchedule)
         , ConnectionParams(std::move(params))
     {}
 
@@ -50,8 +52,8 @@ public:
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             return;
         }
-
-        TActorId actorId = Register(CreatePgwireKqpProxyQuery(ConnectionParams, std::move(ev)));
+        ++Inflight;
+        TActorId actorId = Register(CreatePgwireKqpProxyQuery(SelfId(), ConnectionParams, Connection, std::move(ev)));
         BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
     }
 
@@ -102,77 +104,10 @@ public:
             return;
         }
 
-        auto query(ConvertQuery(it->second));
-        auto script(ToPgSyntax(query.Query, ConnectionParams));
-
-        TActorId actorId = Register(CreatePgwireKqpProxyDescribe(ConnectionParams, std::move(ev), script));
-        BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
+        ++Inflight;
+        TActorId actorId = Register(CreatePgwireKqpProxyDescribe(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
+        BLOG_D("Created pgwireKqpProxyDescribe: " << actorId);
         return;
-        /*
-        TActorSystem* actorSystem = TActivationContext::ActorSystem();
-        auto query = ConvertQuery(it->second);
-        Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(query.Query, ConnectionParams));
-        // TODO:
-        //request.set_parameters(query.Params);
-        TString database;
-        if (ConnectionParams.count("database")) {
-            database = ConnectionParams["database"];
-        }
-        TString token;
-        if (ConnectionParams.count("ydb-serialized-token")) {
-            token = ConnectionParams["ydb-serialized-token"];
-        }
-        using TRpcEv = NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
-        auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, token, actorSystem);
-        // TODO: it's wrong. it should be done using explain to get all result meta. but it's not ready yet.
-        rpcFuture.Subscribe([actorSystem, ev](NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse> future) {
-            auto response = std::make_unique<NPG::TEvPGEvents::TEvDescribeResponse>();
-            try {
-                Ydb::Scripting::ExecuteYqlResponse yqlResponse(future.ExtractValueSync());
-                if (yqlResponse.has_operation()) {
-                    if (yqlResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
-                        if (yqlResponse.operation().has_result()) {
-                            NYdb::NScripting::TExecuteYqlResult result(ConvertProtoResponseToSdkResult(std::move(yqlResponse)));
-                            if (result.IsSuccess()) {
-                                const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
-                                if (!resultSets.empty()) {
-                                    NYdb::TResultSet resultSet = resultSets[0];
-
-                                    {
-                                        for (const NYdb::TColumn& column : resultSet.GetColumnsMeta()) {
-                                            // TODO: fill data types and sizes
-                                            response->DataFields.push_back({
-                                                .Name = column.Name,
-                                                .DataType = GetPgOidFromYdbType(column.Type),
-                                            });
-                                        }
-                                    }
-                                }
-                            } else {
-                                response->ErrorFields.push_back({'E', "ERROR"});
-                                response->ErrorFields.push_back({'M', TStringBuilder() << (NYdb::TStatus&)result});
-                            }
-                        }
-                    } else {
-                        NYql::TIssues issues;
-                        NYql::IssuesFromMessage(yqlResponse.operation().issues(), issues);
-                        NYdb::TStatus status(NYdb::EStatus(yqlResponse.operation().status()), std::move(issues));
-                        response->ErrorFields.push_back({'E', "ERROR"});
-                        response->ErrorFields.push_back({'M', TStringBuilder() << status});
-                    }
-                } else {
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', "No result received"});
-                }
-            }
-            catch (const std::exception& e) {
-                response->ErrorFields.push_back({'E', "ERROR"});
-                response->ErrorFields.push_back({'M', e.what()});
-            }
-
-            actorSystem->Send(ev->Sender, response.release(), 0, ev->Cookie);
-        });*/
     }
 
     void Handle(NPG::TEvPGEvents::TEvExecute::TPtr& ev) {
@@ -199,78 +134,63 @@ public:
             return;
         }
 
-        TActorSystem* actorSystem = TActivationContext::ActorSystem();
-        auto query = ConvertQuery(it->second);
-        Ydb::Scripting::ExecuteYqlRequest request;
-        request.set_script(ToPgSyntax(query.Query, ConnectionParams));
-        // TODO:
-        //request.set_parameters(query.Params);
-        TString database;
-        if (ConnectionParams.count("database")) {
-            database = ConnectionParams["database"];
-        }
-        TString token;
-        if (ConnectionParams.count("ydb-serialized-token")) {
-            token = ConnectionParams["ydb-serialized-token"];
-        }
-        using TRpcEv = NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
-        auto rpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), database, token, actorSystem);
+        ++Inflight;
+        TActorId actorId = Register(CreatePgwireKqpProxyExecute(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
+        BLOG_D("Created pgwireKqpProxyExecute: " << actorId);
+    }
 
-        rpcFuture.Subscribe([actorSystem, ev](NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse> future) {
-            auto response = std::make_unique<NPG::TEvPGEvents::TEvExecuteResponse>();
-            try {
-                Ydb::Scripting::ExecuteYqlResponse yqlResponse(future.ExtractValueSync());
-                if (yqlResponse.has_operation()) {
-                    if (yqlResponse.operation().status() == Ydb::StatusIds::SUCCESS) {
-                        if (yqlResponse.operation().has_result()) {
-                            NYdb::NScripting::TExecuteYqlResult result(ConvertProtoResponseToSdkResult(std::move(yqlResponse)));
-                            if (result.IsSuccess()) {
-                                const TVector<NYdb::TResultSet>& resultSets = result.GetResultSets();
-                                if (!resultSets.empty()) {
-                                    NYdb::TResultSet resultSet = resultSets[0];
-
-                                    {
-                                        auto maxRows = ev->Get()->Message->GetExecuteData().MaxRows;
-                                        NYdb::TResultSetParser parser(std::move(resultSet));
-                                        while (parser.TryNextRow()) {
-                                            response->DataRows.emplace_back();
-                                            auto& row = response->DataRows.back();
-                                            row.resize(parser.ColumnsCount());
-                                            for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                                                row[index] = ColumnValueToString(parser.ColumnParser(index));
-                                            }
-                                            if (maxRows != 0) {
-                                                if (--maxRows == 0) {
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                response->ErrorFields.push_back({'E', "ERROR"});
-                                response->ErrorFields.push_back({'M', TStringBuilder() << (NYdb::TStatus&)result});
-                            }
-                        }
-                    } else {
-                        NYql::TIssues issues;
-                        NYql::IssuesFromMessage(yqlResponse.operation().issues(), issues);
-                        NYdb::TStatus status(NYdb::EStatus(yqlResponse.operation().status()), std::move(issues));
-                        response->ErrorFields.push_back({'E', "ERROR"});
-                        response->ErrorFields.push_back({'M', TStringBuilder() << status});
+    void Handle(TEvEvents::TEvProxyCompleted::TPtr& ev) {
+        --Inflight;
+        BLOG_D("Received TEvProxyCompleted");
+        if (ev->Get()->Connection.Transaction.Status) {
+            BLOG_D("Updating transaction state to " << ev->Get()->Connection.Transaction.Status);
+            Connection.Transaction.Status = ev->Get()->Connection.Transaction.Status;
+            switch (ev->Get()->Connection.Transaction.Status) {
+                case 'I':
+                case 'E':
+                    Connection.Transaction.Id.clear();
+                    BLOG_D("Transaction id cleared");
+                    break;
+                case 'T':
+                    if (ev->Get()->Connection.Transaction.Id) {
+                        Connection.Transaction.Id = ev->Get()->Connection.Transaction.Id;
+                        BLOG_D("Transaction id is " << Connection.Transaction.Id);
                     }
+                    break;
+            }
+        }
+        if (ev->Get()->Connection.SessionId) {
+            BLOG_D("Session id is " << ev->Get()->Connection.SessionId);
+            Connection.SessionId = ev->Get()->Connection.SessionId;
+        }
+        while (!Events.empty() && Inflight == 0) {
+            StateWork(Events.front());
+            Events.pop_front();
+        }
+    }
+
+    void PassAway() override {
+        if (Connection.SessionId) {
+            BLOG_D("Closing session " << Connection.SessionId);
+            auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+            ev->Record.MutableRequest()->SetSessionId(Connection.SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        }
+        TBase::PassAway();
+    }
+
+    STATEFN(StateSchedule) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvEvents::TEvProxyCompleted, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            default: {
+                if (Inflight == 0) {
+                    return StateWork(ev);
                 } else {
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', "No result received"});
+                    Events.push_back(ev);
                 }
             }
-            catch (const std::exception& e) {
-                response->ErrorFields.push_back({'E', "ERROR"});
-                response->ErrorFields.push_back({'M', e.what()});
-            }
-
-            actorSystem->Send(ev->Sender, response.release(), 0, ev->Cookie);
-        });
+        }
     }
 
     STATEFN(StateWork) {

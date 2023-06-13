@@ -1,0 +1,28 @@
+RECURSE(
+    api
+    autoconfig
+    blobstorage
+    canonical
+    clickbench
+    cms
+    cms_config_cache
+    dynumber
+    encryption
+    hive
+    large_serializable
+    limits
+    open_source
+    postgresql
+    rename
+    restarts
+    scheme_shard
+    scheme_tests
+    serializable
+    serverless
+    sqs
+    suite_tests
+    tenants
+    ttl
+    ydb_cli
+    query_cache
+)

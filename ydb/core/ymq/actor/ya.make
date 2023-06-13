@@ -1,0 +1,108 @@
+LIBRARY()
+
+SRCS(
+    actor.cpp
+    auth_factory.cpp
+    attributes_md5.cpp
+    cfg.cpp
+    change_visibility.cpp
+    count_queues.cpp
+    cleanup_queue_data.cpp
+    create_queue.cpp
+    create_user.cpp
+    delete_message.cpp
+    delete_queue.cpp
+    delete_user.cpp
+    error.cpp
+    executor.cpp
+    fifo_cleanup.cpp
+    garbage_collector.cpp
+    get_queue_attributes.cpp
+    get_queue_url.cpp
+    index_events_processor.cpp
+    infly.cpp
+    log.cpp
+    list_dead_letter_source_queues.cpp
+    list_permissions.cpp
+    list_queues.cpp
+    list_users.cpp
+    local_rate_limiter_allocator.cpp
+    message_delay_stats.cpp
+    metering.cpp
+    modify_permissions.cpp
+    monitoring.cpp
+    node_tracker.cpp
+    proxy_actor.cpp
+    purge.cpp
+    purge_queue.cpp
+    queue_leader.cpp
+    receive_message.cpp
+    retention.cpp
+    schema.cpp
+    sha256.cpp
+    send_message.cpp
+    service.cpp
+    set_queue_attributes.cpp
+    proxy_service.cpp
+    queues_list_reader.cpp
+    queue_schema.cpp
+    user_settings_names.cpp
+    user_settings_reader.cpp
+)
+
+PEERDIR(
+    contrib/libs/openssl
+    contrib/libs/protobuf
+    library/cpp/actors/core
+    library/cpp/containers/intrusive_rb_tree
+    library/cpp/digest/md5
+    library/cpp/grpc/client
+    library/cpp/logger
+    library/cpp/lwtrace/mon
+    library/cpp/monlib/dynamic_counters
+    library/cpp/monlib/service/pages
+    library/cpp/scheme
+    ydb/core/base
+    ydb/core/client/minikql_compile
+    ydb/core/engine
+    ydb/core/kesus/tablet
+    ydb/core/mind/address_classification
+    ydb/core/mon
+    ydb/core/node_whiteboard
+    ydb/core/protos
+    ydb/core/tx/scheme_cache
+    ydb/core/tx/schemeshard
+    ydb/core/tx/tx_proxy
+    ydb/core/util
+    ydb/core/ymq/base
+    ydb/core/ymq/proto
+    ydb/core/ymq/queues/common
+    ydb/core/ymq/queues/fifo
+    ydb/core/ymq/queues/std
+    ydb/library/aclib
+    ydb/library/http_proxy/authorization
+    ydb/library/http_proxy/error
+    ydb/library/mkql_proto/protos
+    ydb/public/lib/scheme_types
+    ydb/public/lib/value
+    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/library/yql/minikql
+    ydb/public/lib/deprecated/client
+)
+
+YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(events.h)
+
+GENERATE_ENUM_SERIALIZATION(metering.h)
+
+GENERATE_ENUM_SERIALIZATION(fifo_cleanup.h)
+
+GENERATE_ENUM_SERIALIZATION(queue_schema.h)
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+    yc_search_ut
+)

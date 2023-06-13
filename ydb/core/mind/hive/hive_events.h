@@ -24,6 +24,7 @@ struct TEvPrivate {
         EvProcessPendingOperations,
         EvRestartComplete,
         EvBalancerOut,
+        EvProcessIncomingEvent,
         EvEnd
     };
 
@@ -81,6 +82,8 @@ struct TEvPrivate {
     struct TEvProcessPendingOperations : TEventLocal<TEvProcessPendingOperations, EvProcessPendingOperations> {};
 
     struct TEvBalancerOut : TEventLocal<TEvBalancerOut, EvBalancerOut> {};
+
+    struct TEvProcessIncomingEvent : TEventLocal<TEvProcessIncomingEvent, EvProcessIncomingEvent> {};
 };
 
 } // NHive

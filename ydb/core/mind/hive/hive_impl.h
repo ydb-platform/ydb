@@ -27,6 +27,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/util/event_priority_queue.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -379,6 +380,7 @@ protected:
     bool SpreadNeighbours = true; // spread tablets of the same object across cluster
     TSequenceGenerator Sequencer;
     TOwnershipKeeper Keeper;
+    TEventPriorityQueue<THive> EventQueue{*this};
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -502,6 +504,7 @@ protected:
     void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev);
     void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -585,6 +588,7 @@ public:
     void UpdateCounterTabletsTotal(i64 tabletsTotalDiff);
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);
     void UpdateCounterBootQueueSize(ui64 bootQueueSize);
+    void UpdateCounterEventQueueSize(i64 eventQueueSizeDiff);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
     void ProcessWaitQueue();
@@ -620,6 +624,10 @@ public:
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown() const;
+
+    ui32 GetEventPriority(IEventHandle* ev);
+    void PushProcessIncomingEvent();
+    void ProcessEvent(std::unique_ptr<NActors::IEventHandle> event);
 
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;
     ui64 MetricsWindowSize = TDuration::Minutes(1).MilliSeconds();
@@ -836,6 +844,7 @@ protected:
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();
+    void EnqueueIncomingEvent(STATEFN_SIG);
 
     bool SeenDomain(TSubDomainKey domain);
     void ResolveDomain(TSubDomainKey domain);

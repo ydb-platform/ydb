@@ -29,6 +29,7 @@ target_sources(ydb-core-util-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/circular_queue_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/event_priority_queue_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/fast_tls_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/fragmented_buffer_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/hazard_ut.cpp

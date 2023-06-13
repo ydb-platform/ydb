@@ -12,6 +12,7 @@ SRCS(
     console.h
     counted_leaky_bucket.h
     defs.h
+    event_priority_queue.h
     failure_injection.cpp
     failure_injection.h
     fast_tls.cpp

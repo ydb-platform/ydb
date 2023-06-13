@@ -45,7 +45,13 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config) {
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
         .StoreTrue(&PrintTimestamp);
-
+    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
+        .DefaultValue(50)
+        .StoreResult(&Percentile);
+    config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
+        .DefaultValue(1)
+        .StoreResult(&Warmup);
+        
     // Specific params
     config.Opts->AddLongOption('p', "producer-threads", "Number of producer threads.")
         .DefaultValue(1)
@@ -69,9 +75,6 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config) {
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Codec, &TCommandWorkloadTopicParams::StrToCodec);
-    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
-        .DefaultValue(50)
-        .StoreResult(&Percentile);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
@@ -85,6 +88,9 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     if (Percentile >= 100) {
         throw TMisuseException() << "--percentile should be less than 100.";
     }
+    if (Warmup >= Seconds) {
+        throw TMisuseException() << "--warmup should be less than --seconds.";
+    }
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
@@ -92,7 +98,7 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
     Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Percentile, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Warmup, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, *Driver);

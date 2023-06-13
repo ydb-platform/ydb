@@ -13,7 +13,7 @@ namespace NYdb {
             TTopicWorkloadStatsCollector(
                 size_t producerCount, size_t consumerCount,
                 bool quiet, bool printTimestamp,
-                ui32 windowDurationSec, ui32 totalDurationSec,
+                ui32 windowDurationSec, ui32 totalDurationSec, ui32 warmupSec,
                 ui8 Percentile,
                 std::shared_ptr<std::atomic_bool> errorFlag);
 
@@ -30,7 +30,7 @@ namespace NYdb {
             ui64 GetTotalWriteMessages() const;
 
         private:
-            void CollectThreadEvents();
+            void CollectThreadEvents(ui32 windowIt);
 
             void PrintWindowStats(ui32 windowIt);
             void PrintStats(TMaybe<ui32> windowIt) const;
@@ -47,6 +47,7 @@ namespace NYdb {
 
             double WindowDurationSec;
             double TotalDurationSec;
+            double WarmupSec;
 
             ui8 Percentile;
 

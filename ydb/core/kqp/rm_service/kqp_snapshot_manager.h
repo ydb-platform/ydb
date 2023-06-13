@@ -45,10 +45,7 @@ struct TEvKqpSnapshot {
     };
 
     struct TEvDiscardSnapshot : public TEventLocal<TEvDiscardSnapshot, TKqpSnapshotEvents::EvDiscardSnapshot> {
-        explicit TEvDiscardSnapshot(const IKqpGateway::TKqpSnapshot& snapshot)
-            : Snapshot(snapshot)
-        {}
-        const IKqpGateway::TKqpSnapshot Snapshot;
+        TEvDiscardSnapshot() = default;
     };
 };
 

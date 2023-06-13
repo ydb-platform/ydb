@@ -232,9 +232,8 @@ private:
         Become(&TThis::StateCleanup);
     }
 
-    void HandleRefreshing(TEvKqpSnapshot::TEvDiscardSnapshot::TPtr& ev) {
-        const auto* msg = ev->Get();
-        LOG_W("KqpSnapshotManager: discarding snapshot; our snapshot: " << Snapshot << " got: " << msg->Snapshot << " shutting down");
+    void HandleRefreshing(TEvKqpSnapshot::TEvDiscardSnapshot::TPtr&) {
+        LOG_W("KqpSnapshotManager: discarding snapshot; our snapshot: " << Snapshot << " shutting down");
         SendDiscard();
         PassAway();
     }

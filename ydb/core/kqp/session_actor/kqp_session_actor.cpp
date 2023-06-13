@@ -538,7 +538,7 @@ public:
 
     void DiscardPersistentSnapshot(const IKqpGateway::TKqpSnapshotHandle& handle) {
         if (handle.ManagingActor) { // persistent snapshot was acquired
-            Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot(handle.Snapshot));
+            Send(handle.ManagingActor, new TEvKqpSnapshot::TEvDiscardSnapshot());
         }
     }
 

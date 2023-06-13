@@ -17,6 +17,8 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <library/cpp/json/json_writer.h>
+
 #include <iostream>
 
 namespace NKikimr::NCms {
@@ -87,6 +89,9 @@ protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TResponseEvent, Handle);
+            HFunc(NConsole::TEvConsole::TEvUnauthorized, HandleError);
+            HFunc(NConsole::TEvConsole::TEvDisabled, HandleError);
+            HFunc(NConsole::TEvConsole::TEvGenericError, HandleError);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
             CFunc(TEvTabletPipe::TEvClientDestroyed::EventType, Disconnect);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -127,6 +132,36 @@ protected:
 
     void Handle(typename TResponseEvent::TPtr &ev, const TActorContext &ctx) {
         ReplyAndDie(ev->Get()->Record, ctx);
+    }
+
+    void HandleError(NConsole::TEvConsole::TEvUnauthorized::TPtr &, const TActorContext &ctx) {
+        ReplyAndDieImpl(TString(NMonitoring::HTTPUNAUTHORIZED), ctx);
+    }
+
+    void HandleError(NConsole::TEvConsole::TEvDisabled::TPtr &, const TActorContext &ctx) {
+        ReplyAndDieImpl(TString("HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n{\"code\":400, \"message\":\"Feature is disabled\"}\r\n"), ctx);
+    }
+
+    void HandleError(NConsole::TEvConsole::TEvGenericError::TPtr &ev, const TActorContext &ctx) {
+        TStringStream issues;
+        for (auto& issue : ev->Get()->Record.GetIssues()) {
+            issues << issue.ShortDebugString() + ", ";
+        }
+
+        TString res;
+        TStringOutput ss(res);
+
+        NJson::TJsonWriter writer(&ss, true);
+
+        writer.OpenMap();
+        writer.Write("code", (ui64)ev->Get()->Record.GetYdbStatus());
+        writer.Write("issues", issues.Str());
+        writer.CloseMap();
+
+        writer.Flush();
+        ss.Flush();
+
+        ReplyAndDieImpl(TString("HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n") + res + "\r\n", ctx);
     }
 
     void SetTempError(NKikimrCms::TStatus &status, const TString &error) {

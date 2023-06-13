@@ -63,8 +63,9 @@ public:
 
 }
 
-TVector<TString> TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
+TVector<TClickBenchCommandRun::TQueryFullInfo> TClickBenchCommandRun::GetQueries(const TString& fullTablePath) const {
     TVector<TString> queries;
+    const TMap<ui32, TString> qResults = LoadExternalResults();
     if (ExternalQueries) {
         queries = StringSplitter(ExternalQueries).Split(';').ToList<TString>();
     } else if (ExternalQueriesFile) {
@@ -97,7 +98,19 @@ TVector<TString> TClickBenchCommandRun::GetQueries(const TString& fullTablePath)
             SubstGlobal(i, "{" + v.GetId() + "}", v.GetValue());
         }
     }
-    return queries;
+    TVector<TQueryFullInfo> result;
+    ui32 resultsUsage = 0;
+    for (ui32 i = 0; i < queries.size(); ++i) {
+        auto it = qResults.find(i);
+        if (it != qResults.end()) {
+            ++resultsUsage;
+            result.emplace_back(queries[i], it->second);
+        } else {
+            result.emplace_back(queries[i], "");
+        }
+    }
+    Y_VERIFY(resultsUsage == qResults.size(), "there are unused files with results in directory");
+    return result;
 }
 
 bool TClickBenchCommandRun::RunBench(TConfig& config)
@@ -115,19 +128,21 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
-    const TVector<TString> qtokens = GetQueries(FullTablePath(config.Database, Table));
+    const TVector<TQueryFullInfo> qtokens = GetQueries(FullTablePath(config.Database, Table));
     bool allOkay = true;
 
     std::map<ui32, TTestInfo> QueryRuns;
     for (ui32 queryN = 0; queryN < qtokens.size(); ++queryN) {
+        const TQueryFullInfo& qInfo = qtokens[queryN];
         if (!NeedRun(queryN)) {
             continue;
         }
 
-        if (!HasCharsInString(qtokens[queryN])) {
+        if (!HasCharsInString(qInfo.GetQuery())) {
             continue;
         }
-        const TString query = PatchQuery(qtokens[queryN]);
+
+        const TString query = PatchQuery(qInfo.GetQuery());
 
         std::vector<TDuration> timings;
         timings.reserve(IterationsCount);
@@ -137,9 +152,16 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Cerr << query << Endl << Endl;
 
         ui32 successIteration = 0;
+        TString prevResult = "";
         for (ui32 i = 0; i < IterationsCount * 10 && successIteration < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
             auto res = Execute(query, client);
+            if (prevResult != res.first && !qInfo.IsCorrectResult(res.first)) {
+                outFStream << queryN << ": UNEXPECTED DIFF: " << Endl
+                    << "RESULT: " << Endl << res.first << Endl
+                    << "EXPECTATION: " << Endl << qInfo.GetExpectedResult() << Endl;
+                prevResult = res.first;
+            }
             auto duration = TInstant::Now() - t1;
 
             Cout << "\titeration " << i << ":\t";
@@ -375,6 +397,9 @@ void TClickBenchCommandRun::Config(TConfig& config) {
     config.Opts->AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
         .DefaultValue("")
         .StoreResult(&ExternalQueriesDir);
+    config.Opts->AddLongOption("ext-results-dir", "Directory with external results. Naming have to be q[0-N].sql")
+        .DefaultValue("")
+        .StoreResult(&ExternalResultsDir);
     TString externalVariables;
     config.Opts->AddLongOption("ext-query-variables", "v1_id=v1_value;v2_id=v2_value;...; applied for queries {v1_id} -> v1_value")
         .DefaultValue("")
@@ -436,6 +461,27 @@ int TClickBenchCommandRun::Run(TConfig& config) {
     const bool okay = RunBench(config);
     return !okay;
 };
+
+TMap<ui32, TString> TClickBenchCommandRun::LoadExternalResults() const {
+    TMap<ui32, TString> result;
+    if (ExternalResultsDir) {
+        TFsPath dir(ExternalResultsDir);
+        TVector<TString> filesList;
+        dir.ListNames(filesList);
+        std::sort(filesList.begin(), filesList.end());
+        for (auto&& i : filesList) {
+            Y_VERIFY(i.StartsWith("q") && i.EndsWith(".result"));
+            TStringBuf sb(i.data(), i.size());
+            sb.Skip(1);
+            sb.Chop(7);
+            ui32 qId;
+            Y_VERIFY(TryFromString<ui32>(sb, qId));
+            TFileInput fInput(ExternalResultsDir + "/" + i);
+            result.emplace(qId, fInput.ReadAll());
+        }
+    }
+    return result;
+}
 
 TCommandClickBench::TCommandClickBench()
     : TClientCommandTree("clickbench", {}, "ClickBench workload (ClickHouse OLAP test)")

@@ -1193,10 +1193,13 @@ namespace Tests {
 
     void TClient::WaitRootIsUp(const TString& root) {
         while (true) {
+            Cerr << "WaitRootIsUp '" << root << "'..." << Endl;
+
             TAutoPtr<NMsgBusProxy::TBusResponse> resp = Ls(root);
             UNIT_ASSERT(resp);
 
             if (resp->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK && resp->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess) {
+                Cerr << "WaitRootIsUp '" << root << "' success." << Endl;
                 break;
             }
         }
@@ -1830,15 +1833,17 @@ namespace Tests {
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::LsImpl(const TString& path) {
+        Cerr << "TClient::Ls request: " << path << Endl;
+
         TAutoPtr<NMsgBusProxy::TBusSchemeDescribe> request(new NMsgBusProxy::TBusSchemeDescribe());
         request->Record.SetPath(path);
         request->Record.MutableOptions()->SetShowPrivateTable(true);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-#ifndef NDEBUG
-        Cerr << "TClient::Ls: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
+
+        Cerr << "TClient::Ls response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
     }
 

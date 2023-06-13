@@ -14,7 +14,9 @@ SPLIT_FACTOR(20)
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-DEPENDS(ydb/apps/ydbd)
+DEPENDS(
+    ydb/apps/ydbd
+)
 
 PEERDIR(
     ydb/tests/library

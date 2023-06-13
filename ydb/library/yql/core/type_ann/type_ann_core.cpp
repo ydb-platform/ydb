@@ -2226,19 +2226,29 @@ namespace NTypeAnnImpl {
 
     // Using to detect warnings when operating (+, /, %, -, *) with integral types
     namespace {
-        IGraphTransformer::TStatus CheckIntegralsWidth(const TExprNode::TPtr& input, TContext& ctx, EDataSlot first, EDataSlot second) {
-            if (!IsDataTypeIntegral(first) || !IsDataTypeIntegral(second)) {
+        IGraphTransformer::TStatus CheckIntegralsWidth(const TExprNode::TPtr& input, TContext& ctx, EDataSlot first, EDataSlot second, TExprNode::TPtr& output) {
+            if (!input->Content().EndsWith("MayWarn")) {
                 return IGraphTransformer::TStatus::Ok;
             }
+
+            output = ctx.Expr.RenameNode(*input, TString(input->Content()).substr(0, input->Content().size() - 7));
+
+            if (!IsDataTypeIntegral(first) || !IsDataTypeIntegral(second)) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
             ui32 first_width = GetDataTypeInfo(first).FixedSize,
                  second_width = GetDataTypeInfo(second).FixedSize;
+
             // invariant: first_width >= second_width
             if (first_width < second_width) {
                 std::swap(first, second);
                 std::swap(first_width, second_width);
             }
+
             bool first_signed = IsDataTypeSigned(first);
             bool second_signed = IsDataTypeSigned(second);
+
             if (first_width > second_width && !first_signed && second_signed ||
                 first_width == second_width && first_signed != second_signed)
             {
@@ -2251,7 +2261,7 @@ namespace NTypeAnnImpl {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
-            return IGraphTransformer::TStatus::Ok;
+            return IGraphTransformer::TStatus::Repeat;
         }
     }
 
@@ -2283,7 +2293,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!checked) {
-            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot(), output);
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
@@ -2376,7 +2386,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!checked) {
-            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot(), output);
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
@@ -2467,7 +2477,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!checked) {
-            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot(), output);
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
@@ -2545,7 +2555,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!checked) {
-            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot(), output);
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
@@ -2618,7 +2628,7 @@ namespace NTypeAnnImpl {
         }
 
         if (!checked) {
-            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot());
+            auto check_result = CheckIntegralsWidth(input, ctx, dataType[0]->GetSlot(), dataType[1]->GetSlot(), output);
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
@@ -11439,19 +11449,29 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["+"] = &AddWrapper;
         Functions["Add"] = &AddWrapper;
         Functions["CheckedAdd"] = &AddWrapper;
+        Functions["+MayWarn"] = &AddWrapper;
+        Functions["AddMayWarn"] = &AddWrapper;
         Functions["AggrAdd"] = &AggrAddWrapper;
         Functions["-"] = &SubWrapper;
         Functions["Sub"] = &SubWrapper;
         Functions["CheckedSub"] = &SubWrapper;
+        Functions["-MayWarn"] = &SubWrapper;
+        Functions["SubMayWarn"] = &SubWrapper;
         Functions["*"] = &MulWrapper;
         Functions["Mul"] = &MulWrapper;
         Functions["CheckedMul"] = &MulWrapper;
+        Functions["*MayWarn"] = &MulWrapper;
+        Functions["MulMayWarn"] = &MulWrapper;
         Functions["/"] = &DivWrapper;
         Functions["Div"] = &DivWrapper;
         Functions["CheckedDiv"] = &DivWrapper;
+        Functions["/MayWarn"] = &DivWrapper;
+        Functions["DivMayWarn"] = &DivWrapper;
         Functions["%"] = &ModWrapper;
         Functions["Mod"] = &ModWrapper;
         Functions["CheckedMod"] = &ModWrapper;
+        Functions["%MayWarn"] = &ModWrapper;
+        Functions["ModMayWarn"] = &ModWrapper;
         Functions["BitAnd"] = &BitOpsWrapper<2>;
         Functions["BitOr"] = &BitOpsWrapper<2>;
         Functions["BitXor"] = &BitOpsWrapper<2>;

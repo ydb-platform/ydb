@@ -38,7 +38,8 @@ public:
 
         auto name = input->Content();
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << name);
+            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), 
+                TStringBuilder() << "At function: " << NormalizeCallableName(name));
         });
 
         TStatus status = TStatus::Ok;

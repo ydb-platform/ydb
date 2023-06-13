@@ -194,7 +194,7 @@ private:
                         CurrentFunctions.top().second = true;
                     }
 
-                    str << "function: " << input->Content();
+                    str << "function: " << NormalizeCallableName(input->Content());
                     break;
                 case TExprNode::List:
                     if (CurrentFunctions.empty()) {

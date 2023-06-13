@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"+\""));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"+MayWarn\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("key"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("subkey"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'true)"));
@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"-\""));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"-MayWarn\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'false)"));
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%\""));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"%MayWarn\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"key\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("\"subkey\""));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Bool 'true)"));

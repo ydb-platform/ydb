@@ -1949,11 +1949,11 @@ class MSVCCompiler(MSVC, Compiler):
         ]
 
         defines = [
+            '${hide:CPP_FAKEID}',
             # FIXME: This is quick fix to let catboost build from MSVS IDE
             # This place is questionable overall, see YMAKE-437
             '/DARCADIA_ROOT=' + ('${ARCADIA_ROOT}' if not self.tc.ide_msvs else '.'),
             '/DARCADIA_BUILD_ROOT=' + ('${ARCADIA_BUILD_ROOT}' if not self.tc.ide_msvs else '.'),
-            '/DFAKEID=$CPP_FAKEID',
             '/DWIN32',
             '/D_WIN32',
             '/D_WINDOWS',
@@ -1972,7 +1972,6 @@ class MSVCCompiler(MSVC, Compiler):
             '/D__STDC_CONSTANT_MACROS',
             '/D__STDC_FORMAT_MACROS',
             '/D_USING_V110_SDK71_',
-            '/D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
             # Below defines are covered at
             # https://docs.microsoft.com/en-us/windows/win32/winprog/using-the-windows-headers#faster-builds-with-smaller-header-files
             # Exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets (while including <windows.h>)

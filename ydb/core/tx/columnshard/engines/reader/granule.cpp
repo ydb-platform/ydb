@@ -120,4 +120,9 @@ void TGranule::CheckReady() {
     }
 }
 
+void TGranule::OnBlobReady(const TBlobRange& range) noexcept {
+    BlobsDataSize += range.Size;
+    Owner->OnBlobReady(GranuleId, range);
+}
+
 }

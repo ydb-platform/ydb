@@ -288,13 +288,8 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
                 Y_VERIFY(batch->num_rows());
                 Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortReplaceDescription->ReplaceKey));
             }
-#if 1 // optimization
             auto deduped = SpecialMergeSorted(inGranule, indexInfo, SortReplaceDescription, granule->GetBatchesToDedup());
             out.emplace_back(std::move(deduped));
-#else
-            out.push_back({});
-            out.back().emplace_back(CombineSortedBatches(inGranule, SortReplaceDescription));
-#endif
         } else {
             out.emplace_back(std::move(inGranule));
         }

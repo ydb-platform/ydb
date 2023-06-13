@@ -119,7 +119,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     ```bash
     ccache -o remote_storage="http://158.160.20.102:8080|read-only|layout=bazel"
     ccache -o sloppiness=locale 
-    ccache -o basedir=~/ydbwork/
+    ccache -o base_dir=~/ydbwork/
    
     ```
     </details>

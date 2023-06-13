@@ -240,6 +240,12 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
     return arrow::Datum();
 }
 
+TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
+    Y_UNUSED(originalType);
+    Y_UNUSED(targetType);
+    return {};
+}
+
 TMaybe<ui32> ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
     return Nothing();
@@ -434,6 +440,13 @@ TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId
     Y_UNUSED(binary);
     Y_UNUSED(pgTypeId);
     throw yexception() << "PG types are not supported";
+}
+
+TString GetPostgresServerVersionNum() {
+    return "-1";
+}
+TString GetPostgresServerVersionStr() {
+    return "pg_sql_dummy";
 }
 
 } // namespace NKikimr::NPg

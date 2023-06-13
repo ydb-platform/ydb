@@ -118,7 +118,7 @@ class TNodeRef {
     {}
 
 public:
-    TNodeRef() {};
+    TNodeRef() = default;
 
     TNodeRef(const TNodeRef& other) { Node_ = other.Node_; }
 

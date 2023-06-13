@@ -17,7 +17,7 @@ on:
         default: true
       run_functional_tests:
         type: boolean
-        default: false
+        default: true
       test_label_regexp:
         required: false
         type: string
@@ -54,9 +54,9 @@ jobs:
       if: inputs.run_build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-    - name: Run unit tests
+        ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.rc_auth, vars.REMOTE_CACHE_URL) || ''}}
+    - name: Run tests
       uses: ./.github/actions/test
-      if: inputs.run_unit_tests
       with: 
         log_suffix: ${{format('{0}{1}', inputs.runner_label, inputs.sanitizer)}}
         test_label_regexp: ${{ inputs.test_label_regexp }}
@@ -67,14 +67,6 @@ jobs:
         testman_token: ${{secrets.TESTMO_TOKEN}}
         testman_url: ${{vars.TESTMO_URL}}
         testman_project_id: ${{vars.TESTMO_PROJECT_ID}}
-    - name: Run functional tests
-      if: inputs.run_functional_tests && (success() || failure()) && steps.build.conclusion != 'failure'
-      uses: ./.github/actions/test_python
-      with:
-        log_suffix: ${{format('{0}{1}', inputs.runner_label, inputs.sanitizer)}}
-        test_label_regexp: ${{ inputs.test_label_regexp }}
-        aws_key_id: ${{secrets.AWS_KEY_ID}}
-        aws_key_value: ${{secrets.AWS_KEY_VALUE}}
-        aws_bucket: ${{vars.AWS_BUCKET}}
-        aws_endpoint: ${{vars.AWS_ENDPOINT}}
+        run_unit_tests: ${{inputs.run_unit_tests}}
+        run_functional_tests: ${{inputs.run_functional_tests}}
       

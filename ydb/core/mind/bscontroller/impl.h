@@ -1120,7 +1120,7 @@ public:
                 return x.GetKey() < y.GetKey();
             }
 
-            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind)
+            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind);
         };
 
         Table::Name::Type Name;

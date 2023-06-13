@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-import sys
+import copy
 import itertools
 import os
-import tempfile
 import socket
+import sys
+import tempfile
+
 import six
 import yaml
-import copy
+from google.protobuf.text_format import Parse
 from pkg_resources import resource_string
 
-from google.protobuf.text_format import Parse
-from ydb.core.protos import config_pb2
 import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.core.protos import config_pb2
+from ydb.tests.library.common.types import Erasure
 
 from . import tls_tools
-from ydb.tests.library.common.types import Erasure
 from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path
 from .util import LogLevels
@@ -144,7 +145,14 @@ class KikimrConfigGenerator(object):
             disable_iterator_lookups=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
+            extra_feature_flags=None,  # list[str]
+            extra_grpc_services=None,  # list[str]
     ):
+        if extra_feature_flags is None:
+            extra_feature_flags = []
+        if extra_grpc_services is None:
+            extra_grpc_services = []
+
         self._version = version
         self.use_log_files = use_log_files
         self.suppress_version_check = suppress_version_check
@@ -231,6 +239,8 @@ class KikimrConfigGenerator(object):
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
+        for extra_feature_flag in extra_feature_flags:
+            self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
         self.yaml_config['pqconfig']['enabled'] = enable_pq
@@ -250,6 +260,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
+
+        self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
 
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs

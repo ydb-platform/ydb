@@ -1885,6 +1885,9 @@ bool TDataShard::IsMvccEnabled() const {
 }
 
 TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
+    if (IsFollower())
+        return {TRowVersion::Max(), TRowVersion::Max()};
+
     if (!IsMvccEnabled())
         return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()};
 
@@ -1983,6 +1986,10 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
 }
 
 TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
+    if (IsFollower()) {
+        return {TRowVersion::Max(), TRowVersion::Max()};
+    }
+
     if (!IsMvccEnabled())
         return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()};
 
@@ -2000,6 +2007,8 @@ TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
 TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdges(
         const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc)
 {
+    Y_VERIFY(!IsFollower(), "Unexpected attempt to promote edges on a follower");
+
     TPromotePostExecuteEdges res;
 
     res.HadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(version, txc);
@@ -2050,6 +2059,10 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
                 res.HadWrites |= SnapshotManager.PromoteCompleteEdge(version.Step, txc);
             }
             res.HadWrites |= SnapshotManager.PromoteImmediateWriteEdge(version, txc);
+            if (res.HadWrites) {
+                // Promoting write edges may promote read edge
+                PromoteFollowerReadEdge(txc);
+            }
             break;
         }
     }
@@ -2197,6 +2210,10 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
         }
         break;
+    }
+
+    if (IsMvccEnabled()) {
+        PromoteFollowerReadEdge();
     }
 }
 

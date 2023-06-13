@@ -44,7 +44,7 @@ namespace NProtoBuf {
             Y_ASSERT(fd);                                 \
             return fd->default_value_##method();          \
         }                                                 \
-    };
+    }
 
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_INT32, int32);
     DECLARE_CPPTYPE_DEFAULT(FieldDescriptor::CppType::CPPTYPE_INT64, int64);
@@ -108,7 +108,7 @@ namespace NProtoBuf {
     struct TSelectCppType<type> {                                                                        \
         static const FieldDescriptor::CppType Result = cpptype;                                          \
         typedef type T;                                                                                  \
-    };
+    }
 
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_INT32, i32, Int32);
     DECLARE_CPPTYPE_TRAITS(FieldDescriptor::CPPTYPE_INT64, i64, Int64);

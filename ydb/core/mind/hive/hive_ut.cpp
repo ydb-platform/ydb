@@ -2534,15 +2534,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto updateDiskStatus = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 
         for (ui32 groupId = 0x80000000; groupId < 0x8000000a; ++groupId) {
-            if (tabletGroups.count(groupId) == 0) {
-                NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = updateDiskStatus->Record.AddVDisksMetrics();
+            NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = updateDiskStatus->Record.AddVDisksMetrics();
 
-                vdiskMetrics->MutableVDiskId()->SetGroupID(groupId);
-                vdiskMetrics->MutableVDiskId()->SetGroupGeneration(1);
-                vdiskMetrics->MutableVDiskId()->SetRing(0);
-                vdiskMetrics->MutableVDiskId()->SetDomain(0);
-                vdiskMetrics->MutableVDiskId()->SetVDisk(0);
-                vdiskMetrics->SetAvailableSize(100000);
+            vdiskMetrics->MutableVDiskId()->SetGroupID(groupId);
+            vdiskMetrics->MutableVDiskId()->SetGroupGeneration(1);
+            vdiskMetrics->MutableVDiskId()->SetRing(0);
+            vdiskMetrics->MutableVDiskId()->SetDomain(0);
+            vdiskMetrics->MutableVDiskId()->SetVDisk(0);
+
+            if (tabletGroups.contains(groupId)) {
+                vdiskMetrics->SetOccupancy(1.0);
+            } else {
+                vdiskMetrics->SetOccupancy(0.8);
             }
         }
 
@@ -2743,22 +2746,20 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         struct TTestGroupInfo {
             ui32 Id;
-            ui64 AvailiableSize;
-            ui64 MaximumSize;
+            double Occupancy;
         };
 
         auto groupMetricsExchange = MakeHolder<TEvBlobStorage::TEvControllerGroupMetricsExchange>();
-        std::vector<TTestGroupInfo> groups = {{initialGroup, 100000, 200000},
-                                              {badGroup, 200000, 800000}, // has more space in absolute units, but less in %
-                                              {goodGroup, 105001, 200000}};
+        std::vector<TTestGroupInfo> groups = {{initialGroup, 0.9},
+                                              {badGroup, 0.91},
+                                              {goodGroup, 0.89}};
         for (const auto& group : groups) {
             NKikimrBlobStorage::TGroupMetrics* metrics = groupMetricsExchange->Record.AddGroupMetrics();
 
             metrics->SetGroupId(group.Id);
             metrics->MutableGroupParameters()->SetGroupID(group.Id);
             metrics->MutableGroupParameters()->SetStoragePoolName("def1");
-            metrics->MutableGroupParameters()->MutableAssuredResources()->SetSpace(group.MaximumSize);
-            metrics->MutableGroupParameters()->SetAvailableSize(group.AvailiableSize);
+            metrics->MutableGroupParameters()->MutableCurrentResources()->SetOccupancy(group.Occupancy);
         }
 
         runtime.SendToPipe(MakeBSControllerID(0), sender, groupMetricsExchange.Release(), 0, GetPipeConfigWithRetries());

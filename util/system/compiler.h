@@ -607,33 +607,15 @@ _YandexAbort();
     #define Y_HAVE_INT128 1
 #endif
 
-/**
- * XRAY macro must be passed to compiler if XRay is enabled.
- *
- * Define everything XRay-specific as a macro so that it doesn't cause errors
- * for compilers that doesn't support XRay.
- */
-#if defined(XRAY) && defined(__cplusplus)
-    #include <xray/xray_interface.h>
-    #define Y_XRAY_ALWAYS_INSTRUMENT [[clang::xray_always_instrument]]
-    #define Y_XRAY_NEVER_INSTRUMENT [[clang::xray_never_instrument]]
-    #define Y_XRAY_CUSTOM_EVENT(__string, __length) \
-        do {                                        \
-            __xray_customevent(__string, __length); \
-        } while (0)
-#else
-    #define Y_XRAY_ALWAYS_INSTRUMENT
-    #define Y_XRAY_NEVER_INSTRUMENT
-    #define Y_XRAY_CUSTOM_EVENT(__string, __length) \
-        do {                                        \
-        } while (0)
-#endif
-
 #if defined(__clang__) && Y_CUDA_AT_LEAST(11, 0)
     #define Y_REINITIALIZES_OBJECT [[clang::reinitializes]]
 #else
     #define Y_REINITIALIZES_OBJECT
 #endif
+
+// Use at the end of macros declaration. It allows macros usage only with semicolon at the end.
+// It prevents from warnings for extra semicolons when building with flag `-Wextra-semi`.
+#define Y_SEMICOLON_GUARD static_assert(true, "")
 
 #ifdef __cplusplus
 
@@ -652,6 +634,15 @@ Y_FORCE_INLINE void DoNotOptimizeAway(T&& datum) {
     Y_FAKE_READ(datum);
     #endif
 }
+
+/**
+ * The usage for `const T&` is prohibited.
+ * The compiler assume that a constant reference, even though escaped via asm volatile, is unchanged.
+ * The const-ref interface is deleted to discourage new uses of it, as subtle compiler optimizations (invariant hoisting, etc.) can occur.
+ * For more details see https://github.com/google/benchmark/pull/1493.
+ */
+template <typename T>
+Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
 
     /**
      * Use this macro to prevent unused variables elimination.

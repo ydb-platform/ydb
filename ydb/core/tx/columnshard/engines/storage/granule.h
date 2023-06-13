@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 
@@ -30,25 +31,28 @@ public:
     }
 };
 
-class TDataClassSummary {
+class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
-    ui64 PortionsSize = 0;
-    ui64 MaxColumnsSize = 0;
-    ui64 PortionsCount = 0;
-    ui64 RecordsCount = 0;
     friend class TGranuleMeta;
 public:
-    ui64 GetPortionsSize() const {
-        return PortionsSize;
+    void AddPortion(const TPortionInfo& info) {
+        const auto sizes = info.BlobsSizes();
+        PortionsSize += sizes.first;
+        MaxColumnsSize += sizes.second;
+        RecordsCount += info.NumRows();
+        ++PortionsCount;
     }
-    ui64 GetRecordsCount() const {
-        return RecordsCount;
-    }
-    ui64 GetMaxColumnsSize() const {
-        return MaxColumnsSize;
-    }
-    ui64 GetPortionsCount() const {
-        return PortionsCount;
+
+    void RemovePortion(const TPortionInfo& info) {
+        const auto sizes = info.BlobsSizes();
+        PortionsSize -= sizes.first;
+        Y_VERIFY(PortionsSize >= 0);
+        MaxColumnsSize -= sizes.second;
+        Y_VERIFY(MaxColumnsSize >= 0);
+        RecordsCount -= info.NumRows();
+        Y_VERIFY(RecordsCount >= 0);
+        --PortionsCount;
+        Y_VERIFY(PortionsCount >= 0);
     }
 
     TDataClassSummary operator+(const TDataClassSummary& item) const {
@@ -106,25 +110,31 @@ public:
     }
 };
 
-class TGranuleSummary {
+class TGranuleHardSummary {
+private:
+    std::vector<TColumnSummary> ColumnIdsSortedBySizeDescending;
+    bool DifferentBorders = false;
+    friend class TGranuleMeta;
+public:
+    bool GetDifferentBorders() const {
+        return DifferentBorders;
+    }
+    const std::vector<TColumnSummary>& GetColumnIdsSortedBySizeDescending() const {
+        return ColumnIdsSortedBySizeDescending;
+    }
+};
+
+class TGranuleAdditiveSummary {
 private:
     TDataClassSummary Inserted;
     TDataClassSummary Other;
     friend class TGranuleMeta;
-    std::vector<TColumnSummary> ColumnIdsSortedBySizeDescending;
-    bool DifferentBorders = false;
 public:
-    const std::vector<TColumnSummary>& GetColumnIdsSortedBySizeDescending() const {
-        return ColumnIdsSortedBySizeDescending;
-    }
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
     const TDataClassSummary& GetOther() const {
         return Other;
-    }
-    bool GetDifferentBorders() const {
-        return DifferentBorders;
     }
     ui64 GetGranuleSize() const {
         return (Inserted + Other).GetPortionsSize();
@@ -135,23 +145,34 @@ public:
     ui64 GetMaxColumnsSize() const {
         return (Inserted + Other).GetMaxColumnsSize();
     }
+    void AddPortion(const TPortionInfo& info) {
+        if (info.IsInserted()) {
+            Inserted.AddPortion(info);
+        } else {
+            Other.AddPortion(info);
+        }
+    }
+    void RemovePortion(const TPortionInfo& info) {
+        if (info.IsInserted()) {
+            Inserted.RemovePortion(info);
+        } else {
+            Other.RemovePortion(info);
+        }
+    }
 };
 
 class TCompactionPriority: public TCompactionPriorityInfo {
 private:
     using TBase = TCompactionPriorityInfo;
-    TGranuleSummary GranuleSummary;
+    TGranuleAdditiveSummary GranuleSummary;
     ui64 GetWeightCorrected() const {
-        if (!GranuleSummary.GetDifferentBorders()) {
-            return 0;
-        }
         if (GranuleSummary.GetActivePortionsCount() <= 1) {
             return 0;
         }
         return GranuleSummary.GetGranuleSize() * GranuleSummary.GetActivePortionsCount() * GranuleSummary.GetActivePortionsCount();
     }
 public:
-    TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleSummary& granuleSummary)
+    TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleAdditiveSummary& granuleSummary)
         : TBase(data)
         , GranuleSummary(granuleSummary)
     {
@@ -167,13 +188,11 @@ public:
 class TGranuleMeta: public ICompactionObjectCallback, TNonCopyable {
 private:
     THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
-    mutable std::optional<TGranuleSummary> SummaryCache;
+    mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
+    mutable std::optional<TGranuleHardSummary> HardSummaryCache;
     bool NeedSplit(const TCompactionLimits& limits, bool& inserted) const;
-    void RebuildMetrics() const;
-
-    void ResetCaches() {
-        SummaryCache = {};
-    }
+    void RebuildHardMetrics() const;
+    void RebuildAdditiveMetrics() const;
 
     enum class EActivity {
         SplitCompaction,
@@ -184,17 +203,21 @@ private:
     TCompactionPriorityInfo CompactionPriorityInfo;
     mutable bool AllowInsertionFlag = false;
     std::shared_ptr<TGranulesStorage> Owner;
+    const NColumnShard::TGranuleDataCounters Counters;
 
-    void OnAfterChangePortion(const ui64 portion);
+    void OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter);
+    void OnAfterChangePortion();
+    void OnAdditiveSummaryChange() const;
 public:
-    const TGranuleSummary& GetSummary() const {
-        if (!SummaryCache) {
-            RebuildMetrics();
+    const TGranuleHardSummary& GetHardSummary() const {
+        if (!HardSummaryCache) {
+            RebuildHardMetrics();
         }
-        return *SummaryCache;
+        return *HardSummaryCache;
     }
+    const TGranuleAdditiveSummary& GetAdditiveSummary() const;
     TCompactionPriority GetCompactionPriority() const {
-        return TCompactionPriority(CompactionPriorityInfo, GetSummary());
+        return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary());
     }
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
@@ -242,17 +265,31 @@ public:
         return Portions;
     }
 
+    ui64 GetPathId() const {
+        return Record.PathId;
+    }
+
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
         Y_VERIFY(it != Portions.end());
         return it->second;
     }
 
+    const TPortionInfo* GetPortionPointer(const ui64 portion) const {
+        auto it = Portions.find(portion);
+        if (it == Portions.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner)
+    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
         : Owner(owner)
-        , Record(rec) {
+        , Counters(counters)
+        , Record(rec)
+    {
     }
 
     ui64 GetGranuleId() const {

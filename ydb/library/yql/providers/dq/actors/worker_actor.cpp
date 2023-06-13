@@ -560,7 +560,7 @@ private:
                     }
                     auto guard = source.TypeEnv->BindAllocator();
                     TMaybe<TInstant> watermark;
-                    NKikimr::NMiniKQL::TUnboxedValueVector batch;
+                    NKikimr::NMiniKQL::TUnboxedValueBatch batch;
                     bool finished = false;
                     const i64 space = source.Source->GetAsyncInputData(batch, watermark, finished, freeSpace);
                     const ui64 index = inputIndex;
@@ -706,7 +706,7 @@ private:
 
     void SinkSend(
         ui64 index,
-        NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
+        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
         TMaybe<NDqProto::TCheckpoint>&& checkpoint,
         i64 size,
         i64 checkpointSize,

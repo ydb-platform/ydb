@@ -57,7 +57,7 @@ public:
     }
     void IncDroppedMsgs() override {
         DroppedMsgs_->Inc();
-    };
+    }
 
     void GetOutputHtml(IOutputStream& str) override {
         HTML(str) {
@@ -122,7 +122,7 @@ public:
     }
     void IncDroppedMsgs() override {
         DroppedMsgs_->Inc();
-    };
+    }
 
     void GetOutputHtml(IOutputStream& str) override {
         HTML(str) {

@@ -34,10 +34,12 @@ target_sources(yql-public-udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_registrator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_static_registry.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_string.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_inspection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_type_printer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_types.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_validate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_version.cpp
 )

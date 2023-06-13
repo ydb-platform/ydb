@@ -59,7 +59,7 @@ void THelperSchemaless::CreateTestOlapTable(TActorId sender, TString storeOrDirN
     WaitForSchemeOperation(sender, txId);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch) const {
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus) const {
     auto* runtime = Server.GetRuntime();
 
     UNIT_ASSERT(batch);
@@ -87,7 +87,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
             }
             Cerr << "\n";
         }
-        UNIT_ASSERT_VALUES_EQUAL(op.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
         });
 
     TDispatchOptions options;
@@ -98,8 +98,8 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     runtime->DispatchEvents(options);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) const {
-    auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount);
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
+    auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount, tsStepUs);
     SendDataViaActorSystem(testTable, batch);
 }
 
@@ -118,7 +118,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     return std::make_shared<arrow::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) const {
+std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
     arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
@@ -136,7 +136,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     for (size_t i = 0; i < rowCount; ++i) {
         std::string uid("uid_" + std::to_string(tsBegin + i));
         std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
-        Y_VERIFY(b1.Append(tsBegin + i).ok());
+        Y_VERIFY(b1.Append(tsBegin + i * tsStepUs).ok());
         Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok());
         Y_VERIFY(b3.Append(uid).ok());
         Y_VERIFY(b4.Append(i % 5).ok());
@@ -325,7 +325,7 @@ std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount) const {
+std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui32 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
     UNIT_ASSERT(schema);
     UNIT_ASSERT(schema->num_fields());
@@ -353,7 +353,7 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
                     break;
                 }
                 case arrow::Type::TIMESTAMP: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::TimestampBuilder>(col)->Append(value).ok());
+                    UNIT_ASSERT(builders->GetFieldAs<arrow::TimestampBuilder>(col)->Append(begin + row * tsStepUs).ok());
                     break;
                 }
                 case arrow::Type::BINARY: {
@@ -395,10 +395,10 @@ std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() const {
 }
 
 std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() const {
-    return TestArrowBatch(0, 0, 10);
+    return TestArrowBatch(0, 0, 10, 1);
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount) const {
+std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui32 /*tsStepUs*/) const {
     rowCount = 10;
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 

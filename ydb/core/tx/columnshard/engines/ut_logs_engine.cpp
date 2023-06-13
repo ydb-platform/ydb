@@ -47,13 +47,20 @@ public:
         Aborted.erase(TWriteId{data.WriteTxId});
     }
 
-    bool Load(THashMap<TWriteId, TInsertedData>& inserted,
-              THashMap<ui64, TSet<TInsertedData>>& committed,
-              THashMap<TWriteId, TInsertedData>& aborted,
+    bool Load(TInsertTableAccessor& accessor,
               const TInstant&) override {
-        inserted = Inserted;
-        committed = Committed;
-        aborted = Aborted;
+        for (auto&& i : Inserted) {
+            accessor.AddInserted(i.first, std::move(i.second));
+        }
+        for (auto&& i : Aborted) {
+            accessor.AddAborted(i.first, std::move(i.second));
+        }
+        for (auto&& i : Committed) {
+            for (auto&& c: i.second) {
+                auto copy = c;
+                accessor.AddCommitted(std::move(copy));
+            }
+        }
         return true;
     }
 

@@ -1501,6 +1501,11 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type) {
             currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
         } while (currentType->IsOptional());
 
+        if (currentType->IsPg()) {
+            previousType = currentType;
+            ++nestLevel;
+        }
+
         // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
         if (!ConvertArrowType(previousType, innerArrowType)) {

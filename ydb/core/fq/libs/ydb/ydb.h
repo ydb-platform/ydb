@@ -8,6 +8,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
+#include <util/stream/file.h>
+#include <util/string/strip.h>
+#include <util/system/env.h>
+
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -129,5 +133,45 @@ NThreading::TFuture<NYdb::TStatus> RegisterCheckGeneration(const TGenerationCont
 NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& context);
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
+
+template <class TSettings>
+TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
+                            const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
+    TString oauth;
+    if (config.GetToken()) {
+        oauth = config.GetToken();
+    } else if (config.GetOAuthFile()) {
+        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
+    } else {
+        oauth = GetEnv("YDB_TOKEN");
+    }
+
+    const TString iamEndpoint = config.GetIamEndpoint();
+    const TString saKeyFile = config.GetSaKeyFile();
+
+    TSettings settings;
+    settings
+        .DiscoveryEndpoint(config.GetEndpoint())
+        .Database(config.GetDatabase());
+
+    NKikimr::TYdbCredentialsSettings credSettings;
+    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
+    credSettings.OAuthToken = oauth;
+    credSettings.SaKeyFile = config.GetSaKeyFile();
+    credSettings.IamEndpoint = config.GetIamEndpoint();
+
+    settings.CredentialsProviderFactory(credProviderFactory(credSettings));
+
+    if (config.GetUseLocalMetadataService()) {
+        settings.SslCredentials(NYdb::TSslCredentials(true));
+    }
+
+    if (config.GetCertificateFile()) {
+        auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
+        settings.SslCredentials(NYdb::TSslCredentials(true, cert));
+    }
+
+    return settings;
+}
 
 } // namespace NFq

@@ -221,10 +221,8 @@ private:
 
         outputChannel.PopStarted = true;
         ProcessOutputsState.Inflight++;
+        UpdateBlocked(outputChannel, toSend);
         if (toSend <= 0) {
-            if (Y_UNLIKELY(outputChannel.Stats)) {
-                outputChannel.Stats->BlockedByCapacity++;
-            }
             CA_LOG_T("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
                 << ". To send: " << toSend
                 << ". Free space: " << peerState.PeerFreeSpace
@@ -291,7 +289,7 @@ private:
         DoExecute();
     }
 
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) override {
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) override {
         ProcessSourcesState.Inflight++;
         source.PushStarted = true;
         source.Finished = finished;
@@ -693,7 +691,7 @@ private:
     }
 
     void SinkSend(ui64 index,
-                  NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
+                  NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
                   TMaybe<NDqProto::TCheckpoint>&& checkpoint,
                   i64 size,
                   i64 checkpointSize,
@@ -722,7 +720,7 @@ private:
 
         {
             auto guard = BindAllocator();
-            NKikimr::NMiniKQL::TUnboxedValueVector data = std::move(batch);
+            NKikimr::NMiniKQL::TUnboxedValueBatch data = std::move(batch);
             sinkInfo.AsyncOutput->SendData(std::move(data), size, std::move(checkpoint), finished);
         }
 

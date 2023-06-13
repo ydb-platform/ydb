@@ -1,6 +1,7 @@
 #include "common.h"
 #include "progress_bar.h"
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <util/string/cast.h>
 
 namespace NYdb {
@@ -9,13 +10,27 @@ namespace NConsoleClient {
 TProgressBar::TProgressBar(size_t capacity) : Capacity(capacity) {
 }
 
+void TProgressBar::SetProcess(size_t progress)
+{
+    CurProgress = Min(progress, Capacity);
+    Render();
+}
+
 void TProgressBar::AddProgress(size_t value) {
     CurProgress = Min(CurProgress + value, Capacity);
-    size_t barLen = TermWidth();
-    if (Capacity == 0 || barLen == Max<size_t>()) {
+    if (Capacity == 0) {
         return;
     }
+    Render();
+}
 
+void TProgressBar::Render()
+{
+    std::optional<size_t> barLenOpt = GetTerminalWidth();
+    if (!barLenOpt)
+        return;
+
+    size_t barLen = *barLenOpt;
     TString output = ToString(CurProgress * 100 / Capacity);
     output += "% |";
     TString outputEnd = "| [";
@@ -23,7 +38,7 @@ void TProgressBar::AddProgress(size_t value) {
     outputEnd += "/";
     outputEnd += ToString(Capacity);
     outputEnd += "]";
-    
+
     if (barLen > output.Size()) {
         barLen -= output.Size();
     } else {

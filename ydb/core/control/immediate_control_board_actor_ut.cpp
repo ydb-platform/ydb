@@ -97,19 +97,19 @@ static void Run(i64 instances = 1) {
 
         const TActorId nameserviceId = GetNameserviceActorId();
         TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
 
         // ICB Actor creation
         TActorId IcbActorId = MakeIcbId(setup->NodeId);
         TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, Counters), TMailboxType::Revolving, 0);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, testSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, std::move(testSetup)));
 
 
         THolder<TTestConfig> testConfig(new TTestConfig(IcbActorId, appData.Icb.Get()));
         for (ui32 i = 0; i < instances; ++i) {
             testIds[i] = MakeBlobStorageProxyID(1 + i);
             TActorSetupCmd testSetup(new T(testConfig.Get()), TMailboxType::Revolving, 0);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testIds[i], testSetup));
+            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testIds[i], std::move(testSetup)));
         }
 
         AtomicSet(DoneCounter, 0);
@@ -137,8 +137,8 @@ static void Run(i64 instances = 1) {
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings, NActors::CreateStderrBackend(),
             GetServiceCounters(Counters, "utils"));
         NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
-        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
-        setup->LocalServices.push_back(loggerActorPair);
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, std::move(loggerActorCmd));
+        setup->LocalServices.push_back(std::move(loggerActorPair));
         //////////////////////////////////////////////////////////////////////////////
 
         ActorSystem.Reset(new TActorSystem(setup, &appData, logSettings));

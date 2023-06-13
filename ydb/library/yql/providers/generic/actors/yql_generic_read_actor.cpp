@@ -126,8 +126,9 @@ namespace NYql::NDq {
                       hFunc(TEvPrivate::TEvReadResult, Handle);
                       hFunc(TEvPrivate::TEvReadError, Handle);)
 
-        i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>&, bool& finished,
+        i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished,
                               i64 /*freeSpace*/) final {
+            YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
             if (Result) {
                 NUdf::TUnboxedValue value;
 

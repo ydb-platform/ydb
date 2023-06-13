@@ -175,9 +175,6 @@ public:
         }
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
-        request.SetQuery(ToPgSyntax(query, ConnectionParams_));
-        request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request.MutableTxControl()->set_commit_tx(true);
         request.SetKeepSession(false);
@@ -188,12 +185,19 @@ public:
         if (query.starts_with("BEGIN")) {
             Tag = "BEGIN";
             TransactionStatus = 'T';
+            request.SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
         } else if (query.starts_with("COMMIT")) {
             Tag = "COMMIT";
             TransactionStatus = 'I';
+            request.SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
         } else if (query.starts_with("ROLLBACK")) {
             Tag = "ROLLBACK";
             TransactionStatus = 'I';
+            request.SetAction(NKikimrKqp::QUERY_ACTION_ROLLBACK_TX);
+        } else {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+            request.SetQuery(ToPgSyntax(query, ConnectionParams_));
         }
 
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());

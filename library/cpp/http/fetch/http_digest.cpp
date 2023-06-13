@@ -94,7 +94,7 @@ void httpDigestHandler::digestCalcHA1(const THttpAuthHeader& hd,
     }
 
     ctx.End(outSessionKey);
-};
+}
 
 /************************************************************/
 /* calculate request-digest/response-digest as per HTTP Digest spec */

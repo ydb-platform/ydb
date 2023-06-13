@@ -97,6 +97,22 @@ To update cluster (stop + start):
             help='The path to Federated Query config'
         )
         sub_parser.add_argument(
+            '--enable-feature-flag',
+            default=[],
+            action='append',
+            type=str,
+            dest="enabled_feature_flags",
+            help='Enable feature flag'
+        )
+        sub_parser.add_argument(
+            '--enable-grpc-service',
+            default=[],
+            action='append',
+            type=str,
+            dest="enabled_grpc_services",
+            help='Enables GRPC service'
+        )
+        sub_parser.add_argument(
             '--suppress-version-check', default=False, action='store_true',
             help='Should suppress version check',
         )

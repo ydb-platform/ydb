@@ -20,6 +20,37 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
+    TActorSetupCmd::TActorSetupCmd()
+        : MailboxType(TMailboxType::HTSwap)
+        , PoolId(0)
+        , Actor(nullptr)
+    {
+    }
+
+    TActorSetupCmd::TActorSetupCmd(TActorSetupCmd&&) = default;
+    TActorSetupCmd& TActorSetupCmd::operator=(TActorSetupCmd&&) = default;
+    TActorSetupCmd::~TActorSetupCmd() = default;
+
+    TActorSetupCmd::TActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId)
+        : MailboxType(mailboxType)
+        , PoolId(poolId)
+        , Actor(actor)
+    {
+    }
+
+    TActorSetupCmd::TActorSetupCmd(std::unique_ptr<IActor> actor, TMailboxType::EType mailboxType, ui32 poolId)
+        : MailboxType(mailboxType)
+        , PoolId(poolId)
+        , Actor(std::move(actor))
+    {
+    }
+
+    void TActorSetupCmd::Set(std::unique_ptr<IActor> actor, TMailboxType::EType mailboxType, ui32 poolId) {
+        MailboxType = mailboxType;
+        PoolId = poolId;
+        Actor = std::move(actor);
+    }
+
     struct TActorSystem::TServiceMap : TNonCopyable {
         NActors::TServiceMap<TActorId, TActorId, TActorId::THash> LocalMap;
         TTicketLock Lock;
@@ -236,12 +267,12 @@ namespace NActors {
 
         // setup interconnect proxies
         {
-            const TInterconnectSetup& setup = SystemSetup->Interconnect;
+            TInterconnectSetup& setup = SystemSetup->Interconnect;
             Interconnect.Reset(new TActorId[InterconnectCount + 1]);
             for (ui32 i = 0, e = InterconnectCount; i != e; ++i) {
-                const TActorSetupCmd& x = setup.ProxyActors[i];
+                TActorSetupCmd& x = setup.ProxyActors[i];
                 if (x.Actor) {
-                    Interconnect[i] = Register(x.Actor, x.MailboxType, x.PoolId, i);
+                    Interconnect[i] = Register(x.Actor.release(), x.MailboxType, x.PoolId, i);
                     Y_VERIFY(!!Interconnect[i]);
                 }
             }
@@ -251,8 +282,8 @@ namespace NActors {
         // setup local services
         {
             for (ui32 i = 0, e = (ui32)SystemSetup->LocalServices.size(); i != e; ++i) {
-                const std::pair<TActorId, TActorSetupCmd>& x = SystemSetup->LocalServices[i];
-                const TActorId xid = Register(x.second.Actor, x.second.MailboxType, x.second.PoolId, i);
+                std::pair<TActorId, TActorSetupCmd>& x = SystemSetup->LocalServices[i];
+                const TActorId xid = Register(x.second.Actor.release(), x.second.MailboxType, x.second.PoolId, i);
                 Y_VERIFY(!!xid);
                 if (!!x.first)
                     RegisterLocalService(x.first, xid);

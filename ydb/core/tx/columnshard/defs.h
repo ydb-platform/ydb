@@ -47,11 +47,7 @@ struct TLimits {
     TControlWrapper MaxInsertBytes;
     TControlWrapper InsertTableSize;
 
-    TLimits()
-        : MinInsertBytes(MIN_BYTES_TO_INSERT, 1, 2 * MAX_BYTES_TO_INSERT)
-        , MaxInsertBytes(MAX_BYTES_TO_INSERT, 0, 2 * MAX_BYTES_TO_INSERT)
-        , InsertTableSize(MIN_SMALL_BLOBS_TO_INSERT, 0, 1000)
-    {}
+    TLimits();
 
     void RegisterControls(TControlBoard& icb) {
         icb.RegisterSharedControl(MinInsertBytes, "ColumnShardControls.MinBytesToIndex");

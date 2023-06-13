@@ -110,9 +110,23 @@ public:
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
 
+        switch (QueryId.Settings.Syntax) {
+            case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                prepareSettings.UsePgParser = false;
+                prepareSettings.SyntaxVersion = 1;
+                break;
+
+            case Ydb::Query::Syntax::SYNTAX_PG:
+                prepareSettings.UsePgParser = true;
+                break;
+
+            default:
+                break;
+        }
+
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-        switch (QueryId.QueryType) {
+        switch (QueryId.Settings.QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
                 AsyncCompileResult = KqpHost->PrepareDataQuery(QueryRef, prepareSettings);
                 break;
@@ -135,7 +149,7 @@ public:
                 break;
 
             default:
-                YQL_ENSURE(false, "Unexpected query type: " << QueryId.QueryType);
+                YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
         }
 
         Continue(ctx);
@@ -202,7 +216,7 @@ private:
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_plan", queryPlan);
-        replayMessage.InsertValue("query_type", ToString(QueryId.QueryType));
+        replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
             << "Built the replay message " << message);
@@ -283,7 +297,7 @@ private:
 
         ETableReadType maxReadType = ExtractMostHeavyReadType(kqpResult.QueryPlan);
 
-        auto queryType = QueryId.QueryType;
+        auto queryType = QueryId.Settings.QueryType;
 
         KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(QueryId), status, kqpResult.Issues(), maxReadType);
 

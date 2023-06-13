@@ -8,6 +8,7 @@
 #include "blob_manager.h"
 #include "tables_manager.h"
 #include "inflight_request_tracker.h"
+#include "counters/columnshard.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -27,10 +28,10 @@ extern bool gAllowLogBatchingDefaultValue;
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
 IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
 IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                          TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline = TInstant::Max());
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                          const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                          TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline = TInstant::Max());
 IActor* CreateReadActor(ui64 tabletId,
@@ -163,6 +164,7 @@ class TColumnShard
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
 
+    void OverloadWriteFail(const TString& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
@@ -329,6 +331,72 @@ private:
         }
     };
 
+    class TBackgroundController {
+    private:
+        using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
+        bool ActiveIndexing = false;
+        TCurrentCompaction ActiveCompactionInfo;
+        bool ActiveCleanup = false;
+        bool ActiveTtl = false;
+    public:
+        void StartCompaction(const NOlap::TPlanCompactionInfo& info) {
+            Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
+        }
+        void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
+            Y_VERIFY(ActiveCompactionInfo.erase(info.GetPathId()));
+        }
+        const TCurrentCompaction& GetActiveCompaction() const {
+            return ActiveCompactionInfo;
+        }
+        ui32 GetCompactionsCount() const {
+            return ActiveCompactionInfo.size();
+        }
+
+        void StartIndexing() {
+            Y_VERIFY(!ActiveIndexing);
+            ActiveIndexing = true;
+        }
+        void FinishIndexing() {
+            Y_VERIFY(ActiveIndexing);
+            ActiveIndexing = false;
+        }
+        bool IsIndexingActive() const {
+            return ActiveIndexing;
+        }
+
+        void StartCleanup() {
+            Y_VERIFY(!ActiveCleanup);
+            ActiveCleanup = true;
+        }
+        void FinishCleanup() {
+            Y_VERIFY(ActiveCleanup);
+            ActiveCleanup = false;
+        }
+        bool IsCleanupActive() const {
+            return ActiveCleanup;
+        }
+
+        void StartTtl() {
+            Y_VERIFY(!ActiveTtl);
+            ActiveTtl = true;
+        }
+        void FinishTtl() {
+            Y_VERIFY(ActiveTtl);
+            ActiveTtl = false;
+        }
+        bool IsTtlActive() const {
+            return ActiveTtl;
+        }
+
+        bool HasSplitCompaction(const ui64 pathId) const {
+            auto it = ActiveCompactionInfo.find(pathId);
+            if (it == ActiveCompactionInfo.end()) {
+                return false;
+            }
+            return !it->second.IsInternal();
+        }
+    };
+
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 
@@ -351,7 +419,6 @@ private:
     ui64 WritesInFly = 0;
     ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
-    ui64 BackgroundActivation = 0;
     ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
     TString OwnerPath;
 
@@ -383,6 +450,8 @@ private:
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
 
+    const TCSCounters CSCounters;
+
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
     TSet<TDeadlineQueueItem> DeadlineQueue;
@@ -397,11 +466,8 @@ private:
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
-    bool ActiveIndexing = false;
-    ui32 ActiveCompaction = 0;
-    bool ActiveCleanup = false;
-    bool ActiveTtl = false;
     ui32 ActiveEvictions = 0;
+    TBackgroundController BackgroundController;
     std::unique_ptr<TBlobManager> BlobManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TSettings Settings;
@@ -425,14 +491,6 @@ private:
         ui64 writesLimit = Settings.OverloadWritesInFly;
         return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
            (writesLimit && WritesInFly > writesLimit);
-    }
-
-    bool InsertTableOverloaded() const {
-        return InsertTable && InsertTable->HasOverloaded();
-    }
-
-    bool IndexOverloaded() const {
-        return TablesManager.IndexOverloaded();
     }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
@@ -469,8 +527,8 @@ private:
 
     void ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly = false);
 
-    bool SetupIndexation();
-    bool SetupCompaction();
+    void SetupIndexation();
+    void SetupCompaction();
     std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {},
                                                       bool force = false);
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();

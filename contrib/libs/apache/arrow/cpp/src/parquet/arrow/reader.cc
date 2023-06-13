@@ -290,7 +290,7 @@ class FileReaderImpl : public FileReader {
   }
 
   Status WillNeedRowGroups(const std::vector<int>& row_groups,
-                          const std::vector<int>& column_indices) override;
+                           const std::vector<int>& column_indices) override;
 
   Status DecodeRowGroups(const std::vector<int>& row_groups,
                          const std::vector<int>& column_indices,

@@ -49,9 +49,9 @@ namespace NActors {
 #else
 
 namespace NActors {
-    inline void EnableActorCallstack(){};
+    inline void EnableActorCallstack(){}
 
-    inline void DisableActorCallstack(){};
+    inline void DisableActorCallstack(){}
 
 }
 

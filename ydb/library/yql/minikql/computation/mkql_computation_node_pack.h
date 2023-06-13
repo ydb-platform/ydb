@@ -78,6 +78,7 @@ public:
 
     // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
+    TSelf& AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 count);
     size_t PackedSizeEstimate() const {
         return Buffer_.Size() + Buffer_.ReservedHeaderSize();
     }
@@ -89,11 +90,13 @@ public:
     // reference is valid till the next call to Pack()
     const TPagedBuffer& Pack(const NUdf::TUnboxedValuePod &value) const;
     NUdf::TUnboxedValue Unpack(TStringBuf buf, const THolderFactory& holderFactory) const;
-    void UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueVector& result) const;
+    void UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
 private:
     void BuildMeta(bool addItemCount) const;
+    void StartPack();
 
     const TType* const Type_;
+    const TMaybe<ui32> Width_;
     ui64 ItemCount_ = 0;
     mutable TPagedBuffer Buffer_;
     mutable NDetails::TPackerState State_;

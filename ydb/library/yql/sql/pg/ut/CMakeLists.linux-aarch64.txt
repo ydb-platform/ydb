@@ -17,6 +17,7 @@ target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   yql-sql-pg
+  contrib-libs-fmt
   udf-service-exception_policy
   library-yql-sql
 )

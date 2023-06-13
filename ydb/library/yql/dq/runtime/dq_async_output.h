@@ -32,7 +32,7 @@ public:
 
     // Pop data to send. Return estimated size of returned data.
     [[nodiscard]]
-    virtual ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch, ui64 bytes) = 0;
+    virtual ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) = 0;
     // Pop watermark
     [[nodiscard]]
     virtual bool Pop(NDqProto::TWatermark& watermark) = 0;

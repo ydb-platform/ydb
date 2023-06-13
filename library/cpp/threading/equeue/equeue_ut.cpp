@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
     struct TJob: public IObjectInQueue {
         void Process(void*) override {
             AtomicIncrement(Counters.Processed);
-        };
+        }
     };
     static TJob Job;
 

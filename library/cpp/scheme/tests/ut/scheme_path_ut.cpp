@@ -156,4 +156,4 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
     }
-};
+}

@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         int A, B;
         TCustom()
             : A(0)
-            , B(0){};
+            , B(0){}
         TCustom(int a, int b)
             : A(a)
             , B(b)
@@ -159,4 +159,4 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_EXCEPTION(FromJson<TSI>(json, true), yexception);
         UNIT_ASSERT_EXCEPTION(FromJson<TPI>(json, true), yexception);
     }
-};
+}

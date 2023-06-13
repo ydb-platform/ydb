@@ -25,7 +25,6 @@ target_link_libraries(ydb-core-cms-ut PUBLIC
   core-testlib-default
 )
 target_sources(ydb-core-cms-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/checkers_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tenants_ut.cpp

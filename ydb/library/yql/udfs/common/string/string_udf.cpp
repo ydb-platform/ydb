@@ -28,6 +28,8 @@
 using namespace NKikimr;
 using namespace NUdf;
 
+namespace {
+
 #define STRING_UDF(udfName, function)                       \
     SIMPLE_STRICT_UDF(T##udfName, char*(TAutoMap<char*>)) { \
         const TString input(args[0].AsStringRef());         \
@@ -572,5 +574,6 @@ using namespace NUdf;
         TPrec,
         TToByteList,
         TFromByteList)
+}
 
 REGISTER_MODULES(TStringModule)

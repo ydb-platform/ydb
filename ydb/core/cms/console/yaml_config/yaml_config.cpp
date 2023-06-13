@@ -592,7 +592,7 @@ size_t Hash(const TResolvedConfig& config)
 
 void ValidateVolatileConfig(NFyaml::TDocument& doc) {
     auto root = doc.Root();
-    auto seq = root.Sequence();
+    auto seq = root.Map().at("selector_config").Sequence();
     if (seq.size() == 0) {
         ythrow yexception() << "Empty volatile config";
     }
@@ -621,6 +621,17 @@ void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatil
     auto volatileConfigRoot = volatileConfig.Root();
 
     auto seq = volatileConfigRoot.Sequence();
+    auto selectors = configRoot.Map().at("selector_config").Sequence();
+    for (auto& elem : seq) {
+        auto node = elem.Copy(config);
+        selectors.Append(node.Ref());
+    }
+}
+
+void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TNodeRef& volatileConfig) {
+    auto configRoot = config.Root();
+
+    auto seq = volatileConfig.Sequence();
     auto selectors = configRoot.Map().at("selector_config").Sequence();
     for (auto& elem : seq) {
         auto node = elem.Copy(config);
@@ -704,9 +715,6 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     }
 }
 
-/**
- * Parses config metadata
- */
 TMetadata GetMetadata(const TString& config) {
     if (config.empty()) {
         return {};
@@ -726,32 +734,42 @@ TMetadata GetMetadata(const TString& config) {
     return {};
 }
 
-/**
- * Replaces metadata in config
- */
-TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
+TVolatileMetadata GetVolatileMetadata(const TString& config) {
+    if (config.empty()) {
+        return {};
+    }
+
     auto doc = NFyaml::TDocument::Parse(config);
 
+    if (auto node = doc.Root().Map().at("metadata"); node) {
+        auto versionNode = node.Map().at("version");
+        auto clusterNode = node.Map().at("cluster");
+        auto idNode = node.Map().at("id");
+        return TVolatileMetadata{
+            .Version = versionNode ? std::make_optional(FromString<ui64>(versionNode.Scalar())) : std::nullopt,
+            .Cluster = clusterNode ? std::make_optional(clusterNode.Scalar()) : std::nullopt,
+            .Id = idNode ? std::make_optional(FromString<ui64>(idNode.Scalar())) : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
+TString ReplaceMetadata(const TString& config, const std::function<void(TStringStream&)>& serializeMetadata) {
     TStringStream sstr;
-    auto serializeMetadata = [&]() {
-        sstr
-          << "metadata:\n  cluster: \""
-          << *metadata.Cluster << "\""
-          << "\n  version: "
-          << *metadata.Version;
-    };
+    auto doc = NFyaml::TDocument::Parse(config);
     if (doc.Root().Style() == NFyaml::ENodeStyle::Flow) {
         if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
             doc.Root().Map().Remove(pair);
         }
-        serializeMetadata();
+        serializeMetadata(sstr);
         sstr << "\n" << doc;
     } else {
         if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
             auto begin = pair.Key().BeginMark().InputPos;
             auto end = pair.Value().EndMark().InputPos;
             sstr << config.substr(0, begin);
-            serializeMetadata();
+            serializeMetadata(sstr);
             if (end < config.length() && config[end] == ':') {
                 end = end + 1;
             }
@@ -760,12 +778,74 @@ TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
             if (doc.HasExplicitDocumentStart()) {
                 auto docStart = doc.BeginMark().InputPos + 4;
                 sstr << config.substr(0, docStart);
-                serializeMetadata();
+                serializeMetadata(sstr);
                 sstr << "\n" << config.substr(docStart, TString::npos);
             } else {
-                serializeMetadata();
+                serializeMetadata(sstr);
                 sstr << "\n" << config;
             }
+        }
+    }
+    return sstr.Str();
+
+}
+
+TString ReplaceMetadata(const TString& config, const TMetadata& metadata) {
+    auto serializeMetadata = [&](TStringStream& sstr) {
+        sstr
+          << "metadata:"
+          << "\n  kind: MainConfig"
+          << "\n  cluster: \"" << *metadata.Cluster << "\""
+          << "\n  version: " << *metadata.Version;
+    };
+    return ReplaceMetadata(config, serializeMetadata);
+}
+
+TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata) {
+    auto serializeMetadata = [&](TStringStream& sstr) {
+        sstr
+          << "metadata:"
+          << "\n  kind: VolatileConfig"
+          << "\n  cluster: \"" << *metadata.Cluster << "\""
+          << "\n  version: " << *metadata.Version
+          << "\n  id: "  << *metadata.Id;
+    };
+    return ReplaceMetadata(config, serializeMetadata);
+}
+
+bool IsConfigKindEquals(const TString& config, const TString& kind) {
+    try {
+        auto doc = NFyaml::TDocument::Parse(config);
+        return doc.Root().Map().at("metadata").Map().at("kind").Scalar() == kind;
+    } catch (yexception& e) {
+        return false;
+    }
+}
+
+bool IsVolatileConfig(const TString& config) {
+    return IsConfigKindEquals(config, "VolatileConfig");
+}
+
+bool IsMainConfig(const TString& config) {
+    return IsConfigKindEquals(config, "MainConfig");
+}
+
+TString StripMetadata(const TString& config) {
+    auto doc = NFyaml::TDocument::Parse(config);
+
+    TStringStream sstr;
+    if (auto pair = doc.Root().Map().pair_at_opt("metadata"); pair) {
+        auto begin = pair.Key().BeginMark().InputPos;
+        sstr << config.substr(0, begin);
+        auto end = pair.Value().EndMark().InputPos;
+        sstr << config.substr(end, TString::npos);
+    } else {
+        if (doc.HasExplicitDocumentStart()) {
+            auto docStart = doc.BeginMark().InputPos + 4;
+            sstr << config.substr(0, docStart);
+            sstr << "\n" << config.substr(docStart, TString::npos);
+        } else {
+            sstr << config;
         }
     }
 

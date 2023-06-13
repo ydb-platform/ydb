@@ -586,7 +586,7 @@ public:
     }
 
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }
@@ -726,11 +726,11 @@ public:
         }
     }
 
-    void Push(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, i64 space) override {
+    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
         auto inputType = GetInputType();
         NDqProto::TSourcePushRequest data;
         TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-        *data.MutableData() = dataSerializer.Serialize(batch.begin(), batch.end(), static_cast<NKikimr::NMiniKQL::TType*>(inputType));
+        *data.MutableData() = dataSerializer.Serialize(batch, inputType);
         data.SetSpace(space);
 
         NDqProto::TCommandHeader header;
@@ -740,10 +740,11 @@ public:
         header.SetChannelId(InputIndex);
         header.Save(&Output);
         data.Save(&Output);
+
     }
 
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }
@@ -909,6 +910,12 @@ public:
     // can throw TDqChannelStorageException
     void Push(NUdf::TUnboxedValue&& value) override {
         Y_UNUSED(value);
+        ythrow yexception() << "unimplemented";
+    }
+
+    void WidePush(NUdf::TUnboxedValue* values, ui32 count) override {
+        Y_UNUSED(values);
+        Y_UNUSED(count);
         ythrow yexception() << "unimplemented";
     }
 
@@ -1087,7 +1094,7 @@ public:
         }
     }
 
-    ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch, ui64 bytes) override {
+    ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(5);
@@ -1198,6 +1205,12 @@ public:
 
     void Push(NUdf::TUnboxedValue&& value) override {
         Y_UNUSED(value);
+        Y_FAIL("Unimplemented");
+    }
+
+    void WidePush(NUdf::TUnboxedValue* values, ui32 count) override {
+        Y_UNUSED(values);
+        Y_UNUSED(count);
         Y_FAIL("Unimplemented");
     }
 

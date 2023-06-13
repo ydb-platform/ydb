@@ -182,17 +182,35 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
-class IBoxedValue : public IBoxedValue6 {};
+class IBoxedValue : public IBoxedValue6 {
+protected:
+    IBoxedValue();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-class IBoxedValue : public IBoxedValue5 {};
+class IBoxedValue : public IBoxedValue5 {
+protected:
+    IBoxedValue();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
-class IBoxedValue : public IBoxedValue4 {};
+class IBoxedValue : public IBoxedValue4 {
+protected:
+    IBoxedValue();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
-class IBoxedValue : public IBoxedValue3 {};
+class IBoxedValue : public IBoxedValue3 {
+protected:
+    IBoxedValue();
+};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
-class IBoxedValue : public IBoxedValue2 {};
+class IBoxedValue : public IBoxedValue2 {
+protected:
+    IBoxedValue();
+};
 #else
-class IBoxedValue : public IBoxedValue1 {};
+class IBoxedValue : public IBoxedValue1 {
+protected:
+    IBoxedValue();
+};
 #endif
 
 UDF_ASSERT_TYPE_SIZE(IBoxedValue, 16);

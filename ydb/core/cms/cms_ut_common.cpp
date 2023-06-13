@@ -316,12 +316,10 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 ui32 vdiskId = pdiskIndex * vdiskPerPdisk + vdiskIndex;
                 ui32 groupId = groupShift + vdiskId;
                 ui32 failRealm = 0;
-                ui32 failDomain = nodeIndex % 8;
-                if (useMirror3dcErasure) {
+                if (useMirror3dcErasure)
                     failRealm = (nodeIndex % 9) / 3;
-                    failDomain = (nodeIndex % 9) % 3;
-                }
-                TVDiskID id = {(ui8)groupId, 1, (ui8)failRealm, (ui8)failDomain, (ui8)0};
+
+                TVDiskID id = {(ui8)groupId, 1, (ui8)failRealm, (ui8)(nodeIndex % 8), (ui8)0};
 
                 auto &vdisk = node.VDiskStateInfo[id];
                 VDiskIDFromVDiskID(id, vdisk.MutableVDiskId());
@@ -339,7 +337,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetGroupId(groupId);
                 vdiskConfig.SetGroupGeneration(1);
                 vdiskConfig.SetFailRealmIdx(failRealm);
-                vdiskConfig.SetFailDomainIdx(failDomain);
+                vdiskConfig.SetFailDomainIdx(nodeIndex % 8);
 
                 config->MutableGroup(groupId)->AddVSlotId()
                     ->CopyFrom(vdiskConfig.GetVSlotId());

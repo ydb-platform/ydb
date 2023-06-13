@@ -1517,10 +1517,12 @@ public:
 
     template <class TSettings>
     class IObjectModifier {
+    public:
+        using TYqlConclusionStatus = TConclusionSpecialStatus<TIssuesIds::EIssueCode, TIssuesIds::SUCCESS, TIssuesIds::DEFAULT_ERROR>;
     private:
         TKikimrIcGateway& Owner;
     protected:
-        virtual TFuture<TConclusionStatus> DoExecute(
+        virtual TFuture<TYqlConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const TSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) = 0;
         ui32 GetNodeId() const {
@@ -1556,13 +1558,14 @@ public:
                     context.SetUserToken(*GetUserToken());
                 }
                 context.SetDatabase(Owner.Database);
-                return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TConclusionStatus>& f) {
+                return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TYqlConclusionStatus>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
                         TGenericResult result;
                         result.SetSuccess();
                         return NThreading::MakeFuture<TGenericResult>(result);
                     } else if (f.HasValue()) {
                         TGenericResult result;
+                        result.SetStatus(f.GetValue().GetStatus());
                         result.AddIssue(NYql::TIssue(f.GetValue().GetErrorMessage()));
                         return NThreading::MakeFuture<TGenericResult>(result);
                     } else {
@@ -1581,7 +1584,7 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TCreateObjectSettings>;
     protected:
-        virtual TFuture<TConclusionStatus> DoExecute(
+        virtual TFuture<TYqlConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TCreateObjectSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override
         {
@@ -1595,7 +1598,7 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TAlterObjectSettings>;
     protected:
-        virtual TFuture<TConclusionStatus> DoExecute(
+        virtual TFuture<TYqlConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TAlterObjectSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->AlterObject(settings, TBase::GetNodeId(), manager, context);
@@ -1608,7 +1611,7 @@ public:
     private:
         using TBase = IObjectModifier<NYql::TDropObjectSettings>;
     protected:
-        virtual TFuture<TConclusionStatus> DoExecute(
+        virtual TFuture<TYqlConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TDropObjectSettings& settings,
             const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->DropObject(settings, TBase::GetNodeId(), manager, context);

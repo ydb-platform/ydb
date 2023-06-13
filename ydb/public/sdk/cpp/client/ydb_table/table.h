@@ -209,6 +209,8 @@ public:
 
     // Enable virtual timestamps
     TChangefeedDescription& WithVirtualTimestamps();
+    // Enable resolved timestamps
+    TChangefeedDescription& WithResolvedTimestamps(const TDuration& interval);
     // Customise retention period of underlying topic (24h by default).
     TChangefeedDescription& WithRetentionPeriod(const TDuration& value);
     // Initial scan will output the current state of the table first
@@ -225,6 +227,7 @@ public:
     EChangefeedFormat GetFormat() const;
     EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
+    const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
     const THashMap<TString, TString>& GetAttributes() const;
     const TString& GetAwsRegion() const;
@@ -246,6 +249,7 @@ private:
     EChangefeedFormat Format_;
     EChangefeedState State_ = EChangefeedState::Unknown;
     bool VirtualTimestamps_ = false;
+    std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;
     THashMap<TString, TString> Attributes_;
@@ -845,7 +849,6 @@ class TDescribeTableResult;
 class TBeginTransactionResult;
 class TCommitTransactionResult;
 class TKeepAliveResult;
-class TSessionPoolImpl;
 class TBulkUpsertResult;
 class TReadRowsResult;
 class TScanQueryPartIterator;
@@ -974,6 +977,7 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 };
 
 class TSession;
+class TSessionPool;
 struct TRetryState;
 
 enum class EDataFormat {
@@ -984,7 +988,7 @@ enum class EDataFormat {
 class TTableClient {
     friend class TSession;
     friend class TTransaction;
-    friend class TSessionPoolImpl;
+    friend class TSessionPool;
     friend class TRetryOperationContext;
 
 public:
@@ -1575,7 +1579,7 @@ class TSession {
     friend class TTableClient;
     friend class TDataQuery;
     friend class TTransaction;
-    friend class TSessionPoolImpl;
+    friend class TSessionPool;
 
 public:
     //! The following methods perform corresponding calls.
@@ -1643,7 +1647,7 @@ public:
 
     class TImpl;
 private:
-    TSession(std::shared_ptr<TTableClient::TImpl> client, const TString& sessionId, const TString& endpointId);
+    TSession(std::shared_ptr<TTableClient::TImpl> client, const TString& sessionId, const TString& endpointId, bool isOwnedBySessionPool);
     TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<TSession::TImpl> SessionImpl_);
 
     std::shared_ptr<TTableClient::TImpl> Client_;

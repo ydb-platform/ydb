@@ -14,6 +14,7 @@ namespace NYdb {
                 size_t producerCount, size_t consumerCount,
                 bool quiet, bool printTimestamp,
                 ui32 windowDurationSec, ui32 totalDurationSec,
+                ui8 Percentile,
                 std::shared_ptr<std::atomic_bool> errorFlag);
 
             void PrintWindowStatsLoop();
@@ -46,6 +47,8 @@ namespace NYdb {
 
             double WindowDurationSec;
             double TotalDurationSec;
+
+            ui8 Percentile;
 
             std::shared_ptr<std::atomic_bool> ErrorFlag;
 

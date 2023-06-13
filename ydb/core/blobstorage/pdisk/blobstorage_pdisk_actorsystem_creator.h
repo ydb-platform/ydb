@@ -51,10 +51,10 @@ public:
             NKikimrServices::EServiceKikimr_Name
         );
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings, NActors::CreateNullBackend(),
+        auto loggerActor = std::make_unique<NActors::TLoggerActor>(logSettings, NActors::CreateNullBackend(),
                 GetServiceCounters(Counters, "utils"));
-        NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 2);
-        setup->LocalServices.emplace_back(NActors::TActorId(1, "logger"), loggerActorCmd);
+        NActors::TActorSetupCmd loggerActorCmd(std::move(loggerActor), NActors::TMailboxType::Simple, 2);
+        setup->LocalServices.emplace_back(NActors::TActorId(1, "logger"), std::move(loggerActorCmd));
 
         ActorSystem = std::make_unique<TActorSystem>(setup, AppData.get(), logSettings);
         ActorSystem->Start();

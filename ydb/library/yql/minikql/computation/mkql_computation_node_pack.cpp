@@ -216,6 +216,16 @@ bool HasOptionalFields(const TType* type) {
         return HasOptionalFields(taggedType->GetBaseType());
     }
 
+    case TType::EKind::Multi: {
+        auto multiType = static_cast<const TMultiType*>(type);
+        for (ui32 index = 0; index < multiType->GetElementsCount(); ++index) {
+            if (HasOptionalFields(multiType->GetElementType(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     default:
         THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }
@@ -889,6 +899,7 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 template<bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type)
     : Type_(type)
+    , Width_(type->IsMulti() ? static_cast<const TMultiType*>(type)->GetElementsCount() : TMaybe<ui32>())
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
 {
@@ -909,7 +920,7 @@ NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TStringBuf buf, const TH
 }
 
 template<bool Fast>
-void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueVector& result) const {
+void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
     auto& s = IncrementalState_;
     ui64 len;
     ui32 topLength;
@@ -930,9 +941,21 @@ void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFacto
         len = NDetails::GetRawData<ui64>(buf);
     }
 
-    result.reserve(len + result.size());
-    for (ui64 i = 0; i < len; ++i) {
-        result.emplace_back(UnpackFromContigousBuffer<Fast>(itemType, buf, topLength, holderFactory, s));
+    if (Type_->IsMulti()) {
+        auto multiType = static_cast<const TMultiType*>(Type_);
+        const ui32 width = multiType->GetElementsCount();
+        Y_VERIFY_DEBUG(result.IsWide());
+        Y_VERIFY_DEBUG(result.Width() == width);
+        for (ui64 i = 0; i < len; ++i) {
+            result.PushRow([&](ui32 j) {
+                return UnpackFromContigousBuffer<Fast>(multiType->GetElementType(j), buf, topLength, holderFactory, s);
+            });
+        }
+    } else {
+        Y_VERIFY_DEBUG(!result.IsWide());
+        for (ui64 i = 0; i < len; ++i) {
+            result.emplace_back(UnpackFromContigousBuffer<Fast>(itemType, buf, topLength, holderFactory, s));
+        }
     }
     MKQL_ENSURE(buf.empty(), "Bad packed data. Not fully data read");
 }
@@ -953,20 +976,42 @@ const TPagedBuffer& TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValueP
 }
 
 template<bool Fast>
+void TValuePackerTransport<Fast>::StartPack() {
+    Buffer_.Clear();
+    if constexpr (Fast) {
+        // reserve place for list item count
+        Buffer_.ReserveHeader(sizeof(ItemCount_));
+    } else {
+        IncrementalState_.OptionalUsageMask.Reset();
+        Buffer_.ReserveHeader(sizeof(ui32) + State_.OptionalMaskReserve + MAX_PACKED64_SIZE);
+    }
+}
+
+template<bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TUnboxedValuePod& value) {
+    Y_VERIFY_DEBUG(!Type_->IsMulti());
     const TType* itemType = Type_;
     if (!ItemCount_) {
-        Buffer_.Clear();
-        if constexpr (Fast) {
-            // reserve place for list item count
-            Buffer_.ReserveHeader(sizeof(ItemCount_));
-        } else {
-            IncrementalState_.OptionalUsageMask.Reset();
-            Buffer_.ReserveHeader(sizeof(ui32) + State_.OptionalMaskReserve + MAX_PACKED64_SIZE);
-        }
+        StartPack();
     }
 
     PackImpl<Fast, false>(itemType, Buffer_, value, IncrementalState_);
+    ++ItemCount_;
+    return *this;
+}
+
+template<bool Fast>
+TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 width) {
+    Y_VERIFY_DEBUG(Type_->IsMulti());
+    Y_VERIFY_DEBUG(static_cast<const TMultiType*>(Type_)->GetElementsCount() == width);
+    const TMultiType* itemType = static_cast<const TMultiType*>(Type_);
+    if (!ItemCount_) {
+        StartPack();
+    }
+
+    for (ui32 i = 0; i < width; ++i) {
+        PackImpl<Fast, false>(itemType->GetElementType(i), Buffer_, values[i], IncrementalState_);
+    }
     ++ItemCount_;
     return *this;
 }

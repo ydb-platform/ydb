@@ -31,11 +31,16 @@ public:
     struct TInputChannelStats {
         ui64 PollRequests = 0;
         ui64 ResentMessages = 0;
-        TDuration WaitTime;
+        TDuration IdleTime; // wait time until 1st message received
+        TDuration WaitTime; // wait time after 1st message received
+        TInstant FirstMessageTs;
+        TInstant LastMessageTs;
     };
 
     struct TOutputChannelStats {
         ui64 ResentMessages = 0;
+        TInstant FirstMessageTs;
+        TInstant LastMessageTs;
     };
 
 public:

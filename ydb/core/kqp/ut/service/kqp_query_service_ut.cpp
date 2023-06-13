@@ -97,6 +97,29 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(ExecuteQueryPg) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings()
+            .Syntax(ESyntax::Pg);
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT * FROM (VALUES
+                (1::int8, 'one'),
+                (2::int8, 'two'),
+                (3::int8, 'three')
+            ) AS t;
+        )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            ["1";"one"];
+            ["2";"two"];
+            ["3";"three"]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(ExecuteQueryScalar) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -327,7 +350,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
-        UNIT_ASSERT(op.Ready());
+        UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetIssues().ToString());
+        UNIT_ASSERT_C(op.Ready(), op.Status().GetIssues().ToString());
         UNIT_ASSERT(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled);
         UNIT_ASSERT_EQUAL(op.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT(op.Status().GetStatus() == NYdb::EStatus::SUCCESS || op.Status().GetStatus() == NYdb::EStatus::CANCELLED);

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List
 from log_parser import ctest_log_parser, parse_yunit_fails, parse_gtest_fails, log_reader
 from mute_utils import MutedTestCheck, MutedShardCheck
+from junit_utils import add_junit_log_property
 
 
 def make_filename(*parts):
@@ -84,13 +85,6 @@ def write_summary(summary, is_mute_shard, is_mute_test):
 
 
 def patch_jsuite(log_urls, ctest_path, unit_paths):
-    def add_link_property(tc, url):
-        props = tc.find("properties")
-        if props is None:
-            props = ET.Element("properties")
-            tc.append(props)
-        props.append(ET.Element("property", dict(name="url:Log", value=url)))
-
     suite_logs = {}
     test_logs = {}
 
@@ -106,7 +100,7 @@ def patch_jsuite(log_urls, ctest_path, unit_paths):
         for testcase in root.findall("testcase"):
             log_url = suite_logs.get(testcase.attrib["classname"])
             if log_url:
-                add_link_property(testcase, log_url)
+                add_junit_log_property(testcase, log_url)
                 changed = True
 
         if changed:
@@ -123,7 +117,7 @@ def patch_jsuite(log_urls, ctest_path, unit_paths):
                     cls, method = testcase.attrib["classname"], testcase.attrib["name"]
                     log_url = test_logs.get((cls, method))
                     if log_url:
-                        add_link_property(testcase, log_url)
+                        add_junit_log_property(testcase, log_url)
                         changed = True
             if changed:
                 print(f"patch {fn}")

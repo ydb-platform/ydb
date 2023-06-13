@@ -316,7 +316,7 @@ namespace NMonitoring {
 
         inline void Clear() noexcept override {
             Labels_.clear();
-        };
+        }
 
         TLabelImpl<TStringBackend>& front() {
             return Labels_.front();

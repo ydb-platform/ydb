@@ -34,12 +34,10 @@ void TDbWrapper::EraseAborted(const TInsertedData& data) {
     NColumnShard::Schema::InsertTable_EraseAborted(db, data);
 }
 
-bool TDbWrapper::Load(THashMap<TWriteId, TInsertedData>& inserted,
-                      THashMap<ui64, TSet<TInsertedData>>& committed,
-                      THashMap<TWriteId, TInsertedData>& aborted,
+bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
                       const TInstant& loadTime) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, inserted, committed, aborted, loadTime);
+    return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
 void TDbWrapper::WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) {

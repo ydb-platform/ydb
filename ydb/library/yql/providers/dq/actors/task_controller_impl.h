@@ -295,9 +295,9 @@ private:
                         auto& counter = *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv);
                         if (name == "MultiHop_LateThrownEventsCount") {
                             // the only incremental sensor from TaskRunner
-                            counter += v.Count;
+                            counter += v.Sum;
                         } else {
-                            counter = v.Count;
+                            counter = v.Sum;
                         }
                     }
                 }
@@ -356,18 +356,21 @@ private:
         ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(SourceCpuTimeUs)
-        ADD_COUNTER(PendingInputTimeUs)
-        ADD_COUNTER(PendingOutputTimeUs)
-        ADD_COUNTER(FinishTimeUs)
+        ADD_COUNTER(FirstRowTimeMs)
+        ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
+        ADD_COUNTER(StartTimeMs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
         ADD_COUNTER(WaitTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
+        ADD_COUNTER(PendingInputTimeUs)
+        ADD_COUNTER(PendingOutputTimeUs)
+        ADD_COUNTER(FinishTimeUs)
 
         for (const auto& ingress : s.GetIngress()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
@@ -409,6 +412,7 @@ private:
         for (const auto& stats : s.GetInputChannels()) {
             auto labels = commonLabels;
             labels["InputChannel"] = ToString(stats.GetChannelId());
+            labels["SrcStageId"] = ToString(stats.GetSrcStageId());
 
             ADD_COUNTER(Chunks);
             ADD_COUNTER(Bytes);
@@ -416,6 +420,18 @@ private:
             ADD_COUNTER(RowsOut);
             ADD_COUNTER(MaxMemoryUsage);
             ADD_COUNTER(DeserializationTimeUs);
+
+            ADD_COUNTER(IdleTimeUs);
+            ADD_COUNTER(WaitTimeUs);
+            ADD_COUNTER(FirstMessageMs);
+            ADD_COUNTER(LastMessageMs);
+
+            if (stats.GetFirstMessageMs() && stats.GetLastMessageMs()) {
+                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "ActiveTimeUs"),
+                    (   TInstant::MilliSeconds(stats.GetLastMessageMs()) -
+                        TInstant::MilliSeconds(stats.GetFirstMessageMs()) ).MicroSeconds()
+                );
+            }
 
 //            if (stats.GetFinishTs() >= stats.GetStartTs()) {
 //                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
@@ -425,6 +441,7 @@ private:
         for (const auto& stats : s.GetOutputChannels()) {
             auto labels = commonLabels;
             labels["OutputChannel"] = ToString(stats.GetChannelId());
+            labels["DstStageId"] = ToString(stats.GetDstStageId());
 
             ADD_COUNTER(Chunks)
             ADD_COUNTER(Bytes);
@@ -438,6 +455,17 @@ private:
             ADD_COUNTER(SpilledBytes);
             ADD_COUNTER(SpilledRows);
             ADD_COUNTER(SpilledBlobs);
+
+            ADD_COUNTER(BlockedTimeUs);
+            ADD_COUNTER(FirstMessageMs);
+            ADD_COUNTER(LastMessageMs);
+
+            if (stats.GetFirstMessageMs() && stats.GetLastMessageMs()) {
+                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "ActiveTimeUs"),
+                    (   TInstant::MilliSeconds(stats.GetLastMessageMs()) -
+                        TInstant::MilliSeconds(stats.GetFirstMessageMs()) ).MicroSeconds()
+                );
+            }
 
 //            if (stats.GetFinishTs() >= stats.GetStartTs()) {
 //                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());

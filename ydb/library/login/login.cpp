@@ -70,6 +70,15 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     return response;
 }
 
+bool TLoginProvider::CheckSubjectExists(const TString& name, const ESidType::SidType& type) {
+    auto itSidModify = Sids.find(name);
+    return itSidModify != Sids.end() && itSidModify->second.Type == type;
+}
+
+bool TLoginProvider::CheckUserExists(const TString& name) {
+    return CheckSubjectExists(name, ESidType::USER);
+}
+
 TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserRequest& request) {
     TBasicResponse response;
 

@@ -222,4 +222,4 @@ Y_UNIT_TEST_SUITE(TestParseNextAction) {
 
         DoTestParsePathFailure("\x22\x0C", 1, 0);
     }
-};
+}

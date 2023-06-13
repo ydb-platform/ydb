@@ -122,7 +122,7 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
         if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
             for (const auto& p : stat.GetMap()) {
                 if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
-                    if (auto* ingressNode = p.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.count")) {
+                    if (auto* ingressNode = p.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.sum")) {
                         ingress += ingressNode->GetInteger();
                     }
                 }

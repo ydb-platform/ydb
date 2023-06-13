@@ -26,7 +26,7 @@ ui64 GetNodeIdFromSession(const TString& sessionId) {
     return 0;
 }
 
-TSession::TImpl::TImpl(const TString& sessionId, const TString& endpoint, bool useQueryCache, ui32 queryCacheSize)
+TSession::TImpl::TImpl(const TString& sessionId, const TString& endpoint, bool useQueryCache, ui32 queryCacheSize, bool isOwnedBySessionPool)
     : SessionId_(sessionId)
     , EndpointKey_(endpoint, GetNodeIdFromSession(sessionId))
     , State_(S_STANDALONE)
@@ -36,6 +36,7 @@ TSession::TImpl::TImpl(const TString& sessionId, const TString& endpoint, bool u
     , TimeToTouch_(TInstant::Now())
     , TimeInPast_(TInstant::Now())
     , NeedUpdateActiveCounter_(false)
+    , IsOwnedBySessionPool_(isOwnedBySessionPool)
 {}
 
 TSession::TImpl::~TImpl() {
@@ -87,6 +88,10 @@ void TSession::TImpl::MarkActive() {
 void TSession::TImpl::MarkIdle() {
     State_ = EState::S_IDLE;
     NeedUpdateActiveCounter_ = false;
+}
+
+bool TSession::TImpl::IsOwnedBySessionPool() const {
+    return IsOwnedBySessionPool_;
 }
 
 TSession::TImpl::EState TSession::TImpl::GetState() const {

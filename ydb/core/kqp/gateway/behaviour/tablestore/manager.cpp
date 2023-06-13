@@ -11,32 +11,32 @@
 
 namespace NKikimr::NKqp {
 
-NThreading::TFuture<TConclusionStatus> TTableStoreManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
+NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager::DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         NMetadata::IClassBehaviour::TPtr manager, TInternalModificationContext& context) const {
             Y_UNUSED(nodeId);
             Y_UNUSED(manager);
-        auto promise = NThreading::NewPromise<TConclusionStatus>();
+        auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
         auto result = promise.GetFuture();
 
         switch (context.GetActivityType()) {
             case EActivityType::Create:
             case EActivityType::Drop:
             case EActivityType::Undefined:
-                return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail("not implemented"));
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("not implemented"));
             case EActivityType::Alter:
             try {
                 auto actionName = settings.GetFeaturesExtractor().Extract("ACTION");
                 if (!actionName) {
-                    return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail("can't find ACTION parameter"));
+                    return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("can't find ACTION parameter"));
                 }
                 ITableStoreOperation::TPtr operation(ITableStoreOperation::TFactory::Construct(*actionName));
                 if (!operation) {
-                    return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail("invalid ACTION: " + *actionName));
+                    return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("invalid ACTION: " + *actionName));
                 }
                 {
                     auto parsingResult = operation->Deserialize(settings);
                     if (!parsingResult) {
-                        return NThreading::MakeFuture<TConclusionStatus>(parsingResult);
+                        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(parsingResult.GetErrorMessage()));
                     }
                 }
                 auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
@@ -51,14 +51,14 @@ NThreading::TFuture<TConclusionStatus> TTableStoreManager::DoModify(const NYql::
                 TActivationContext::AsActorContext().Register(new NKqp::TSchemeOpRequestHandler(ev.Release(), promiseScheme, false));
                 return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
-                        return TConclusionStatus::Success();
+                        return TYqlConclusionStatus::Success();
                     } else if (f.HasValue()) {
-                        return TConclusionStatus::Fail(f.GetValue().Issues().ToString());
+                        return TYqlConclusionStatus::Fail(f.GetValue().Status(), f.GetValue().Issues().ToString());
                     }
-                    return TConclusionStatus::Fail("no value in result");
+                    return TYqlConclusionStatus::Fail("no value in result");
                 });
             } catch (yexception& e) {
-                return NThreading::MakeFuture<TConclusionStatus>(TConclusionStatus::Fail(e.what()));
+                return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(e.what()));
             }
         }
         return result;

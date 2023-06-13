@@ -1003,6 +1003,7 @@ void TTablet::Handle(TEvTablet::TEvPing::TPtr &ev) {
 void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
     Y_UNUSED(ev);
     ReportTabletStateChange(TTabletStateInfo::Active);
+    Send(Launcher, new TEvTablet::TEvReady(TabletID(), StateStorageInfo.KnownGeneration, UserTablet));
     ActivateTime = AppData()->TimeProvider->Now();
     BLOG_I("Active! Generation: " << StateStorageInfo.KnownGeneration
             <<  ", Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)

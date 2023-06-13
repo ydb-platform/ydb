@@ -63,7 +63,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
 
     const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, nameserviceSetup));
+    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
 
 
     ///////////////////////// LOGGER ///////////////////////////////////////////////
@@ -88,14 +88,14 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
                                                                    NActors::CreateStderrBackend(),
                                                                    Counters->GetSubgroup("logger", "counters"));
     NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 0);
-    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, loggerActorCmd);
-    setup1->LocalServices.push_back(loggerActorPair);
+    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, std::move(loggerActorCmd));
+    setup1->LocalServices.push_back(std::move(loggerActorPair));
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// SETUP TEST ACTOR ///////////////////////////////////
     NActors::TActorId testActorId = NActors::TActorId(1, "test123");
     TActorSetupCmd testActorSetup(testActor, TMailboxType::Simple, 0);
-    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testActorId, testActorSetup));
+    setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(testActorId, std::move(testActorSetup)));
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// TYPE REGISTRY //////////////////////////////////////

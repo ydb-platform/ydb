@@ -34,8 +34,6 @@ using namespace NYql::NCommon;
 using namespace NYql::NNodes;
 using namespace NThreading;
 
-using TSqlVersion = ui16;
-
 namespace {
 
 void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&& stats) {
@@ -1050,11 +1048,14 @@ public:
 
 private:
     TExprNode::TPtr CompileQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, TExprContext& ctx,
-        TMaybe<TSqlVersion>& sqlVersion) const
+        TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const
     {
         TAstParseResult astRes;
         if (isSql) {
             NSQLTranslation::TTranslationSettings settings{};
+            if (usePgParser) {
+                settings.PgParser = *usePgParser;
+            }
             if (sqlVersion) {
                 settings.SyntaxVersion = *sqlVersion;
 
@@ -1137,9 +1138,9 @@ private:
     }
 
     TExprNode::TPtr CompileYqlQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, TExprContext& ctx,
-        TMaybe<TSqlVersion>& sqlVersion) const
+        TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const
     {
-        auto queryExpr = CompileQuery(query, isSql, sqlAutoCommit, ctx, sqlVersion);
+        auto queryExpr = CompileQuery(query, isSql, sqlAutoCommit, ctx, sqlVersion, usePgParser);
         if (!queryExpr) {
             return nullptr;
         }
@@ -1211,7 +1212,7 @@ private:
         }
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion);
+        auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion, {});
         if (!queryExpr) {
             return nullptr;
         }
@@ -1265,7 +1266,7 @@ private:
         }
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto queryExpr = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, ctx, sqlVersion);
+        auto queryExpr = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, ctx, sqlVersion, {});
         if (!queryExpr) {
             return nullptr;
         }
@@ -1290,7 +1291,7 @@ private:
         }
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto queryExpr = CompileYqlQuery(queryAst, false, false, ctx, sqlVersion);
+        auto queryExpr = CompileYqlQuery(queryAst, false, false, ctx, sqlVersion, {});
         if (!queryExpr) {
             return nullptr;
         }
@@ -1301,8 +1302,8 @@ private:
             SessionCtx, *ExecuteCtx);
     }
 
-    IAsyncQueryResultPtr PrepareQueryInternal(const TKqpQueryRef& query, EKikimrQueryType queryType, const TPrepareSettings& settings,
-        TExprContext& ctx)
+    IAsyncQueryResultPtr PrepareQueryInternal(const TKqpQueryRef& query, EKikimrQueryType queryType,
+        const TPrepareSettings& settings, TExprContext& ctx)
     {
         SetupYqlTransformer(queryType);
 
@@ -1315,9 +1316,13 @@ private:
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
 
-        // TODO: Support PG
-        TMaybe<TSqlVersion> sqlVersion = 1;
-        auto queryExpr = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, ctx, sqlVersion);
+        TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;
+        if (!sqlVersion) {
+            sqlVersion = 1;
+        }
+
+        auto queryExpr = CompileYqlQuery(query, /* isSql */ true, /* sqlAutoCommit */ false, ctx, sqlVersion,
+            settings.UsePgParser);
         if (!queryExpr) {
             return nullptr;
         }
@@ -1334,7 +1339,9 @@ private:
             : PrepareScanQueryAstInternal(query, ctx);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx, EKikimrStatsMode statsMode = EKikimrStatsMode::None) {
+    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx,
+        EKikimrStatsMode statsMode = EKikimrStatsMode::None)
+    {
         SetupYqlTransformer(EKikimrQueryType::Scan);
 
         SessionCtx->Query().PrepareOnly = true;
@@ -1342,7 +1349,7 @@ private:
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
 
         TMaybe<TSqlVersion> sqlVersion = 1;
-        auto queryExpr = CompileYqlQuery(query, true, false, ctx, sqlVersion);
+        auto queryExpr = CompileYqlQuery(query, true, false, ctx, sqlVersion, {});
         if (!queryExpr) {
             return nullptr;
         }
@@ -1359,7 +1366,7 @@ private:
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto queryExpr = CompileYqlQuery(queryAst, false, false, ctx, sqlVersion);
+        auto queryExpr = CompileYqlQuery(queryAst, false, false, ctx, sqlVersion, {});
         if (!queryExpr) {
             return nullptr;
         }
@@ -1381,7 +1388,7 @@ private:
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion);
+        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
         if (!scriptExpr) {
             return nullptr;
         }
@@ -1407,7 +1414,7 @@ private:
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion);
+        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
         if (!scriptExpr) {
             return nullptr;
         }
@@ -1429,7 +1436,7 @@ private:
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion);
+        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
         if (!scriptExpr) {
             return nullptr;
         }
@@ -1453,7 +1460,7 @@ private:
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion);
+        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
         if (!scriptExpr) {
             return nullptr;
         }

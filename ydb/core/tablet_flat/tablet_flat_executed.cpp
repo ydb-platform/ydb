@@ -263,6 +263,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
+        IgnoreFunc(TEvTablet::TEvReady);
     default:
         return false;
     }
@@ -283,6 +284,7 @@ void TTabletExecutedFlat::StateInitImpl(TAutoPtr<IEventHandle>& ev, const TActor
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
+        IgnoreFunc(TEvTablet::TEvReady);
     default:
         return Enqueue(ev);
     }

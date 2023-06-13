@@ -26,6 +26,7 @@ public:
     }
     virtual bool IsFull() const = 0;
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
+    virtual void WideConsume(NKikimr::NUdf::TUnboxedValue* values, ui32 count) = 0;
     virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
     bool IsFinishing() const {
@@ -43,9 +44,9 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output);
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
-    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices);
+    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices, TMaybe<ui32> outputWidth);
 
-IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs);
+IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 
 
 } // namespace NYql::NDq

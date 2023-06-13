@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(r.Execute(), TSystemError, "Connection reset by peer");
 
         server.Stop();
-    };
+    }
 
     Y_UNIT_TEST(TTestReleaseConnection) {
         TPortManager pm;
@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         server.Stop();
 
         UNIT_ASSERT_STRINGS_EQUAL(serverImpl.ExceptionMessage, "(yexception) some error");
-    };
+    }
 
     THttpInput SendRequest(TSocket& socket, ui16 port) {
         TSocketInput si(socket);
@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         UNIT_ASSERT(resp == TString::Join("127.0.0.1", ":", ToString(port2)));
 
         server.Stop();
-    };
+    }
 
 #if 0
     Y_UNIT_TEST(TestSocketsLeak) {

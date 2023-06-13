@@ -31,6 +31,67 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
     return arrow::RecordBatch::Make(resultArrowSchema, batch->num_rows(), newColumns);
 }
 
+std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TString& data, const TString& dataSchemaStr, TString& strError) const {
+    std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
+    std::shared_ptr<arrow::Schema> dataSchema;
+    if (dataSchemaStr.size()) {
+        dataSchema = NArrow::DeserializeSchema(dataSchemaStr);
+        if (!dataSchema) {
+            strError = "DeserializeSchema() failed";
+            return nullptr;
+        }
+    }
+
+    auto batch = NArrow::DeserializeBatch(data, (dataSchema ? dataSchema : dstSchema));
+    if (!batch) {
+        strError = "DeserializeBatch() failed";
+        return nullptr;
+    }
+    if (batch->num_rows() == 0) {
+        strError = "empty batch";
+        return nullptr;
+    }
+
+    // Correct schema
+    if (dataSchema) {
+        batch = NArrow::ExtractColumns(batch, dstSchema, true);
+        if (!batch) {
+            strError = "cannot correct schema";
+            return nullptr;
+        }
+    }
+
+    if (!batch->schema()->Equals(dstSchema)) {
+        strError = "unexpected schema for insert batch: '" + batch->schema()->ToString() + "'";
+        return nullptr;
+    }
+
+    const auto& sortingKey = GetIndexInfo().GetSortingKey();
+    Y_VERIFY(sortingKey);
+
+    // Check PK is NOT NULL
+    for (auto& field : sortingKey->fields()) {
+        auto column = batch->GetColumnByName(field->name());
+        if (!column) {
+            strError = "missing PK column '" + field->name() + "'";
+            return nullptr;
+        }
+        if (NArrow::HasNulls(column)) {
+            strError = "PK column '" + field->name() + "' contains NULLs";
+            return nullptr;
+        }
+    }
+
+    auto status = batch->ValidateFull();
+    if (!status.ok()) {
+        strError = status.ToString();
+        return nullptr;
+    }
+    batch = NArrow::SortBatch(batch, sortingKey);
+    Y_VERIFY_DEBUG(NArrow::IsSorted(batch, sortingKey));
+    return batch;
+}
+
 TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array,
     const std::shared_ptr<arrow::Field>& field,
     const TColumnSaver saver) {

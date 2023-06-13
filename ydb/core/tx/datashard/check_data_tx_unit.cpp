@@ -86,7 +86,19 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
     if (tx->IsMvccSnapshotRead()) {
         auto snapshot = tx->GetMvccSnapshot();
-        if (!DataShard.IsMvccEnabled()) {
+        if (DataShard.IsFollower()) {
+            TString err = TStringBuilder()
+                << "Operation " << *op << " cannot read from snapshot " << snapshot
+                << " using data tx on a follower " << DataShard.TabletID();
+
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
+                ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
+            op->Abort(EExecutionUnitKind::FinishPropose);
+
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+
+            return EExecutionStatus::Executed;
+        } else if (!DataShard.IsMvccEnabled()) {
             TString err = TStringBuilder()
                 << "Operation " << *op << " reads from snapshot " << snapshot
                 << " with MVCC feature disabled at " << DataShard.TabletID();

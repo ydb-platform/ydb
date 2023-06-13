@@ -207,21 +207,22 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
 
     for (auto& field : dstSchema->fields()) {
         columns.push_back(srcBatch->GetColumnByName(field->name()));
-        Y_VERIFY(columns.back());
-        if (!columns.back()->type()->Equals(field->type())) {
-            columns.back() = {};
-        }
-
         if (!columns.back()) {
             if (addNotExisted) {
                 auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows());
                 if (!result.ok()) {
-                    return {};
+                    return nullptr;
                 }
                 columns.back() = *result;
             } else {
-                return {};
+                return nullptr;
             }
+        }
+
+        Y_VERIFY(columns.back());
+        if (!columns.back()->type()->Equals(field->type())) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())("column_type", field->type()->ToString());
+            return nullptr;
         }
     }
 
@@ -796,14 +797,19 @@ bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shar
 }
 
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
+    arrow::Status result = arrow::Status::OK();
     if (builder.type()->id() == arrow::Type::BINARY) {
         arrow::BaseBinaryBuilder<arrow::BinaryType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::BinaryType>&>(builder);
-        return bBuilder.ReserveData(size).ok();
+        result = bBuilder.ReserveData(size);
     } else if (builder.type()->id() == arrow::Type::STRING) {
         arrow::BaseBinaryBuilder<arrow::StringType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::StringType>&>(builder);
-        return bBuilder.ReserveData(size).ok();
+        result = bBuilder.ReserveData(size);
     }
-    return true;
+
+    if (!result.ok()) {
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "ReserveData")("error", result.ToString());
+    }
+    return result.ok();
 }
 
 bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result,

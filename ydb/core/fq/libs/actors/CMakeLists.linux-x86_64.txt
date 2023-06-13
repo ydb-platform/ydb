@@ -30,10 +30,12 @@ target_link_libraries(fq-libs-actors PUBLIC
   libs-actors-logging
   fq-libs-checkpointing
   fq-libs-checkpointing_common
-  fq-libs-db_id_async_resolver_impl
   fq-libs-common
+  libs-compute-common
+  libs-compute-ydb
   fq-libs-control_plane_storage
   libs-control_plane_storage-events
+  fq-libs-db_id_async_resolver_impl
   fq-libs-db_schema
   fq-libs-events
   fq-libs-grpc
@@ -48,14 +50,9 @@ target_link_libraries(fq-libs-actors PUBLIC
   library-yql-ast
   yql-core-facade
   core-services-mounts
+  dq-integration-transform
   library-yql-minikql
   yql-minikql-comp_nodes
-  common-token_accessor-client
-  yql-public-issue
-  public-issue-protos
-  yql-sql-settings
-  yql-utils-actor_log
-  dq-integration-transform
   providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes
@@ -63,6 +60,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   providers-common-metrics
   providers-common-provider
   common-schema-mkql
+  common-token_accessor-client
   providers-common-udf_resolve
   providers-dq-actors
   providers-dq-common
@@ -75,9 +73,15 @@ target_link_libraries(fq-libs-actors PUBLIC
   providers-pq-task_meta
   providers-s3-provider
   providers-ydb-provider
+  yql-public-issue
+  public-issue-protos
+  yql-sql-settings
   library-yql-utils
+  yql-utils-actor_log
   api-protos
   public-lib-fq
+  client-draft-ydb_query
+  cpp-client-ydb_operation
   cpp-client-ydb_table
 )
 target_sources(fq-libs-actors PRIVATE
@@ -87,14 +91,12 @@ target_sources(fq-libs-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_health_check.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/pending_fetcher.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/pinger.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy_private.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter_resources.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter_resources.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/result_writer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/run_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/run_actor_params.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/table_bindings_from_bindings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/task_get.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/actors/task_ping.cpp

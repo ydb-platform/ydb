@@ -243,7 +243,7 @@ struct TEvents {
     struct TEvEffectApplicationResult : public NActors::TEventLocal<TEvEffectApplicationResult, TEventIds::EvEffectApplicationResult> {
         explicit TEvEffectApplicationResult(const NYql::TIssues& issues, bool fataError = false)
             : Issues(issues), FatalError(fataError) {
-        } 
+        }
         NYql::TIssues Issues;
         const bool FatalError;
     };

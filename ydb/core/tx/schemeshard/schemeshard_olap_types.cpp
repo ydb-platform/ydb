@@ -140,7 +140,7 @@ namespace NKikimr::NSchemeShard {
         TMap<TString, ui32> keyColumnNames;
         for (auto&& pkKey : tableSchema.GetKeyColumnNames()) {
             if (!keyColumnNames.emplace(pkKey, keyColumnNames.size()).second) {
-                errors.AddError(Sprintf("Duplicate key column '%s'", pkKey.c_str()));
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate key column '" << pkKey << "'");
                 return false;
             }
         }
@@ -161,19 +161,19 @@ namespace NKikimr::NSchemeShard {
             }
             if (column.GetKeyOrder() && *column.GetKeyOrder() == 0) {
                 if (!TOlapSchema::IsAllowedFirstPkType(column.GetType().GetTypeId())) {
-                    errors.AddError(TStringBuilder()
+                    errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
                         << "Type '" << column.GetType().GetTypeId() << "' specified for column '" << column.GetName()
                         << "' is not supported in first PK position");
                     return false;
                 }
             }
             if (columnNames.contains(column.GetName())) {
-                errors.AddError(Sprintf("Duplicate column '%s'", column.GetName().c_str()));
+                errors.AddError(NKikimrScheme::StatusMultipleModifications, TStringBuilder() << "Duplicate column '" << column.GetName() << "'");
                 return false;
             }
             if (!allowNullKeys) {
                 if (keyColumnNames.contains(column.GetName()) && !column.IsNotNull()) {
-                    errors.AddError(Sprintf("Nullable key column '%s'", column.GetName().c_str()));
+                    errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Nullable key column '" << column.GetName() << "'");
                     return false;
                 }
             }
@@ -184,19 +184,21 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        TSet<TString> addColumnNames;
-        if (alterRequest.DropColumnsSize()) {
-            errors.AddError("Drop columns method not supported for tablestore and table");
-            return false;
+        for (const auto& column: alterRequest.GetDropColumns()) {
+            if (!DropColumns.emplace(column.GetName()).second) {
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, "Duplicated column for drop");
+                return false;
+            }
         }
-
+        
+        TSet<TString> addColumnNames;
         for (auto& columnSchema : alterRequest.GetAddColumns()) {
             TOlapColumnAdd column({});
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;
             }
             if (addColumnNames.contains(column.GetName())) {
-                errors.AddError(Sprintf("column '%s' duplication for add", column.GetName().c_str()));
+                errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "column '" << column.GetName() << "' duplication for add");
                 return false;
             }
             addColumnNames.emplace(column.GetName());
@@ -210,11 +212,11 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
             if (addColumnNames.contains(columnDiff.GetName())) {
-                errors.AddError(Sprintf("column '%s' have to be either add or update", columnDiff.GetName().c_str()));
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' have to be either add or update");
                 return false;
             }
             if (alterColumnNames.contains(columnDiff.GetName())) {
-                errors.AddError(Sprintf("column '%s' duplication for update", columnDiff.GetName().c_str()));
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' duplication for update");
                 return false;
             }
             alterColumnNames.emplace(columnDiff.GetName());
@@ -225,7 +227,7 @@ namespace NKikimr::NSchemeShard {
 
     bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
         if (Columns.empty() && schemaUpdate.GetAddColumns().empty()) {
-            errors.AddError("No add columns specified");
+            errors.AddError(NKikimrScheme::StatusSchemeError, "No add columns specified");
             return false;
         }
 
@@ -233,7 +235,7 @@ namespace NKikimr::NSchemeShard {
             Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
         } else {
             if (schemaUpdate.HasEngine()) {
-                errors.AddError("No engine updates supported");
+                errors.AddError(NKikimrScheme::StatusSchemeError, "No engine updates supported");
                 return false;
             }
         }
@@ -242,16 +244,16 @@ namespace NKikimr::NSchemeShard {
         std::map<ui32, ui32> orderedKeyColumnIds;
         for (auto&& column : schemaUpdate.GetAddColumns()) {
             if (ColumnsByName.contains(column.GetName())) {
-                errors.AddError(Sprintf("column '%s' already exists", column.GetName().data()));
+                errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "column '" << column.GetName() << "' already exists");
                 return false;
             }
             if (hasColumnsBefore) {
                 if (column.IsNotNull()) {
-                    errors.AddError("Cannot add new not null column currently (not supported yet)");
+                    errors.AddError(NKikimrScheme::StatusSchemeError, "Cannot add new not null column currently (not supported yet)");
                     return false;
                 }
                 if (column.GetKeyOrder()) {
-                    errors.AddError(Sprintf("column '%s' is pk column. its impossible to modify pk", column.GetName().data()));
+                    errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << column.GetName() << "' is pk column. its impossible to modify pk");
                     return false;
                 }
             }
@@ -267,7 +269,7 @@ namespace NKikimr::NSchemeShard {
         for (auto&& columnDiff : schemaUpdate.GetAlterColumns()) {
             auto it = ColumnsByName.find(columnDiff.GetName());
             if (it == ColumnsByName.end()) {
-                errors.AddError(Sprintf("column '%s' not exists for altering", columnDiff.GetName().data()));
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' not exists for altering");
                 return false;
             } else {
                 auto itColumn = Columns.find(it->second);
@@ -278,6 +280,7 @@ namespace NKikimr::NSchemeShard {
                 }
             }
         }
+
         if (KeyColumnIds.empty()) {
             auto it = orderedKeyColumnIds.begin();
             for (ui32 i = 0; i < orderedKeyColumnIds.size(); ++i, ++it) {
@@ -285,10 +288,26 @@ namespace NKikimr::NSchemeShard {
                 Y_VERIFY(i == it->first);
             }
             if (KeyColumnIds.empty()) {
-                errors.AddError("No primary key specified");
+                errors.AddError(NKikimrScheme::StatusSchemeError, "No primary key specified");
                 return false;
             }
         }
+
+        for (const auto& columnName : schemaUpdate.GetDropColumns()) {
+            auto columnInfo = GetColumnByName(columnName);
+            if (!columnInfo) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown column for drop: " << columnName);
+                return false;
+            }
+
+            if (columnInfo->IsKeyColumn()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot remove pk column: " << columnName);
+                return false;
+            }
+            ColumnsByName.erase(columnName);
+            Columns.erase(columnInfo->GetId());
+        }
+
         ++Version;
         return true;
     }

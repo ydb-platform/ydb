@@ -45,13 +45,16 @@ struct TEvConsole {
         EvUpdateTenantPoolConfig,
         EvGetLogTailRequest,
         //
-        EvApplyConfigRequest,
+        EvSetYamlConfigRequest,
         EvAddVolatileConfigRequest,
         EvRemoveVolatileConfigRequest,
         EvGetAllConfigsRequest,
         EvResolveConfigRequest,
         EvResolveAllConfigRequest,
         EvDropConfigRequest,
+        EvReplaceYamlConfigRequest,
+        EvGetAllMetadataRequest,
+        EvGetNodeLabelsRequest,
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -83,13 +86,19 @@ struct TEvConsole {
         EvConfigSubscriptionError,
         EvGetLogTailResponse,
         //
-        EvApplyConfigResponse,
+        EvSetYamlConfigResponse,
         EvAddVolatileConfigResponse,
         EvRemoveVolatileConfigResponse,
         EvGetAllConfigsResponse,
         EvResolveConfigResponse,
         EvResolveAllConfigResponse,
         EvDropConfigResponse,
+        EvReplaceYamlConfigResponse,
+        EvGetAllMetadataResponse,
+        EvGetNodeLabelsResponse,
+        EvUnauthorized,
+        EvDisabled,
+        EvGenericError,
 
         EvEnd
     };
@@ -151,10 +160,16 @@ struct TEvConsole {
     //////////////////////////////////////////////////
     // NEW CONFIGS MANAGEMENT
     //////////////////////////////////////////////////
-    struct TEvApplyConfigResponse : public TEventShortDebugPB<TEvApplyConfigResponse, NKikimrConsole::TApplyConfigResponse, EvApplyConfigResponse> {};
+    struct TEvSetYamlConfigResponse : public TEventShortDebugPB<TEvSetYamlConfigResponse, NKikimrConsole::TSetYamlConfigResponse, EvSetYamlConfigResponse> {};
 
-    struct TEvApplyConfigRequest : public TEventShortDebugPB<TEvApplyConfigRequest, NKikimrConsole::TApplyConfigRequest, EvApplyConfigRequest> {
-        using TResponse = TEvApplyConfigResponse;
+    struct TEvSetYamlConfigRequest : public TEventShortDebugPB<TEvSetYamlConfigRequest, NKikimrConsole::TSetYamlConfigRequest, EvSetYamlConfigRequest> {
+        using TResponse = TEvSetYamlConfigResponse;
+    };
+
+    struct TEvReplaceYamlConfigResponse : public TEventShortDebugPB<TEvReplaceYamlConfigResponse, NKikimrConsole::TReplaceYamlConfigResponse, EvReplaceYamlConfigResponse> {};
+
+    struct TEvReplaceYamlConfigRequest : public TEventShortDebugPB<TEvReplaceYamlConfigRequest, NKikimrConsole::TReplaceYamlConfigRequest, EvReplaceYamlConfigRequest> {
+        using TResponse = TEvReplaceYamlConfigResponse;
     };
 
     struct TEvDropConfigResponse : public TEventShortDebugPB<TEvDropConfigResponse, NKikimrConsole::TDropConfigResponse, EvDropConfigResponse> {};
@@ -181,6 +196,18 @@ struct TEvConsole {
         using TResponse = TEvGetAllConfigsResponse;
     };
 
+    struct TEvGetAllMetadataResponse : public TEventShortDebugPB<TEvGetAllMetadataResponse, NKikimrConsole::TGetAllMetadataResponse, EvGetAllMetadataResponse> {};
+
+    struct TEvGetAllMetadataRequest : public TEventShortDebugPB<TEvGetAllMetadataRequest, NKikimrConsole::TGetAllMetadataRequest, EvGetAllMetadataRequest> {
+        using TResponse = TEvGetAllMetadataResponse;
+    };
+
+    struct TEvGetNodeLabelsResponse : public TEventShortDebugPB<TEvGetNodeLabelsResponse, NKikimrConsole::TGetNodeLabelsResponse, EvGetNodeLabelsResponse> {};
+
+    struct TEvGetNodeLabelsRequest : public TEventShortDebugPB<TEvGetNodeLabelsRequest, NKikimrConsole::TGetNodeLabelsRequest, EvGetNodeLabelsRequest> {
+        using TResponse = TEvGetNodeLabelsResponse;
+    };
+
     struct TEvResolveConfigRequest : public TEventShortDebugPB<TEvResolveConfigRequest, NKikimrConsole::TResolveConfigRequest, EvResolveConfigRequest> {};
 
     struct TEvResolveConfigResponse : public TEventShortDebugPB<TEvResolveConfigResponse, NKikimrConsole::TResolveConfigResponse, EvResolveConfigResponse> {};
@@ -188,6 +215,12 @@ struct TEvConsole {
     struct TEvResolveAllConfigRequest : public TEventShortDebugPB<TEvResolveAllConfigRequest, NKikimrConsole::TResolveAllConfigRequest, EvResolveAllConfigRequest> {};
 
     struct TEvResolveAllConfigResponse : public TEventShortDebugPB<TEvResolveAllConfigResponse, NKikimrConsole::TResolveAllConfigResponse, EvResolveAllConfigResponse> {};
+
+    struct TEvUnauthorized : public TEventShortDebugPB<TEvUnauthorized, NKikimrConsole::TUnauthorized, EvUnauthorized> {};
+
+    struct TEvDisabled : public TEventShortDebugPB<TEvDisabled, NKikimrConsole::TDisabled, EvDisabled> {};
+
+    struct TEvGenericError : public TEventShortDebugPB<TEvGenericError, NKikimrConsole::TGenericError, EvGenericError> {};
 
     //////////////////////////////////////////////////
     // CMS MANAGEMENT

@@ -56,14 +56,12 @@ struct TCounters {
 
     template<typename T>
     void AddCounter(const TString& name, T value) const {
-        auto& counter = Counters[name];
-        counter.Count += value;
+        Counters[name].Add(TEntry(value));
     }
 
     template<typename T>
     void SetCounter(const TString& name, T value) const {
-        auto& counter = Counters[name];
-        counter.Count = value;
+        Counters[name] = TEntry(value);
     }
 
     THashMap<i64, ui64>& GetHistogram(const TString& name) {
@@ -142,6 +140,25 @@ struct TCounters {
         i64 Min = 0;
         i64 Avg = 0;
         i64 Count = 0;
+
+        TEntry() = default;
+        explicit TEntry(i64 value) {
+            Sum = value;
+            Max = value;
+            Min = value;
+            Avg = value;
+            Count = 1;
+        }
+
+        void Add(const TEntry& entry) {
+            if (entry.Count) {
+                Sum += entry.Sum;
+                Min = (Count == 0) ? entry.Min : ::Min(Min, entry.Min);
+                Max = (Count == 0) ? entry.Max : ::Max(Max, entry.Max);
+                Count += entry.Count;
+                Avg = Sum / Count;
+            }
+        }
     };
 
     struct TCounterBlock {
@@ -171,18 +188,7 @@ struct TCounters {
     }
 
     void AddCounter(const TString& name, const TEntry& value) const {
-        auto& counter = Counters[name];
-        if (value.Count) {
-            counter.Sum += value.Sum;
-            counter.Min = counter.Count == 0
-                ? value.Min
-                : Min(counter.Min, value.Min);
-            counter.Max = counter.Count == 0
-                ? value.Max
-                : Max(counter.Max, value.Max);
-            counter.Count += value.Count;
-            counter.Avg = counter.Sum / counter.Count;
-        }
+        Counters[name].Add(value);
     }
 
     void Clear() const {

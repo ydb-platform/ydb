@@ -18,14 +18,14 @@ namespace NJsonConverters {
 
         const TString ToJson(const bool sort = false) const {
             return ToTValue().ToJson(sort);
-        };
+        }
 
         void FromJson(const TStringBuf& json, const bool validate = false) {
             NSc::TValue v = NSc::TValue::FromJson(json);
             FromTValue(v, validate);
         }
 
-        virtual ~IJsonSerializable(){};
+        virtual ~IJsonSerializable() = default;
     };
     //////////////////////////////////////////////////////////////////////
     // fwd declarations

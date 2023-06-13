@@ -16,6 +16,8 @@ namespace NYdb {
             virtual int Run(TConfig& config) override;
         private:
             size_t Seconds;
+            ui8 Percentile;
+
             size_t MessageRate;
             size_t ByteRate;
             size_t MessageSize;

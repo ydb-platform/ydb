@@ -21,18 +21,6 @@
 
 namespace NYdb::NConsoleClient {
 
-namespace {
-
-    bool IsStdinInteractive() {
-#if defined(_win32_)
-        return _isatty(_fileno(stdin));
-#elif defined(_unix_)
-        return isatty(fileno(stdin));
-#endif
-        return true;
-    }
-}
-
 const TString AuthNode = "authentication";
 
 TCommandConfig::TCommandConfig()
@@ -220,7 +208,7 @@ namespace {
             TString authMethod = authValue["method"].as<TString>();
             Cout << "  " << authMethod;
             if (authMethod == "ydb-token" ||authMethod == "iam-token"
-                || authMethod == "yc-token" || authMethod == "sa-key-file" 
+                || authMethod == "yc-token" || authMethod == "sa-key-file"
                 || authMethod == "token-file" || authMethod == "yc-token-file")
             {
                 TString authData = authValue["data"].as<TString>();

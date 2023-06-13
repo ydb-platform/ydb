@@ -25,11 +25,14 @@ void TGRpcDynamicConfigService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) 
             }, &DynamicConfig::V1::DynamicConfigService::AsyncService::Request ## NAME,                           \
             #NAME, logger, getCounterBlock("console", #NAME))->Run();
 
-    ADD_REQUEST(ApplyConfig, DoApplyConfigRequest)
+    ADD_REQUEST(SetConfig, DoSetConfigRequest)
+    ADD_REQUEST(ReplaceConfig, DoReplaceConfigRequest)
     ADD_REQUEST(DropConfig, DoDropConfigRequest)
     ADD_REQUEST(AddVolatileConfig, DoAddVolatileConfigRequest)
     ADD_REQUEST(RemoveVolatileConfig, DoRemoveVolatileConfigRequest)
     ADD_REQUEST(GetConfig, DoGetConfigRequest)
+    ADD_REQUEST(GetMetadata, DoGetMetadataRequest)
+    ADD_REQUEST(GetNodeLabels, DoGetNodeLabelsRequest)
     ADD_REQUEST(ResolveConfig, DoResolveConfigRequest)
     ADD_REQUEST(ResolveAllConfig, DoResolveAllConfigRequest)
 

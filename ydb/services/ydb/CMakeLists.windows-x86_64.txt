@@ -9,6 +9,7 @@
 find_package(OpenSSL REQUIRED)
 add_subdirectory(index_ut)
 add_subdirectory(sdk_credprovider_ut)
+add_subdirectory(sdk_sessions_pool_ut)
 add_subdirectory(sdk_sessions_ut)
 add_subdirectory(table_split_ut)
 add_subdirectory(ut)

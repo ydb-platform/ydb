@@ -48,9 +48,11 @@ target_link_libraries(clicommands PUBLIC
 target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/term_io.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/benchmark_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/kv_workload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_command.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
@@ -102,14 +104,16 @@ target_link_libraries(clicommands.global PUBLIC
   library-cpp-resource
 )
 target_sources(clicommands.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/b27fa204a2892655fc6f34eb84a6343b.cpp
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/5be7e95ef4262fc1083e6058ef5d266e.cpp
 )
 resources(clicommands.global
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/b27fa204a2892655fc6f34eb84a6343b.cpp
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/ydb_cli/commands/5be7e95ef4262fc1083e6058ef5d266e.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_queries.sql
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench_schema.sql
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/tpch_schema.sql
   KEYS
   click_bench_queries.sql
   click_bench_schema.sql
+  tpch_schema.sql
 )

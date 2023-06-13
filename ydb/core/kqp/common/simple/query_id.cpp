@@ -11,14 +11,15 @@
 
 namespace NKikimr::NKqp {
 
-TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& text, NKikimrKqp::EQueryType type, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes)
+TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const TString& text,
+    const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes)
     : Cluster(cluster)
     , Database(database)
     , Text(text)
-    , QueryType(type)
+    , Settings(settings)
     , QueryParameterTypes(queryParameterTypes)
 {
-    switch (QueryType) {
+    switch (Settings.QueryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_DML:
         case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
         case NKikimrKqp::QUERY_TYPE_AST_DML:
@@ -33,7 +34,7 @@ TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const 
 }
 
 bool TKqpQueryId::IsSql() const {
-    return IsSqlQuery(QueryType);
+    return IsSqlQuery(Settings.QueryType);
 }
 
 bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
@@ -42,7 +43,6 @@ bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
         UserSid == other.UserSid &&
         Text == other.Text &&
         Settings == other.Settings &&
-        QueryType == other.QueryType &&
         !QueryParameterTypes == !other.QueryParameterTypes)) {
         return false;
     }

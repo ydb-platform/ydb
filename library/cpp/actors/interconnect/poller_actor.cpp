@@ -288,7 +288,7 @@ namespace NActors {
     }
 
     IActor* CreatePollerActor() {
-        return new TPollerActor;
+        return new TPollerActor();
     }
 
 }

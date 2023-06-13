@@ -96,15 +96,13 @@ bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<b
     const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
 
-    TUnboxedValueVector buffer;
+    YQL_ENSURE(!ResultType->IsMulti());
+    TUnboxedValueBatch buffer(ResultType);
     dataSerializer.Deserialize(data, ResultType, buffer);
 
-    for (const auto& item : buffer) {
-        if (!func(item)) {
-            return false;
-        }
-    }
-    return true;
+    return buffer.ForEachRow([&func](const auto& value) {
+        return func(value);
+    });
 }
 
 bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
@@ -115,13 +113,13 @@ bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::f
     const auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
 
+    YQL_ENSURE(!ResultType->IsMulti());
+
     for (const auto& part : rows) {
-        TUnboxedValueVector buffer;
+        TUnboxedValueBatch buffer(ResultType);
         dataSerializer.Deserialize(part, ResultType, buffer);
-        for (const auto& item : buffer) {
-            if (!func(item)) {
-                return false;
-            }
+        if (!buffer.ForEachRow([&func](const auto& value) { return func(value); })) {
+            return false;
         }
     }
     return true;

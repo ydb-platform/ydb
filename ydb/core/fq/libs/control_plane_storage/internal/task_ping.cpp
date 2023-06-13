@@ -23,7 +23,8 @@ struct TPingTaskParams {
 TPingTaskParams ConstructHardPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
-    const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters, uint64_t maxRequestSize) {
+    const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters,
+    uint64_t maxRequestSize, bool dumpRawStatistics) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -169,7 +170,7 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (request.status_code() != NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            internal.set_status_code(request.status_code());   
+            internal.set_status_code(request.status_code());
         }
 
         if (issues) {
@@ -194,12 +195,13 @@ TPingTaskParams ConstructHardPingTask(
         }
 
         if (request.statistics()) {
-            TString statistics;
-            try {
-                statistics = GetPrettyStatistics(request.statistics());
-            } catch (const std::exception&) {
-                CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
-                statistics = request.statistics();
+            TString statistics = request.statistics();
+            if (!dumpRawStatistics) {
+                try {
+                    statistics = GetPrettyStatistics(statistics);
+                } catch (const std::exception&) {
+                    CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
+                }
             }
             *query.mutable_statistics()->mutable_json() = statistics;
             *job.mutable_statistics()->mutable_json() = statistics;
@@ -275,6 +277,8 @@ TPingTaskParams ConstructHardPingTask(
             internal.clear_created_topic_consumers();
             // internal.clear_dq_graph(); keep for debug
             internal.clear_dq_graph_index();
+            // internal.clear_execution_id(); keep for debug
+            // internal.clear_operation_id(); keep for debug
         }
 
         if (!request.created_topic_consumers().empty()) {
@@ -289,6 +293,14 @@ TPingTaskParams ConstructHardPingTask(
             for (auto&& c : mergedConsumers) {
                 *internal.add_created_topic_consumers() = std::move(c);
             }
+        }
+
+        if (!request.execution_id().empty()) {
+            internal.set_execution_id(request.execution_id());
+        }
+
+        if (!request.operation_id().empty()) {
+            internal.set_operation_id(request.operation_id());
         }
 
         if (!request.dq_graph().empty()) {
@@ -526,7 +538,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     }
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl, Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize()) :
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl,
+            Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize(),
+            Config->Proto.GetDumpRawStatistics()) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);

@@ -63,6 +63,45 @@ public:
             }
         )", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
     }
+
+    void CreateTestOlapTableWithTTL(TString tableName = "olapTable", ui32 tableShardsCount = 3,
+        TString storeName = "olapStore", ui32 storeShardsCount = 4,
+        TString shardingFunction = "HASH_FUNCTION_CLOUD_LOGS") {
+
+        TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
+        CreateTestOlapStore(sender, Sprintf(R"(
+             Name: "%s"
+             ColumnShardCount: %d
+             SchemaPresets {
+                 Name: "default"
+                 Schema {
+                     %s
+                 }
+             }
+        )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
+
+        TString shardingColumns = "[\"timestamp\", \"uid\"]";
+        if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {
+            shardingColumns = "[\"uid\"]";
+        }
+
+        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+            Name: "%s"
+            ColumnShardCount: %d
+            TtlSettings: {
+                Enabled: {
+                    ColumnName : "timestamp"
+                    ExpireAfterSeconds : 86400
+                }
+            }
+            Sharding {
+                HashSharding {
+                    Function: %s
+                    Columns: %s
+                }
+            }
+        )", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
+    }
 };
 
 
@@ -549,6 +588,305 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #ifndef S3_TEST_USAGE
         UNIT_ASSERT_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1);
 #endif
+    }
+
+    std::optional<NYdb::TValue> GetValueResult(const THashMap<TString, NYdb::TValue>& hMap, const TString& fName) {
+        auto it = hMap.find(fName);
+        if (it == hMap.end()) {
+            Cerr << fName << ": NOT_FOUND" << Endl;
+            return {};
+        } else {
+            Cerr << fName << ": " << it->second.GetProto().DebugString() << Endl;
+            return it->second;
+        }
+    }
+
+    class TGCSource {
+    private:
+        const ui64 TabletId;
+        const ui32 Channel;
+    public:
+        ui32 GetChannel() const {
+            return Channel;
+        }
+        TGCSource(const ui64 tabletId, const ui32 channel)
+            : TabletId(tabletId)
+            , Channel(channel)
+        {
+
+        }
+
+        bool operator<(const TGCSource& item) const {
+            return std::tie(TabletId, Channel) < std::tie(item.TabletId, item.Channel);
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << "tId=" << TabletId << ";c=" << Channel << ";";
+        }
+    };
+
+    class TCurrentBarrier {
+    private:
+        ui32 Generation = 0;
+        ui32 Step = 0;
+    public:
+        TCurrentBarrier() = default;
+
+        TCurrentBarrier(const ui32 gen, const ui32 step)
+            : Generation(gen)
+            , Step(step)
+        {
+
+        }
+
+        bool operator<(const TCurrentBarrier& b) const {
+            return std::tie(Generation, Step) < std::tie(b.Generation, b.Step);
+        }
+
+        bool IsDeprecated(const NKikimr::TLogoBlobID& id) const {
+            if (id.Generation() < Generation) {
+                return true;
+            }
+            if (id.Generation() > Generation) {
+                return false;
+            }
+
+            if (id.Step() < Step) {
+                return true;
+            }
+            return id.Generation() == Generation && id.Step() == Step;
+        }
+    };
+
+    class TBlobFlags {
+    private:
+        bool KeepFlag = false;
+        bool DontKeepFlag = false;
+    public:
+        bool IsRemovable() const {
+            return !KeepFlag || DontKeepFlag;
+        }
+        void Keep() {
+            KeepFlag = true;
+        }
+        void DontKeep() {
+            DontKeepFlag = true;
+        }
+    };
+
+    class TGCSourceData {
+    private:
+        i64 BytesSize = 0;
+        TCurrentBarrier Barrier;
+        std::map<NKikimr::TLogoBlobID, TBlobFlags> Blobs;
+    public:
+
+        TString DebugString() const {
+            return TStringBuilder() << "size=" << BytesSize << ";count=" << Blobs.size() << ";";
+        }
+
+        i64 GetSize() const {
+            return BytesSize;
+        }
+        void AddSize(const ui64 size) {
+            BytesSize += size;
+        }
+        void ReduceSize(const ui64 size) {
+            BytesSize -= size;
+            Y_VERIFY(BytesSize >= 0);
+        }
+        void SetBarrier(const TCurrentBarrier& b) {
+            Y_VERIFY(!(b < Barrier));
+            Barrier = b;
+            RefreshBarrier();
+        }
+
+        void AddKeep(const TLogoBlobID& id) {
+            auto it = Blobs.find(id);
+            if (it != Blobs.end()) {
+                it->second.Keep();
+            }
+        }
+
+        void AddDontKeep(const TLogoBlobID& id) {
+            auto it = Blobs.find(id);
+            if (it != Blobs.end()) {
+                it->second.DontKeep();
+            }
+        }
+
+        void AddBlob(const TLogoBlobID& id) {
+            Blobs[id] = TBlobFlags();
+        }
+
+        void RefreshBarrier() {
+            for (auto it = Blobs.begin(); it != Blobs.end();) {
+                if (Barrier.IsDeprecated(it->first) && it->second.IsRemovable()) {
+                    ReduceSize(it->first.BlobSize());
+                    it = Blobs.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    };
+
+    class TBSDataCollector {
+    private:
+        std::map<TGCSource, TGCSourceData> Data;
+    public:
+        TGCSourceData& GetData(const TGCSource& id) {
+            return Data[id];
+        }
+        ui64 GetChannelSize(const ui32 channelId) const {
+            ui64 result = 0;
+            for (auto&& i : Data) {
+                if (i.first.GetChannel() == channelId) {
+                    result += i.second.GetSize();
+                }
+            }
+            return result;
+        }
+        ui64 GetSize() const {
+            ui64 result = 0;
+            for (auto&& i : Data) {
+                result += i.second.GetSize();
+            }
+            return result;
+        }
+        TString StatusString() const {
+            std::map<ui32, TString> info;
+            for (auto&& i : Data) {
+                info[i.first.GetChannel()] += i.second.DebugString();
+            }
+            TStringBuilder sb;
+            for (auto&& i : info) {
+                sb << i.first << ":" << i.second << ";";
+            }
+            return sb;
+        }
+
+    };
+
+    Y_UNIT_TEST(TTLUsage) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableBackgroundTasks(true)
+            .SetForceColumnTablesCompositeMarks(true);
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+
+//        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
+//        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
+        //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+
+        TLocalHelper lHelper(*server);
+        lHelper.CreateTestOlapTableWithTTL("olapTable", 1);
+        Cerr << "Wait tables" << Endl;
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        Cerr << "Initialization tables" << Endl;
+        const ui32 numRecords = 600000;
+        auto batch = lHelper.TestArrowBatch(0, TInstant::Zero().GetValue(), 600000, 1000000);
+
+        ui32 gcCounter = 0;
+        TBSDataCollector bsCollector;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
+                Y_VERIFY(msg->Status == NKikimrProto::EReplyStatus::OK);
+            }
+            if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbage*>(ev->StaticCastAsLocal<IEventBase>())) {
+                TGCSource gcSource(msg->TabletId, msg->Channel);
+                auto& gcSourceData = bsCollector.GetData(gcSource);
+                if (msg->Keep) {
+                    for (auto&& i : *msg->Keep) {
+                        gcSourceData.AddKeep(i);
+                    }
+                }
+                if (msg->DoNotKeep) {
+                    for (auto&& i : *msg->DoNotKeep) {
+                        gcSourceData.AddDontKeep(i);
+                    }
+                }
+
+                Y_VERIFY(!msg->Hard);
+                if (msg->Collect) {
+                    gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
+                } else {
+                    gcSourceData.RefreshBarrier();
+                }
+                Cerr << "TEvBlobStorage::TEvCollectGarbage " << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
+            }
+            if (auto* msg = dynamic_cast<TEvBlobStorage::TEvPut*>(ev->StaticCastAsLocal<IEventBase>())) {
+                TGCSource gcSource(msg->Id.TabletID(), msg->Id.Channel());
+                auto& gcSourceData = bsCollector.GetData(gcSource);
+                gcSourceData.AddBlob(msg->Id);
+                gcSourceData.AddSize(msg->Id.BlobSize());
+                Cerr << "TEvBlobStorage::TEvPut " << gcSource.DebugString() << ":" << gcCounter << "/" << bsCollector.StatusString() << Endl;
+            }
+            return false;
+        };
+        runtime.SetEventFilter(captureEvents);
+
+        lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
+
+        {
+            TVector<THashMap<TString, NYdb::TValue>> result;
+            lHelper.StartScanRequest("SELECT MAX(timestamp) as a, MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);
+            UNIT_ASSERT(result.size() == 1);
+            UNIT_ASSERT(result.front().size() == 3);
+            UNIT_ASSERT(GetValueResult(result.front(), "c")->GetProto().uint64_value() == 600000);
+            UNIT_ASSERT(GetValueResult(result.front(), "a")->GetProto().uint64_value() == 599999000000);
+            UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == 0);
+        }
+        const ui32 reduceStepsCount = 1;
+        for (ui32 i = 0; i < reduceStepsCount; ++i) {
+            runtime.AdvanceCurrentTime(TDuration::Seconds(numRecords * (i + 1) / reduceStepsCount + 500000));
+            const TInstant start = TInstant::Now();
+            const ui64 purposeSize = 800000000.0 * (1 - 1.0 * (i + 1) / reduceStepsCount);
+            const ui64 purposeRecords = numRecords * (1 - 1.0 * (i + 1) / reduceStepsCount);
+            const ui64 purposeMinTimestamp = numRecords * 1.0 * (i + 1) / reduceStepsCount * 1000000;
+            while (bsCollector.GetChannelSize(2) > purposeSize && TInstant::Now() - start < TDuration::Seconds(60)) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            Cerr << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
+
+            TVector<THashMap<TString, NYdb::TValue>> result;
+            lHelper.StartScanRequest("SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);
+            UNIT_ASSERT(result.size() == 1);
+            UNIT_ASSERT(result.front().size() == 2);
+            UNIT_ASSERT(GetValueResult(result.front(), "c")->GetProto().uint64_value() == purposeRecords);
+            if (purposeRecords) {
+                UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == purposeMinTimestamp);
+            }
+
+            Y_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize);
+        }
+
+        {
+            TVector<THashMap<TString, NYdb::TValue>> result;
+            lHelper.StartScanRequest("SELECT COUNT(*) FROM `/Root/olapStore/olapTable`", true, &result);
+            UNIT_ASSERT(result.front().begin()->second.GetProto().uint64_value() == 0);
+        }
     }
 
 }

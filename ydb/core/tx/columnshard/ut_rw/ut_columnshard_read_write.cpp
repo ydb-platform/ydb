@@ -2735,7 +2735,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 planStep = 5000000;
         ui64 txId = 1000;
 
-        // Ovewrite the same data multiple times to produce multiple portions at different timestamps
+        // Overwrite the same data multiple times to produce multiple portions at different timestamps
         ui32 numWrites = 14;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));

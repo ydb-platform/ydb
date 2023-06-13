@@ -955,6 +955,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             internal.clear_plan_compressed();
             internal.clear_ast_compressed();
             internal.clear_dq_graph_compressed();
+            internal.clear_execution_id();
+            internal.clear_operation_id();
 
             auto& jobMeta = *job.mutable_meta();
             jobMeta.set_id(jobId);

@@ -1,8 +1,11 @@
 #include "util/charset/utf8.h"
 #include "utils.h"
 #include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/parser/pg_wrapper/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
@@ -30,6 +33,8 @@ extern "C" {
 #undef TypeName
 #undef SortBy
 }
+
+constexpr auto PREPARED_PARAM_PREFIX =  "$p";
 
 namespace NSQLTranslationPG {
 
@@ -218,6 +223,11 @@ public:
             Provider = provider;
             break;
         }
+        
+        for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
+            auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
+            ParamNameToTypeOid[paramName] = Settings.PgParameterTypeOids[i];
+        }
     }
 
     void OnResult(const List* raw) {
@@ -248,11 +258,13 @@ public:
             return nullptr;
         }
 
-
         if (Settings.EndOfQueryCommit) {
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
         }
+
+        AddVariableDeclarations();
+
         Statements.push_back(L(A("return"), A("world")));
 
 
@@ -285,6 +297,8 @@ public:
             return ParseVariableSetStmt(CAST_NODE(VariableSetStmt, node)) != nullptr;
         case T_DeleteStmt:
             return ParseDeleteStmt(CAST_NODE(DeleteStmt, node)) != nullptr;
+        case T_VariableShowStmt:
+            return ParseVariableShowStmt(CAST_NODE(VariableShowStmt, node)) != nullptr;
         case T_TransactionStmt:
             return true;
         default:
@@ -1368,7 +1382,23 @@ public:
         }
 
         auto name = to_lower(TString(value->name));
-        if (name == "dqengine") {
+        if (name == "useblocks" || name == "emitaggapply") {
+            if (ListLength(value->args) != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto arg = ListNodeNth(value->args, 0);
+            if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
+                auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
+                Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                    QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+                return nullptr;
+            }
+        } else if (name == "dqengine") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -1516,6 +1546,50 @@ public:
                 )
             )
         ));
+        return Statements.back();
+    }
+    
+    TMaybe<TString> GetConfigVariable(const TString& varName) {
+        if (varName == "server_version") {
+            return GetPostgresServerVersionStr();
+        }
+        if (varName == "server_version_num") {
+            return GetPostgresServerVersionNum();
+        }
+        return {};
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseVariableShowStmt(const VariableShowStmt* value) {
+        const auto varName = to_lower(TString(value->name));
+
+        const auto varValue = GetConfigVariable(varName);
+        if (!varValue) {
+            AddError("unrecognized configuration parameter \"" + varName + "\"");
+            return nullptr;
+        }
+
+        const auto columnName = QAX(varName);
+        const auto varValueNode = 
+            L(A("PgConst"), QAX(*varValue), L(A("PgType"), QA("text")));
+
+        const auto lambda = L(A("lambda"), QL(), varValueNode);
+        const auto res = QL(L(A("PgResultItem"), columnName, L(A("Void")), lambda));
+
+        const auto setItem = L(A("PgSetItem"), QL(QL(QA("result"), res)));
+        const auto setItems = QL(QA("set_items"), QL(setItem));
+        const auto setOps = QL(QA("set_ops"), QVL(QA("push")));
+        const auto selectOptions = QL(setItems, setOps);
+
+        const auto output = L(A("PgSelect"), selectOptions);
+        Statements.push_back(L(A("let"), A("output"), output));
+        Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
+
+        const auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
+        Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
+            A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
+        Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
+            A("world"), A("result_sink"))));
         return Statements.back();
     }
 
@@ -1892,6 +1966,14 @@ public:
         return L(A("If"), final.Pred, final.Value, defaultResult);
     }
 
+    TAstNode* ParseParamRefExpr(const ParamRef* value) {
+        const auto varName = PREPARED_PARAM_PREFIX + ToString(value->number);
+        if (!ParamNameToTypeOid.contains(varName)) {
+            ParamNameToTypeOid[varName] = UNKNOWNOID;
+        }
+        return A(varName);
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
         case T_A_Const: {
@@ -1929,6 +2011,9 @@ public:
         }
         case T_GroupingFunc: {
             return ParseGroupingFunc(CAST_NODE(GroupingFunc, node));
+        }
+        case T_ParamRef: {
+            return ParseParamRefExpr(CAST_NODE(ParamRef, node));
         }
         default:
             NodeNotImplemented(node);
@@ -3014,6 +3099,15 @@ public:
 
     }
 
+    void AddVariableDeclarations() {
+      for (const auto &[varName, typeOid] : ParamNameToTypeOid) {
+        const auto &typeName =
+            typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : "text";
+        const auto pgType = L(A("PgType"), QA(typeName));
+        Statements.push_back(L(A("declare"), A(varName), pgType));
+      }
+    }
+
     template <typename T>
     void NodeNotImplementedImpl(const Node* nodeptr) {
         TStringBuilder b;
@@ -3200,6 +3294,8 @@ private:
     ui32 QuerySize;
     TString Provider;
     static const THashMap<TStringBuf, TString> ProviderToInsertModeMap;
+
+    THashMap<TString, Oid> ParamNameToTypeOid;
 };
 
 const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {

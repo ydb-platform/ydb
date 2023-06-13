@@ -72,6 +72,8 @@ message TChannel {
     uint64 Id = 1;
     EDataTransportVersion TransportVersion = 2;
 
+    uint32 SrcStageId = 11;
+    uint32 DstStageId = 12;
     uint64 SrcTaskId = 3;
     uint64 DstTaskId = 4;
     TEndpoint SrcEndpoint = 5;

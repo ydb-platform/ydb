@@ -22,7 +22,7 @@ target_link_libraries(ydb-core-kqp-ut-service PUBLIC
   ydb-core-kqp
   cpp-threading-local_executor
   kqp-ut-common
-  yql-sql-pg_dummy
+  yql-sql-pg
   cpp-client-ydb_operation
   client-ydb_types-operation
 )

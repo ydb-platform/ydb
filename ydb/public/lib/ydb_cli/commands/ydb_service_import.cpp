@@ -2,6 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
 #include <ydb/library/backup/util.h>
 
@@ -17,20 +18,6 @@
 
 namespace NYdb {
 namespace NConsoleClient {
-namespace {
-    bool IsStdinInteractive() {
-#if defined(_win32_)
-    errno = 0;
-    bool value = _isatty(_fileno(stdin));
-    return value || (errno == EBADF);
-#elif defined(_unix_)
-    errno = 0;
-    bool value = isatty(fileno(stdin));
-    return value || (errno == EBADF);
-#endif
-    return true;
-}
-}
 
 TCommandImport::TCommandImport()
     : TClientCommandTree("import", {}, "Import service operations")

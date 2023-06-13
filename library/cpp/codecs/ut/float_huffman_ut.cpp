@@ -234,4 +234,4 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
     Y_UNIT_TEST(TestDecompressEmpty) {
         UNIT_ASSERT_EXCEPTION(fh::Decode({}), yexception);
     }
-};
+}

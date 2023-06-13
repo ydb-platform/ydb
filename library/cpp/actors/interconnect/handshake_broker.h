@@ -142,7 +142,7 @@ namespace NActors {
 
         void Bootstrap() {
             Become(&TThis::StateFunc);
-        };
+        }
     };
 
     inline IActor* CreateHandshakeBroker(ui32 maxCapacity) {
@@ -153,4 +153,4 @@ namespace NActors {
         char x[12] = {'I', 'C', 'H', 's', 'h', 'k', 'B', 'r', 'k', 'O', 'u', 't'};
         return TActorId(0, TStringBuf(std::begin(x), std::end(x)));
     }
-};
+}

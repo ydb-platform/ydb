@@ -19,7 +19,8 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
     bool keepSession,
-    bool useCancelAfter)
+    bool useCancelAfter,
+    const ::Ydb::Query::Syntax syntax)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -34,6 +35,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , QueryCachePolicy(queryCachePolicy)
     , HasOperationParams(operationParams)
     , KeepSession(keepSession)
+    , Syntax(syntax)
 {
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());
@@ -88,6 +90,7 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
         Record.MutableRequest()->SetType(QueryType);
+        Record.MutableRequest()->SetSyntax(Syntax);
         if (HasOperationParams) {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());

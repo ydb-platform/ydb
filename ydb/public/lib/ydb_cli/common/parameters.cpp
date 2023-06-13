@@ -1,24 +1,12 @@
 #include "parameters.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
 
 namespace NYdb {
 namespace NConsoleClient {
-
-    bool IsStdinInteractive() {
-#if defined(_win32_)
-        errno = 0;
-        bool value = _isatty(_fileno(stdin));
-        return value || (errno == EBADF);
-#elif defined(_unix_)
-        errno = 0;
-        bool value = isatty(fileno(stdin));
-        return value || (errno == EBADF);
-#endif
-        return true;
-    }
 
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     for (const auto& parameterOption : ParameterOptions) {
@@ -42,7 +30,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         Parameters[paramName] = parameterOption.substr(equalPos + 1);
         ParameterSources[paramName] = "\'--param\' option";
     }
-    
+
     for (auto& file : ParameterFiles) {
         TString data;
         data = ReadFromFile(file, "param-file");
@@ -57,7 +45,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             ParameterSources[name] = "param file " + file;
         }
     }
-    
+
     if (!StdinParameters.empty() && IsStdinInteractive()) {
         throw TMisuseException() << "\"--stdin-par\" option is allowed only with non-interactive stdin.";
     }
@@ -66,7 +54,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
             throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option.";
         }
         if (Parameters.find("$" + *it) != Parameters.end()) {
-            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option, " 
+            throw TMisuseException() << "Parameter $" << *it << " value found in more than one source: \'--stdin-par\' option, "
                 << ParameterSources["$" + *it] << ".";
         }
     }
@@ -117,11 +105,11 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
 void TCommandWithParameters::AddParametersStdinOption(TClientCommand::TConfig& config, const TString& requestString) {
     TStringStream descr;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    descr << "Batching mode for stdin parameters processing. Available options:\n  " 
-        << colors.BoldColor() << "iterative" << colors.OldColor() 
+    descr << "Batching mode for stdin parameters processing. Available options:\n  "
+        << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
         "when no framing specified in \"stdin-format\")\n  "
-        << colors.BoldColor() << "full" << colors.OldColor() 
+        << colors.BoldColor() << "full" << colors.OldColor()
         << "\n    Executes " << requestString << " once, with all parameter sets wrapped in json list, when EOF is reached on stdin\n  "
         << colors.BoldColor() << "adaptive" << colors.OldColor()
         << "\n    Executes " << requestString << " with a json list of parameter sets every time when its number reaches batch-limit, "
@@ -167,7 +155,7 @@ void TCommandWithParameters::AddParams(const std::map<TString, TType>& paramType
 bool TCommandWithParameters::GetNextParams(const std::map<TString, TType>& paramTypes, EOutputFormat inputFormat, EOutputFormat encodingFormat,
                                             EOutputFormat framingFormat, THolder<TParamsBuilder>& paramBuilder) {
     paramBuilder = MakeHolder<TParamsBuilder>();
-    AddParams(paramTypes, inputFormat, *paramBuilder);                       
+    AddParams(paramTypes, inputFormat, *paramBuilder);
     if (IsStdinInteractive()) {
         static bool firstEncounter = true;
         if (!firstEncounter) {
@@ -278,7 +266,7 @@ bool TCommandWithParameters::GetNextParams(const std::map<TString, TType>& param
                 if (!futureData.Initialized() || listSize) {
                     futureData = NThreading::Async(ReadDataLambda, *pool);
                 }
-                if (BatchMode == EBatchMode::Adaptive && listSize && 
+                if (BatchMode == EBatchMode::Adaptive && listSize &&
                     ((BatchMaxDelay != TDuration::Zero() && !futureData.Wait(endTime)) || listSize == BatchLimit)) {
                     break;
                 }
@@ -290,7 +278,7 @@ bool TCommandWithParameters::GetNextParams(const std::map<TString, TType>& param
                 if (!listSize) {
                     endTime = Now() + BatchMaxDelay;
                 }
-                
+
                 if (parser.GetKind() != TTypeParser::ETypeKind::Primitive) {
                     throw TMisuseException() << "Wrong type of list \"" << fullname << "\" elements.";
                 }
@@ -315,7 +303,7 @@ bool TCommandWithParameters::GetNextParams(const std::map<TString, TType>& param
                 if (!futureData.Initialized() || listSize) {
                     futureData = NThreading::Async(ReadDataLambda, *pool);
                 }
-                if (BatchMode == EBatchMode::Adaptive && listSize && 
+                if (BatchMode == EBatchMode::Adaptive && listSize &&
                     ((BatchMaxDelay != TDuration::Zero() && !futureData.Wait(endTime)) || listSize == BatchLimit)) {
                     break;
                 }
@@ -376,7 +364,7 @@ void TCommandWithParameters::ApplyParams(const TMap<TString, TString> &params, c
         }
         const TType &type = (*paramIt).second;
         paramBuilder.AddParam(name, JsonToYdbValue(value, type, encoding));
-    }   
+    }
 }
 
 TMaybe<TString> TCommandWithParameters::ReadData(EOutputFormat framingFormat) {
@@ -396,7 +384,7 @@ TMaybe<TString> TCommandWithParameters::ReadData(EOutputFormat framingFormat) {
         throw TMisuseException() << "Unknown framing format: " << framingFormat;
     }
     return result;
-    
+
 }
 
 }

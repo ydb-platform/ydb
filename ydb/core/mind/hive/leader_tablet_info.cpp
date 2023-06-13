@@ -242,15 +242,9 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 auto filterBySpace = [params = *params, currentGroup, &maxUsage](const TStorageGroupInfo& newGroup) -> bool {
                     if (newGroup.IsMatchesParameters(params)) {
                         if (currentGroup) {
-                            double currentMaximumSize = 1.0;
-                            double newMaximumSize = 1.0;
-                            if (newGroup.MaximumSize != 0 && currentGroup->MaximumSize != 0) {
-                                currentMaximumSize = currentGroup->MaximumSize;
-                                newMaximumSize = newGroup.MaximumSize;
-                            }
                             bool result = newGroup.Id != currentGroup->Id
-                                          && newGroup.GroupParameters.GetAvailableSize() * currentMaximumSize
-                                          > currentGroup->GroupParameters.GetAvailableSize() * newMaximumSize;
+                                          && newGroup.GroupParameters.GetCurrentResources().GetOccupancy()
+                                          < currentGroup->GroupParameters.GetCurrentResources().GetOccupancy();
                             if (result) {
                                 maxUsage = std::max(maxUsage, newGroup.GetUsage());
                             }
@@ -266,8 +260,8 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 auto calculateUsageWithSpacePenalty = [currentGroup, &maxUsage, spacePenaltyThreshold, spacePenalty](const TStorageGroupInfo* newGroup) -> double {
                     double usage = newGroup->GetUsage();
                     if (currentGroup && currentGroup->MaximumSize) {
-                        if (newGroup->GroupParameters.GetAvailableSize() * currentGroup->MaximumSize
-                            < spacePenaltyThreshold * currentGroup->GroupParameters.GetAvailableSize() * newGroup->MaximumSize) {
+                        if (1 - newGroup->GroupParameters.GetCurrentResources().GetOccupancy()
+                            < spacePenaltyThreshold * (1 - currentGroup->GroupParameters.GetCurrentResources().GetOccupancy())) {
                             double avail = maxUsage - usage;
                             usage = maxUsage - avail * spacePenalty;
                         }

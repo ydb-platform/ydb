@@ -173,7 +173,7 @@ public:
         pDiskConfig->SectorMap = SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), MainKey, Counters), TMailboxType::Revolving, 0);
-        setup->LocalServices.emplace_back(PDiskId, pDiskSetup);
+        setup->LocalServices.emplace_back(PDiskId, std::move(pDiskSetup));
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // BlobStorage group info
@@ -205,7 +205,7 @@ public:
 
         IActor* vDisk = CreateVDisk(vDiskConfig, Info, Counters);
         TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);
-        setup->LocalServices.emplace_back(VDiskActorId, vDiskSetup);
+        setup->LocalServices.emplace_back(VDiskActorId, std::move(vDiskSetup));
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Filter
@@ -239,7 +239,7 @@ public:
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor{logSettings, NActors::CreateStderrBackend(),
             Counters};
         NActors::TActorSetupCmd loggerActorCmd{loggerActor, NActors::TMailboxType::Simple, 2};
-        setup->LocalServices.emplace_back(loggerActorId, loggerActorCmd);
+        setup->LocalServices.emplace_back(loggerActorId, std::move(loggerActorCmd));
         AppData.reset(new TAppData(0, 1, 2, 1, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr));
 
         ActorSystem.reset(new TActorSystem{setup, AppData.get(), logSettings});

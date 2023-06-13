@@ -158,8 +158,8 @@ public:
         return SchemaPresets;
     }
 
-    bool IndexOverloaded() const {
-        return PrimaryIndex && PrimaryIndex->HasOverloadedGranules();
+    bool IsOverloaded(const ui64 pathId) const {
+        return PrimaryIndex && PrimaryIndex->HasOverloadedGranules(pathId);
     }
 
     bool HasPrimaryIndex() const {

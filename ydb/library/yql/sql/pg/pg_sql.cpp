@@ -1056,6 +1056,7 @@ private:
         std::vector<TAstNode*> PrimaryKey;
         std::vector<TAstNode*> NotNullColumns;
         std::unordered_set<TString> NotNullColSet;
+        bool isTemporary;
     };
 
     bool CheckConstraintSupported(const Constraint* pk) {
@@ -1223,6 +1224,9 @@ private:
         if (!ctx.NotNullColumns.empty()) {
             options.push_back(QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
         }
+        if (ctx.isTemporary) {
+            options.push_back(QL(QA("temporary")));
+        }
         return QVL(options.data(), options.size());
     }
 
@@ -1278,29 +1282,25 @@ public:
             success = false;
         }
 
-        { auto relPersistence = static_cast<NPg::ERelPersistence>(value->relation->relpersistence);
-        if (relPersistence != NPg::ERelPersistence::Permanent) {
-            switch (relPersistence) {
-                case NPg::ERelPersistence::Temp:
-                    AddError("CREATE TEMP TABLE not supported");
-                    break;
+        TCreateTableCtx ctx {};
 
-                case NPg::ERelPersistence::Unlogged:
-                    AddError("UNLOGGED tables not supported");
-                    break;
-
-                default:
-                    Y_UNREACHABLE();
-            }
-            success = false;
-        }}
+        const auto relPersistence = static_cast<NPg::ERelPersistence>(value->relation->relpersistence);
+        switch (relPersistence) {
+            case NPg::ERelPersistence::Temp:
+                ctx.isTemporary = true;
+                break;
+            case NPg::ERelPersistence::Unlogged:
+                AddError("UNLOGGED tables not supported");
+                success = false;
+                break;
+            case NPg::ERelPersistence::Permanent:
+                break;
+        }
 
         auto [sink, key] = ParseWriteRangeVar(value->relation, true);
 
         if (!sink || !key)
             success = false;
-
-        TCreateTableCtx ctx;
 
         for (ui32 i = 0; i < ListLength(value->tableElts); ++i) {
             auto rawNode = ListNodeNth(value->tableElts, i);

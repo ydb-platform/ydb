@@ -15,6 +15,7 @@ service QueryService {
     rpc CreateSession(Query.CreateSessionRequest) returns (Query.CreateSessionResponse);
     rpc DeleteSession(Query.DeleteSessionRequest) returns (Query.DeleteSessionResponse);
     rpc PingSession(Query.PingSessionRequest) returns (Query.PingSessionResponse);
+    rpc AttachSession(Query.AttachSessionRequest) returns (stream Query.SessionState);
 
     // Short-living transactions allow transactional execution of several queries, including support
     // for interactive transactions. Transaction control can be implemented via flags in ExecuteQuery

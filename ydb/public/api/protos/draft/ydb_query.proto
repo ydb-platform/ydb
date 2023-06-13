@@ -27,6 +27,16 @@ message CreateSessionResponse {
     int64 node_id = 4 [(Ydb.value) = ">= 0"];
 }
 
+message AttachSessionRequest {
+    // Identifier of session to attach (required)
+    string session_id = 1 [(Ydb.length).le = 1024];
+}
+
+message SessionState {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}
+
 message DeleteSessionRequest {
     // Identifier of session to delete (required)
     string session_id = 1 [(Ydb.length).le = 1024];

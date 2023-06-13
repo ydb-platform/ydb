@@ -39,7 +39,7 @@ class TopicReaderUnexpectedCodec(YdbError):
     pass
 
 
-class TopicReaderCommitToExpiredPartition(TopicReaderError):
+class PublicTopicReaderPartitionExpiredError(TopicReaderError):
     """
     Commit message when partition read session are dropped.
     It is ok - the message/batch will not commit to server and will receive in other read session
@@ -114,15 +114,22 @@ class PublicAsyncIOReader:
         Write commit message to a buffer.
 
         For the method no way check the commit result
-        (for example if lost connection - commits will not re-send and committed messages will receive again)
+        (for example if lost connection - commits will not re-send and committed messages will receive again).
         """
-        self._reconnector.commit(batch)
+        try:
+            self._reconnector.commit(batch)
+        except PublicTopicReaderPartitionExpiredError:
+            pass
 
     async def commit_with_ack(self, batch: typing.Union[datatypes.PublicMessage, datatypes.PublicBatch]):
         """
         write commit message to a buffer and wait ack from the server.
 
         use asyncio.wait_for for wait with timeout.
+
+        may raise ydb.TopicReaderPartitionExpiredError, the error mean reader partition closed from server
+        before receive commit ack. Message may be acked or not (if not - it will send in other read session,
+        to this or other reader).
         """
         waiter = self._reconnector.commit(batch)
         await waiter.future
@@ -174,6 +181,14 @@ class ReaderReconnector:
                 await asyncio.sleep(retry_info.sleep_timeout_seconds)
 
                 attempt += 1
+            finally:
+                if self._stream_reader is not None:
+                    # noinspection PyBroadException
+                    try:
+                        await self._stream_reader.close()
+                    except BaseException:
+                        # supress any error on close stream reader
+                        pass
 
     async def wait_message(self):
         while True:
@@ -348,6 +363,9 @@ class ReaderStream:
         return batch
 
     def receive_message_nowait(self):
+        if self._get_first_error():
+            raise self._get_first_error()
+
         try:
             batch = self._message_batches[0]
             message = batch.pop_message()
@@ -355,7 +373,7 @@ class ReaderStream:
             return None
 
         if batch.empty():
-            self._message_batches.popleft()
+            self.receive_batch_nowait()
 
         return message
 
@@ -366,10 +384,10 @@ class ReaderStream:
             raise TopicReaderError("reader can commit only self-produced messages")
 
         if partition_session.reader_stream_id != self._id:
-            raise TopicReaderCommitToExpiredPartition("commit messages after reconnect to server")
+            raise PublicTopicReaderPartitionExpiredError("commit messages after reconnect to server")
 
         if partition_session.id not in self._partition_sessions:
-            raise TopicReaderCommitToExpiredPartition("commit messages after server stop the partition read session")
+            raise PublicTopicReaderPartitionExpiredError("commit messages after server stop the partition read session")
 
         commit_range = batch._commit_get_offsets_range()
         waiter = partition_session.add_waiter(commit_range.end)
@@ -617,6 +635,7 @@ class ReaderStream:
     async def close(self):
         if self._closed:
             return
+
         self._closed = True
 
         self._set_first_error(TopicReaderStreamClosedError())
@@ -625,6 +644,7 @@ class ReaderStream:
 
         for session in self._partition_sessions.values():
             session.close()
+        self._partition_sessions.clear()
 
         for task in self._background_tasks:
             task.cancel()

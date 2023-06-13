@@ -13,6 +13,7 @@ __all__ = [
     "TopicReaderAsyncIO",
     "TopicReaderSelector",
     "TopicReaderSettings",
+    "TopicReaderPartitionExpiredError",
     "TopicStatWindow",
     "TopicWriteResult",
     "TopicWriter",
@@ -40,6 +41,7 @@ from ._topic_reader.topic_reader_sync import TopicReaderSync as TopicReader
 
 from ._topic_reader.topic_reader_asyncio import (
     PublicAsyncIOReader as TopicReaderAsyncIO,
+    PublicTopicReaderPartitionExpiredError as TopicReaderPartitionExpiredError,
 )
 
 from ._topic_writer.topic_writer import (  # noqa: F401

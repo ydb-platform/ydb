@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import datetime
+import functools
 import gzip
 import typing
 from collections import deque
@@ -75,7 +76,7 @@ class WriterAsyncIO:
         if self._closed or self._loop.is_closed():
             return
 
-        self._loop.call_soon(self.close, False)
+        self._loop.call_soon(functools.partial(self.close, flush=False))
 
     async def close(self, *, flush: bool = True):
         if self._closed:

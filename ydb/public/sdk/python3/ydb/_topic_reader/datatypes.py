@@ -82,6 +82,8 @@ class PartitionSession:
             self._loop = None
 
     def add_waiter(self, end_offset: int) -> "PartitionSession.CommitAckWaiter":
+        self._ensure_not_closed()
+
         waiter = PartitionSession.CommitAckWaiter(end_offset, self._create_future())
         if end_offset <= self.committed_offset:
             waiter._finish_ok()
@@ -121,7 +123,7 @@ class PartitionSession:
             return
 
         self.state = PartitionSession.State.Stopped
-        exception = topic_reader_asyncio.TopicReaderCommitToExpiredPartition()
+        exception = topic_reader_asyncio.PublicTopicReaderPartitionExpiredError()
         for waiter in self._ack_waiters:
             waiter._finish_error(exception)
 
@@ -131,7 +133,7 @@ class PartitionSession:
 
     def _ensure_not_closed(self):
         if self.state == PartitionSession.State.Stopped:
-            raise topic_reader_asyncio.TopicReaderCommitToExpiredPartition()
+            raise topic_reader_asyncio.PublicTopicReaderPartitionExpiredError()
 
     class State(enum.Enum):
         Active = 1

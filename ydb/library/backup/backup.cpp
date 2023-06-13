@@ -250,7 +250,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
         const TFsPath& folderPath, TMaybe<TValue> lastWrittenPK, ui32 *fileCounter, bool ordered)
 {
     TMaybe<NTable::TTablePartIterator> iter;
-    auto readTableJob = [fullTablePath, &lastWrittenPK, &iter](NTable::TSession session) -> TStatus {
+    auto readTableJob = [fullTablePath, &lastWrittenPK, &iter, &ordered](NTable::TSession session) -> TStatus {
         NTable::TReadTableSettings settings;
         if (lastWrittenPK) {
             settings.From(NTable::TKeyBound::Exclusive(*lastWrittenPK));

@@ -28,13 +28,17 @@ private:
     std::set<ui32> GranuleBatchNumbers;
     TGranulesFillingContext* Owner = nullptr;
     THashSet<const void*> BatchesToDedup;
-
+    ui64 BlobsDataSize = 0;
     void CheckReady();
 public:
     TGranule(const ui64 granuleId, const ui64 granuleIdx, TGranulesFillingContext& owner)
         : GranuleId(granuleId)
         , GranuleIdx(granuleIdx)
         , Owner(&owner) {
+    }
+
+    ui64 GetBlobsDataSize() const noexcept {
+        return BlobsDataSize;
     }
 
     ui64 GetGranuleId() const noexcept {
@@ -124,6 +128,7 @@ public:
 
     const std::set<ui32>& GetEarlyFilterColumns() const;
     void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
+    void OnBlobReady(const TBlobRange& range) noexcept;
     bool OnFilterReady(TBatch& batchInfo);
     TBatch& AddBatch(const TPortionInfo& portionInfo);
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) const;

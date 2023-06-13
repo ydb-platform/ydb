@@ -10,9 +10,11 @@
 add_executable(ydb-core-kqp-ut-opt)
 target_compile_options(ydb-core-kqp-ut-opt PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
+  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(ydb-core-kqp-ut-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(ydb-core-kqp-ut-opt PUBLIC
   contrib-libs-cxxsupp
@@ -21,7 +23,7 @@ target_link_libraries(ydb-core-kqp-ut-opt PUBLIC
   cpp-testing-unittest_main
   ydb-core-kqp
   kqp-ut-common
-  yql-sql-pg_dummy
+  yql-sql-pg
   re2_udf
 )
 target_link_options(ydb-core-kqp-ut-opt PRIVATE

@@ -1,0 +1,5 @@
+RECURSE(
+    example
+    perftest
+    ut
+)

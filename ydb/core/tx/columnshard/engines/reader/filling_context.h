@@ -27,11 +27,22 @@ private:
     std::set<ui32> UsedColumns;
     IOrderPolicy::TPtr SortingPolicy;
     NColumnShard::TScanCounters Counters;
-
+    std::set<ui64> GranulesInProcessing;
+    i64 BlobsSizeInProcessing = 0;
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
+    static constexpr ui32 GranulesCountProcessingLimit = 16;
+    static constexpr ui64 ExpectedBytesForGranule = 200 * 1024 * 1024;
+    static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
 public:
     TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading);
+
+    bool CanProcessMore() const;
+    
+    void OnBlobReady(const ui64 granuleId, const TBlobRange& range) noexcept {
+        GranulesInProcessing.emplace(granuleId);
+        BlobsSizeInProcessing += range.Size;
+    }
 
     TReadMetadata::TConstPtr GetReadMetadata() const noexcept {
         return ReadMetadata;
@@ -104,6 +115,9 @@ public:
     void OnGranuleReady(TGranule& granule) {
         Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
         Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
+        Y_VERIFY(GranulesInProcessing.erase(granule.GetGranuleId()));
+        BlobsSizeInProcessing -= granule.GetBlobsDataSize();
+        Y_VERIFY(BlobsSizeInProcessing >= 0);
     }
 
     void Wakeup(TGranule& granule) {

@@ -5959,19 +5959,19 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                 Ctx.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
                 break;
             case SQLv1LexerTokens::TOKEN_PLUS:
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Plus");
                 break;
             case SQLv1LexerTokens::TOKEN_MINUS:
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Minus");
                 break;
             case SQLv1LexerTokens::TOKEN_ASTERISK:
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Multiply");
                 break;
             case SQLv1LexerTokens::TOKEN_SLASH:
-                opName = "/";
+                opName = "/MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
                     partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")});
@@ -5980,7 +5980,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                 }
                 break;
             case SQLv1LexerTokens::TOKEN_PERCENT:
-                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%";
+                opName = Ctx.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
                 Ctx.IncrementMonCounter("sql_binary_operations", "Mod");
                 break;
             default:

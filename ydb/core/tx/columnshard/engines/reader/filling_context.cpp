@@ -71,4 +71,10 @@ void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_
     }
 }
 
+bool TGranulesFillingContext::CanProcessMore() const {
+    return GranulesInProcessing.size() <= GranulesCountProcessingLimit ||
+        BlobsSizeInProcessing <= ProcessingBytesLimit
+        ;
+}
+
 }

@@ -329,4 +329,6 @@ bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotation
 TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext& ctx);
 
 const TStringBuf BlockLengthColumnName = "_yql_block_length";
+
+TStringBuf NormalizeCallableName(TStringBuf name);
 }

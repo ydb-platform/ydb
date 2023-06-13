@@ -1,0 +1,15 @@
+PROTO_LIBRARY()
+
+GRPC()
+
+IF (OS_WINDOWS)
+    NO_OPTIMIZE_PY_PROTOS()
+ENDIF()
+
+SRCS(
+    minikql.proto
+)
+
+EXCLUDE_TAGS(GO_PROTO)
+
+END()

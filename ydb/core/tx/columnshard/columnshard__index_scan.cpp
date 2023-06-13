@@ -66,7 +66,11 @@ NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
 }
 
 NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
-    return FetchBlobsQueue.pop_front();
+    if (IndexedData.GetGranulesContext().CanProcessMore()) {
+        return FetchBlobsQueue.pop_front();
+    } else {
+        return NKikimr::NColumnShard::TBlobRange();
+    }
 }
 
 void TColumnShardScanIterator::FillReadyResults() {

@@ -27,7 +27,7 @@ public:
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
 
-class TColumnShardScanIterator : public TScanIteratorBase {
+class TColumnShardScanIterator: public TScanIteratorBase {
 private:
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TFetchBlobsQueue FetchBlobsQueue;

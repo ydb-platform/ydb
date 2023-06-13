@@ -164,6 +164,7 @@ bool TBatch::AddIndexedReady(const TBlobRange& bRange, const TString& blobData) 
     WaitingBytes -= bRange.Size;
     FetchedBytes += bRange.Size;
     Data.emplace(bRange, TPortionInfo::TAssembleBlobInfo(blobData));
+    Owner->OnBlobReady(bRange);
     return true;
 }
 

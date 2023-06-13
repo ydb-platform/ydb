@@ -1,0 +1,4 @@
+RECURSE(
+    grpc
+    protos
+)

@@ -1425,7 +1425,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name.StartsWith("dq.") || name.StartsWith("yt.")) {
+        } else if (name.StartsWith("dq.") || name.StartsWith("yt.") || name.StartsWith("s3.")) {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -1435,7 +1435,16 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto dotPos = name.find('.');
                 auto provider = name.substr(0, dotPos);
-                auto providerSource = L(A("DataSource"), QA(TString(name.StartsWith("dq.") ? NYql::DqProviderName : NYql::YtProviderName)), QA("$all"));
+                TString providerName;
+                if (name.StartsWith("dq.")) {
+                    providerName = NYql::DqProviderName;
+                } else if (name.StartsWith("yt.")) {
+                    providerName = NYql::YtProviderName;
+                } else {
+                    providerName = NYql::S3ProviderName;
+                }
+
+                auto providerSource = L(A("DataSource"), QA(providerName), QA("$all"));
 
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
 

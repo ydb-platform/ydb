@@ -614,7 +614,9 @@ public:
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema,
                                             const ISnapshotSchema& resultSchema,
                                             const THashMap<TBlobRange, TString>& data) const {
-        return PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
+        auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
+        Y_VERIFY(batch->Validate().ok());
+        return batch;
     }
 
     static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,

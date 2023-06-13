@@ -6105,5 +6105,9 @@ TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext
     return ctx.NewLambda(lambda->Pos(), ctx.NewArguments(lambda->Pos(), { newArg }), std::move(bodies));
 }
 
+TStringBuf NormalizeCallableName(TStringBuf name) {
+    name.ChopSuffix("MayWarn"sv);
+    return name;
+}
 
 } // NYql

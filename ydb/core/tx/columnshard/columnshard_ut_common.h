@@ -388,10 +388,11 @@ bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString
 void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
-               const TString& data, std::shared_ptr<arrow::Schema> schema = {});
+               const TString& data, std::shared_ptr<arrow::Schema> schema = {}, bool waitResult = true);
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const TString& dedupId, const TString& data,
                               std::shared_ptr<arrow::Schema> schema = {});
+ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 metaShard);
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                     NOlap::TSnapshot snap, ui64 scanId = 0);
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const std::vector<ui64>& writeIds);
@@ -416,7 +417,7 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TS
 TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo,
                                     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
 
-                                    
+
 }
 
 namespace NKikimr::NColumnShard {

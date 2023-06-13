@@ -76,13 +76,21 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
-               const TString& data, std::shared_ptr<arrow::Schema> schema) {
+               const TString& data, std::shared_ptr<arrow::Schema> schema, bool waitResult) {
     const TString dedupId = ToString(writeId);
     auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, metaShard, writeId, tableId, dedupId, data, 1);
     if (schema) {
         write->SetArrowSchema(NArrow::SerializeSchema(*schema));
     }
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
+
+    if (waitResult) {
+        return WaitWriteResult(runtime, metaShard) == NKikimrTxColumnShard::EResultStatus::SUCCESS;
+    }
+    return true;
+}
+
+ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 metaShard) {
     TAutoPtr<IEventHandle> handle;
     auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvWriteResult>(handle);
     UNIT_ASSERT(event);
@@ -90,7 +98,7 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui6
     auto& resWrite = Proto(event);
     UNIT_ASSERT_EQUAL(resWrite.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resWrite.GetTxInitiator(), metaShard);
-    return (resWrite.GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    return resWrite.GetStatus();
 }
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,

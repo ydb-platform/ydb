@@ -463,8 +463,7 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(!ok);
 }
 
-// TODO: Improve test. It does not catch KIKIMR-14890
-void TestWriteReadDup() {
+void TestWriteOverload(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -481,7 +480,74 @@ void TestWriteReadDup() {
     ui64 writeId = 0;
     ui64 tableId = 1;
 
-    auto ydbSchema = TTestSchema::YdbSchema();
+    SetupSchema(runtime, sender, tableId, table);
+
+    TString testBlob = MakeTestBlob({0, 100 * 1000}, table.Schema);
+    UNIT_ASSERT(testBlob.size() > NOlap::TCompactionLimits::MAX_BLOB_SIZE / 2);
+    UNIT_ASSERT(testBlob.size() < NOlap::TCompactionLimits::MAX_BLOB_SIZE);
+
+    const ui64 overloadSize = NColumnShard::TSettings::OverloadWritesSizeInFlight;
+    ui32 toCatch = overloadSize / testBlob.size() + 1;
+    UNIT_ASSERT_VALUES_EQUAL(toCatch, 22);
+    TDeque<TAutoPtr<IEventHandle>> capturedWrites;
+
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        if (auto* msg = TryGetPrivateEvent<TEvColumnShard::TEvWrite>(ev)) {
+            Cerr << "CATCH TEvWrite, status " << msg->GetPutStatus() << Endl;
+            if (toCatch && msg->GetPutStatus() != NKikimrProto::UNKNOWN) {
+                capturedWrites.push_back(ev.Release());
+                --toCatch;
+                return true;
+            } else {
+                return false;
+            }
+        }
+        return false;
+    };
+
+    auto resendOneCaptured = [&]() {
+        UNIT_ASSERT(capturedWrites.size());
+        Cerr << "RESEND TEvWrite" << Endl;
+        runtime.Send(capturedWrites.front().Release());
+        capturedWrites.pop_front();
+    };
+
+    runtime.SetEventFilter(captureEvents);
+
+    const ui32 toSend = toCatch + 1;
+    for (ui32 i = 0; i < toSend; ++i) {
+        UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, testBlob, {}, false));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, metaShard), (ui32)NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+
+    while (capturedWrites.size()) {
+        resendOneCaptured();
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, metaShard), (ui32)NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    }
+
+    UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, testBlob)); // OK after overload
+}
+
+// TODO: Improve test. It does not catch KIKIMR-14890
+void TestWriteReadDup(const TestTableDescription& table = {}) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    //
+
+    ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+
+    auto ydbSchema = table.Schema;
     SetupSchema(runtime, sender, tableId);
 
     constexpr ui32 numRows = 10;
@@ -1790,6 +1856,17 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         table.Schema = TTestSchema::YdbExoticSchema();
         table.InStore = false;
         TestWrite(table);
+    }
+
+    Y_UNIT_TEST(WriteOverload) {
+        TestTableDescription table;
+        TestWriteOverload(table);
+    }
+
+    Y_UNIT_TEST(WriteStandaloneOverload) {
+        TestTableDescription table;
+        table.InStore = false;
+        TestWriteOverload(table);
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {

@@ -18,16 +18,16 @@ namespace NKikimr {
             }
             switch (TIngress::IngressMode(gtype)) {
                 case TIngress::EMode::GENERIC:
-                    if (i < gtype.TotalPartCount() && needed.Get(i)) { // only main replica
-                        const TLogoBlobID partId(id, i + 1);
-                        AddExtremeQuery(vdiskId, partId, deadline, gtype.PartSize(partId));
+                    ui32 maxSize;
+                    maxSize = 0;
+                    if (gtype.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                        maxSize += gtype.PartSize(TLogoBlobID(id, i % 3 + 1));
                     } else {
-                        ui32 maxSize = 0;
-                        for (ui32 i = 0; i < gtype.TotalPartCount(); ++i) {
-                            maxSize += gtype.PartSize(TLogoBlobID(id, i + 1));
+                        for (ui32 k = 0; k < gtype.TotalPartCount(); ++k) {
+                            maxSize += i >= gtype.TotalPartCount() || k == i ? gtype.PartSize(TLogoBlobID(id, k + 1)) : 0;
                         }
-                        AddExtremeQuery(vdiskId, id, deadline, maxSize);
                     }
+                    AddExtremeQuery(vdiskId, id, deadline, maxSize);
                     break;
 
                 case TIngress::EMode::MIRROR3OF4:

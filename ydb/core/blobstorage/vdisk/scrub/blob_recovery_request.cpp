@@ -29,8 +29,7 @@ namespace NKikimr {
 
         // create timer to process deadlines if not yet created
         if (!WakeupScheduled) {
-            const TInstant now = TActivationContext::Now();
-            Schedule(msg->Deadline - now, new TEvents::TEvWakeup);
+            Schedule(msg->Deadline, new TEvents::TEvWakeup);
             WakeupScheduled = true;
         }
     }
@@ -57,7 +56,7 @@ namespace NKikimr {
 
         // reschedule timer
         if (deadline != TInstant::Max()) {
-            Schedule(deadline - now, new TEvents::TEvWakeup);
+            Schedule(deadline, new TEvents::TEvWakeup);
         } else {
             WakeupScheduled = false;
         }

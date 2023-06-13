@@ -38,9 +38,7 @@ namespace NKikimr {
         it->second.IsConnected = ev->Get()->IsConnected;
         STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS29, VDISKP(LogPrefix, "BS_QUEUE state update"), (SelfId, SelfId()),
             (VDiskId, it->first), (IsConnected, it->second.IsConnected));
-        if (it->second.IsConnected) {
-            EvaluateConnectionQuorum();
-        }
+        EvaluateConnectionQuorum();
     }
 
     void TBlobRecoveryActor::EvaluateConnectionQuorum() {

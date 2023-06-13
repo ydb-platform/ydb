@@ -25,6 +25,7 @@ SRCS(
     main.cpp
     mirror3of4.cpp
     sanitize_groups.cpp
+    scrub_fast.cpp
     snapshots.cpp
     space_check.cpp
     sync.cpp

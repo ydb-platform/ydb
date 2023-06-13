@@ -159,6 +159,10 @@ protected:
     void StartPQWriteStateObserver();
     void WaitForPQWriteState();
 
+    void WaitForCalcPredicateResult();
+
+    void TestWaitingForTEvReadSet(size_t senders, size_t receivers);
+
     bool FoundPQWriteState = false;
 
     //
@@ -418,6 +422,28 @@ void TPQTabletFixture::WaitDropTabletReply(const TDropTabletReplyMatcher& matche
         UNIT_ASSERT(event->Record.HasActualState());
         UNIT_ASSERT_EQUAL(*matcher.State, event->Record.GetActualState());
     }
+}
+
+void TPQTabletFixture::WaitForCalcPredicateResult()
+{
+    bool found = false;
+
+    auto observer = [&found](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicateResult>()) {
+            found = true;
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+
+    Ctx->Runtime->SetObserverFunc(observer);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() {
+        return found;
+    };
+
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
 }
 
 void TPQTabletFixture::StartPQWriteStateObserver()
@@ -812,6 +838,83 @@ Y_UNIT_TEST_F(UpdateConfig_2, TPQTabletFixture)
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
     WaitProposeTransactionResponse({.TxId=txId_3,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+void TPQTabletFixture::TestWaitingForTEvReadSet(size_t sendersCount, size_t receiversCount)
+{
+    const ui64 txId = 67890;
+
+    TVector<NHelpers::TPQTabletMock*> tablets;
+    TVector<ui64> senders;
+    TVector<ui64> receivers;
+
+    //
+    // senders
+    //
+    for (size_t i = 0; i < sendersCount; ++i) {
+        senders.push_back(22222 + i);
+        tablets.push_back(CreatePQTabletMock(senders.back()));
+    }
+
+    //
+    // receivers
+    //
+    for (size_t i = 0; i < receiversCount; ++i) {
+        receivers.push_back(33333 + i);
+        tablets.push_back(CreatePQTabletMock(receivers.back()));
+    }
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders=senders, .Receivers=receivers,
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"}
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitForCalcPredicateResult();
+
+    //
+    // The tablet received the predicate value from the partition, but has not yet saved the transaction state.
+    // Therefore, the transaction has not yet entered the WAIT_RS state
+    //
+
+    for (size_t i = 0; i < sendersCount; ++i) {
+        tablets[i]->SendReadSet(*Ctx->Runtime,
+                                {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+    }
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+}
+
+Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_When_There_Are_More_Senders_Than_Recipients, TPQTabletFixture)
+{
+    TestWaitingForTEvReadSet(4, 2);
+}
+
+Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_When_There_Are_Fewer_Senders_Than_Recipients, TPQTabletFixture)
+{
+    TestWaitingForTEvReadSet(2, 4);
+}
+
+Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_When_The_Number_Of_Senders_And_Recipients_Match, TPQTabletFixture)
+{
+    TestWaitingForTEvReadSet(2, 2);
+}
+
+Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_Without_Recipients, TPQTabletFixture)
+{
+    TestWaitingForTEvReadSet(2, 0);
+}
+
+Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_Without_Senders, TPQTabletFixture)
+{
+    TestWaitingForTEvReadSet(0, 2);
 }
 
 }

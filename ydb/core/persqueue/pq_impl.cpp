@@ -2885,8 +2885,6 @@ void TPersQueue::SendEvReadSetToReceivers(const TActorContext& ctx,
             SendToPipe(receiverId, tx, std::move(event), ctx);
         }
     }
-
-    tx.ReadSetAcks.clear();
 }
 
 void TPersQueue::SendEvReadSetAckToSenders(const TActorContext& ctx,
@@ -3132,7 +3130,11 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         [[fallthrough]];
 
     case NKikimrPQ::TTransaction::WAIT_RS:
-        Y_VERIFY(tx.ReadSetAcks.size() <= tx.Receivers.size());
+        //
+        // the number of TEvReadSetAck sent should not be greater than the number of senders
+        // from TEvProposeTransaction
+        //
+        Y_VERIFY(tx.ReadSetAcks.size() <= tx.Senders.size());
 
         if (tx.HaveParticipantsDecision()) {
             SendEvProposeTransactionResult(ctx, tx);

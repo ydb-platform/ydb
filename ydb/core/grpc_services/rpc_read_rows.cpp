@@ -10,6 +10,7 @@
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
@@ -37,17 +38,17 @@ TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(const Ydb::Table::ReadR
 
     TVector<std::pair<TString, Ydb::Type>> result;
     result.reserve(rowFields.size());
-    for (i32 pos = 0; pos < rowFields.size(); ++pos) {
-        const auto& name = rowFields[pos].Getname();
-        const auto& typeInProto = rowFields[pos].type().has_optional_type() ?
-                    rowFields[pos].type().optional_type().item() : rowFields[pos].type();
+    for (const auto& rowField: rowFields) {
+        const auto& name = rowField.Getname();
+        const auto& typeInProto = rowField.type().has_optional_type() ?
+                    rowField.type().optional_type().item() : rowField.type();
 
         result.emplace_back(name, typeInProto);
     }
     return result;
 }
 
-}
+} // namespace
 
 using TEvReadRowsRequest = TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
 
@@ -61,8 +62,8 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(60);
 public:
-    explicit TReadRowsRPC(IRequestNoOpCtx* request)
-        : Request(request)
+    explicit TReadRowsRPC(std::unique_ptr<IRequestNoOpCtx> request)
+        : Request(std::move(request))
         , PipeCache(MakePipePeNodeCacheID(true))
     {}
 
@@ -79,11 +80,15 @@ public:
         THashSet<TString> keyColumnsLeft;
         THashMap<TString, ui32> columnByName;
 
-        for (const auto& [_, colInfo] : entry.Columns) {
+        for (const auto& [colId, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
-            auto& name = colInfo.Name;
-            auto& type = colInfo.PType;
-            ColumnsMeta.emplace_back(TColumnMeta{name, type, id});
+            const auto& name = colInfo.Name;
+            const auto& type = colInfo.PType;
+
+            ColumnsMeta.emplace_back(TColumnMeta{.Id = id,
+                                                 .Name = name,
+                                                 .Type = type,
+                                                 .PTypeMod = colInfo.PTypeMod});
 
             columnByName[name] = id;
             i32 keyOrder = colInfo.KeyOrder;
@@ -92,10 +97,6 @@ public:
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
                 KeyColumnTypes[keyOrder] = type;
                 keyColumnsLeft.insert(name);
-            }
-            if (colInfo.PType.GetTypeId() == NScheme::NTypeIds::Pg) {
-                errorMessage = "Pg types are not supported yet";
-                return false;
             }
         }
 
@@ -112,13 +113,13 @@ public:
             }
             i32 typmod = -1;
             ui32 colId = *cp;
-            auto& ci = *entry.Columns.FindPtr(colId);
+            auto& colInfo = *entry.Columns.FindPtr(colId);
 
             const auto& typeInProto = reqColumns[pos].second;
 
             if (typeInProto.type_id()) {
                 // TODO check Arrow types
-            } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+            } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
                 int precision = typeInProto.decimal_type().precision();
                 int scale = typeInProto.decimal_type().scale();
                 if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
@@ -137,18 +138,20 @@ public:
                                            name.c_str(), typeName.c_str());
                     return false;
                 }
-                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-                if (typeInRequest != ci.PType) {
+
+                const auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                if (typeInRequest != colInfo.PType) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
+                                           name.c_str(), NScheme::TypeName(colInfo.PType).c_str(),
                                            NScheme::TypeName(typeInRequest).c_str());
                     return false;
                 }
-                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
-                    auto result = NPg::BinaryTypeModFromTextTypeMod(ci.PTypeMod, typeDesc);
+
+                if (!colInfo.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(colInfo.PTypeMod, typeDesc);
                     if (result.Error) {
                         errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
-                            name.c_str(), NScheme::TypeName(ci.PType, ci.PTypeMod).c_str(),
+                            name.c_str(), NScheme::TypeName(colInfo.PType, colInfo.PTypeMod).c_str(),
                             result.Error->c_str());
                         return false;
                     }
@@ -156,15 +159,15 @@ public:
                 }
             } else {
                 errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(ci.PType).c_str());
+                                       name.c_str(), NScheme::TypeName(colInfo.PType).c_str());
                 return false;
             }
 
-            bool notNull = entry.NotNullColumns.contains(ci.Name);
+            bool notNull = entry.NotNullColumns.contains(colInfo.Name);
 
-            if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = NTxProxy::TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull};
-                keyColumnsLeft.erase(ci.Name);
+            if (colInfo.KeyOrder != -1) {
+                KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, (ui32)pos, colInfo.PType, typmod, notNull};
+                keyColumnsLeft.erase(colInfo.Name);
             }
         }
 
@@ -329,17 +332,17 @@ public:
                 Sprintf("Table '%s' is a system view. ReadRows is not supported.", GetTable().c_str()));
         }
 
-        auto* resolveNamesResult = ev->Get()->Request.Release();
+        auto& resolveNamesResult = ev->Get()->Request;
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST,
             "TReadRowsRPC going to create keys to read from proto: " << GetProto()->DebugString());
 
         TString errorMessage;
-        if (!CheckAccess(resolveNamesResult, errorMessage)) {
+        if (!CheckAccess(resolveNamesResult.Get(), errorMessage)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, errorMessage);
         }
 
-        if (!BuildSchema(resolveNamesResult, errorMessage)) {
+        if (!BuildSchema(resolveNamesResult.Get(), errorMessage)) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage);
         }
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable) {
@@ -351,7 +354,7 @@ public:
             return;
         }
 
-        ResolveShards(resolveNamesResult);
+        ResolveShards(resolveNamesResult.Get());
     }
 
     void ResolveShards(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult) {
@@ -359,9 +362,9 @@ public:
 
         // We are going to request only key columns
         TVector<TKeyDesc::TColumnOp> columns;
-        for (const auto& [_, ci] : entry.Columns) {
-            if (ci.KeyOrder != -1) {
-                TKeyDesc::TColumnOp op = { ci.Id, TKeyDesc::EColumnOperation::Set, ci.PType, 0, 0 };
+        for (const auto& [colId, colInfo] : entry.Columns) {
+            if (colInfo.KeyOrder != -1) {
+                TKeyDesc::TColumnOp op = { colInfo.Id, TKeyDesc::EColumnOperation::Set, colInfo.PType, 0, 0 };
                 columns.push_back(op);
             }
         }
@@ -457,8 +460,23 @@ public:
         NKqp::TProgressStatEntry stats;
         auto& ioStats = stats.ReadIOStat;
 
+        const auto getPgTypeFromColMeta = [](const auto &colMeta) {
+            return NYdb::TPgType(NPg::PgTypeNameFromTypeDesc(colMeta.Type.GetTypeDesc()),
+                                 colMeta.PTypeMod);
+        };
+
+        const auto getTypeFromColMeta = [&](const auto &colMeta) {
+            if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                return NYdb::TTypeBuilder().Pg(getPgTypeFromColMeta(colMeta)).Build();
+            } else {
+                return NYdb::TTypeBuilder()
+                    .Primitive((NYdb::EPrimitiveType)colMeta.Type.GetTypeId())
+                    .Build();
+            }
+        };
+
         for (const auto& colMeta : ColumnsMeta) {
-            auto type = NYdb::TTypeBuilder().Primitive((NYdb::EPrimitiveType)colMeta.Type.GetTypeId()).Build();
+            const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
             *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
             *col->mutable_name() = colMeta.Name;
@@ -471,13 +489,26 @@ public:
                 vb.BeginStruct();
                 ui64 sz = 0;
                 for (const auto& colMeta : ColumnsMeta) {
-                    auto type = NYdb::TTypeBuilder().Primitive((NYdb::EPrimitiveType)colMeta.Type.GetTypeId()).Build();
+                    const auto type = getTypeFromColMeta(colMeta);
                     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC "
                         << " name: " << colMeta.Name
                     );
                     const auto& cell = row[colMeta.Id - 1];
                     vb.AddMember(colMeta.Name);
-                    ProtoValueFromCell(vb, colMeta.Type, cell);
+                    if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
+                    {
+                        const auto pgTypeId = NPg::PgTypeIdFromTypeDesc(colMeta.Type.GetTypeDesc());
+                        const NYdb::TPgValue pgValue{
+                            cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT,
+                            NPg::PgNativeTextFromNativeBinary({cell.AsBuf().data(), cell.AsBuf().size()}, pgTypeId).Str,
+                            getPgTypeFromColMeta(colMeta)
+                        };
+                        vb.Pg(pgValue);
+                    }
+                    else
+                    {
+                        ProtoValueFromCell(vb, colMeta.Type, cell);
+                    }
                     sz += cell.Size();
                 }
                 vb.EndStruct();
@@ -554,9 +585,10 @@ private:
     TVector<NTxProxy::TFieldDescription> KeyColumnPositions;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     struct TColumnMeta {
+        ui32 Id;
         TString Name;
         NScheme::TTypeInfo Type;
-        ui32 Id;
+        TString PTypeMod;
     };
     TVector<TColumnMeta> ColumnsMeta;
 
@@ -569,7 +601,7 @@ private:
 };
 
 void DoReadRowsRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    f.RegisterActor(new TReadRowsRPC(p.release()));
+    f.RegisterActor(new TReadRowsRPC(std::move(p)));
 }
 
 } // namespace NKikimr::NGRpcService

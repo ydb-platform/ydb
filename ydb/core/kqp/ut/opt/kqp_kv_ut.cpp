@@ -1,6 +1,58 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <util/system/env.h>
+
+
+extern "C" {
+#include "postgres.h"
+#include "catalog/pg_type_d.h"
+}
+
+namespace 
+{
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+struct ReadRowsPgParam
+{
+    ui32 TypeId;
+    TString TypeMod;
+    TString ValueContent;
+};
+
+} // namespace
+
+namespace
+{
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+template <typename T>
+void ValidateSinglePgRowResult(T& result, const TString& columnName, const TPgValue& expectedValue) {
+    TResultSetParser parser{result.GetResultSet()};
+    UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+
+    bool gotRows = false;
+    while( parser.TryNextRow()) {
+        gotRows = true;
+        auto& col = parser.ColumnParser(columnName);
+        
+        const auto pgValue = col.GetPg();
+        UNIT_ASSERT_VALUES_EQUAL(pgValue.Content_, expectedValue.Content_);
+        UNIT_ASSERT_VALUES_EQUAL(pgValue.Kind_, expectedValue.Kind_);
+        UNIT_ASSERT_VALUES_EQUAL(pgValue.PgType_.TypeName, expectedValue.PgType_.TypeName);
+        UNIT_ASSERT_VALUES_EQUAL(pgValue.PgType_.TypeModifier, expectedValue.PgType_.TypeModifier);
+    }
+    Y_ENSURE(gotRows, "empty select result");
+}
+
+} // namespace
 
 namespace NKikimr::NKqp {
 
@@ -106,6 +158,205 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 [7687053901553772359u;4u;"abcde"]
             ]
         )", res);
+    }
+
+    TVector<::ReadRowsPgParam> readRowsPgParams
+    {
+        {.TypeId = BOOLOID, .TypeMod={}, .ValueContent="t"},
+        {.TypeId = CHAROID, .TypeMod={}, .ValueContent="v"},
+        {.TypeId = INT2OID, .TypeMod={}, .ValueContent="42"},
+        {.TypeId = INT4OID, .TypeMod={}, .ValueContent="42"},
+        {.TypeId = INT8OID, .TypeMod={}, .ValueContent="42"},
+        {.TypeId = FLOAT4OID, .TypeMod={}, .ValueContent="42.42"},
+        {.TypeId = FLOAT8OID, .TypeMod={}, .ValueContent="42.42"},
+        {.TypeId = TEXTOID, .TypeMod={}, .ValueContent="i'm a text"},
+        {.TypeId = BPCHAROID, .TypeMod={}, .ValueContent="i'm a text"},
+        {.TypeId = VARCHAROID, .TypeMod={}, .ValueContent="i'm a text"},
+        {.TypeId = NAMEOID, .TypeMod={}, .ValueContent="i'm a text"},
+        {.TypeId = NUMERICOID, .TypeMod={}, .ValueContent="42.42"},
+        {.TypeId = MONEYOID, .TypeMod={}, .ValueContent="$42.42"},
+        {.TypeId = DATEOID, .TypeMod={}, .ValueContent="1999-01-01"},
+        {.TypeId = TIMEOID, .TypeMod={}, .ValueContent="23:59:59.999"},
+        {.TypeId = TIMESTAMPOID, .TypeMod={}, .ValueContent="1999-01-01 23:59:59.999"},
+        {.TypeId = TIMETZOID, .TypeMod={}, .ValueContent="23:59:59.999+03"},
+        {.TypeId = TIMESTAMPTZOID, .TypeMod={}, .ValueContent="1999-01-01 23:59:59.999+00"},
+        {.TypeId = INTERVALOID, .TypeMod={}, .ValueContent="1 year 2 mons 3 days 01:02:03"},
+        {.TypeId = BITOID, .TypeMod={}, .ValueContent="1011"},
+        {.TypeId = VARBITOID, .TypeMod={}, .ValueContent="1011"},
+        {.TypeId = POINTOID, .TypeMod={}, .ValueContent="(42,24)"},
+        {.TypeId = LINEOID, .TypeMod={}, .ValueContent="{42,24,13}"},
+        {.TypeId = LSEGOID, .TypeMod={}, .ValueContent="[(0,0),(42,42)]"},
+        {.TypeId = BOXOID, .TypeMod={}, .ValueContent="(42,42),(0,0)"},
+        {.TypeId = PATHOID, .TypeMod={}, .ValueContent="((0,0),(42,42),(13,13))"},
+        {.TypeId = POLYGONOID, .TypeMod={}, .ValueContent="((0,0),(42,42),(13,13))"},
+        {.TypeId = CIRCLEOID, .TypeMod={}, .ValueContent="<(0,0),42>"},
+        {.TypeId = INETOID, .TypeMod={}, .ValueContent="127.0.0.1/16"},
+        {.TypeId = CIDROID, .TypeMod={}, .ValueContent="16.0.0.0/8"},
+        {.TypeId = MACADDROID, .TypeMod={}, .ValueContent="08:00:2b:01:02:03"},
+        {.TypeId = MACADDR8OID, .TypeMod={}, .ValueContent="08:00:2b:01:02:03:04:05"},
+        {.TypeId = UUIDOID, .TypeMod={}, .ValueContent="00000000-0000-0000-0000-000000000042"},
+        {.TypeId = JSONOID, .TypeMod={}, .ValueContent="{\"value\": 42}"},
+        {.TypeId = JSONBOID, .TypeMod={}, .ValueContent="{\"value\": 42}"},
+        {.TypeId = JSONPATHOID, .TypeMod={}, .ValueContent="($.\"field\"[*] > 42)"},
+        {.TypeId = XMLOID, .TypeMod={}, .ValueContent="<tag>42</tag>"},
+        {.TypeId = TSQUERYOID, .TypeMod={}, .ValueContent="'a' & 'b1'"},
+        {.TypeId = TSVECTOROID, .TypeMod={}, .ValueContent="'cat' 'fat' '|'"},
+        {.TypeId = INT2VECTOROID, .TypeMod={}, .ValueContent="42 24 13"},
+        {.TypeId = BYTEAOID, .TypeMod={}, .ValueContent="\\x627974656120ff"},
+        {.TypeId = BYTEAARRAYOID, .TypeMod={}, .ValueContent="{\"\\\\x61ff\",\"\\\\x6231ff\"}"},
+        {.TypeId = BPCHAROID, .TypeMod="4", .ValueContent="abcd"},
+        {.TypeId = VARCHAROID, .TypeMod="4", .ValueContent="abcd"},
+        {.TypeId = BITOID, .TypeMod="4", .ValueContent="1101"},
+        {.TypeId = VARBITOID, .TypeMod="4", .ValueContent="1101"},
+        {.TypeId = NUMERICOID, .TypeMod="4", .ValueContent="1234"},
+        {.TypeId = TIMEOID, .TypeMod="4", .ValueContent="23:59:59.9999"},
+        {.TypeId = TIMETZOID, .TypeMod="4", .ValueContent="23:59:59.9999+00"},
+        {.TypeId = TIMESTAMPOID, .TypeMod="4", .ValueContent="1999-01-01 23:59:59.9999"},
+        {.TypeId = TIMESTAMPTZOID, .TypeMod="4", .ValueContent="1999-01-01 23:59:59.9999+00"},
+    }; 
+    ::ReadRowsPgParam readRowsPgNullParam{.TypeId = BOOLOID, .TypeMod={}, .ValueContent=""};
+    
+    Y_UNIT_TEST(ReadRowsPgValue) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(true);
+        auto kikimr = TKikimrRunner{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName = "Key";
+        const auto valueColumnName = "Value";
+
+        const auto testSingle = [&](const ::ReadRowsPgParam& testParam, bool isNull)
+        {
+            auto* typeDesc = NPg::TypeDescFromPgTypeId(testParam.TypeId);
+            UNIT_ASSERT(!!typeDesc);
+            const auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
+            const auto& pgType = TPgType(typeName, testParam.TypeMod);
+
+            Cout << Sprintf("TestParam: type: `%s`; mod: `%s`, is null: %s\n", typeName.data(), testParam.TypeMod.data(), isNull ? "+" : "-" );
+
+            TTableBuilder builder;
+            builder.AddNonNullableColumn(keyColumnName, EPrimitiveType::Uint64);
+            builder.SetPrimaryKeyColumn(keyColumnName);
+            builder.AddNullableColumn(valueColumnName, pgType);
+
+            auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+  
+            const ui64 keyValue = 1;
+            const TPgValue pgValue(
+                isNull ? TPgValue::VK_NULL : TPgValue::VK_TEXT,
+                testParam.ValueContent,
+                pgType
+            );
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember(keyColumnName).Uint64(keyValue)
+                        .AddMember(valueColumnName).Pg(pgValue)
+                    .EndStruct();
+            rows.EndList();
+            auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+                keys.AddListItem()
+                    .BeginStruct()
+                        .AddMember(keyColumnName).Uint64(keyValue)
+                    .EndStruct();
+            keys.EndList();
+            auto selectResult = db.ReadRows(tableName, keys.Build()).GetValueSync();
+            UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+
+            ValidateSinglePgRowResult(selectResult, valueColumnName, pgValue);
+
+            result = session.DropTable(tableName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        for (const auto& testParam: readRowsPgParams)
+        {
+            testSingle(testParam, false);
+        }
+        testSingle(readRowsPgNullParam, true);
+    }
+
+    TVector<::ReadRowsPgParam> readRowsPgKeyParams
+    {
+        {.TypeId = TEXTOID, .TypeMod={}, .ValueContent="i'm a text"},
+        {.TypeId = BITOID, .TypeMod="4", .ValueContent="0110"},
+    }; 
+    ::ReadRowsPgParam readRowsPgNullKeyParam{.TypeId = TEXTOID, .TypeMod={}, .ValueContent=""};
+    
+    Y_UNIT_TEST(ReadRowsPgKey) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(true);
+        auto kikimr = TKikimrRunner{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName = "Key";
+        const auto valueColumnName = "Value";
+
+        const auto testSingle = [&](const ::ReadRowsPgParam& testParam, bool isNull)
+        {
+            auto* typeDesc = NPg::TypeDescFromPgTypeId(testParam.TypeId);
+            UNIT_ASSERT(!!typeDesc);
+            const auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
+            const auto& pgType = TPgType(typeName, testParam.TypeMod);
+
+            Cout << Sprintf("TestParam: type: `%s`; mod: `%s`, is null: %s\n", typeName.data(), testParam.TypeMod.data(), isNull ? "+" : "-" );
+
+            TTableBuilder builder;
+            builder.AddNullableColumn(keyColumnName, pgType);
+            builder.SetPrimaryKeyColumn(keyColumnName);
+            builder.AddNullableColumn(valueColumnName, EPrimitiveType::Uint64);
+
+            auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+  
+            const TPgValue pgValue(
+                isNull ? TPgValue::VK_NULL : TPgValue::VK_TEXT,
+                testParam.ValueContent,
+                pgType
+            );
+            const ui64 value = 1;
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember(keyColumnName).Pg(pgValue)
+                        .AddMember(valueColumnName).Uint64(value)
+                    .EndStruct();
+            rows.EndList();
+            auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+                keys.AddListItem()
+                    .BeginStruct()
+                        .AddMember(keyColumnName).Pg(pgValue)
+                    .EndStruct();
+            keys.EndList();
+            auto selectResult = db.ReadRows(tableName, keys.Build()).GetValueSync();
+            UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+
+            ValidateSinglePgRowResult(selectResult, keyColumnName, pgValue);
+
+            result = session.DropTable(tableName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        for (const auto& testParam: readRowsPgKeyParams)
+        {
+            testSingle(testParam, false);
+        }
+        testSingle(readRowsPgNullKeyParam, true);
     }
 }
 

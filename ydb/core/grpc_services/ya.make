@@ -113,6 +113,7 @@ PEERDIR(
     ydb/library/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
+    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/types
     ydb/public/api/grpc/draft
     ydb/public/api/protos

@@ -26,9 +26,15 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/sql/pg
     ydb/library/yql/udfs/common/re2
 )
+
+ADDINCL(
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+)
+
+NO_COMPILER_WARNINGS()
 
 YQL_LAST_ABI_VERSION()
 

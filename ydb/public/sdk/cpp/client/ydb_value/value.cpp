@@ -2144,9 +2144,11 @@ public:
 
     void Pg(const TPgValue& value) {
         FillPgType(value.PgType_);
-        if (value.IsText()) {
+        if (value.IsNull()) {
+            GetValue().set_null_flag_value(::google::protobuf::NULL_VALUE);
+        } else if (value.IsText()) {
             GetValue().set_text_value(value.Content_);
-        } else if (!value.IsNull()) {
+        } else {
             GetValue().set_bytes_value(value.Content_);
         }
     }

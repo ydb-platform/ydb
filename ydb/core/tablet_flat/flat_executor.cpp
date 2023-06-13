@@ -1553,6 +1553,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
 
     THPTimer cpuTimer;
 
+    PrivatePageCache->ResetTouchesAndToLoad(true);
     TPageCollectionTxEnv env(*Database, *PrivatePageCache);
 
     TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId);
@@ -1619,28 +1620,21 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
         CommitTransactionLog(seat, env, prod.Change, cpuTimer, ctx);
     } else {
         Y_VERIFY(!seat->CapturedMemory);
-        if (!env.ToLoad && !seat->RequestedMemory && !txc.IsRescheduled()) {
+        if (!PrivatePageCache->GetStats().CurrentCacheMisses && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postoned w/o demands");
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
     }
+    PrivatePageCache->ResetTouchesAndToLoad(false);
 
     ActiveTransaction = false;
     PlanTransactionActivation();
 }
 
 void TExecutor::UnpinTransactionPages(TSeat &seat) {
-    for (auto &xinfoid : seat.Pinned) {
-        if (TPrivatePageCache::TInfo *info = PrivatePageCache->Info(xinfoid.first)) {
-            for (auto &x : xinfoid.second) {
-                ui32 pageId = x.first;
-                TPrivatePageCachePinPad *pad = x.second.Get();
-                x.second.Reset();
-                PrivatePageCache->Unpin(pageId, pad, info);
-            }
-        }
-    }
+    size_t unpinnedPages = 0;
+    PrivatePageCache->UnpinPages(seat.Pinned, unpinnedPages);
     seat.Pinned.clear();
     seat.MemoryTouched = 0;
 
@@ -1672,41 +1666,19 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     TTxType txType = seat->Self->GetTxType();
 
     ui32 touchedPages = 0;
-    ui32 touchedBytes = 0;
+    ui64 touchedBytes = 0;
     ui32 newPinnedPages = 0;
     ui32 waitPages = 0;
     ui32 loadPages = 0;
     ui64 loadBytes = 0;
     ui64 prevTouched = seat->MemoryTouched;
 
-    // must pin new entries
-    for (auto &xpair : env.Touches) {
-        TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
-        auto &pinned = seat->Pinned[pageCollectionInfo->Id];
-        for (auto &x : xpair.second) {
-            // would insert only if first seen
-            if (pinned.insert(std::make_pair(x, PrivatePageCache->Pin(x, pageCollectionInfo))).second) {
-                ++newPinnedPages;
-                seat->MemoryTouched += pageCollectionInfo->GetPage(x)->Size;
-            }
-        }
-        touchedPages += xpair.second.size();
-    }
+    PrivatePageCache->PinTouches(seat->Pinned, touchedPages, newPinnedPages, seat->MemoryTouched);
 
     touchedBytes = seat->MemoryTouched - prevTouched;
     prevTouched = seat->MemoryTouched;
 
-    for (auto &xpair : env.ToLoad) {
-        TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
-        auto &pinned = seat->Pinned[pageCollectionInfo->Id];
-
-        for (auto &x : xpair.second) {
-            if (pinned.insert(std::make_pair(x, PrivatePageCache->Pin(x, pageCollectionInfo))).second) {
-                ++newPinnedPages;
-                seat->MemoryTouched += pageCollectionInfo->GetPage(x)->Size;
-            }
-        }
-    }
+    PrivatePageCache->PinToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
 
     if (seat->AttachedMemory)
         Memory->AttachMemory(*seat);
@@ -1776,7 +1748,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
     // If memory was allocated and there is nothing to load
     // then tx may be re-activated.
-    if (!env.ToLoad) {
+    if (!PrivatePageCache->GetStats().CurrentCacheMisses) {
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
@@ -1789,18 +1761,13 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     auto *const pad = padHolder.Get();
     TransactionWaitPads[pad] = std::move(padHolder);
 
-    for (auto &xpair : env.ToLoad) {
+    auto toLoad = PrivatePageCache->GetToLoad();
+    for (auto &xpair : toLoad) {
         TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
+        TVector<NTable::TPageId> &pages = xpair.second;
+        waitPages += pages.size();
 
-        TVector<NTable::TPageId> pages;
-        pages.reserve(xpair.second.size());
-
-        waitPages += xpair.second.size();
-        for (auto &x : xpair.second) {
-            pages.push_back(x);
-        }
-
-        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Load(pages, pad, pageCollectionInfo);
+        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
 
@@ -1846,13 +1813,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     const bool isTerminated = seat->TerminationReason != ETerminationReason::None;
     const TTxType txType = seat->Self->GetTxType();
 
-    ui64 touchedBlocks = 0;
-    for (auto &xpair : env.Touches) {
-        TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
-        touchedBlocks += xpair.second.size();
-        for (ui32 blockId : xpair.second)
-            PrivatePageCache->Touch(blockId, pageCollectionInfo);
-    }
+    size_t touchedBlocks = PrivatePageCache->GetStats().CurrentCacheHits;
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_TOUCHED_BLOCKS].IncrementFor(touchedBlocks);
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks);
@@ -1862,6 +1823,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     }
 
     UnpinTransactionPages(*seat);
+
     Memory->ReleaseMemory(*seat);
 
     const double currentBookkeepingTime = seat->CPUBookkeepingTime;
@@ -4273,16 +4235,18 @@ ui64 TExecutor::BeginRead(THolder<NTable::ICompactionRead> read)
 {
     Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size() + 1;
 
+    PrivatePageCache->ResetTouchesAndToLoad(true);
     TPageCollectionReadEnv env(*PrivatePageCache);
     bool finished = read->Execute(&env);
 
-    if (env.CacheHits) {
+    if (PrivatePageCache->GetStats().CurrentCacheHits) {
         // Cache hits are only counted when read is first executed
-        Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_CACHE_HITS].Increment(env.CacheHits);
+        Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_CACHE_HITS].Increment(PrivatePageCache->GetStats().CurrentCacheHits);
     }
 
     if (finished) {
         // Optimize for successful read completion
+        PrivatePageCache->ResetTouchesAndToLoad(false);
         Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size();
         return 0;
     }
@@ -4295,7 +4259,8 @@ ui64 TExecutor::BeginRead(THolder<NTable::ICompactionRead> read)
     Y_VERIFY(r.second, "Cannot register a new read %" PRIu64, readId);
 
     auto* state = &r.first->second;
-    PostponeCompactionRead(state, &env);
+    PostponeCompactionRead(state);
+    PrivatePageCache->ResetTouchesAndToLoad(false);
 
     return readId;
 }
@@ -4321,43 +4286,14 @@ void TExecutor::RequestChanges(ui32 table)
     PlanCompactionChangesActivation();
 }
 
-void TExecutor::PostponeCompactionRead(TCompactionReadState* state, TPageCollectionReadEnv* env)
+void TExecutor::PostponeCompactionRead(TCompactionReadState* state)
 {
-    Y_VERIFY(env->ToLoad, "Compaction read postponed with nothing to load");
+    Y_VERIFY(PrivatePageCache->GetStats().CurrentCacheMisses, "Compaction read postponed with nothing to load");
 
     size_t newPinnedPages = 0;
     TCompactionReadState::TPinned pinned;
 
-    auto pinTouched = [&](TPrivatePageCache::TInfo* pageCollectionInfo, const THashSet<ui32>& touched) {
-        auto& newPinned = pinned[pageCollectionInfo->Id];
-        if (auto* oldPinned = state->Pinned.FindPtr(pageCollectionInfo->Id)) {
-            // We had previously pinned pages from this page collection
-            // Create new or move used old pins to the new map
-            for (auto pageId : touched) {
-                if (auto it = oldPinned->find(pageId); it != oldPinned->end()) {
-                    Y_VERIFY_DEBUG(it->second);
-                    newPinned[pageId] = std::move(it->second);
-                    oldPinned->erase(it);
-                } else {
-                    newPinned[pageId] = PrivatePageCache->Pin(pageId, pageCollectionInfo);
-                    newPinnedPages++;
-                }
-            }
-        } else {
-            for (auto pageId : touched) {
-                newPinned[pageId] = PrivatePageCache->Pin(pageId, pageCollectionInfo);
-                newPinnedPages++;
-            }
-        }
-    };
-
-    // Everything touched during this read iteration must be pinned
-    for (auto& touch : env->Touches) {
-        pinTouched(touch.first, touch.second);
-    }
-    for (auto& load : env->ToLoad) {
-        pinTouched(load.first, load.second);
-    }
+    PrivatePageCache->RepinPages(pinned, state->Pinned, newPinnedPages);
 
     // Everything not touched during this read iteration must be unpinned
     size_t unpinnedPages = UnpinCompactionReadPages(state);
@@ -4373,16 +4309,13 @@ void TExecutor::PostponeCompactionRead(TCompactionReadState* state, TPageCollect
     ui32 loadPages = 0;
     ui64 loadBytes = 0;
 
-    for (auto& load : env->ToLoad) {
+    auto toLoad = PrivatePageCache->GetToLoad();
+    for (auto& load : toLoad) {
         auto* pageCollectionInfo = load.first;
+        TVector<NTable::TPageId> &pages = load.second;
+        waitPages += pages.size();
 
-        waitPages += load.second.size();
-        TVector<NTable::TPageId> pages(Reserve(load.second.size()));
-        for (auto pageId : load.second) {
-            pages.push_back(pageId);
-        }
-
-        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Load(pages, pad, pageCollectionInfo);
+        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
             auto* req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
 
@@ -4407,7 +4340,7 @@ void TExecutor::PostponeCompactionRead(TCompactionReadState* state, TPageCollect
     Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_POSTPONED].Increment(1);
     Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_LOAD_BYTES].Increment(loadBytes);
     Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_LOAD_PAGES].Increment(loadPages);
-    Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_CACHE_MISSES].Increment(env->CacheMisses);
+    Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_CACHE_MISSES].Increment(PrivatePageCache->GetStats().CurrentCacheMisses);
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
@@ -4415,27 +4348,15 @@ void TExecutor::PostponeCompactionRead(TCompactionReadState* state, TPageCollect
 
 size_t TExecutor::UnpinCompactionReadPages(TCompactionReadState* state)
 {
-    size_t unpinned = 0;
-
-    for (auto& kv : state->Pinned) {
-        if (auto* info = PrivatePageCache->Info(kv.first)) {
-            for (auto& x : kv.second) {
-                auto pageId = x.first;
-                if (auto* pad = x.second.Get()) {
-                    x.second.Reset();
-                    PrivatePageCache->Unpin(pageId, pad, info);
-                    unpinned++;
-                }
-            }
-        }
-    }
+    size_t unpinnedPages = 0;
+    PrivatePageCache->UnpinPages(state->Pinned, unpinnedPages);
 
     state->Pinned.clear();
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
 
-    return unpinned;
+    return unpinnedPages;
 }
 
 void TExecutor::PlanCompactionReadActivation()
@@ -4457,16 +4378,19 @@ void TExecutor::Handle(TEvPrivate::TEvActivateCompactionRead::TPtr& ev, const TA
         CompactionReadQueue.pop_front();
         if (auto* state = CompactionReads.FindPtr(readId)) {
             state->Retries++;
+            PrivatePageCache->ResetTouchesAndToLoad(true);
             TPageCollectionReadEnv env(*PrivatePageCache);
             if (state->Read->Execute(&env)) {
                 // Optimize for successful read completion
                 UnpinCompactionReadPages(state);
+                PrivatePageCache->ResetTouchesAndToLoad(false);
                 CompactionReads.erase(readId);
                 Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size();
                 continue;
             }
 
-            PostponeCompactionRead(state, &env);
+            PostponeCompactionRead(state);
+            PrivatePageCache->ResetTouchesAndToLoad(false);
         }
     }
 }

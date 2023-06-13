@@ -103,6 +103,7 @@ namespace NKikimr::NSchemeShard {
     class TOlapSchemaUpdate {
         YDB_READONLY_OPT(NKikimrSchemeOp::EColumnTableEngine, Engine);
         YDB_READONLY_DEF(TVector<TOlapColumnAdd>, AddColumns);
+        YDB_READONLY_DEF(TSet<TString>, DropColumns);
         YDB_READONLY_DEF(TVector<TOlapColumnDiff>, AlterColumns);
     public:
         bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);

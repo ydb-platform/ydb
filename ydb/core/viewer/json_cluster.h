@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/viewer/json/json.h>
+#include "json_pipe_req.h"
 #include "viewer.h"
 
 namespace NKikimr {
@@ -15,9 +16,9 @@ using namespace NActors;
 using namespace NNodeWhiteboard;
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonCluster : public TActorBootstrapped<TJsonCluster> {
+class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     using TThis = TJsonCluster;
-    using TBase = TActorBootstrapped<TJsonCluster>;
+    using TBase = TViewerPipeClient<TJsonCluster>;
     IViewer* Viewer;
     TActorId Initiator;
     ui32 Requested;
@@ -33,6 +34,7 @@ class TJsonCluster : public TActorBootstrapped<TJsonCluster> {
     TSet<TNodeId> NodesAlive;
     TJsonSettings JsonSettings;
     ui32 Timeout;
+    ui32 TenantsNumber;
     bool Tablets = false;
 
 public:
@@ -50,6 +52,7 @@ public:
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
+        InitConfig(params);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
     }
@@ -57,6 +60,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        RequestConsoleListTenants();
         TBase::Become(&TThis::StateRequestedBrowse);
         ctx.Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
@@ -246,6 +250,13 @@ public:
         RequestDone(ctx);
     }
 
+    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev, const TActorContext& ctx) {
+        Ydb::Cms::ListDatabasesResult listTenantsResult;
+        ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+        TenantsNumber = listTenantsResult.paths().size();
+        RequestDone(ctx);
+    }
+
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext &ctx) {
         if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
             DescribeResult = ev->Release();
@@ -284,6 +295,7 @@ public:
             HFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
             HFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
             HFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
+            HFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvents::TEvUndelivered, Undelivered);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
@@ -396,7 +408,6 @@ public:
         NKikimrViewer::TClusterInfo pbCluster;
 
         if (Tablets) {
-            std::unordered_set<std::pair<ui64, ui64>> tenants; /// group by tenantid (TDomainKey)
             for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : MergedTabletInfo.GetTabletStateInfo()) {
                 if (tablets.contains(tabletInfo.GetTabletId())) {
                     NKikimrWhiteboard::TTabletStateInfo* tablet = pbCluster.AddSystemTablets();
@@ -405,15 +416,10 @@ public:
                     tablet->SetOverall(tabletFlag);
                     flag = Max(flag, GetViewerFlag(tabletFlag));
                 }
-                std::pair<ui64, ui64> tenantId = {0, 0};
-                if (tabletInfo.HasTenantId()) {
-                    tenantId = {tabletInfo.GetTenantId().GetSchemeShard(), tabletInfo.GetTenantId().GetPathId()};
-                }
-                tenants.emplace(tenantId);
             }
             pbCluster.SetTablets(MergedTabletInfo.TabletStateInfoSize());
-            pbCluster.SetTenants(tenants.size());
         }
+        pbCluster.SetTenants(TenantsNumber);
 
         pbCluster.SetOverall(flag);
         if (NodesInfo != nullptr) {

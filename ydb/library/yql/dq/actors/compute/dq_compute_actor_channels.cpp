@@ -105,6 +105,14 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
 
     TInputChannelState& inputChannel = InCh(channelId);
 
+    if (Y_UNLIKELY(inputChannel.Stats)) {
+        auto now = Now();
+        if (inputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
+            inputChannel.Stats->FirstMessageTs = now;
+        }
+        inputChannel.Stats->LastMessageTs = now;
+    }
+
     LOG_T("Received input for channelId: " << channelId
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.GetData().GetRaw().size()
@@ -148,7 +156,12 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
 
     if (inputChannel.PollRequest && inputChannel.PollRequest->SeqNo <= record.GetSeqNo()) {
         if (Y_UNLIKELY(inputChannel.Stats)) {
-            inputChannel.Stats->WaitTime += TInstant::Now() - *inputChannel.StartPollTime;
+            auto waitTime = TInstant::Now() - *inputChannel.StartPollTime;
+            if (inputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
+                inputChannel.Stats->IdleTime += waitTime;
+            } else {
+                inputChannel.Stats->WaitTime += waitTime;
+            }
             inputChannel.StartPollTime.reset();
         }
         inputChannel.PollRequest.reset();
@@ -250,6 +263,11 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
 
         if (Y_UNLIKELY(outputChannel.Stats)) {
             outputChannel.Stats->ResentMessages++;
+            auto now = Now();
+            if (outputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
+                outputChannel.Stats->FirstMessageTs = now;
+            }
+            outputChannel.Stats->LastMessageTs = now;
         }
 
         auto retryEv = MakeHolder<TEvDqCompute::TEvChannelData>();
@@ -561,6 +579,14 @@ void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelDa
         << ", checkpoint: " << channelData.HasCheckpoint()
         << ", seqNo: " << seqNo
         << ", finished: " << finished);
+
+    if (Y_UNLIKELY(outputChannel.Stats)) {
+        auto now = Now();
+        if (outputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
+            outputChannel.Stats->FirstMessageTs = now;
+        }
+        outputChannel.Stats->LastMessageTs = now;
+    }
 
     auto dataEv = MakeHolder<TEvDqCompute::TEvChannelData>();
     dataEv->Record.SetSeqNo(seqNo);

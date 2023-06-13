@@ -6,7 +6,6 @@
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -37,7 +36,6 @@ public:
         NODE_STATE_DOWN /* "Down" */
     };
 
-
 protected:
     static ENodeState NodeState(NKikimrCms::EState state);
 
@@ -50,12 +48,9 @@ public:
     virtual void LockNode(ui32 nodeId) = 0;
     virtual void UnlockNode(ui32 nodeId) = 0;
 
-    virtual void EmplaceTask(const ui32 nodeId, i32 priority, ui64 order, const std::string& taskUId) = 0;
-    virtual void RemoveTask(const std::string& taskUId) = 0;
+    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const = 0;
 
-    virtual Ydb::Maintenance::ActionState::ActionReason TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, ui64 order) const = 0;
-
-    virtual std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, Ydb::Maintenance::ActionState::ActionReason reason) const = 0;
+    virtual std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const = 0;
 };
 
 /**
@@ -63,35 +58,7 @@ public:
  */
 class TNodesCounterBase : public INodesChecker {
 protected:
-    /** Structure to hold information about vdisk state and priorities and orders of some task.
-     *
-     * Requests with equal priority are processed in the order of arrival at CMS. 
-     */
-    struct TNodeState {
-    public:
-        struct TTaskPriority {
-            i32 Priority;
-            ui64 Order;
-            std::string TaskUId;
-            
-            explicit TTaskPriority(i32 priority, ui64 order, const std::string& taskUId)
-                : Priority(priority)
-                , Order(order)
-                , TaskUId(taskUId)
-            {}
-
-            bool operator<(const TTaskPriority& rhs) const {
-                return Priority < rhs.Priority || (Priority == rhs.Priority && Order > rhs.Order);
-            }
-        };
-    public:
-        ENodeState State;
-        std::set<TTaskPriority> Priorities;
-    };
-
-protected:
-    THashMap<ui32, TNodeState> NodeToState;
-    THashSet<ui32> NodesWithScheduledTasks;
+    THashMap<ui32, ENodeState> NodeToState;
     ui32 LockedNodesCount;
     ui32 DownNodesCount;
 
@@ -105,9 +72,6 @@ public:
 
     void AddNode(ui32 nodeId) override;
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
-
-    void EmplaceTask(const ui32 nodeId, i32 priority, ui64 order, const std::string& taskUId) override final;
-    virtual void RemoveTask(const std::string& taskUId) override final;
 
     void LockNode(ui32 nodeId) override;
     void UnlockNode(ui32 nodeId) override;
@@ -139,7 +103,7 @@ public:
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    Ydb::Maintenance::ActionState::ActionReason TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, ui64 order) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
@@ -153,8 +117,20 @@ public:
     {
     }
 
-    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode,
-                               Ydb::Maintenance::ActionState::ActionReason reason) const override final;
+    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final {
+        Y_UNUSED(mode);
+
+        std::stringstream reason;
+        reason << "Cannot lock node: " << nodeId
+               << ". Too many locked nodes for tenant " << TenantName
+               << "; locked: " << LockedNodesCount
+               << "; down: " << DownNodesCount
+               << "; total: " << NodeToState.size()
+               << "; limit: " << DisabledNodesLimit
+               << "; ratio limit: " << DisabledNodesRatioLimit << "%";
+
+        return reason.str();
+    }
 };
 
 class TClusterLimitsCounter : public TNodesLimitsCounterBase {
@@ -164,8 +140,20 @@ public:
     {
     }
 
-    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode,
-                               Ydb::Maintenance::ActionState::ActionReason reason) const override final;
+    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final {
+        Y_UNUSED(mode);
+
+        std::stringstream reason;
+        reason << "Cannot lock node: " << nodeId
+               <<". Too many locked nodes in cluster"
+               << "; locked: " << LockedNodesCount
+               << "; down: " << DownNodesCount
+               << "; total: " << NodeToState.size()
+               << "; limit: " << DisabledNodesLimit
+               << "; ratio limit: " << DisabledNodesRatioLimit << "%";
+
+        return reason.str();
+    }
 };
 
 /**
@@ -183,10 +171,30 @@ public:
         : TabletType(tabletType)
     {}
 
-    Ydb::Maintenance::ActionState::ActionReason TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, ui64 order) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
 
-    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode,
-                               Ydb::Maintenance::ActionState::ActionReason reason) const override final;
+    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final {
+        std::stringstream reason;
+
+        if (mode == NKikimrCms::MODE_FORCE_RESTART) {
+            return reason.str();
+        }
+
+        reason << "Cannot lock node: " << nodeId
+               << ". Tablet "
+               << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
+               << " has too many unavailable nodes. Locked: " << LockedNodesCount
+               << ". Down: " << DownNodesCount;
+        if (mode == NKikimrCms::MODE_MAX_AVAILABILITY) {
+            reason << ". Limit: " << NodeToState.size() / 2 << " (50%)";
+        }
+
+        if (mode == NKikimrCms::MODE_KEEP_AVAILABLE) {
+            reason << ". Limit: " << NodeToState.size() - 1; 
+        }
+
+        return reason.str();
+    }
 };
 
 } // namespace NKikimr::NCms

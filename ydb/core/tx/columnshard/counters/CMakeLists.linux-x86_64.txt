@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
 
 add_library(tx-columnshard-counters)
 target_link_libraries(tx-columnshard-counters PUBLIC
@@ -13,10 +14,15 @@ target_link_libraries(tx-columnshard-counters PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-monlib-dynamic_counters
+  columnshard-counters-common
   ydb-core-base
 )
 target_sources(tx-columnshard-counters PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/engine_logs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/blobs_manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/columnshard.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/insert_table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
 )

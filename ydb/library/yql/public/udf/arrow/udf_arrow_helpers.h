@@ -455,11 +455,11 @@ public:
 
 #define BEGIN_SIMPLE_ARROW_UDF(udfName, signatureFunc) \
     BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
-    UDF(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();)
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
     BEGIN_ARROW_UDF(udfName##_BlocksImpl, signatureFunc) \
-    UDF(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();)
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define END_ARROW_UDF(udfNameBlocks, exec) \
     inline bool udfNameBlocks::DeclareSignature(\
@@ -475,9 +475,4 @@ public:
     }
 
 #define END_SIMPLE_ARROW_UDF(udfName, exec) \
-    END_ARROW_UDF(udfName##_BlocksImpl, exec) \
-    template<> \
-    struct ::NYql::NUdf::TUdfTraits<udfName> { \
-        static constexpr bool SupportsBlocks = true; \
-        using TBlockUdf = udfName##_BlocksImpl; \
-    };
+    END_ARROW_UDF(udfName##_BlocksImpl, exec)

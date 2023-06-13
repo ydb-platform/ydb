@@ -99,16 +99,26 @@ struct TEvPrivate {
     };
 
     struct TEvLeaseCheckResult : public NActors::TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {
-        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues, TMaybe<Ydb::StatusIds::StatusCode> operationStatus)
+        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues)
             : Status(statusCode)
             , Issues(std::move(issues))
-            , OperationStatus(operationStatus)
         {
         }
+
+        TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus,
+            TMaybe<Ydb::Query::ExecStatus> executionStatus,
+            TMaybe<NYql::TIssues> operationIssues)
+            : Status(Ydb::StatusIds::SUCCESS)
+            , OperationStatus(operationStatus)
+            , ExecutionStatus(executionStatus)
+            , OperationIssues(operationIssues)
+        {}
 
         const Ydb::StatusIds::StatusCode Status;
         const NYql::TIssues Issues;
         const TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
+        const TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
+        const TMaybe<NYql::TIssues> OperationIssues;
     };
 };
 
@@ -567,7 +577,7 @@ class TScriptExecutionFinisherBase : public TQueryBase {
 public:
     using TQueryBase::TQueryBase;
 
-    void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, const NYql::TIssues& issues, TTxControl txControl = TTxControl::ContinueAndCommitTx()) {
+    void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, const NYql::TIssues& issues = LeaseExpiredIssues(), TTxControl txControl = TTxControl::ContinueAndCommitTx()) {
         TString sql = R"(
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
@@ -609,9 +619,17 @@ public:
     }
 
     void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, const TString& message, TTxControl txControl = TTxControl::ContinueAndCommitTx()) {
+        FinishScriptExecution(database, executionId, operationStatus, execStatus, IssuesFromMessage(message), txControl);
+    }
+
+    static NYql::TIssues IssuesFromMessage(const TString& message) {
         NYql::TIssues issues;
         issues.AddIssue(message);
-        FinishScriptExecution(database, executionId, operationStatus, execStatus, issues, txControl);
+        return issues;
+    }
+
+    static NYql::TIssues LeaseExpiredIssues() {
+        return IssuesFromMessage("Lease expired");
     }
 };
 
@@ -702,7 +720,117 @@ private:
     bool FinishWasRun = false;
 };
 
-class TGetScriptExecutionOperationActor : public TQueryBase {
+class TCheckLeaseStatusActor : public TScriptExecutionFinisherBase {
+public:
+    TCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED, ui64 cookie = 0)
+        : Database(database)
+        , ExecutionId(executionId)
+        , StatusOnExpiredLease(statusOnExpiredLease)
+        , Cookie(cookie)
+    {}
+
+    void OnRunQuery() override {
+        const TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+
+            SELECT operation_status, execution_status, issues FROM `.metadata/script_executions`
+                WHERE database = $database AND execution_id = $execution_id;
+
+            SELECT lease_deadline FROM `.metadata/script_execution_leases`
+                WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build();
+
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+        SetQueryResultHandler(&TCheckLeaseStatusActor::OnResult);
+    }
+
+    void OnResult() {
+        if (ResultSets.size() != 2) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (result.RowsCount() == 0) {
+            Finish(Ydb::StatusIds::BAD_REQUEST, "No such execution");
+            return;
+        }
+
+        result.TryNextRow();
+
+        TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+        TMaybe<TInstant> leaseDeadline;
+
+        NYdb::TResultSetParser result2(ResultSets[1]);
+
+        if (result2.RowsCount() > 0) {
+            result2.TryNextRow();
+
+            leaseDeadline = result2.ColumnParser(0).GetOptionalTimestamp();
+        }
+
+        if (leaseDeadline) {
+            if (operationStatus) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Invalid operation state");
+            } else if (*leaseDeadline < RunStartTime) {
+                FinishScriptExecution(Database, ExecutionId, StatusOnExpiredLease, Ydb::Query::EXEC_STATUS_ABORTED);
+                SetQueryResultHandler(&TCheckLeaseStatusActor::OnFinishScriptExecution);
+            } else {
+                // OperationStatus is Nothing(): currently running
+                CommitTransaction();
+            }
+        } else if (operationStatus) {
+            OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+            TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
+            if (executionStatus) {
+                ExecutionStatus = static_cast<Ydb::Query::ExecStatus>(*executionStatus);
+            }
+            const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+            if (issuesSerialized) {
+                OperationIssues = DeserializeIssues(*issuesSerialized);
+            }
+            CommitTransaction();
+        } else {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Invalid operation state");
+        }
+    }
+
+    void OnFinishScriptExecution() {
+        OperationStatus = StatusOnExpiredLease;
+        ExecutionStatus = Ydb::Query::EXEC_STATUS_ABORTED;
+        OperationIssues = LeaseExpiredIssues();
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            Send(Owner, new TEvPrivate::TEvLeaseCheckResult(OperationStatus, ExecutionStatus, std::move(OperationIssues)), 0, Cookie);
+        } else {
+            Send(Owner, new TEvPrivate::TEvLeaseCheckResult(status, std::move(issues)), 0, Cookie);
+        }
+    }
+
+private:
+    const TInstant RunStartTime = TInstant::Now();
+    const TString Database;
+    const TString ExecutionId;
+    const Ydb::StatusIds::StatusCode StatusOnExpiredLease;
+    const ui64 Cookie;
+    TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
+    TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
+    TMaybe<NYql::TIssues> OperationIssues;
+};
+
+class TGetScriptExecutionOperationActor : public TScriptExecutionFinisherBase {
 public:
     explicit TGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev)
         : Request(std::move(ev))
@@ -723,10 +851,16 @@ public:
                 issues
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
+
+            SELECT
+                lease_deadline
+            FROM `.metadata/script_execution_leases`
+            WHERE database = $database AND execution_id = $execution_id;
         )";
 
         TMaybe<TString> maybeExecutionId = ScriptExecutionFromOperation(Request->Get()->OperationId);
         Y_ENSURE(maybeExecutionId, "No execution id specified");
+        ExecutionId = *maybeExecutionId;
 
         NYdb::TParamsBuilder params;
         params
@@ -734,14 +868,15 @@ public:
                 .Utf8(Request->Get()->Database)
                 .Build()
             .AddParam("$execution_id")
-                .Utf8(*maybeExecutionId)
+                .Utf8(ExecutionId)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+        SetQueryResultHandler(&TGetScriptExecutionOperationActor::OnGetInfo);
     }
 
-    void OnQueryResult() override {
-        if (ResultSets.size() != 1) {
+    void OnGetInfo() {
+        if (ResultSets.size() != 2) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
             return;
         }
@@ -783,31 +918,72 @@ public:
         }
 
         const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
-        NYql::TIssues issues;
         if (issuesSerialized) {
-            issues = DeserializeIssues(*issuesSerialized);
+            Issues = DeserializeIssues(*issuesSerialized);
+        }
+
+        bool finishing = false;
+        if (!operationStatus) {
+            // Check lease deadline
+            NYdb::TResultSetParser deadlineResult(ResultSets[1]);
+            if (deadlineResult.RowsCount() == 0) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state");
+                return;
+            }
+
+            deadlineResult.TryNextRow();
+
+            TMaybe<TInstant> leaseDeadline = deadlineResult.ColumnParser(0).GetOptionalTimestamp();
+            if (!leaseDeadline) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state");
+                return;
+            }
+
+            if (*leaseDeadline < TInstant::Now()) {
+                finishing = true;
+
+                metadata.set_exec_status(Ydb::Query::EXEC_STATUS_ABORTED);
+                Ready = true;
+                Issues = LeaseExpiredIssues();
+
+                FinishScriptExecution(Request->Get()->Database, ExecutionId, Ydb::StatusIds::ABORTED, Ydb::Query::EXEC_STATUS_ABORTED, Issues);
+                SetQueryResultHandler(&TGetScriptExecutionOperationActor::OnFinishOperation);
+            }
         }
 
         Metadata.ConstructInPlace().PackFrom(metadata);
 
-        Finish(Ydb::StatusIds::SUCCESS, std::move(issues));
+        if (!finishing) {
+            CommitTransaction();
+        }
+    }
+
+    void OnFinishOperation() {
+        Finish(Ydb::StatusIds::SUCCESS, std::move(Issues));
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(Ready, status, std::move(issues), std::move(Metadata)));
+        if (status == Ydb::StatusIds::SUCCESS) {
+            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(Ready, status, std::move(Issues), std::move(Metadata)));
+        } else {
+            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(false, status, std::move(issues), Nothing()));
+        }
     }
 
 private:
     TEvGetScriptExecutionOperation::TPtr Request;
+    TString ExecutionId;
     bool Ready = false;
+    NYql::TIssues Issues;
     TMaybe<google::protobuf::Any> Metadata;
 };
 
-class TListScriptExecutionOperationsActor : public TQueryBase {
+class TListScriptExecutionOperationsQuery : public TQueryBase {
 public:
-    TListScriptExecutionOperationsActor(TEvListScriptExecutionOperations::TPtr ev)
-        : Request(std::move(ev))
-        , PageSize(ClampVal<ui64>(Request->Get()->PageSize, 1, 500))
+    TListScriptExecutionOperationsQuery(const TString& database, const TString& pageToken, ui64 pageSize)
+        : Database(database)
+        , PageToken(pageToken)
+        , PageSize(pageSize)
     {}
 
     static std::pair<TInstant, TString> ParsePageToken(const TString& token) {
@@ -825,7 +1001,7 @@ public:
 
     void OnRunQuery() override {
         TStringBuilder sql;
-        if (Request->Get()->PageToken) {
+        if (PageToken) {
             sql << R"(
                 DECLARE $execution_id AS Text;
                 DECLARE $ts AS Timestamp;
@@ -847,7 +1023,7 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database
         )";
-        if (Request->Get()->PageToken) {
+        if (PageToken) {
             sql << R"(
                 AND (start_ts, execution_id) <= ($ts, $execution_id)
                 )";
@@ -860,14 +1036,14 @@ public:
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(Request->Get()->Database)
+                .Utf8(Database)
                 .Build()
             .AddParam("$page_size")
                 .Uint64(PageSize + 1)
                 .Build();
 
-        if (Request->Get()->PageToken) {
-            auto pageTokenParts = ParsePageToken(Request->Get()->PageToken);
+        if (PageToken) {
+            auto pageTokenParts = ParsePageToken(PageToken);
             params
                 .AddParam("$ts")
                     .Timestamp(pageTokenParts.first)
@@ -955,106 +1131,95 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Request->Sender, new TEvListScriptExecutionOperationsResponse(status, std::move(issues), NextPageToken, std::move(Operations)));
+        Send(Owner, new TEvListScriptExecutionOperationsResponse(status, std::move(issues), NextPageToken, std::move(Operations)));
     }
 
 private:
-    TEvListScriptExecutionOperations::TPtr Request;
-    ui64 PageSize = 0;
+    const TString Database;
+    const TString PageToken;
+    const ui64 PageSize;
     TString NextPageToken;
     std::vector<Ydb::Operations::Operation> Operations;
 };
 
-class TCheckLeaseStatusActor : public TScriptExecutionFinisherBase {
+class TListScriptExecutionOperationsActor : public TActorBootstrapped<TListScriptExecutionOperationsActor> {
 public:
-    TCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED)
-        : Database(database)
-        , ExecutionId(executionId)
-        , StatusOnExpiredLease(statusOnExpiredLease)
+    TListScriptExecutionOperationsActor(TEvListScriptExecutionOperations::TPtr ev)
+        : Request(std::move(ev))
     {}
 
-    void OnRunQuery() override {
-        const TString sql = R"(
-            DECLARE $database AS Text;
-            DECLARE $execution_id AS Text;
+    void Bootstrap() {
+        const ui64 pageSize = ClampVal<ui64>(Request->Get()->PageSize, 1, 100);
+        Register(new TListScriptExecutionOperationsQuery(Request->Get()->Database, Request->Get()->PageToken, pageSize));
 
-            SELECT operation_status FROM `.metadata/script_executions`
-                WHERE database = $database AND execution_id = $execution_id;
-
-            SELECT lease_deadline FROM `.metadata/script_execution_leases`
-                WHERE database = $database AND execution_id = $execution_id;
-        )";
-
-        NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database")
-                .Utf8(Database)
-                .Build()
-            .AddParam("$execution_id")
-                .Utf8(ExecutionId)
-                .Build();
-
-        RunDataQuery(sql, &params, TTxControl::BeginTx());
+        Become(&TListScriptExecutionOperationsActor::StateFunc);
     }
 
-    void OnQueryResult() override {
-        if (!FinishWasRun) {
-            if (ResultSets.size() != 2) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
-                return;
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvListScriptExecutionOperationsResponse, Handle);
+        hFunc(TEvPrivate::TEvLeaseCheckResult, Handle);
+    )
+
+    void Handle(TEvListScriptExecutionOperationsResponse::TPtr& ev) {
+        Response = std::move(ev);
+
+        for (ui64 i = 0; i < Response->Get()->Operations.size(); ++i) {
+            const Ydb::Operations::Operation& op = Response->Get()->Operations[i];
+            if (!op.ready()) {
+                Ydb::Query::ExecuteScriptMetadata metadata;
+                op.metadata().UnpackTo(&metadata);
+                Register(new TCheckLeaseStatusActor(Request->Get()->Database, metadata.execution_id(), Ydb::StatusIds::ABORTED, i));
+                ++OperationsToCheck;
             }
-            NYdb::TResultSetParser result(ResultSets[0]);
-            if (result.RowsCount() == 0) {
-                Finish(Ydb::StatusIds::BAD_REQUEST, "No such execution");
-                return;
-            }
+        }
 
-            result.TryNextRow();
-
-            TMaybe<i32> operationStatus = result.ColumnParser(0).GetOptionalInt32();
-            TMaybe<TInstant> leaseDeadline;
-
-            NYdb::TResultSetParser result2(ResultSets[1]);
-
-            if (result2.RowsCount() > 0) {
-                result2.TryNextRow();
-
-                leaseDeadline = result2.ColumnParser(0).GetOptionalTimestamp();
-            }
-
-            if (leaseDeadline) {
-                if (operationStatus) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Invalid operation state");
-                } else if (*leaseDeadline < RunStartTime) {
-                    FinishWasRun = true;
-                    FinishScriptExecution(Database, ExecutionId, StatusOnExpiredLease, Ydb::Query::EXEC_STATUS_ABORTED, "Lease expired");
-                } else {
-                    // OperationStatus is Nothing(): currently running
-                    Finish();
-                }
-            } else if (operationStatus) {
-                OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
-                Finish();
-            } else {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Invalid operation state");
-            }
-        } else {
-            OperationStatus = StatusOnExpiredLease;
-            Finish();
+        if (OperationsToCheck == 0) {
+            Reply();
         }
     }
 
-    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvLeaseCheckResult(status, std::move(issues), OperationStatus));
+    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
+        Y_VERIFY(ev->Cookie < Response->Get()->Operations.size());
+
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Response->Get()->Status = ev->Get()->Status;
+            Response->Get()->Issues = std::move(ev->Get()->Issues);
+            Response->Get()->NextPageToken.clear();
+            Response->Get()->Operations.clear();
+            Reply();
+            return;
+        }
+
+        if (ev->Get()->OperationStatus) {
+            Ydb::Operations::Operation& op = Response->Get()->Operations[ev->Cookie];
+            op.set_status(*ev->Get()->OperationStatus);
+            Ydb::Query::ExecuteScriptMetadata metadata;
+            op.metadata().UnpackTo(&metadata);
+            Y_VERIFY(ev->Get()->ExecutionStatus);
+            metadata.set_exec_status(*ev->Get()->ExecutionStatus);
+            op.mutable_metadata()->PackFrom(metadata);
+            if (ev->Get()->OperationIssues) {
+                for (const NYql::TIssue& issue : *ev->Get()->OperationIssues) {
+                    NYql::IssueToMessage(issue, op.add_issues());
+                }
+            }
+        }
+
+        --OperationsToCheck;
+        if (OperationsToCheck == 0) {
+            Reply();
+        }
+    }
+
+    void Reply() {
+        Send(Request->Sender, Response->Release().Release());
+        PassAway();
     }
 
 private:
-    const TInstant RunStartTime = TInstant::Now();
-    const TString Database;
-    const TString ExecutionId;
-    const Ydb::StatusIds::StatusCode StatusOnExpiredLease;
-    TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
-    bool FinishWasRun = false;
+    TEvListScriptExecutionOperations::TPtr Request;
+    TEvListScriptExecutionOperationsResponse::TPtr Response;
+    ui64 OperationsToCheck = 0;
 };
 
 class TCancelScriptExecutionOperationActor : public NActors::TActorBootstrapped<TCancelScriptExecutionOperationActor> {
@@ -1121,12 +1286,12 @@ public:
         if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) { // The actor probably had finished before our cancel message arrived.
             Register(new TCheckLeaseStatusActor(Request->Get()->Database, ExecutionId)); // Check if the operation has finished.
         } else {
-            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver request to destination");
+            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver cancel request to destination");
         }
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver request to destination");
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver cancel request to destination");
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {

@@ -9,18 +9,18 @@ namespace NCloud {
 
 using namespace NKikimr;
 
-class TFolderService : public NActors::TActor<TFolderService>, TGrpcServiceClient<yandex::cloud::priv::resourcemanager::v1::transitional::FolderService> {
+class TFolderService : public NActors::TActor<TFolderService>, TGrpcServiceClient<yandex::cloud::priv::resourcemanager::v1::FolderService> {
     using TThis = TFolderService;
     using TBase = NActors::TActor<TFolderService>;
 
-    struct TListFolderRequest : TGrpcRequest {
-        static constexpr auto Request = &yandex::cloud::priv::resourcemanager::v1::transitional::FolderService::Stub::AsyncList;
-        using TRequestEventType = TEvFolderService::TEvListFolderRequest;
-        using TResponseEventType = TEvFolderService::TEvListFolderResponse;
+    struct TResolveFoldersGrpcRequest : TGrpcRequest {
+        static constexpr auto Request = &yandex::cloud::priv::resourcemanager::v1::FolderService::Stub::AsyncResolve;
+        using TRequestEventType = TEvFolderService::TEvResolveFoldersRequest;
+        using TResponseEventType = TEvFolderService::TEvResolveFoldersResponse;
     };
 
-    void Handle(TEvFolderService::TEvListFolderRequest::TPtr& ev) {
-        MakeCall<TListFolderRequest>(std::move(ev));
+    void Handle(TEvFolderService::TEvResolveFoldersRequest::TPtr& ev) {
+        MakeCall<TResolveFoldersGrpcRequest>(std::move(ev));
     }
 
 public:
@@ -33,7 +33,7 @@ public:
 
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvFolderService::TEvListFolderRequest, Handle);
+            hFunc(TEvFolderService::TEvResolveFoldersRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
     }
@@ -46,8 +46,8 @@ IActor* CreateFolderService(const TFolderServiceSettings& settings) {
 
 IActor* CreateFolderServiceWithCache(const TFolderServiceSettings& settings) {
     IActor* folderService = CreateFolderService(settings);
-    folderService = CreateGrpcServiceCache<TEvFolderService::TEvListFolderRequest, TEvFolderService::TEvListFolderResponse>(folderService);
+    folderService = CreateGrpcServiceCache<TEvFolderService::TEvResolveFoldersRequest, TEvFolderService::TEvResolveFoldersResponse>(folderService);
     return folderService;
 }
 
-}
+} // namespace NCloud

@@ -4821,11 +4821,20 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
         }
 
-        void ReadData(const TString& query, const TString& expected) {
+        void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS) {
+            Y_UNUSED(opStatus);
+            NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+            auto batch = updates.BuildArrow();
+            helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
+        }
+
+        void ReadData(const TString& query, const TString& expected, const EStatus opStatus = EStatus::SUCCESS) {
             auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString result = StreamResultToYson(it, false, opStatus);
+            if (opStatus == EStatus::SUCCESS) {
+                UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
+            }
         }
 
         void RebootTablets(const TString& tableName) {
@@ -4926,6 +4935,34 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             testHelper.InsertData(testTable, tableInserter, {}, EStatus::SCHEME_ERROR);
         }
+    }
+
+    Y_UNIT_TEST(AddColumnOldSchemeBulkUpsert) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
     }
 
     Y_UNIT_TEST(AddColumnOnSchemeChange) {
@@ -5030,15 +5067,221 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`ADD COLUMN new_column Uint64 NOT NULL;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(DropColumn) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
+            testHelper.InsertData(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN resource_id;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#]]");
+        testHelper.ReadData("SELECT resource_id FROM `/Root/ColumnTableTest` ", "[[];[]]", EStatus::GENERIC_ERROR);
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN level;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` ", "[[1];[2]]");
+    }
+
+    Y_UNIT_TEST(DropColumnOnSchemeChange) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.InsertData(testTable, tableInserter, [&testTable, &testHelper]() {
+                auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN resource_id;";
+                auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            });
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#]]");
+    }
+
+    Y_UNIT_TEST(DropColumnOldScheme) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN resource_id;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.InsertData(testTable, tableInserter, {}, EStatus::SUCCESS);
+        }
+     //   testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#]]");
+    }
+
+    Y_UNIT_TEST(DropColumnOldSchemeBulkUpsert) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN resource_id;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(DropColumnAfterAdd) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
+            testHelper.InsertData(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+        {
+            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN new_column;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+    }
+
+    Y_UNIT_TEST(DropColumnErrors) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64).SetNullable(false));
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`ADD COLUMN new_column Uint64 NOT NULL;";
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN unknown_column;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`DROP COLUMN id;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(DropColumnTableStoreErrors) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        TTestHelper::TColumnTableStore testTableStore;
+
+        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTableStore);
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "`DROP COLUMN id;";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
         }
     }
 }

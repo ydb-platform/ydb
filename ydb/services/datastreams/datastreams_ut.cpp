@@ -476,17 +476,22 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
                             },
-                            [storageMb](const NJson::TJsonValue::TMapType& map) {
+                            [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
                                 auto& usage = map.find("usage")->second.GetMap();
-                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
-                                               TInstant::Now().Seconds() - 10);
-                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
-                                               TInstant::Now().Seconds() - 9);
+
+                                auto start = usage.find("start")->second.GetUInteger();
+                                auto finish = usage.find("finish")->second.GetUInteger();
+                                UNIT_ASSERT_LE(start, finish);
+
+                                auto now = TInstant::Now();
+                                UNIT_ASSERT_GT(start, now.Seconds() - 10);
+                                UNIT_ASSERT_GT(finish, now.Seconds() - 9);
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
                                                          "mbyte*second");
+
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetUInteger(),
-                                               storageMb);
+                                               storageMb * (finish - start));
 
                             });
         UNIT_ASSERT_VALUES_EQUAL(storageSchemaFound, 8);
@@ -516,11 +521,16 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
                                 auto& usage = map.find("usage")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetInteger(), 1);
-                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
-                                               TInstant::Now().Seconds() - 10);
-                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
-                                               TInstant::Now().Seconds() - 9);
+
+                                auto start = usage.find("start")->second.GetUInteger();
+                                auto finish = usage.find("finish")->second.GetUInteger();
+                                UNIT_ASSERT_LE(start, finish);
+
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetInteger(), finish - start);
+
+                                auto now = TInstant::Now();
+                                UNIT_ASSERT_GT(start, now.Seconds() - 10);
+                                UNIT_ASSERT_GT(finish, now.Seconds() - 9);
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
                                                          "second");
                             });
@@ -689,11 +699,16 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
                                 auto& usage = map.find("usage")->second.GetMap();
-                                UNIT_ASSERT(usage.find("quantity")->second.GetInteger() <= 1);
-                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
-                                               TInstant::Now().Seconds() - 10);
-                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
-                                               TInstant::Now().Seconds() - 9);
+
+                                auto start = usage.find("start")->second.GetUInteger();
+                                auto finish = usage.find("finish")->second.GetUInteger();
+                                UNIT_ASSERT_LE(start, finish);
+
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetInteger(), finish - start);
+
+                                auto now = TInstant::Now();
+                                UNIT_ASSERT_GT(start, now.Seconds() - 10);
+                                UNIT_ASSERT_GT(finish, now.Seconds() - 9);
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
                                                          "second");
                             });

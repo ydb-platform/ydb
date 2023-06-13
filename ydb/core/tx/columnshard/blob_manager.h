@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob.h"
+#include "counters/blobs_manager.h"
 
 #include <ydb/core/tx/columnshard/inflight_request_tracker.h>
 #include <ydb/core/tablet_flat/flat_executor.h>
@@ -192,6 +193,8 @@ private:
     TGenStep CollectGenStepInFlight = {0, 0};
     bool FirstGC = true;
 
+    const TBlobsManagerCounters BlobsManagerCounters = TBlobsManagerCounters("BlobsManager");
+
     // Stores counter updates since last call to GetCountersUpdate()
     // Then the counters are reset and start accumulating new delta
     TBlobManagerCounters CountersUpdate;
@@ -204,6 +207,10 @@ private:
 
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen);
+
+    const TBlobsManagerCounters& GetCounters() const {
+        return BlobsManagerCounters;
+    }
 
     void RegisterControls(NKikimr::TControlBoard& icb);
 

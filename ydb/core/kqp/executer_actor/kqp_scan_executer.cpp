@@ -490,7 +490,8 @@ private:
         }
         if (shardIds) {
             LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-            auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, std::move(shardIds));
+            auto kqpShardsResolver = CreateKqpShardsResolver(
+                this->SelfId(), TxId, false, std::move(shardIds));
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
         } else {
             GetResourcesSnapshot();

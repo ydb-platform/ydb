@@ -19,7 +19,12 @@ service DynamicConfigService {
     //  - After applying next version another identical call will result in an error.
     // The field version within the YAML in the request must strictly be set to the current version increment by one.
     // The field cluster within the YAML should be identical to the one configured on the node used by the console tablet.
-    rpc ApplyConfig(DynamicConfig.ApplyConfigRequest) returns (DynamicConfig.ApplyConfigResponse);
+    rpc SetConfig(DynamicConfig.SetConfigRequest) returns (DynamicConfig.SetConfigResponse);
+
+    rpc ReplaceConfig(DynamicConfig.ReplaceConfigRequest) returns (DynamicConfig.ReplaceConfigResponse);
+
+    // Get current configs metadata.
+    rpc GetMetadata(DynamicConfig.GetMetadataRequest) returns (DynamicConfig.GetMetadataResponse);
 
     // Get current configs.
     rpc GetConfig(DynamicConfig.GetConfigRequest) returns (DynamicConfig.GetConfigResponse);
@@ -33,6 +38,8 @@ service DynamicConfigService {
 
     // Remove volatile config.
     rpc RemoveVolatileConfig(DynamicConfig.RemoveVolatileConfigRequest) returns (DynamicConfig.RemoveVolatileConfigResponse);
+
+    rpc GetNodeLabels(DynamicConfig.GetNodeLabelsRequest) returns (DynamicConfig.GetNodeLabelsResponse);
 
     // Resolve config for particular labels.
     rpc ResolveConfig(DynamicConfig.ResolveConfigRequest) returns (DynamicConfig.ResolveConfigResponse);

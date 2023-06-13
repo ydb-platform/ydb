@@ -64,27 +64,20 @@ namespace NActors {
     struct TActorSetupCmd {
         TMailboxType::EType MailboxType;
         ui32 PoolId;
-        IActor* Actor;
+        std::unique_ptr<IActor> Actor;
 
-        TActorSetupCmd()
-            : MailboxType(TMailboxType::HTSwap)
-            , PoolId(0)
-            , Actor(nullptr)
-        {
-        }
+        TActorSetupCmd();
+        TActorSetupCmd(const TActorSetupCmd&) = delete;
+        TActorSetupCmd(TActorSetupCmd&&);
+        TActorSetupCmd& operator=(const TActorSetupCmd&) = delete;
+        TActorSetupCmd& operator=(TActorSetupCmd&&);
+        TActorSetupCmd(std::unique_ptr<IActor> actor, TMailboxType::EType mailboxType, ui32 poolId);
+        ~TActorSetupCmd();
 
-        TActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId)
-            : MailboxType(mailboxType)
-            , PoolId(poolId)
-            , Actor(actor)
-        {
-        }
+        // For legacy code, please do not use
+        TActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId);
 
-        void Set(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) {
-            MailboxType = mailboxType;
-            PoolId = poolId;
-            Actor = actor;
-        }
+        void Set(std::unique_ptr<IActor> actor, TMailboxType::EType mailboxType, ui32 poolId);
     };
 
     using TProxyWrapperFactory = std::function<TActorId(TActorSystem*, ui32)>;

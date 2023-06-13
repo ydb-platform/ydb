@@ -49,8 +49,6 @@ TCounters AggregateQueryStatsByStage(TCounters& queryStat, const THashMap<ui64, 
         std::map<TString, TString> labels;
         TString prefix, name;
         if (k.StartsWith("TaskRunner") && NCommon::ParseCounterName(&prefix, &labels, &name, k)) {
-            auto maybeInputChannel = labels.find("InputChannel");
-            auto maybeOutputChannel = labels.find("OutputChannel");
             auto maybeTask = labels.find("Task");
             if (maybeTask == labels.end()) {
                 aggregatedQueryStat.AddCounter(k, v);
@@ -65,29 +63,56 @@ TCounters AggregateQueryStatsByStage(TCounters& queryStat, const THashMap<ui64, 
                 ? "0"
                 : ToString(maybeStage->second);
             ui64 channelId;
+            bool input = false;
+            bool output = false;
+            auto maybeInputChannel = labels.find("InputChannel");
             if (maybeInputChannel != labels.end()) {
                 if (!TryFromString(maybeInputChannel->second, channelId)) {
                     continue;
                 }
+                ui32 stage = 0;
+                auto maybeSrcStageId = labels.find("SrcStageId");
+                if (maybeSrcStageId != labels.end()) {
+                    TryFromString(maybeSrcStageId->second, stage);
+                    labels.erase(maybeSrcStageId);
+                }
                 stage2Input[stageId].insert(channelId);
                 stage2Input["Total"].insert(channelId);
                 labels.erase(maybeInputChannel);
-                labels["Input"] = "1";
+                labels["Input"] = ToString(stage);
+                input = true;
             }
+            auto maybeOutputChannel = labels.find("OutputChannel");
             if (maybeOutputChannel != labels.end()) {
                 if (!TryFromString(maybeOutputChannel->second, channelId)) {
                     continue;
                 }
+                ui32 stage = 0;
+                auto maybeDstStageId = labels.find("DstStageId");
+                if (maybeDstStageId != labels.end()) {
+                    TryFromString(maybeDstStageId->second, stage);
+                    labels.erase(maybeDstStageId);
+                }
                 stage2Output[stageId].insert(channelId);
                 stage2Output["Total"].insert(channelId);
                 labels.erase(maybeOutputChannel);
-                labels["Output"] = "1";
+                labels["Output"] = ToString(stage);
+                output = true;
             }
             labels.erase(maybeTask);
             labels["Stage"] = ToString(stageId);
             stage2Tasks[stageId].insert(taskId);
             stage2Tasks["Total"].insert(taskId);
             aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner", labels, name), v);
+            if (input || output) {
+                if (input) {
+                    labels["Input"] = "Total";
+                }
+                if (output) {
+                    labels["Output"] = "Total";
+                }
+                aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner", labels, name), v);
+            }
             labels["Stage"] = "Total";
             aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner", labels, name), v);
         } else {
@@ -124,11 +149,11 @@ TCounters AggregateQueryStatsByStage(TCounters& queryStat, const THashMap<ui64, 
     }
     for (const auto& [stageId, v] : stage2Input) {
         aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner",
-            {{"Stage", stageId},{"Input", "1"}}, "ChannelsCount"), static_cast<ui64>(v.size()));
+            {{"Stage", stageId},{"Input", "Total"}}, "ChannelsCount"), static_cast<ui64>(v.size()));
     }
-    for (const auto& [stageId, v] : stage2Input) {
+    for (const auto& [stageId, v] : stage2Output) {
         aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner",
-            {{"Stage", stageId},{"Output", "1"}}, "ChannelsCount"), static_cast<ui64>(v.size()));
+            {{"Stage", stageId},{"Output", "Total"}}, "ChannelsCount"), static_cast<ui64>(v.size()));
     }
     aggregatedQueryStat.AddCounter("StagesCount", static_cast<ui64>(stage2Tasks.size()));
 

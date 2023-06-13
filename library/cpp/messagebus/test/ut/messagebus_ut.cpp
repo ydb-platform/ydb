@@ -1059,7 +1059,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         client.WaitReplies();
 
         server.WaitForOnMessageCount(test_msg_count);
-    };
+    }
 
     Y_UNIT_TEST(TestConnectionAttempts) {
         TObjectCountCheck objectCountCheck;
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             // First connection attempt is for connect call; second one is to get connect result.
             UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 4);
         }
-    };
+    }
 
     Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndNotReconnectWhenIdle) {
         TObjectCountCheck objectCountCheck;
@@ -1118,7 +1118,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
         Sleep(TDuration::MilliSeconds(10 * clientConfig.RetryInterval));
         UNIT_ASSERT_EQUAL(client.Session->GetConnectSyscallsNumForTest(noServerAddr), 2);
-    };
+    }
 
     Y_UNIT_TEST(TestConnectionAttemptsOnNoMessagesAndReconnectWhenIdle) {
         TObjectCountCheck objectCountCheck;
@@ -1147,5 +1147,5 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         // it is undeterministic how many reconnects will be during that amount of time
         // but it should occur at least once
         UNIT_ASSERT(client.Session->GetConnectSyscallsNumForTest(noServerAddr) > 2);
-    };
-};
+    }
+}

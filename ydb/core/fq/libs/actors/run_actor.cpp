@@ -49,16 +49,17 @@
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/core/fq/libs/actors/nodes_manager.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
+#include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/gateway/empty_gateway.h>
-#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/private_client/events.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
 #include <ydb/core/fq/libs/rate_limiter/utils/path.h>
@@ -1009,6 +1010,7 @@ private:
 
         struct TStatisticsNode {
             std::map<TString, TStatisticsNode> Children;
+            TString Name;
             i64 Avg;
             i64 Count;
             i64 Min;
@@ -1017,6 +1019,29 @@ private:
             void Write(NYson::TYsonWriter& writer) {
                 writer.OnBeginMap();
                 if (Children.empty()) {
+                    if (Name.EndsWith("Us")) { // TDuration
+                        writer.OnKeyedItem("sum");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Sum).ToString());
+                        writer.OnKeyedItem("count");
+                        writer.OnInt64Scalar(Count);
+                        writer.OnKeyedItem("avg");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Avg).ToString());
+                        writer.OnKeyedItem("max");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Max).ToString());
+                        writer.OnKeyedItem("min");
+                        writer.OnStringScalar(TDuration::MicroSeconds(Min).ToString());
+                    } else if (Name.EndsWith("Ms")) { // TInstant
+                        writer.OnKeyedItem("sum");
+                        writer.OnStringScalar("N/A");
+                        writer.OnKeyedItem("count");
+                        writer.OnInt64Scalar(Count);
+                        writer.OnKeyedItem("avg");
+                        writer.OnStringScalar(TInstant::MilliSeconds(Avg).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnKeyedItem("max");
+                        writer.OnStringScalar(TInstant::MilliSeconds(Max).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnKeyedItem("min");
+                        writer.OnStringScalar(TInstant::MilliSeconds(Min).FormatLocalTime("%H:%M:%S.%ms"));
+                    } else {
                         writer.OnKeyedItem("sum");
                         writer.OnInt64Scalar(Sum);
                         writer.OnKeyedItem("count");
@@ -1027,6 +1052,7 @@ private:
                         writer.OnInt64Scalar(Max);
                         writer.OnKeyedItem("min");
                         writer.OnInt64Scalar(Min);
+                    }
                 } else {
                     for (auto& [name, child]: Children) {
                         writer.OnKeyedItem(name);
@@ -1063,6 +1089,7 @@ private:
 
             node = &node->Children[name];
 
+            node->Name = name;
             node->Sum = metric.GetSum();
             node->Count = metric.GetCount();
             node->Avg = metric.GetAvg();
@@ -1223,7 +1250,7 @@ private:
         if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
            LOG_E("StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
         }
-        
+
         if (statusCode != NYql::NDqProto::StatusIds::SUCCESS) {
             // Error
             ResignQuery(statusCode);

@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(status.GetValueSync().IsSuccess());
 
         auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--topic1", "shared/user", describeConsumerSettings).GetValueSync();
+        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--" + setup->GetTestTopic(), "shared/user", describeConsumerSettings).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
         auto description = result.GetConsumerDescription();

@@ -11,8 +11,6 @@
 namespace NKikimr {
 namespace NDataShard {
 
-#define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
-
 TPipeline::TPipeline(TDataShard * self)
     : Self(self)
     , DepTracker(self)
@@ -45,14 +43,19 @@ bool TPipeline::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
     Y_VERIFY(!SchemaTx);
-    LOAD_SYS_UI64(db, Schema::Sys_LastPlannedStep, LastPlannedTx.Step);
-    LOAD_SYS_UI64(db, Schema::Sys_LastPlannedTx, LastPlannedTx.TxId);
-    LOAD_SYS_UI64(db, Schema::Sys_LastCompleteStep, LastCompleteTx.Step);
-    LOAD_SYS_UI64(db, Schema::Sys_LastCompleteTx, LastCompleteTx.TxId);
-    LOAD_SYS_UI64(db, Schema::Sys_AliveStep, KeepSchemaStep);
-    LOAD_SYS_UI64(db, Schema::SysPipeline_Flags, Config.Flags);
-    LOAD_SYS_UI64(db, Schema::SysPipeline_LimitActiveTx, Config.LimitActiveTx);
-    LOAD_SYS_UI64(db, Schema::SysPipeline_LimitDataTxCache, Config.LimitDataTxCache);
+
+    bool ready = true;
+    ready &= Self->SysGetUi64(db, Schema::Sys_LastPlannedStep, LastPlannedTx.Step);
+    ready &= Self->SysGetUi64(db, Schema::Sys_LastPlannedTx, LastPlannedTx.TxId);
+    ready &= Self->SysGetUi64(db, Schema::Sys_LastCompleteStep, LastCompleteTx.Step);
+    ready &= Self->SysGetUi64(db, Schema::Sys_LastCompleteTx, LastCompleteTx.TxId);
+    ready &= Self->SysGetUi64(db, Schema::Sys_AliveStep, KeepSchemaStep);
+    ready &= Self->SysGetUi64(db, Schema::SysPipeline_Flags, Config.Flags);
+    ready &= Self->SysGetUi64(db, Schema::SysPipeline_LimitActiveTx, Config.LimitActiveTx);
+    ready &= Self->SysGetUi64(db, Schema::SysPipeline_LimitDataTxCache, Config.LimitDataTxCache);
+    if (!ready) {
+        return false;
+    }
 
     Config.Validate();
     UtmostCompleteTx = LastCompleteTx;
@@ -940,6 +943,10 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
 
     Self->TransQueue.RemoveTx(db, *op);
     RemoveInReadSets(op, db);
+
+    if (Self->IsMvccEnabled()) {
+        Self->PromoteFollowerReadEdge(txc);
+    }
 
     while (!DelayedAcks.empty()
            && DelayedAcks.begin()->first.Step <= OutdatedReadSetStep())
@@ -1960,7 +1967,7 @@ void TPipeline::RemoveCommittingOp(const TOperation::TPtr& op) {
 }
 
 bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {
-    if (!Self->IsMvccEnabled() || !op->IsMvccSnapshotRead() || op->HasWaitCompletionFlag())
+    if (Self->IsFollower() || !Self->IsMvccEnabled() || !op->IsMvccSnapshotRead() || op->HasWaitCompletionFlag())
         return true;
 
     // don't send errors early

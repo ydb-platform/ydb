@@ -48,6 +48,7 @@ public:
 class IOperationsManager {
 public:
     using TPtr = std::shared_ptr<IOperationsManager>;
+    using TYqlConclusionStatus = TConclusionSpecialStatus<NYql::TIssuesIds::EIssueCode, NYql::TIssuesIds::SUCCESS, NYql::TIssuesIds::DEFAULT_ERROR>;
 
     enum class EActivityType {
         Undefined,
@@ -76,18 +77,18 @@ public:
 private:
     YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
 protected:
-    virtual NThreading::TFuture<TConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
+    virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, TInternalModificationContext& context) const = 0;
 public:
     virtual ~IOperationsManager() = default;
 
-    NThreading::TFuture<TConclusionStatus> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
+    NThreading::TFuture<TYqlConclusionStatus> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
-    NThreading::TFuture<TConclusionStatus> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
+    NThreading::TFuture<TYqlConclusionStatus> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
-    NThreading::TFuture<TConclusionStatus> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
+    NThreading::TFuture<TYqlConclusionStatus> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     const TTableSchema& GetSchema() const {

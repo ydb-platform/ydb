@@ -124,15 +124,20 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
+    TKqpQuerySettings settings(GetType());
+    settings.DocumentApiRestricted = IsDocumentApiRestricted_;
+    settings.IsInternalCall = IsInternalCall();
+    settings.Syntax = GetSyntax();
+
     bool keepInCache = false;
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = GetQueryKeepInCache() && query->IsSql();
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = query->IsSql();
             break;
 
@@ -142,17 +147,12 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             keepInCache = false;
             break;
 
         default:
             YQL_ENSURE(false);
-    }
-
-    if (query) {
-        query->Settings.DocumentApiRestricted = IsDocumentApiRestricted_;
-        query->Settings.IsInternalCall = IsInternalCall();
     }
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;
@@ -169,13 +169,18 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
+    TKqpQuerySettings settings(GetType());
+    settings.DocumentApiRestricted = IsDocumentApiRestricted_;
+    settings.IsInternalCall = IsInternalCall();
+    settings.Syntax = GetSyntax();
+
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             break;
 
         case NKikimrKqp::QUERY_ACTION_PREPARE:
-            query = TKqpQueryId(Cluster, Database, GetQuery(), GetType(), GetQueryParameterTypes());
+            query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             break;
 
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
@@ -184,11 +189,6 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
         default:
             YQL_ENSURE(false);
-    }
-
-    if (query) {
-        query->Settings.DocumentApiRestricted = IsDocumentApiRestricted_;
-        query->Settings.IsInternalCall = IsInternalCall();
     }
 
     auto compileDeadline = QueryDeadlines.TimeoutAt;

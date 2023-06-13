@@ -16,7 +16,10 @@ public:
         Add,
         Sub,
         Mul,
-        Div
+        Div,
+        StartsWith,
+        EndsWith,
+        StringContains
     };
 
     TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry);

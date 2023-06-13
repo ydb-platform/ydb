@@ -128,6 +128,10 @@ public:
         return RequestEv->GetType();
     }
 
+    Ydb::Query::Syntax GetSyntax() const {
+        return RequestEv->GetSyntax();
+    }
+
     std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
         return QueryParameterTypes;
     }

@@ -31,13 +31,20 @@ public:
     virtual bool Empty() const = 0;
 
     [[nodiscard]]
-    virtual bool Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch) = 0;
+    virtual bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) = 0;
 
     virtual bool IsFinished() const = 0;
 
     virtual const TDqInputStats* GetStats() const = 0;
 
     virtual NKikimr::NMiniKQL::TType* GetInputType() const = 0;
+    inline TMaybe<ui32> GetInputWidth() const {
+        auto type = GetInputType();
+        if (type->IsMulti()) {
+            return static_cast<const NKikimr::NMiniKQL::TMultiType*>(type)->GetElementsCount();
+        }
+        return {};
+    }
 
     // Checkpointing
     // After pause IDqInput::Pop() stops return batches that were pushed before pause

@@ -8,6 +8,7 @@
 
 add_subdirectory(counters)
 add_subdirectory(engines)
+add_subdirectory(testlib)
 add_subdirectory(ut_rw)
 add_subdirectory(ut_schema)
 get_built_tool_path(

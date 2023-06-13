@@ -372,7 +372,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     using TBase::PassAway;
     using TBase::Become;
     using TBase::Register;
-    using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr&>;
+    using IRetryPolicy = IRetryPolicy<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr&>;
 
     ::NFq::TControlPlaneProxyConfig Config;
     TActorId Sender;
@@ -416,16 +416,16 @@ public:
         Send(NKikimr::NFolderService::FolderServiceActorId(), CreateRequest().release(), 0, 0);
     }
 
-    std::unique_ptr<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest> CreateRequest() {
-        auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetFolderRequest>();
-        request->Request.set_folder_id(FolderId);
+    std::unique_ptr<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest> CreateRequest() {
+        auto request = std::make_unique<NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest>();
+        request->FolderId = FolderId;
         request->Token = Token;
         return request;
     }
 
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
-        hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse, Handle);
+        hFunc(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse, Handle);
     )
 
     void HandleTimeout() {
@@ -441,12 +441,11 @@ public:
         PassAway();
     }
 
-    void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) {
+    void Handle(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
         Counters->InFly->Dec();
         Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
-        const auto& response = ev->Get()->Response;
         const auto& status = ev->Get()->Status;
-        if (!status.Ok() || !response.has_folder()) {
+        if (!status.Ok() || ev->Get()->CloudId.empty()) {
             TString errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
             auto delay = RetryState->GetNextRetryDelay(ev);
             if (delay) {
@@ -469,7 +468,7 @@ public:
         }
 
         Counters->Ok->Inc();
-        TString cloudId = response.folder().cloud_id();
+        TString cloudId = ev->Get()->CloudId;
         Event->Get()->CloudId = cloudId;
         CPP_LOG_T("Cloud id: " << cloudId << " Folder id: " << FolderId);
 
@@ -483,10 +482,9 @@ public:
 
 private:
     static const IRetryPolicy::TPtr& GetRetryPolicy() {
-        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetFolderResponse::TPtr& ev) {
-            const auto& response = ev->Get()->Response;
+        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev) {
             const auto& status = ev->Get()->Status;
-            return !status.Ok() || !response.has_folder() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
+            return !status.Ok() || ev->Get()->CloudId.empty() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
         }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
         return policy;
     }

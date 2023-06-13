@@ -810,6 +810,7 @@ message TFeatureFlags {
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
+    optional bool EnableGetNodeLabels = 99 [default = false];
 }
 
 message THttpProxyConfig {
@@ -864,6 +865,7 @@ message TSqsConfig {
     optional uint32 YandexCloudServiceId = 16; // only 15 lesser bits should be used!
     optional string YandexCloudAccessServiceAddress = 29; // host:port
     optional string YandexCloudFolderServiceAddress = 30; // host:port
+    optional string YandexCloudResourceManagerServiceAddress = 72; // host:port
     optional string YandexCloudServiceRegion = 39 [default = "ru-central1"];
 
     optional uint32 MeteringFlushingIntervalMs = 51 [default = 5000];

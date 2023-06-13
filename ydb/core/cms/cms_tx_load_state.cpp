@@ -95,7 +95,7 @@ public:
             TString taskId = walleTaskRowset.GetValue<Schema::WalleTask::TaskID>();
             TString requestId = walleTaskRowset.GetValue<Schema::WalleTask::RequestID>();
 
-            TWalleTaskInfo task;
+            TTaskInfo task;
             task.TaskId = taskId;
             task.RequestId = requestId;
             state->WalleRequests.emplace(requestId, taskId);

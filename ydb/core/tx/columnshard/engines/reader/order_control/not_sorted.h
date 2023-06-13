@@ -7,6 +7,10 @@ class TNonSorting: public IOrderPolicy {
 private:
     using TBase = IOrderPolicy;
 protected:
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "type=NonSorting;";
+    }
+
     virtual void DoFill(TGranulesFillingContext& /*context*/) override {
     }
 

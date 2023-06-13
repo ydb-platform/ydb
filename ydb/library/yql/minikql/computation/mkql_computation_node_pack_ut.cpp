@@ -548,13 +548,13 @@ protected:
                 UNIT_ASSERT_VALUES_EQUAL(std::string_view(uVal.AsStringRef()), str);
             }
 
-            TUnboxedValueVector items;
+            TUnboxedValueBatch items;
             packer.UnpackBatch(serializedStr, HolderFactory, items);
-            UNIT_ASSERT_VALUES_EQUAL(items.size(), count);
-            for (auto& uVal : items) {
-                UNIT_ASSERT(uVal);
-                UNIT_ASSERT_VALUES_EQUAL(std::string_view(uVal.AsStringRef()), str);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(items.RowCount(), count);
+            items.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                UNIT_ASSERT(value);
+                UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
+            });
         }
     }
 

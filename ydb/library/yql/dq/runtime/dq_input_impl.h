@@ -1,5 +1,8 @@
 #pragma once
 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
+
 namespace NYql::NDq {
 
 template <class TDerived, class IInputInterface>
@@ -7,6 +10,7 @@ class TDqInputImpl : public IInputInterface {
 public:
     TDqInputImpl(NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes)
         : InputType(inputType)
+        , Width(inputType->IsMulti() ? static_cast<const NKikimr::NMiniKQL::TMultiType*>(inputType)->GetElementsCount() : TMaybe<ui32>{})
         , MaxBufferBytes(maxBufferBytes)
     {
     }
@@ -24,14 +28,16 @@ public:
         return Batches.empty() || (IsPaused() && GetBatchesBeforePause() == 0);
     }
 
-    void AddBatch(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, i64 space) {
+    void AddBatch(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) {
+        Y_VERIFY(batch.Width() == GetWidth());
+
         StoredBytes += space;
-        StoredRows += batch.size();
+        StoredRows += batch.RowCount();
 
         auto& stats = MutableBasicStats();
         stats.Chunks++;
         stats.Bytes += space;
-        stats.RowsIn += batch.size();
+        stats.RowsIn += batch.RowCount();
         if (!stats.FirstRowTs) {
             stats.FirstRowTs = TInstant::Now();
         }
@@ -44,7 +50,8 @@ public:
     }
 
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+        Y_VERIFY(batch.Width() == GetWidth());
         if (Empty()) {
             return false;
         }
@@ -55,12 +62,22 @@ public:
             ui64 batchesCount = GetBatchesBeforePause();
             Y_VERIFY(batchesCount <= Batches.size());
 
-            batch.reserve(StoredRowsBeforePause);
-
-            while (batchesCount--) {
-                auto& part = Batches.front();
-                std::move(part.begin(), part.end(), std::back_inserter(batch));
-                Batches.pop_front();
+            if (batch.IsWide()) {
+                while (batchesCount--) {
+                    auto& part = Batches.front();
+                    part.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
+                        batch.PushRow(values, width);
+                    });
+                    Batches.pop_front();
+                }
+            } else {
+                while (batchesCount--) {
+                    auto& part = Batches.front();
+                    part.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
+                        batch.emplace_back(std::move(value));
+                    });
+                    Batches.pop_front();
+                }
             }
 
             BatchesBeforePause = PauseMask;
@@ -70,10 +87,18 @@ public:
             StoredBytesBeforePause = 0;
             StoredRowsBeforePause = 0;
         } else {
-            batch.reserve(StoredRows);
-
-            for (auto&& part : Batches) {
-                std::move(part.begin(), part.end(), std::back_inserter(batch));
+            if (batch.IsWide()) {
+                for (auto&& part : Batches) {
+                    part.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
+                        batch.PushRow(values, width);
+                    });
+                }
+            } else {
+                for (auto&& part : Batches) {
+                    part.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
+                        batch.emplace_back(std::move(value));
+                    });
+                }
             }
 
             StoredBytes = 0;
@@ -81,7 +106,7 @@ public:
             Batches.clear();
         }
 
-        MutableBasicStats().RowsOut += batch.size();
+        MutableBasicStats().RowsOut += batch.RowCount();
         return true;
     }
 
@@ -128,10 +153,15 @@ protected:
         return BatchesBeforePause & ~PauseMask;
     }
 
+    TMaybe<ui32> GetWidth() const {
+        return Width;
+    }
+
 protected:
     NKikimr::NMiniKQL::TType* const InputType = nullptr;
+    const TMaybe<ui32> Width;
     const ui64 MaxBufferBytes = 0;
-    TList<NKikimr::NMiniKQL::TUnboxedValueVector, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::TUnboxedValue>> Batches;
+    TList<NKikimr::NMiniKQL::TUnboxedValueBatch, NKikimr::NMiniKQL::TMKQLAllocator<NKikimr::NMiniKQL::TUnboxedValueBatch>> Batches;
     ui64 StoredBytes = 0;
     ui64 StoredRows = 0;
     bool Finished = false;

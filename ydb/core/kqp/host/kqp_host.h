@@ -10,6 +10,8 @@ namespace NKqp {
 
 struct TKqpQueryRef;
 
+using TSqlVersion = ui16;
+
 class IKqpHost : public TThrRefBase {
 public:
     using TQueryResult = IKqpGateway::TQueryResult;
@@ -29,6 +31,8 @@ public:
 
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
+        TMaybe<bool> UsePgParser;
+        TMaybe<TSqlVersion> SyntaxVersion;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " IsInternalCall: " << IsInternalCall << " }";

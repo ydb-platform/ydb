@@ -246,6 +246,10 @@ static void AtomicClearBits(std::atomic<intptr_t>* pv, intptr_t bits,
 Y_ABSL_CONST_INIT static y_absl::base_internal::SpinLock deadlock_graph_mu(
     y_absl::kConstInit, base_internal::SCHEDULE_KERNEL_ONLY);
 
+void ResetDeadlockGraphMu() {
+    new (&deadlock_graph_mu) y_absl::base_internal::SpinLock{y_absl::kConstInit, base_internal::SCHEDULE_KERNEL_ONLY};
+}
+
 // Graph used to detect deadlocks.
 Y_ABSL_CONST_INIT static GraphCycles *deadlock_graph
     Y_ABSL_GUARDED_BY(deadlock_graph_mu) Y_ABSL_PT_GUARDED_BY(deadlock_graph_mu);

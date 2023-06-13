@@ -19,13 +19,19 @@ TTypedUnboxedValue TKqpExecuterTxResult::GetUV(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& factory)
 {
+    YQL_ENSURE(!Rows.IsWide());
     if (IsStream) {
         auto* listOfItemType = NKikimr::NMiniKQL::TListType::Create(MkqlItemType, typeEnv);
-        NUdf::TUnboxedValue value = factory.VectorAsArray(Rows);
+
+        NUdf::TUnboxedValue* itemsPtr = nullptr;
+        auto value = factory.CreateDirectArrayHolder(Rows.RowCount(), itemsPtr);
+        Rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
+            *itemsPtr++ = std::move(value);
+        });
         return {listOfItemType, value};
     } else {
-        YQL_ENSURE(Rows.size() == 1, "Actual buffer size: " << Rows.size());
-        return {MkqlItemType, Rows[0]};
+        YQL_ENSURE(Rows.RowCount() == 1, "Actual buffer size: " << Rows.RowCount());
+        return {MkqlItemType, *Rows.Head()};
     }
 }
 
@@ -42,6 +48,7 @@ NKikimrMiniKQL::TResult TKqpExecuterTxResult::GetMkql() {
 }
 
 void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
+    YQL_ENSURE(!Rows.IsWide());
     if (IsStream) {
         mkqlResult->MutableType()->SetKind(NKikimrMiniKQL::List);
         ExportTypeToProto(
@@ -49,16 +56,15 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
             *mkqlResult->MutableType()->MutableList()->MutableItem(),
             ColumnOrder);
 
-        for(auto& row: Rows) {
+        Rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
             ExportValueToProto(
-                MkqlItemType, row, *mkqlResult->MutableValue()->AddList(),
+                MkqlItemType, value, *mkqlResult->MutableValue()->AddList(),
                 ColumnOrder);
-        }
-
+        });
     } else {
-        YQL_ENSURE(Rows.size() == 1, "Actual buffer size: " << Rows.size());
+        YQL_ENSURE(Rows.RowCount() == 1, "Actual buffer size: " << Rows.RowCount());
         ExportTypeToProto(MkqlItemType, *mkqlResult->MutableType());
-        ExportValueToProto(MkqlItemType, Rows[0], *mkqlResult->MutableValue());
+        ExportValueToProto(MkqlItemType, *Rows.Head(), *mkqlResult->MutableValue());
     }
 }
 

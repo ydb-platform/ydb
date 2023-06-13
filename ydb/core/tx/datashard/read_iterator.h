@@ -64,8 +64,14 @@ struct TReadIteratorState {
     };
 
 public:
-    TReadIteratorState(const TActorId& sessionId, bool isHeadRead, TMonotonic ts, NLWTrace::TOrbit&& orbit = {})
-        : IsHeadRead(isHeadRead)
+    TReadIteratorState(
+            const TReadIteratorId& readId, const TPathId& pathId,
+            const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
+            TMonotonic ts, NLWTrace::TOrbit&& orbit = {})
+        : ReadId(readId.ReadId)
+        , PathId(pathId)
+        , ReadVersion(readVersion)
+        , IsHeadRead(isHeadRead)
         , SessionId(sessionId)
         , StartTs(ts)
         , Orbit(std::move(orbit))
@@ -154,11 +160,11 @@ public:
 
     // Data from original request //
 
-    ui64 ReadId = 0;
+    ui64 ReadId;
     TPathId PathId;
     std::vector<NTable::TTag> Columns;
-    TRowVersion ReadVersion = TRowVersion::Max();
-    bool IsHeadRead = false;
+    TRowVersion ReadVersion;
+    bool IsHeadRead;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
     TLockInfo::TPtr Lock;

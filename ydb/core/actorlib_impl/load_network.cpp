@@ -90,10 +90,10 @@ namespace IC_Load {
                            const NKikimr::TAppData* appData,
                            ui32 totalNodesCount)
     {
-        auto actor = new TLoadNetwork(setup->NodeId, totalNodesCount);
+        auto actor = std::make_unique<TLoadNetwork>(setup->NodeId, totalNodesCount);
         setup->LocalServices.emplace_back(
             GetLoadNetworkActorID(setup->NodeId),
-            NActors::TActorSetupCmd(actor,
+            NActors::TActorSetupCmd(std::move(actor),
                                     NActors::TMailboxType::Simple,
                                     appData->UserPoolId));
     }

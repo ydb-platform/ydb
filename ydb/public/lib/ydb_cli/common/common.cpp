@@ -90,21 +90,6 @@ TString ReadFromFile(TString& filePath, const TString& fileName, bool allowEmpty
     }
 }
 
-size_t TermWidth() {
-#if defined(_win32_)
-    CONSOLE_SCREEN_BUFFER_INFO screen_buf_info;
-    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &screen_buf_info)) {
-        return screen_buf_info.srWindow.Right - screen_buf_info.srWindow.Left + 1;
-    }
-#elif defined(_unix_)
-    struct winsize size;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) != -1) {
-        return size.ws_col;
-    }
-#endif
-    return Max<size_t>();
-}
-
 TString InputPassword() {
     // Disable echoing characters and enable per-symbol input handling
 #if defined(_unix_)

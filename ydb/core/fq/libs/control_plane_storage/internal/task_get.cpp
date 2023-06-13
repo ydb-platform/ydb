@@ -491,6 +491,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             *newTask->mutable_result_set_meta() = task.Query.result_set_meta();
             newTask->set_scope(task.Scope);
             *newTask->mutable_resources() = task.Internal.resources();
+
+            newTask->set_execution_id(task.Internal.execution_id());
+            newTask->set_operation_id(task.Internal.operation_id());
         }
 
         return result;

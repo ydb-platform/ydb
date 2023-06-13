@@ -17,6 +17,7 @@ private:
     mutable std::optional<TFeatures> Features;
 protected:
     TReadMetadata::TConstPtr ReadMetadata;
+    virtual TString DoDebugString() const = 0;
     virtual void DoFill(TGranulesFillingContext& context) = 0;
     virtual bool DoWakeup(const TGranule& /*granule*/, TGranulesFillingContext& /*context*/) {
         return true;
@@ -76,6 +77,10 @@ public:
 
     bool Wakeup(const TGranule& granule, TGranulesFillingContext& context) {
         return DoWakeup(granule, context);
+    }
+
+    TString DebugString() const {
+        return DoDebugString();
     }
 };
 

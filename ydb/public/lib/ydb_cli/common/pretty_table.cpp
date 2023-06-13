@@ -5,6 +5,8 @@
 #include <util/generic/xrange.h>
 #include <util/stream/format.h>
 
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -143,7 +145,9 @@ TVector<size_t> TPrettyTable::CalcWidths() const {
     }
 
     // adjust
-    const size_t maxWidth = Max(Config.Width, TermWidth()) - ((Columns * 3) + 1);
+    auto terminalWidth = GetTerminalWidth();
+    size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
+    const size_t maxWidth = Max(Config.Width, lineLength) - ((Columns * 3) + 1);
     size_t totalWidth = Accumulate(widths, (size_t)0);
     while (totalWidth > maxWidth) {
         auto it = MaxElement(widths.begin(), widths.end());

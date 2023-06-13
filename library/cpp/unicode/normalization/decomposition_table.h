@@ -25,4 +25,4 @@ namespace NUnicode {
         }
 
     }
-};    // namespace NUnicode
+}  // namespace NUnicode

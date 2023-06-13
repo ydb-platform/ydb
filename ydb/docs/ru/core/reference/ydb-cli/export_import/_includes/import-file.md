@@ -1,6 +1,8 @@
 # Импорт данных из файла в существующую таблицу
 
-С помощью подкоманды `import file` вы можете импортировать данные из [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %}- или [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %}-файлов в существующую таблицу.
+С помощью подкоманды `import file` вы можете импортировать данные из файлов форматов [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %}, [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, [Parquet](https://parquet.apache.org/docs/overview/), [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} в существующую таблицу.
+
+При импорте файл читается пакетами, размер которых задан параметром `--batch-bytes`. Каждый пакет записывается в БД отдельным запросом. Запросы выполняются асинхронно. Когда число выполняемых запросов достигает указанного в `--max-in-flight`, чтение из файла приостанавливается. Вы можете импортировать данные из нескольких файлов одной командой. В этом случае данные из них будут читаться одновременно.
 
 Импорт выполняется методом `BulkUpsert`, который обеспечивает высокоэффективную пакетную вставку большого количества строк без гарантий атомарности. Запись данных разбивается на несколько независимых транзакций, каждая их которых затрагивает единственную партицию, с параллельным исполнением. В случае успеха гарантируется вставка всех данных.
 
@@ -11,7 +13,7 @@
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options] <input files>
+{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options] <input files...>
 ```
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
@@ -76,17 +78,19 @@ ydb import file csv -p series series.csv
 
 ### Импортировать несколько файлов {#multiple-files}
 
-Файлы содержат данные без дополнительной информации. В качестве разделителя используется символ `,`:
+Следующие файлы файлы содержат данные в формате CSV без дополнительной информации:
 
-series1.csv:
-```text
-1,Айтишники,The IT Crowd is a British sitcom.,13182
-```
+* series1.csv:
 
-series2.csv:
-```text
-2,Silicon Valley,Silicon Valley is an American comedy television series.,16166
-```
+  ```text
+  1,Айтишники,The IT Crowd is a British sitcom.,13182
+  ```
+
+* series2.csv:
+
+  ```text
+  2,Silicon Valley,Silicon Valley is an American comedy television series.,16166
+  ```
 
 Чтобы импортировать такие файлы, выполните команду:
 

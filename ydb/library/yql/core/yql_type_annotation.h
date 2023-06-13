@@ -230,6 +230,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool YsonCastToString = true;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
+    bool PgEmitAggApply = false;
     IArrowResolver::TPtr ArrowResolver;
 
     // compatibility with v0 or raw s-expression code

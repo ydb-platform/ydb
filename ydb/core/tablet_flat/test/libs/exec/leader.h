@@ -47,7 +47,7 @@ namespace NFake {
         void Inbox(TAutoPtr<::NActors::IEventHandle> &eh)
         {
             if (auto *fire = eh->CastAsLocal<NFake::TEvFire>()) {
-                DoFire(fire->Level, fire->Alias, fire->Cmd);
+                DoFire(fire->Level, fire->Alias, std::move(fire->Cmd));
             } else if (eh->CastAsLocal<TEvents::TEvGone>()) {
                 HandleGone(eh->Sender);
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
@@ -94,10 +94,10 @@ namespace NFake {
             }
         }
 
-        void DoFire(ui32 level, const TActorId &alias, TActorSetupCmd &cmd)
+        void DoFire(ui32 level, const TActorId &alias, TActorSetupCmd cmd)
         {
             if (level <= Edge && Levels[level].Alive) {
-                auto actor = Register(cmd.Actor, cmd.MailboxType, 0);
+                auto actor = Register(cmd.Actor.release(), cmd.MailboxType, 0);
                 auto result = Childs.emplace(actor, level);
 
                 Y_VERIFY(result.second, "Cannot register same actor twice");

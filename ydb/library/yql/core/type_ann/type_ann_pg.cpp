@@ -1056,21 +1056,7 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
         // convert lambda with tuple type into multi lambda
         auto args = input->ChildrenList();
         if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-            Y_ENSURE(lambda->ChildrenSize() == 2);
-            auto tupleTypeSize = lambda->GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
-            auto newArg = ctx.Expr.NewArgument(lambda->Pos(), "row");
-            auto newBody = ctx.Expr.ReplaceNode(lambda->TailPtr(), lambda->Head().Head(), newArg);
-            TExprNode::TListType bodies;
-            for (ui32 i = 0; i < tupleTypeSize; ++i) {
-                bodies.push_back(ctx.Expr.Builder(lambda->Pos())
-                    .Callable("Nth")
-                        .Add(0, newBody)
-                        .Atom(1, ToString(i))
-                    .Seal()
-                    .Build());
-            }
-
-            args[2] = ctx.Expr.NewLambda(lambda->Pos(), ctx.Expr.NewArguments(lambda->Pos(), { newArg }), std::move(bodies));
+            args[2] = ConvertToMultiLambda(lambda, ctx.Expr);
         }
 
         output = ctx.Expr.NewCallable(input->Pos(), input->Content().substr(0, input->Content().Size() - 5), std::move(args));

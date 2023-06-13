@@ -3,7 +3,6 @@
 #include "defs.h"
 #include "config.h"
 #include "downtime.h"
-#include "erasure_checkers.h"
 #include "node_checkers.h"
 #include "services.h"
 
@@ -15,7 +14,6 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
-#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -473,8 +471,6 @@ struct TBSGroupInfo {
     ui32 GroupId = 0;
     TErasureType Erasure;
     TSet<TVDiskID> VDisks;
-
-    TSimpleSharedPtr<IStorageGroupChecker> GroupChecker;
 };
 
 /**
@@ -600,32 +596,6 @@ public:
     }
 };
 
-class TLockDiskOperation : public TOperationBase {
-private:
-    TVDiskID VDiskId;
-
-private:
-    TSimpleSharedPtr<IStorageGroupChecker> StorageGroupChecker;
-
-public:
-    TLockDiskOperation(const TVDiskID& vdiskId, TSimpleSharedPtr<IStorageGroupChecker> checker)
-        : TOperationBase(OPERATION_TYPE_LOCK_DISK)
-        , VDiskId(vdiskId)
-        , StorageGroupChecker(checker)
-    {
-    }
-
-    void Do() override final {
-        StorageGroupChecker->LockVDisk(VDiskId);
-    }
-
-    void Undo() override final {
-        StorageGroupChecker->UnlockVDisk(VDiskId);
-    }
-
-
-};
-
 class TLogRollbackPoint : public TOperationBase {
 public:
     TLogRollbackPoint() : TOperationBase(OPERATION_TYPE_ROLLBACK_POINT)
@@ -652,10 +622,6 @@ public:
 
     void AddNodeLockOperation(ui32 nodeId, TSimpleSharedPtr<INodesChecker> nodesState) {
         Log.emplace_back(new TLockNodeOperation(nodeId, nodesState))->Do();
-    }
-
-    void AddLockVDiskOperation(const TVDiskID& vdiskId, TSimpleSharedPtr<IStorageGroupChecker> checker) {
-        Log.emplace_back(new TLockDiskOperation(vdiskId, checker))->Do();
     }
 
     void RollbackOperations() {

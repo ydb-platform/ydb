@@ -111,7 +111,7 @@ public:
             if (!From && !item.From) {
                 return false;
             } else if (From && item.From) {
-                return From->Compare(*item.From) < 0;
+                return From->Compare(*item.From) == std::partial_ordering::less;
             } else if (!From) {
                 return true;
             } else {

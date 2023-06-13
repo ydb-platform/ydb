@@ -275,6 +275,7 @@ message TKqpReadRangesSourceSettings {
     optional uint32 LockNodeId = 14;
 
     optional uint64 MaxInFlightShards = 16;
+    optional bool UseFollowers = 17 [default = false];
 }
 
 message TKqpTaskInfo {

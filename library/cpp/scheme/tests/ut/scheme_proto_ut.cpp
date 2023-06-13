@@ -217,4 +217,4 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
             UNIT_ASSERT_C(NProtoBuf::IsEqual(m, proto, &differentPath), differentPath);
         }
     }
-};
+}

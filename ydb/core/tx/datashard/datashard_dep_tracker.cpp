@@ -140,6 +140,9 @@ void TDependencyTracker::FlushImmediateWrites() noexcept {
 }
 
 const TDependencyTracker::TDependencyTrackingLogic& TDependencyTracker::GetTrackingLogic() const noexcept {
+    if (Self->IsFollower())
+        return FollowerLogic;
+
     if (Self->IsMvccEnabled())
         return MvccLogic;
 
@@ -1072,6 +1075,14 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
             }
         }
     }
+}
+
+void TDependencyTracker::TFollowerDependencyTrackingLogic::AddOperation(const TOperation::TPtr&) const noexcept {
+    // all follower operations are readonly and don't conflict
+}
+
+void TDependencyTracker::TFollowerDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr&) const noexcept {
+    // all follower operations are readonly and don't conflict
 }
 
 } // namespace NDataShard

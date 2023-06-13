@@ -1223,12 +1223,17 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
     YamlConfig = ev->Get()->YamlConfig;
-    VolatileYamlConfigs = ev->Get()->VolatileYamlConfigs;
+    VolatileYamlConfigs.clear();
 
     YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
     VolatileYamlConfigHashes.clear();
-    for (auto& [id, config] : VolatileYamlConfigs) {
-        VolatileYamlConfigHashes[id] = THash<TString>()(config);
+    for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
+        auto doc = NFyaml::TDocument::Parse(config);
+        // we strip it to provide old format for config dispatcher
+        auto node = doc.Root().Map().at("selector_config");
+        TString strippedConfig = "\n" + config.substr(node.BeginMark().InputPos, node.EndMark().InputPos - node.BeginMark().InputPos) + "\n";
+        VolatileYamlConfigs[id] = strippedConfig;
+        VolatileYamlConfigHashes[id] = THash<TString>()(strippedConfig);
     }
 
     for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {

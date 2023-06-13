@@ -108,8 +108,8 @@ namespace NActors {
             const auto* app0 = App0.Get();
             if (!SingleSysEnv) {
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> profilerCounters = NKikimr::GetServiceCounters(node->DynamicCounters, "utils");
-                TActorSetupCmd profilerSetup(CreateProfilerActor(profilerCounters, "."), TMailboxType::Simple, 0);
-                node->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(FirstNodeId + nodeIndex), profilerSetup));
+                TTestActorSetupCmd profilerSetup{CreateProfilerActor(profilerCounters, "."), TMailboxType::Simple, 0};
+                node->LocalServices.push_back(std::pair<TActorId, TTestActorSetupCmd>(MakeProfilerID(FirstNodeId + nodeIndex), profilerSetup));
             }
 
             if (!UseRealThreads) {

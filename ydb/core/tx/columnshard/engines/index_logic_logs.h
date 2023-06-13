@@ -37,7 +37,7 @@ public:
             for (auto&& i : indexChanges->Blobs) {
                 readBytes += i.first.Size;
             }
-            Counters.CompactionInputSize->Collect(readBytes);
+            Counters.CompactionInputSize(readBytes);
         }
         const TInstant start = TInstant::Now();
         TConclusion<std::vector<TString>> result = DoApply(indexChanges);

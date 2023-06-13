@@ -286,7 +286,7 @@ private:
     void AsyncInputPush(
         ui64 cookie,
         ui64 index,
-        NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
+        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
         i64 space,
         bool finish) override
     {
@@ -385,7 +385,7 @@ private:
         auto guard = TaskRunner->BindAllocator();
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
 
-        NKikimr::NMiniKQL::TUnboxedValueVector batch;
+        NKikimr::NMiniKQL::TUnboxedValueBatch batch(sink->GetOutputType());
         NDqProto::TCheckpoint checkpoint;
         TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
         i64 size = 0;

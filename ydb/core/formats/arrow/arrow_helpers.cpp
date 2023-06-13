@@ -207,21 +207,22 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
 
     for (auto& field : dstSchema->fields()) {
         columns.push_back(srcBatch->GetColumnByName(field->name()));
-        Y_VERIFY(columns.back());
-        if (!columns.back()->type()->Equals(field->type())) {
-            columns.back() = {};
-        }
-
         if (!columns.back()) {
             if (addNotExisted) {
                 auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows());
                 if (!result.ok()) {
-                    return {};
+                    return nullptr;
                 }
                 columns.back() = *result;
             } else {
-                return {};
+                return nullptr;
             }
+        }
+
+        Y_VERIFY(columns.back());
+        if (!columns.back()->type()->Equals(field->type())) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())("column_type", field->type()->ToString());
+            return nullptr;
         }
     }
 

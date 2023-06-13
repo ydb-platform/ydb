@@ -127,4 +127,4 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         }
     }
 #endif
-};
+}

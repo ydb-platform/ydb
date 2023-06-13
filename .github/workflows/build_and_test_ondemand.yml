@@ -94,6 +94,7 @@ jobs:
       uses: ./.github/actions/build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
+        ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.rc_auth, vars.REMOTE_CACHE_URL) || ''}}
     - name: Run tests
       uses: ./.github/actions/test
       with:

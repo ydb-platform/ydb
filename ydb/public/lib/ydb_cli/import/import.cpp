@@ -10,6 +10,8 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
 
@@ -82,15 +84,6 @@ FHANDLE GetStdinFileno() {
 #elif defined(_unix_)
     return STDIN_FILENO;
 #endif
-}
-
-bool IsStdoutInteractive() {
-#if defined(_win32_)
-    return _isatty(_fileno(stdout));
-#elif defined(_unix_)
-    return isatty(fileno(stdout));
-#endif
-    return true;
 }
 
 class TMaxInflightGetter {
@@ -277,11 +270,12 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     std::mutex progressWriteLock;
     std::atomic<ui64> globalProgress{0};
 
+    TProgressBar progressBar(100);
+
     auto writeProgress = [&]() {
         ui64 globalProgressValue = globalProgress.load();
         std::lock_guard<std::mutex> lock(progressWriteLock);
-        Cout << "Progress " << (globalProgressValue / filePathsSize) << '%' << "\r";
-        Cout.Flush();
+        progressBar.SetProcess(globalProgressValue / filePathsSize);
     };
 
     auto start = TInstant::Now();

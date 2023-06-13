@@ -37,11 +37,10 @@ bool TPKSortingWithLimit::DoWakeup(const TGranule& granule, TGranulesFillingCont
             OnBatchFilterInitialized(*b, context);
             batches.pop_front();
             if (batches.size()) {
-                auto nextBatchControlPoint = batches.front()->GetFirstPK(ReadMetadata->IsDescSorted(), ReadMetadata->GetIndexInfo());
-                if (!nextBatchControlPoint) {
+                if (!batches.front().GetFrom()) {
                     continue;
                 }
-                MergeStream.PutControlPoint(nextBatchControlPoint);
+                MergeStream.PutControlPoint(batches.front().GetFrom());
             }
             while (CurrentItemsLimit && MergeStream.DrainCurrent()) {
                 --CurrentItemsLimit;

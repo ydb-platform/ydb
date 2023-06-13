@@ -164,8 +164,15 @@ void ValidateVolatileConfig(NFyaml::TDocument& doc);
 
 /**
  * Appends volatile configs to the end of selectors list
+ * **Important**: Document should be a list with selectors
  */
 void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatileConfig);
+
+/**
+ * Appends volatile configs to the end of selectors list
+ * **Important**: Node should be a list with selectors
+ */
+void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TNodeRef& volatileConfig);
 
 /**
  * Parses config version
@@ -204,8 +211,42 @@ struct TMetadata {
 TMetadata GetMetadata(const TString& config);
 
 /**
+ * Represents volatile config metadata
+ */
+struct TVolatileMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+    std::optional<ui64> Id;
+};
+
+/**
+ * Parses volatile config metadata
+ */
+TVolatileMetadata GetVolatileMetadata(const TString& config);
+
+/**
  * Replaces metadata in config
  */
 TString ReplaceMetadata(const TString& config, const TMetadata& metadata);
+
+/**
+ * Replaces volatile metadata in config
+ */
+TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata);
+
+/**
+ * Checks whether string is volatile config or not
+ */
+bool IsVolatileConfig(const TString& config);
+
+/**
+ * Checks whether string is main config or not
+ */
+bool IsMainConfig(const TString& config);
+
+/**
+ * Strips metadata from config
+ */
+TString StripMetadata(const TString& config);
 
 } // namespace NYamlConfig

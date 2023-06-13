@@ -41,7 +41,6 @@ namespace NActors {
 
         // Functions converts EComponent id to string
         using EComponentToStringFunc = std::function<const TString&(EComponent)>;
-        ;
 
         // Log settings
         struct TComponentSettings {

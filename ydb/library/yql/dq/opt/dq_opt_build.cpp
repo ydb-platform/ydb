@@ -384,14 +384,7 @@ public:
     }
 };
 
-bool CanRebuildForWideChannelOutput(const TDqOutput& output) {
-    ui32 index = FromString<ui32>(output.Index().Value());
-    if (index != 0) {
-        // stage has multiple outputs
-        return false;
-    }
-
-    auto stage = output.Stage().Cast<TDqPhyStage>();
+bool CanRebuildForWideChannelOutput(const TDqPhyStage& stage) {
     auto stageSettings = TDqStageSettings::Parse(stage);
     if (stageSettings.WideChannels) {
         return false;
@@ -402,7 +395,21 @@ bool CanRebuildForWideChannelOutput(const TDqOutput& output) {
         return false;
     }
 
+    if (stageOutputType->GetItems()[0]->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
+        return false;
+    }
+
     return true;
+}
+
+bool CanRebuildForWideChannelOutput(const TDqOutput& output) {
+    ui32 index = FromString<ui32>(output.Index().Value());
+    if (index != 0) {
+        // stage has multiple outputs
+        return false;
+    }
+
+    return CanRebuildForWideChannelOutput(output.Stage().Cast<TDqPhyStage>());
 }
 
 bool CanRebuildForWideChannelOutput(const TDqConnection& conn) {
@@ -416,18 +423,7 @@ bool CanRebuildForWideChannelOutput(const TDqConnection& conn) {
         return false;
     }
 
-    auto stage = conn.Output().Stage().Cast<TDqPhyStage>();
-    auto stageSettings = TDqStageSettings::Parse(stage);
-    if (stageSettings.WideChannels) {
-        return false;
-    }
-
-    auto stageOutputType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
-    if (stageOutputType->GetSize() != 1 || stage.Outputs().IsValid()) {
-        return false;
-    }
-
-    return true;
+    return CanRebuildForWideChannelOutput(conn.Output().Stage().Cast<TDqPhyStage>());
 }
 
 const TStructExprType* GetStageOutputItemType(const TDqPhyStage& stage) {

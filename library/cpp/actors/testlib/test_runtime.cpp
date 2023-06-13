@@ -751,7 +751,7 @@ namespace NActors {
         VERBOSE = verbose;
     }
 
-    void TTestActorRuntimeBase::AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex) {
+    void TTestActorRuntimeBase::AddLocalService(const TActorId& actorId, TActorSetupCmd cmd, ui32 nodeIndex) {
         Y_VERIFY(!IsInitialized);
         Y_VERIFY(nodeIndex < NodeCount);
         auto node = Nodes[nodeIndex + FirstNodeId];
@@ -760,8 +760,8 @@ namespace NActors {
             Nodes[nodeIndex + FirstNodeId] = node;
         }
 
-        node->LocalServicesActors[actorId] = cmd.Actor;
-        node->LocalServices.push_back(std::make_pair(actorId, cmd));
+        node->LocalServicesActors[actorId] = cmd.Actor.get();
+        node->LocalServices.push_back(std::make_pair(actorId, TTestActorSetupCmd(std::move(cmd))));
     }
 
     void TTestActorRuntimeBase::InitNodes() {
@@ -1684,7 +1684,9 @@ namespace NActors {
 
         const auto& interconnectCounters = GetCountersForComponent(node->DynamicCounters, "interconnect");
 
-        setup->LocalServices = node->LocalServices;
+        for (const auto& cmd : node->LocalServices) {
+            setup->LocalServices.emplace_back(cmd.first, TActorSetupCmd(cmd.second.Actor, cmd.second.MailboxType, cmd.second.PoolId));
+        }
         setup->Interconnect.ProxyActors.resize(FirstNodeId + NodeCount);
         const TActorId nameserviceId = GetNameserviceActorId();
 
@@ -1734,8 +1736,8 @@ namespace NActors {
             NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(node->LogSettings,
                 logBackend, GetCountersForComponent(node->DynamicCounters, "utils"));
             NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, node->GetLoggerPoolId());
-            std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(node->LogSettings->LoggerActorId, loggerActorCmd);
-            setup->LocalServices.push_back(loggerActorPair);
+            std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(node->LogSettings->LoggerActorId, std::move(loggerActorCmd));
+            setup->LocalServices.push_back(std::move(loggerActorPair));
         }
 
         return THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));

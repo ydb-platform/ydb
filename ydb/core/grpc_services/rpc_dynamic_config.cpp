@@ -13,8 +13,11 @@ using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
 
-using TEvApplyConfigRequest = TGrpcRequestOperationCall<DynamicConfig::ApplyConfigRequest,
-    DynamicConfig::ApplyConfigResponse>;
+using TEvSetConfigRequest = TGrpcRequestOperationCall<DynamicConfig::SetConfigRequest,
+    DynamicConfig::SetConfigResponse>;
+
+using TEvReplaceConfigRequest = TGrpcRequestOperationCall<DynamicConfig::ReplaceConfigRequest,
+    DynamicConfig::ReplaceConfigResponse>;
 
 using TEvDropConfigRequest = TGrpcRequestOperationCall<DynamicConfig::DropConfigRequest,
     DynamicConfig::DropConfigResponse>;
@@ -24,6 +27,12 @@ using TEvAddVolatileConfigRequest = TGrpcRequestOperationCall<DynamicConfig::Add
 
 using TEvRemoveVolatileConfigRequest = TGrpcRequestOperationCall<DynamicConfig::RemoveVolatileConfigRequest,
     DynamicConfig::RemoveVolatileConfigResponse>;
+
+using TEvGetNodeLabelsRequest = TGrpcRequestOperationCall<DynamicConfig::GetNodeLabelsRequest,
+    DynamicConfig::GetNodeLabelsResponse>;
+
+using TEvGetMetadataRequest = TGrpcRequestOperationCall<DynamicConfig::GetMetadataRequest,
+    DynamicConfig::GetMetadataResponse>;
 
 using TEvGetConfigRequest = TGrpcRequestOperationCall<DynamicConfig::GetConfigRequest,
     DynamicConfig::GetConfigResponse>;
@@ -85,32 +94,64 @@ private:
             request->Record.SetUserToken(this->Request_->GetSerializedToken());
 
             NTabletPipe::SendData(IActor::SelfId(), ConsolePipe, request.Release());
+        } else if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            return TBase::Reply(response.operation().status(), response.operation().issues(), TActivationContext::AsActorContext());
         } else {
             return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, response, TActivationContext::AsActorContext());
         }
     }
 
+    void Handle(TEvConsole::TEvGetAllMetadataResponse::TPtr& ev)
+    {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
     void Handle(TEvConsole::TEvGetAllConfigsResponse::TPtr& ev)
     {
-        HandleWithOperationParams(ev);
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
     }
 
     void Handle(TEvConsole::TEvResolveConfigResponse::TPtr& ev)
     {
-        HandleWithOperationParams(ev);
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
     }
 
     void Handle(TEvConsole::TEvResolveAllConfigResponse::TPtr& ev)
     {
-        HandleWithOperationParams(ev);
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvGetNodeLabelsResponse::TPtr& ev) {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvUnauthorized::TPtr&) {
+        ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
+        auto issue = issues.Add();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message("User must have administrator rights");
+
+        return TBase::Reply(Ydb::StatusIds::UNAUTHORIZED, issues, TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvDisabled::TPtr&) {
+        ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
+        auto issue = issues.Add();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message("Feature is disabled");
+
+        return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvGenericError::TPtr& ev) {
+        return TBase::Reply(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetIssues(), TActivationContext::AsActorContext());
     }
 
     template<typename T>
     void Handle(T& ev)
     {
-        auto& response = ev->Get()->Record.GetResponse();
-        TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), this->Request_);
-        PassAway();
+        Y_UNUSED(ev);
+        TBase::Reply(Ydb::StatusIds::SUCCESS, TActivationContext::AsActorContext());
     }
 
     void Handle(TEvConsole::TEvOperationCompletionNotification::TPtr& ev)
@@ -148,6 +189,9 @@ private:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvConsole::TEvOperationCompletionNotification, Handle);
             hFunc(TEvConsole::TEvNotifyOperationCompletionResponse, Handle);
+            hFunc(TEvConsole::TEvUnauthorized, Handle);
+            hFunc(TEvConsole::TEvDisabled, Handle);
+            hFunc(TEvConsole::TEvGenericError, Handle);
             default: TBase::StateFuncBase(ev);
         }
     }
@@ -161,11 +205,18 @@ private:
     }
 };
 
-void DoApplyConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+void DoSetConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
     TActivationContext::AsActorContext().Register(
-        new TDynamicConfigRPC<TEvApplyConfigRequest,
-                    TEvConsole::TEvApplyConfigRequest,
-                    TEvConsole::TEvApplyConfigResponse>(p.release()));
+        new TDynamicConfigRPC<TEvSetConfigRequest,
+                    TEvConsole::TEvSetYamlConfigRequest,
+                    TEvConsole::TEvSetYamlConfigResponse>(p.release()));
+}
+
+void DoReplaceConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvReplaceConfigRequest,
+                    TEvConsole::TEvReplaceYamlConfigRequest,
+                    TEvConsole::TEvReplaceYamlConfigResponse>(p.release()));
 }
 
 void DoDropConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
@@ -187,6 +238,20 @@ void DoRemoveVolatileConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFaci
         new TDynamicConfigRPC<TEvRemoveVolatileConfigRequest,
                     TEvConsole::TEvRemoveVolatileConfigRequest,
                     TEvConsole::TEvRemoveVolatileConfigResponse>(p.release()));
+}
+
+void DoGetNodeLabelsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvGetNodeLabelsRequest,
+                    TEvConsole::TEvGetNodeLabelsRequest,
+                    TEvConsole::TEvGetNodeLabelsResponse>(p.release()));
+}
+
+void DoGetMetadataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvGetMetadataRequest,
+                    TEvConsole::TEvGetAllMetadataRequest,
+                    TEvConsole::TEvGetAllMetadataResponse>(p.release()));
 }
 
 void DoGetConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {

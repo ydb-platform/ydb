@@ -13,6 +13,8 @@
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/testlib/controllers/abstract.h>
+#include <ydb/core/tx/columnshard/testlib/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/datashard/datashard_ut_common.h>
@@ -1349,10 +1351,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR
                     (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR
                     (`timestamp` > CAST(1002000 AS Timestamp))
-                ORDER BY `timestamp`;
+                ORDER BY `timestamp`
+                LIMIT 1000;
         )");
 
+        auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT(csController->HasPKSortingOnly());
+
         TInstant tsPrev = TInstant::MicroSeconds(1000000);
 
         std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099, 1000999, 1001000 };
@@ -1393,7 +1399,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 1000;
         )");
 
+        auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT(csController->HasPKSortingOnly());
+
         TInstant tsPrev = TInstant::MicroSeconds(2000000);
         std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099,
             1000999, 1001000,

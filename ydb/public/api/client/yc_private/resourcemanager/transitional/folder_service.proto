@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.resourcemanager.v1.transitional;
+
+import "google/api/annotations.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/resourcemanager/folder.proto";
+
+service FolderService {
+  // TODO no pagination
+  rpc List (ListFoldersRequest) returns (ListFoldersResponse) {
+    option (google.api.http) = { get: "/yrm/v1/folders" };
+  }
+
+  rpc GetStatus (GetFolderStatusRequest) returns (GetFolderStatusResponse) {
+    option (google.api.http) = { get: "/yrm/v1/folder/{folder_id}/status" };
+  }
+
+  rpc SetStatus (SetFolderStatusRequest) returns (SetFolderStatusResponse) {
+    option (google.api.http) = { post: "/yrm/v1/folder/{folder_id}/status" body: "*" };
+  }
+
+  rpc Delete (DeleteFolderRequest) returns (ydb.yc.priv.operation.Operation) {
+    option (google.api.http) = { delete: "/yrm/v1/folders/{folder_id}" };
+  }
+}
+
+message ListFoldersRequest {
+  string id = 1; // TODO repeated ids
+  string name = 2;
+  string cloud_id = 3;
+}
+
+message ListFoldersResponse {
+  repeated yandex.cloud.priv.resourcemanager.v1.Folder result = 1;
+}
+
+message GetFolderStatusRequest {
+  string folder_id = 1;
+}
+
+message GetFolderStatusResponse {
+  string status = 1;
+}
+
+message SetFolderStatusRequest {
+  string folder_id = 1;
+  string status = 2;
+}
+
+message SetFolderStatusResponse {
+  string result = 1;
+}
+
+message DeleteFolderRequest {
+  string folder_id = 1;
+}
+
+message DeleteFolderMetadata {
+  string folder_id = 1;
+}

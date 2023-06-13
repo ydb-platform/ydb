@@ -164,6 +164,28 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
 
         assertValues();
     }
+
+    Y_UNIT_TEST(Commit) {
+        TTestServer server;
+
+        struct TSelectQuery : public TTestQueryActorBase {
+            void OnRunQuery() override {
+                RunDataQuery("SELECT * FROM TestTable", nullptr, TTxControl::BeginTx());
+                SetQueryResultHandler(&TSelectQuery::MyResultHandler);
+            }
+
+            void MyResultHandler() {
+                CommitTransaction(); // Finish will be after successful commit
+            }
+
+            void OnQueryResult() override {
+                UNIT_ASSERT(false);
+            }
+        };
+
+        auto result = server.RunQueryActor<TSelectQuery>();
+        UNIT_ASSERT_VALUES_EQUAL(result.StatusCode, Ydb::StatusIds::SUCCESS);
+    }
 }
 
 } // namespace NKikimr

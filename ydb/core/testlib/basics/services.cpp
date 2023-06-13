@@ -66,7 +66,7 @@ namespace NPDisk {
             TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex)
+    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers)
     {
         TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
         leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
@@ -76,6 +76,7 @@ namespace NPDisk {
         followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
         followerPipeConfig->PipeConfig.AllowFollower = true;
         followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
+        followerPipeConfig->PipeConfig.ForceFollower = forceFollowers;
 
         runtime.AddLocalService(MakePipePeNodeCacheID(false),
             TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
@@ -310,7 +311,7 @@ namespace NPDisk {
     }
 
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
-                            NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches)
+                            NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches, bool forceFollowers)
     {
         runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
 
@@ -336,7 +337,7 @@ namespace NPDisk {
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);
-            SetupTabletPipePeNodeCaches(runtime, nodeIndex);
+            SetupTabletPipePeNodeCaches(runtime, nodeIndex, forceFollowers);
             SetupResourceBroker(runtime, nodeIndex);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);

@@ -15,13 +15,24 @@ using namespace NYdb::NTable;
 
 constexpr size_t REPEATS = NSan::PlainOrUnderSanitizer(3, 1);
 
+void ExecuteQuery(TTableClient& db, TSession& session, NYdbWorkload::TQueryInfo& queryInfo) {
+    if (queryInfo.UseReadRows) {
+        auto selectResult = db.ReadRows(queryInfo.TablePath, std::move(*queryInfo.KeyToRead))
+            .GetValueSync();
+    } else {
+        auto result = session.ExecuteDataQuery(TString(queryInfo.Query),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), queryInfo.Params).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
+            || result.GetStatus() == NYdb::EStatus::ABORTED, result.GetIssues().ToString()
+                << " status: " << int(result.GetStatus()));
+    }
+}
+
 void Test(NYdbWorkload::EWorkload workloadType) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
     auto kikimr = TKikimrRunner{settings};
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
-
-
 
     std::unique_ptr<NYdbWorkload::TWorkloadParams> params;
     if (workloadType == NYdbWorkload::EWorkload::STOCK) {
@@ -65,12 +76,8 @@ void Test(NYdbWorkload::EWorkload workloadType) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             for (size_t i = 0; i < REPEATS; ++i) {
                 auto queriesList = workloadQueryGen->GetWorkload(type);
-                for (const auto& queryInfo : queriesList) {
-                    auto result = session.ExecuteDataQuery(TString(queryInfo.Query),
-                        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), queryInfo.Params).ExtractValueSync();
-                    UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
-                        || result.GetStatus() == NYdb::EStatus::ABORTED, result.GetIssues().ToString()
-                            << " status: " << int(result.GetStatus()));
+                for (auto& queryInfo : queriesList) {
+                    ExecuteQuery(db, session, queryInfo);
                 }
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);

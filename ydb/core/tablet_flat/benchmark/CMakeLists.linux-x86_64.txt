@@ -13,7 +13,7 @@ target_link_libraries(benchmark PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
-  cpp-testing-gbenchmark_main
+  cpp-testing-gbenchmark
   library-cpp-resource
   ydb-core-scheme
   test-libs-exec

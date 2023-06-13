@@ -27,7 +27,7 @@ class TSession::TImpl : public TEndpointObj {
 #ifdef YDB_IMPL_TABLE_CLIENT_SESSION_UT
 public:
 #endif
-    TImpl(const TString& sessionId, const TString& endpoint, bool useQueryCache, ui32 queryCacheSize);
+    TImpl(const TString& sessionId, const TString& endpoint, bool useQueryCache, ui32 queryCacheSize, bool isOwnedBySessionPool);
 public:
     enum EState {
         S_STANDALONE,
@@ -59,6 +59,7 @@ public:
     void MarkStandalone();
     void MarkActive();
     void MarkIdle();
+    bool IsOwnedBySessionPool() const;
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
     bool NeedUpdateActiveCounter() const;
@@ -100,6 +101,7 @@ private:
     // TODO: suboptimal because need lock for atomic change from interceptor
     // Rewrite with bit field
     bool NeedUpdateActiveCounter_;
+    const bool IsOwnedBySessionPool_;
 };
 
 } // namespace NTable

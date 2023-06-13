@@ -13,7 +13,7 @@ public:
     }
 
     TWriteActor(ui64 tabletId,
-                const NOlap::TIndexInfo& indexInfo,
+                const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                 const TActorId& dstActor,
                 TBlobBatch&& blobBatch,
                 bool blobGrouppingEnabled,
@@ -21,7 +21,7 @@ public:
                 TAutoPtr<TEvPrivate::TEvWriteIndex> writeIndexEv,
                 const TInstant& deadline)
         : TabletId(tabletId)
-        , IndexInfo(indexInfo)
+        , SnapshotSchema(snapshotSchema)
         , DstActor(dstActor)
         , BlobBatch(std::move(blobBatch))
         , BlobGrouppingEnabled(blobGrouppingEnabled)
@@ -29,6 +29,7 @@ public:
         , WriteIndexEv(writeIndexEv)
         , Deadline(deadline)
     {
+        Y_VERIFY(SnapshotSchema);
         Y_VERIFY(WriteEv || WriteIndexEv);
         Y_VERIFY(!WriteEv || !WriteIndexEv);
     }
@@ -118,7 +119,7 @@ public:
         std::shared_ptr<arrow::RecordBatch>& batch = WriteEv->WrittenBatch;
         {
             TCpuGuard guard(ResourceUsage);
-            batch = IndexInfo.PrepareForInsert(srcData, meta, strError);
+            batch = SnapshotSchema->PrepareForInsert(srcData, meta, strError);
         }
         if (!batch) {
             LOG_S_INFO("Bad data for writeId " << writeId << ", pathId " << pathId
@@ -275,7 +276,7 @@ public:
 
 private:
     ui64 TabletId;
-    NOlap::TIndexInfo IndexInfo;
+     NOlap::ISnapshotSchema::TPtr SnapshotSchema;
     TActorId DstActor;
     TBlobBatch BlobBatch;
     bool BlobGrouppingEnabled;
@@ -311,16 +312,16 @@ private:
 
 } // namespace
 
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                         TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline) {
-    return new TWriteActor(tabletId, indexTable, dstActor, std::move(blobBatch), blobGrouppingEnabled, ev, {}, deadline);
+    return new TWriteActor(tabletId, snapshotSchema, dstActor, std::move(blobBatch), blobGrouppingEnabled, ev, {}, deadline);
 }
 
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
                         TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline) {
-    return new TWriteActor(tabletId, indexTable, dstActor, std::move(blobBatch), blobGrouppingEnabled, {}, ev, deadline);
+    return new TWriteActor(tabletId, snapshotSchema, dstActor, std::move(blobBatch), blobGrouppingEnabled, {}, ev, deadline);
 }
 
 }

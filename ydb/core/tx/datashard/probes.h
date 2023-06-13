@@ -51,6 +51,10 @@
         GROUPS("DataShard"),                                                   \
         TYPES(),                                                               \
         NAMES())                                                               \
+    PROBE(ReadWaitProposeDelayers,                                             \
+        GROUPS("DataShard"),                                                   \
+        TYPES(),                                                               \
+        NAMES())                                                               \
     PROBE(ReadWaitSnapshot,                                                    \
         GROUPS("DataShard"),                                                   \
         TYPES(ui64, ui64),                                                     \

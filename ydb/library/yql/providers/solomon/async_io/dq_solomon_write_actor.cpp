@@ -151,12 +151,13 @@ public:
 
 public:
     void SendData(
-        NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
+        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
         i64,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-        SINK_LOG_T("Got " << batch.size() << " items to send. Checkpoint: " << checkpoint.Defined()
+        YQL_ENSURE(!batch.IsWide(), "Wide streams are not supported");
+        SINK_LOG_T("Got " << batch.RowCount() << " items to send. Checkpoint: " << checkpoint.Defined()
                    << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
                    << ". Checkpoint in progress: " << CheckpointInProgress.has_value());
 
@@ -165,13 +166,13 @@ public:
         }
 
         ui64 metricsCount = 0;
-        for (const auto& item : batch) {
+        batch.ForEachRow([&](const auto& value) {
             if (metricsCount + WriteParams.Shard.GetScheme().GetSensors().size() > MaxMetricsPerRequest) {
                 PushMetricsToBuffer(metricsCount);
             }
 
-            metricsCount += UserMetricsEncoder.Append(item);
-        }
+            metricsCount += UserMetricsEncoder.Append(value);
+        });
 
         if (metricsCount != 0) {
             PushMetricsToBuffer(metricsCount);

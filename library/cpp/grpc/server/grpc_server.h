@@ -286,7 +286,7 @@ public:
         }
 
         return TShutdownGuard(this);
-    };
+    }
 
     bool IsUnsafeToShutdown() const override {
         return AtomicGet(GuardCount_) > 0;

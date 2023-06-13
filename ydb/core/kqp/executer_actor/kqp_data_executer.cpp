@@ -177,6 +177,31 @@ public:
         }
     }
 
+    bool ForceAcquireSnapshot() const {
+        const bool forceSnapshot = (
+            ReadOnlyTx &&
+            !ImmediateTx &&
+            !HasPersistentChannels &&
+            (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot) &&
+            AppData()->FeatureFlags.GetEnableMvccSnapshotReads()
+        );
+
+        return forceSnapshot;
+    }
+
+    bool GetUseFollowers() const {
+        return (
+            // first, we must specify read stale flag.
+            Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE &&
+            // next, if snapshot is already defined, so in this case followers are not allowed.
+            !GetSnapshot().IsValid() &&
+            // ensure that followers are allowed only for read only transactions.
+            ReadOnlyTx &&
+            // if we are forced to acquire snapshot by some reason, so we cannot use followers.
+            !ForceAcquireSnapshot()
+        );
+    }
+
     void Finalize() {
         if (LocksBroken) {
             TString message = "Transaction locks invalidated.";
@@ -1131,7 +1156,7 @@ private:
 
         LOG_I("Reattach to shard " << tabletId);
 
-        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(
+        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, TxId),
             tabletId, /* subscribe */ true), 0, ++shardState->ReattachState.Cookie);
     }
@@ -1502,7 +1527,7 @@ private:
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
         shardState.DatashardState.ConstructInPlace();
-        shardState.DatashardState->Follower = UseFollowers;
+        shardState.DatashardState->Follower = GetUseFollowers();
 
         if (Deadline) {
             TDuration timeout = *Deadline - TAppData::TimeProvider->Now();
@@ -1582,7 +1607,7 @@ private:
 
         LOG_D("ExecuteDatashardTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
-        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(ev.release(), shardId, true), 0, 0, std::move(traceId));
+        Send(MakePipePeNodeCacheID(GetUseFollowers()), new TEvPipeCache::TEvForward(ev.release(), shardId, true), 0, 0, std::move(traceId));
 
         auto result = ShardStates.emplace(shardId, std::move(shardState));
         YQL_ENSURE(result.second);
@@ -1777,17 +1802,9 @@ private:
         // Single-shard transactions are always immediate
         ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + readActors) <= 1 && !UnknownAffectedShardCount;
 
-        if (ImmediateTx) {
-            // Transaction cannot be both immediate and volatile
-            YQL_ENSURE(!VolatileTx);
-        }
-
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
             case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
-            // StaleRO transactions always execute as immediate
-            // (legacy behavior, for compatibility with current execution engine)
-            case NKikimrKqp::ISOLATION_LEVEL_READ_STALE:
                 YQL_ENSURE(ReadOnlyTx);
                 YQL_ENSURE(!VolatileTx);
                 ImmediateTx = true;
@@ -1795,6 +1812,11 @@ private:
 
             default:
                 break;
+        }
+
+        if (ImmediateTx) {
+            // Transaction cannot be both immediate and volatile
+            YQL_ENSURE(!VolatileTx);
         }
 
         if ((ReadOnlyTx || Request.UseImmediateEffects) && GetSnapshot().IsValid()) {
@@ -1813,13 +1835,16 @@ private:
             prepareTasksSpan.End();
         }
 
+        TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
+
         if (RemoteComputeTasks) {
             TSet<ui64> shardIds;
             for (const auto& [shardId, _] : RemoteComputeTasks) {
                 shardIds.insert(shardId);
             }
 
-            auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), TxId, std::move(shardIds));
+            auto kqpShardsResolver = CreateKqpShardsResolver(
+                SelfId(), TxId, TasksGraph.GetMeta().UseFollowers, std::move(shardIds));
             RegisterWithSameMailbox(kqpShardsResolver);
             Become(&TKqpDataExecuter::WaitResolveState);
         } else {
@@ -1838,14 +1863,7 @@ private:
     }
 
     void OnShardsResolve() {
-        const bool forceSnapshot = (
-                ReadOnlyTx &&
-                !ImmediateTx &&
-                !HasPersistentChannels &&
-                (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot) &&
-                AppData()->FeatureFlags.GetEnableMvccSnapshotReads());
-
-        if (forceSnapshot) {
+        if (ForceAcquireSnapshot()) {
             YQL_ENSURE(!VolatileTx);
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
@@ -1896,21 +1914,6 @@ private:
     using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TDataTransaction>;
 
     void ContinueExecute() {
-        UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
-
-        if (!ImmediateTx) {
-            // Followers only allowed for single shard transactions.
-            // (legacy behaviour, for compatibility with current execution engine)
-            UseFollowers = false;
-        }
-        if (GetSnapshot().IsValid()) {
-            // TODO: KIKIMR-11912
-            UseFollowers = false;
-        }
-        if (UseFollowers) {
-            YQL_ENSURE(ReadOnlyTx);
-        }
-
         if (Stats) {
             //Stats->AffectedShards = datashardTxs.size();
             Stats->DatashardStats.reserve(DatashardTxs.size());
@@ -2204,7 +2207,7 @@ private:
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
             << ", pending compute tasks" << PendingComputeTasks.size()
-            << ", useFollowers: " << UseFollowers);
+            << ", useFollowers: " << GetUseFollowers());
 
         LOG_T("Updating channels after the creation of compute actors");
         THashMap<TActorId, THashSet<ui64>> updates;
@@ -2245,7 +2248,7 @@ private:
             LOG_D("Executing KQP transaction on topic tablet: " << tabletId
                   << ", lockTxId: " << lockTxId);
 
-            Send(MakePipePeNodeCacheID(UseFollowers),
+            Send(MakePipePeNodeCacheID(false),
                  new TEvPipeCache::TEvForward(ev.release(), tabletId, true),
                  0,
                  0,
@@ -2255,7 +2258,7 @@ private:
             state.State =
                 ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
             state.DatashardState.ConstructInPlace();
-            state.DatashardState->Follower = UseFollowers;
+            state.DatashardState->Follower = false;
 
             state.DatashardState->ShardReadLocks = Request.TopicOperations.TabletHasReadOperations(tabletId);
 
@@ -2274,7 +2277,7 @@ private:
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
 
-        if (UseFollowers) {
+        if (GetUseFollowers()) {
             Send(MakePipePeNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
@@ -2339,7 +2342,6 @@ private:
     bool ReadOnlyTx = true;
     bool VolatileTx = false;
     bool ImmediateTx = false;
-    bool UseFollowers = false;
     bool TxPlanned = false;
     bool LocksBroken = false;
 

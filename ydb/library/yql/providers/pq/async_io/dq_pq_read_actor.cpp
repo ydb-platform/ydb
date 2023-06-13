@@ -277,7 +277,7 @@ private:
         }
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -392,14 +392,15 @@ private:
         THashMap<NYdb::NPersQueue::TPartitionStream::TPtr, TList<std::pair<ui64, ui64>>> OffsetRanges; // [start, end)
     };
 
-    bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
+    bool MaybeReturnReadyBatch(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
         if (ReadyBuffer.empty()) {
             SubscribeOnNextEvent();
             return false;
         }
 
         auto& readyBatch = ReadyBuffer.front();
-        buffer.swap(readyBatch.Data);
+        buffer.clear();
+        std::move(readyBatch.Data.begin(), readyBatch.Data.end(), std::back_inserter(buffer));
         watermark = readyBatch.Watermark;
         usedSpace = readyBatch.UsedSpace;
 
@@ -419,7 +420,7 @@ private:
         }
 
         SRC_LOG_T("Return ready batch."
-            << " DataCount = " << buffer.size()
+            << " DataCount = " << buffer.RowCount()
             << " Watermark = " << (watermark ? ToString(*watermark) : "none")
             << " Used space = " << usedSpace);
         return true;

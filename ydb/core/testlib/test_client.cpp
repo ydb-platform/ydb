@@ -98,7 +98,7 @@
 #include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
-#include <ydb/library/folder_service/mock/mock_folder_service.h>
+#include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 
@@ -238,7 +238,7 @@ namespace Tests {
         });
 
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams);
+        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams, Settings->EnableForceFollowers);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -997,7 +997,7 @@ namespace Tests {
                 "TestTenant",
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 YqSharedResources,
-                NKikimr::NFolderService::CreateMockFolderServiceActor,
+                NKikimr::NFolderService::CreateMockFolderServiceAdapterActor,
                 /*IcPort = */0,
                 {}
                 );

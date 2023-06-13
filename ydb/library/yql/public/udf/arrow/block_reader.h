@@ -328,6 +328,11 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             }
         }
 
+        if (TPgTypeInspector(typeInfoHelper, currentType)) {
+            previousType = currentType;
+            ++nestLevel;
+        }
+
         auto reader = MakeBlockReaderImpl<TTraits>(typeInfoHelper, previousType, pgBuilder);
         for (ui32 i = 1; i < nestLevel; ++i) {
             reader = std::make_unique<typename TTraits::TExtOptional>(std::move(reader));
@@ -434,6 +439,19 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
         } else {
             *props.MaxSize += dataTypeInfo.FixedSize;
         }
+        return;
+    }
+
+    TPgTypeInspector typePg(typeInfoHelper, type);
+    if (typePg) {
+        auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
+        if (desc->PassByValue) {
+            *props.MaxSize += desc->Typelen;
+        } else {
+            props.MaxSize = {};
+            props.IsFixed = false;
+        }
+
         return;
     }
 

@@ -326,6 +326,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
 
 const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
 bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
+TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext& ctx);
 
 const TStringBuf BlockLengthColumnName = "_yql_block_length";
 }

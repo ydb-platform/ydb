@@ -85,6 +85,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 
     TKikimrSettings()
     {
+        FeatureFlags.SetForceColumnTablesCompositeMarks(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -246,9 +247,9 @@ public:
     NYdb::EStatus Status;
 };
 
-TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTImeout = false);
-TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTImeout = false);
-TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTImeout = false);
+TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTImeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS);
+TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool throwOnTImeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS);
+TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTImeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS);
 
 bool ValidatePlanNodeIds(const NJson::TJsonValue& plan);
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);

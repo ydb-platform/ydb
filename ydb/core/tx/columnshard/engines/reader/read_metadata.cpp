@@ -1,8 +1,10 @@
 #include "read_metadata.h"
 #include "order_control/default.h"
 #include "order_control/pk_with_limit.h"
+#include <ydb/core/testlib/controllers/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 
@@ -198,9 +200,9 @@ void TReadStats::PrintToLog() {
         ;
 }
 
-NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
+NIndexedReader::IOrderPolicy::TPtr TReadMetadata::DoBuildSortingPolicy() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    if (Limit && IsSorted() && indexInfo.IsSorted() && indexInfo.GetSortingKey()->num_fields() &&
+    if (Limit && IsSorted() && indexInfo.IsSorted() &&
         indexInfo.GetReplaceKey()->Equals(indexInfo.GetIndexKey())) {
         ui32 idx = 0;
         for (auto&& i : indexInfo.GetPrimaryKey()) {
@@ -213,14 +215,20 @@ NIndexedReader::IOrderPolicy::TPtr TReadMetadata::BuildSortingPolicy() const {
             ++idx;
         }
 
-        if (!GetProgram().HasEarlyFilterOnly()) {
+        if (!idx || !GetProgram().HasEarlyFilterOnly()) {
             return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
         }
-
         return std::make_shared<NIndexedReader::TPKSortingWithLimit>(this->shared_from_this());
     } else {
         return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
     }
+}
+
+std::shared_ptr<NIndexedReader::IOrderPolicy> TReadMetadata::BuildSortingPolicy() const {
+    auto result = DoBuildSortingPolicy();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sorting_policy_constructed")("info", result->DebugString());
+    NYDBTest::TControllers::GetColumnShardController()->OnSortingPolicy(result);
+    return result;
 }
 
 }

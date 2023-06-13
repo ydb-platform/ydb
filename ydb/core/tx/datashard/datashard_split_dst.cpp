@@ -281,6 +281,10 @@ public:
                 kv.second.OptimizeSplitKeys(rdb);
             }
 
+            if (mvcc) {
+                Self->PromoteFollowerReadEdge(txc);
+            }
+
             Self->State = TShardState::Ready;
             Self->PersistSys(db, Schema::Sys_State, Self->State);
         }

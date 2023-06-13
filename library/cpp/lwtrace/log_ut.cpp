@@ -32,7 +32,7 @@ namespace
             ++NumSeen;
         }
     };
-};
+}
 
 Y_UNIT_TEST_SUITE(LWTraceLog) {
     Y_UNIT_TEST(ShouldAccumulateTracesViaReadItems) {

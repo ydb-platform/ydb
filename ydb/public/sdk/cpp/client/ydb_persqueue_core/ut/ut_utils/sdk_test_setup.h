@@ -80,15 +80,15 @@ public:
         }
     }
 
-    TString GetTestTopic() const {
-        return "topic1";
+    static TString GetTestTopic() {
+        return "test-topic";
     }
 
-    TString GetTestClient() const {
+    static TString GetTestClient() {
         return "test-reader";
     }
 
-    TString GetTestMessageGroupId() const {
+    static TString GetTestMessageGroupId() {
         return "test-message-group-id";
     }
 

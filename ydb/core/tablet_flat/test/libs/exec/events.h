@@ -29,7 +29,7 @@ namespace NFake {
         TEvFire(ui32 level, const TActorId &alias, TActorSetupCmd cmd)
             : Level(level)
             , Alias(alias)
-            , Cmd(cmd)
+            , Cmd(std::move(cmd))
         {
 
         }

@@ -1086,6 +1086,8 @@ Y_ABSL_DEPRECATED("y_absl::RegisterSymbolizer() is deprecated and will be remove
                 "on or after 2023-05-01")
 void RegisterSymbolizer(bool (*fn)(const void *pc, char *out, int out_size));
 
+void ResetDeadlockGraphMu();
+
 // EnableMutexInvariantDebugging()
 //
 // Enable or disable global support for Mutex invariant debugging.  If enabled,

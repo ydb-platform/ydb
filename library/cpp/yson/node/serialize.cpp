@@ -40,17 +40,17 @@ void Serialize(type value, NYson::IYsonConsumer* consumer) \
     consumer->OnUint64Scalar(static_cast<ui64>(value)); \
 }
 
-SERIALIZE_SIGNED(signed char);
-SERIALIZE_SIGNED(short);
-SERIALIZE_SIGNED(int);
-SERIALIZE_SIGNED(long);
-SERIALIZE_SIGNED(long long);
+SERIALIZE_SIGNED(signed char)
+SERIALIZE_SIGNED(short)
+SERIALIZE_SIGNED(int)
+SERIALIZE_SIGNED(long)
+SERIALIZE_SIGNED(long long)
 
-SERIALIZE_UNSIGNED(unsigned char);
-SERIALIZE_UNSIGNED(unsigned short);
-SERIALIZE_UNSIGNED(unsigned int);
-SERIALIZE_UNSIGNED(unsigned long);
-SERIALIZE_UNSIGNED(unsigned long long);
+SERIALIZE_UNSIGNED(unsigned char)
+SERIALIZE_UNSIGNED(unsigned short)
+SERIALIZE_UNSIGNED(unsigned int)
+SERIALIZE_UNSIGNED(unsigned long)
+SERIALIZE_UNSIGNED(unsigned long long)
 
 #undef SERIALIZE_SIGNED
 #undef SERIALIZE_UNSIGNED

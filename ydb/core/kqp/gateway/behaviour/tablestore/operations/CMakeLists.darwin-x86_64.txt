@@ -36,4 +36,5 @@ target_link_libraries(behaviour-tablestore-operations.global PUBLIC
 target_sources(behaviour-tablestore-operations.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/add_column.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/alter_column.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_column.cpp
 )

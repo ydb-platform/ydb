@@ -707,16 +707,20 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         InbootTablets.erase(inbootIt);
     }
 
-    void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext&) {
         TEvTablet::TEvRestored *msg = ev->Get();
 
         if (msg->Follower) // ignore follower notifications
             return;
 
-        CounterRestored->Inc(); // always update counter for every tablet, even non-actual one. it's about tracking not resource allocation
+        CounterRestored->Inc(); // always update counter for every tablet, even out-of-date ones. it's about tracking not resource allocation
+    }
+
+    void Handle(TEvTablet::TEvReady::TPtr &ev, const TActorContext &ctx) {
+        TEvTablet::TEvReady *msg = ev->Get();
 
         const auto tabletId = msg->TabletID;
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvRestored tablet "
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvReady tablet "
                     << tabletId
                     << " generation "
                     << msg->Generation);
@@ -727,11 +731,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             return;
         TTabletEntry &entry = inbootIt->second;
         if (msg->Generation < entry.Generation) {
-            LOG_WARN_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvRestored tablet "
+            LOG_WARN_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvReady tablet "
                        << tabletId
-                       << " restored to generation "
+                       << " ready with generation "
                        << msg->Generation
-                       << " but we waiting for generation "
+                       << " but we are waiting for generation "
                        << entry.Generation
                        << " - ignored");
             return;
@@ -930,7 +934,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvRestored, Handle); // tablet restored, notify queue about update
+            HFunc(TEvTablet::TEvRestored, Handle); // tablet restored, update counter
+            HFunc(TEvTablet::TEvReady, Handle); // tablet ready, notify hive about update
             HFunc(TEvTablet::TEvTabletDead, Handle); // tablet dead, notify queue about update
             HFunc(TEvTablet::TEvCutTabletHistory, Handle);
             HFunc(TEvLocal::TEvBootTablet, Handle); // command to boot tablet

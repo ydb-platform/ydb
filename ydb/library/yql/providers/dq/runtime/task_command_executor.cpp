@@ -369,18 +369,15 @@ public:
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
                 NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
                     NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED);
-                NKikimr::NMiniKQL::TUnboxedValueVector buffer;
-                buffer.reserve(request.GetData().GetRows());
+                NKikimr::NMiniKQL::TUnboxedValueBatch buffer(source->GetInputType());
                 if (request.GetString().empty() && request.GetChunks() == 0) {
                     dataSerializer.Deserialize(request.GetData(), source->GetInputType(), buffer);
                 } else if (!request.GetString().empty()) {
-                    buffer.reserve(request.GetString().size());
                     for (auto& row : request.GetString()) {
                         buffer.emplace_back(NKikimr::NMiniKQL::MakeString(row));
                     }
                 } else {
                     i64 chunks = request.GetChunks();
-                    buffer.reserve(chunks);
                     for (i64 i = 0; i < chunks; i++) {
                         NDqProto::TSourcePushChunk chunk;
                         chunk.Load(&input);
@@ -634,25 +631,23 @@ public:
                 request.Load(&input);
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-                NKikimr::NMiniKQL::TUnboxedValueVector batch;
                 auto sink = Runner->GetSink(channelId);
                 auto* outputType = sink->GetOutputType();
+                NKikimr::NMiniKQL::TUnboxedValueBatch batch(outputType);
+                YQL_ENSURE(!batch.IsWide());
                 auto bytes = sink->Pop(batch, request.GetBytes());
 
                 NDqProto::TSinkPopResponse response;
                 if (request.GetRaw()) {
-                    for (auto& raw : batch) {
-                        *response.AddString() = raw.AsStringRef();
-                    }
+                    batch.ForEachRow([&response](const auto& value) {
+                        *response.AddString() = value.AsStringRef();
+                    });
                 } else {
                     NDq::TDqDataSerializer dataSerializer(
                         Runner->GetTypeEnv(),
                         Runner->GetHolderFactory(),
                         NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-
-                    *response.MutableData() = dataSerializer.Serialize(
-                        batch.begin(), batch.end(),
-                        static_cast<NKikimr::NMiniKQL::TType*>(outputType));
+                    *response.MutableData() = dataSerializer.Serialize(batch, outputType);
                 }
                 response.SetBytes(bytes);
                 response.Save(&output);

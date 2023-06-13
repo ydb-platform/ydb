@@ -44,7 +44,7 @@ namespace NFake {
                            ui32 nrings, ui32 ringSize, ui64 stateStorageGroup); 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -57,7 +57,7 @@ namespace NFake {
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
-                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {});
+                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {}, bool forceFollowers = false);
 
     ///
     class TStrandedPDiskServiceFactory : public IPDiskServiceFactory {

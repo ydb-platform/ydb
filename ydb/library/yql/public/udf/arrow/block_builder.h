@@ -1178,6 +1178,11 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderBase(
             }
         }
 
+        if (TPgTypeInspector(typeInfoHelper, currentType)) {
+            previousType = currentType;
+            ++nestLevel;
+        }
+
         auto builder = MakeArrayBuilderBase(typeInfoHelper, previousType, pool, maxBlockLength, pgBuilder);
         for (ui32 i = 1; i < nestLevel; ++i) {
             builder = std::make_unique<TExternalOptionalArrayBuilder>(typeInfoHelper, types[nestLevel - 1 - i], pool, maxBlockLength, std::move(builder));

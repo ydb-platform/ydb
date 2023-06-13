@@ -69,14 +69,22 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config) {
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Codec, &TCommandWorkloadTopicParams::StrToCodec);
+    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
+        .DefaultValue(50)
+        .StoreResult(&Percentile);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
     config.IsNetworkIntensive = true;
 }
 
-void TCommandWorkloadTopicRunFull::Parse(TConfig& config) {
+void TCommandWorkloadTopicRunFull::Parse(TConfig& config) 
+{
     TClientCommand::Parse(config);
+
+    if (Percentile >= 100) {
+        throw TMisuseException() << "--percentile should be less than 100.";
+    }
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
@@ -84,7 +92,7 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
     Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, *Driver);

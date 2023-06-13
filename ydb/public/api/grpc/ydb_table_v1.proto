@@ -74,7 +74,8 @@ service TableService {
     // Streaming read table
     rpc StreamReadTable(Table.ReadTableRequest) returns (stream Table.ReadTableResponse);
 
-    //
+    // draft
+    // Reads specified keys non-transactionally from a single table
     rpc ReadRows(Table.ReadRowsRequest) returns (Table.ReadRowsResponse);
 
     // Upserts a batch of rows non-transactionally.

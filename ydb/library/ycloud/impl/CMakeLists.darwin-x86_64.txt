@@ -24,6 +24,7 @@ target_link_libraries(library-ycloud-impl PUBLIC
 target_sources(library-ycloud-impl PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_transitional.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_adapter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/mock_access_service.cpp

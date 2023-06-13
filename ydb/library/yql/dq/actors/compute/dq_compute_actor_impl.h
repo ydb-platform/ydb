@@ -905,6 +905,7 @@ protected:
     struct TInputChannelInfo {
         const TString LogPrefix;
         ui64 ChannelId;
+        ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
         bool HasPeer = false;
         std::queue<TInstant> PendingWatermarks;
@@ -916,10 +917,12 @@ protected:
         explicit TInputChannelInfo(
                 const TString& logPrefix,
                 ui64 channelId,
+                ui32 srcStageId,
                 NDqProto::EWatermarksMode watermarksMode,
                 NDqProto::ECheckpointingMode checkpointingMode)
             : LogPrefix(logPrefix)
             , ChannelId(channelId)
+            , SrcStageId(srcStageId)
             , WatermarksMode(watermarksMode)
             , CheckpointingMode(checkpointingMode)
         {
@@ -1009,6 +1012,7 @@ protected:
 
     struct TOutputChannelInfo {
         ui64 ChannelId;
+        ui32 DstStageId;
         IDqOutputChannel::TPtr Channel;
         bool HasPeer = false;
         bool Finished = false; // != Channel->IsFinished() // If channel is in finished state, it sends only checkpoints.
@@ -1016,13 +1020,16 @@ protected:
         bool IsTransformOutput = false; // Is this channel output of a transform.
         NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
 
-        explicit TOutputChannelInfo(ui64 channelId)
-            : ChannelId(channelId)
+        TOutputChannelInfo(ui64 channelId, ui32 dstStageId)
+            : ChannelId(channelId), DstStageId(dstStageId)
         { }
 
         struct TStats {
             ui64 BlockedByCapacity = 0;
             ui64 NoDstActorId = 0;
+            TDuration BlockedTime;
+            std::optional<TInstant> StartBlockedTime;
+
         };
         THolder<TStats> Stats;
 
@@ -1080,7 +1087,7 @@ protected:
         return TaskRunner->BindAllocator();
     }
 
-    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) {
+    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) {
         source.Buffer->Push(std::move(batch), space);
         if (finished) {
             source.Buffer->Finish();
@@ -1280,6 +1287,24 @@ protected:
         return allowedOvercommit;
     }
 
+protected:
+
+    void UpdateBlocked(TOutputChannelInfo& outputChannel, i64 toSend) {
+        if (Y_UNLIKELY(outputChannel.Stats)) {
+            if (toSend <= 0) {
+                outputChannel.Stats->BlockedByCapacity++;
+                if (!outputChannel.Stats->StartBlockedTime) {
+                    outputChannel.Stats->StartBlockedTime = TInstant::Now();
+                }
+            } else {
+                if (outputChannel.Stats->StartBlockedTime) {
+                    outputChannel.Stats->BlockedTime += TInstant::Now() - *outputChannel.Stats->StartBlockedTime;
+                    outputChannel.Stats->StartBlockedTime.reset();
+                }
+            }
+        }
+    }
+
 private:
     virtual const TDqMemoryQuota::TProfileStats* GetProfileStats() const {
         Y_VERIFY(MemoryQuota);
@@ -1309,11 +1334,7 @@ private:
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
 
-        if (toSend <= 0) {
-            if (Y_UNLIKELY(outputChannel.Stats)) {
-                outputChannel.Stats->BlockedByCapacity++;
-            }
-        }
+        UpdateBlocked(outputChannel, toSend);
 
         i64 remains = toSend;
         while (remains > 0 && (!outputChannel.Finished || Checkpoints)) {
@@ -1420,7 +1441,7 @@ private:
     ui32 SendDataChunkToAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo, ui64 bytes) {
         auto sink = outputInfo.Buffer;
 
-        NKikimr::NMiniKQL::TUnboxedValueVector dataBatch;
+        NKikimr::NMiniKQL::TUnboxedValueBatch dataBatch(sink->GetOutputType());
         NDqProto::TCheckpoint checkpoint;
 
         const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
@@ -1646,14 +1667,14 @@ protected:
         const i64 freeSpace = AsyncInputFreeSpace(info);
         if (freeSpace > 0) {
             TMaybe<TInstant> watermark;
-            NKikimr::NMiniKQL::TUnboxedValueVector batch;
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             Y_VERIFY(info.AsyncInput);
             bool finished = false;
             const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, freeSpace);
             CA_LOG_T("Poll async input " << inputIndex
                 << ". Buffer free space: " << freeSpace
                 << ", read from async input: " << space << " bytes, "
-                << batch.size() << " rows, finished: " << finished);
+                << batch.RowCount() << " rows, finished: " << finished);
 
             if (!batch.empty()) {
                 // If we have read some data, we must run such reading again
@@ -1662,7 +1683,7 @@ protected:
                 ContinueExecute();
             }
 
-            DqComputeActorMetrics.ReportAsyncInputData(inputIndex, batch.size(), watermark);
+            DqComputeActorMetrics.ReportAsyncInputData(inputIndex, batch.RowCount(), watermark);
 
             if (watermark) {
                 const auto inputWatermarkChanged = WatermarksTracker.NotifyAsyncInputWatermarkReceived(
@@ -1811,6 +1832,7 @@ private:
                         TInputChannelInfo(
                             LogPrefix,
                             channel.GetId(),
+                            channel.GetSrcStageId(),
                             channel.GetWatermarksMode(),
                             channel.GetCheckpointingMode())
                     );
@@ -1833,7 +1855,7 @@ private:
                 YQL_ENSURE(result.second);
             } else {
                 for (auto& channel : outputDesc.GetChannels()) {
-                    TOutputChannelInfo outputChannel(channel.GetId());
+                    TOutputChannelInfo outputChannel(channel.GetId(), channel.GetDstStageId());
                     outputChannel.HasPeer = channel.GetDstEndpoint().HasActorId();
                     outputChannel.IsTransformOutput = outputDesc.HasTransform();
                     outputChannel.WatermarksMode = channel.GetWatermarksMode();
@@ -2034,18 +2056,28 @@ public:
                         protoInputChannelStats.SetPollRequests(caChannelStats->PollRequests);
                         protoInputChannelStats.SetWaitTimeUs(caChannelStats->WaitTime.MicroSeconds());
                         protoInputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
+                        protoInputChannelStats.SetFirstMessageMs(caChannelStats->FirstMessageTs.MilliSeconds());
+                        protoInputChannelStats.SetLastMessageMs(caChannelStats->LastMessageTs.MilliSeconds());
+                    }
+
+                    if (auto* inputInfo = InputChannelsMap.FindPtr(protoInputChannelStats.GetChannelId())) {
+                        protoInputChannelStats.SetSrcStageId(inputInfo->SrcStageId);
                     }
                 }
 
                 for (auto& protoOutputChannelStats : *protoTask->MutableOutputChannels()) {
-                    if (auto* x = Channels->GetOutputChannelStats(protoOutputChannelStats.GetChannelId())) {
-                        protoOutputChannelStats.SetResentMessages(x->ResentMessages);
+                    if (auto* caChannelStats = Channels->GetOutputChannelStats(protoOutputChannelStats.GetChannelId())) {
+                        protoOutputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
+                        protoOutputChannelStats.SetFirstMessageMs(caChannelStats->FirstMessageTs.MilliSeconds());
+                        protoOutputChannelStats.SetLastMessageMs(caChannelStats->LastMessageTs.MilliSeconds());
                     }
 
                     if (auto* outputInfo = OutputChannelsMap.FindPtr(protoOutputChannelStats.GetChannelId())) {
-                        if (auto *x = outputInfo->Stats.Get()) {
-                            protoOutputChannelStats.SetBlockedByCapacity(x->BlockedByCapacity);
-                            protoOutputChannelStats.SetNoDstActorId(x->NoDstActorId);
+                        protoOutputChannelStats.SetDstStageId(outputInfo->DstStageId);
+                        if (auto *outputChannelStats = outputInfo->Stats.Get()) {
+                            protoOutputChannelStats.SetBlockedTimeUs(outputChannelStats->BlockedTime.MicroSeconds());
+                            protoOutputChannelStats.SetBlockedByCapacity(outputChannelStats->BlockedByCapacity);
+                            protoOutputChannelStats.SetNoDstActorId(outputChannelStats->NoDstActorId);
                         }
                     }
                 }
@@ -2060,6 +2092,8 @@ public:
         if (last && MemoryQuota) {
             MemoryQuota->ResetProfileStats();
         }
+
+        // Cerr << "STAAT\n" << dst->DebugString() << Endl;
     }
 
 protected:

@@ -105,14 +105,12 @@ private:
         NKikimrCms::ETenantPolicy TenantPolicy;
         NKikimrCms::EAvailabilityMode AvailabilityMode;
         bool PartialPermissionAllowed;
-        ui64 Order;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
             , PartialPermissionAllowed(false)
-            , Order(0)
         {}
     };
 
@@ -139,7 +137,7 @@ private:
     ITransaction *CreateTxRemoveWalleTask(const TString &id);
     ITransaction *CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
                                            const TString &owner, TAutoPtr<TRequestInfo> scheduled);
-    ITransaction *CreateTxStoreWalleTask(const TWalleTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
+    ITransaction *CreateTxStoreWalleTask(const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
@@ -277,7 +275,6 @@ private:
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,
-        const ui64 requestOrder,
         const TActorContext &ctx);
     bool IsActionHostValid(const NKikimrCms::TAction &action, TErrorInfo &error) const;
     bool ParseServices(const NKikimrCms::TAction &action, TServices &services, TErrorInfo &error) const;

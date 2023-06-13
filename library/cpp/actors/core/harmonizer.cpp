@@ -510,7 +510,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     }
     Pools.push_back(poolInfo);
     PriorityOrder.clear();
-};
+}
 
 void THarmonizer::Enable(bool enable) {
     TGuard<TSpinLock> guard(Lock);

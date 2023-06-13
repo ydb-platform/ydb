@@ -1529,6 +1529,7 @@ metadata: {}
 )";
 
             TString exp = R"(metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 value: 1
@@ -1551,6 +1552,7 @@ obj:
 )";
 
             TString exp = R"(metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 value: 1
@@ -1574,6 +1576,7 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 # comment1
@@ -1598,6 +1601,7 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 # comment1
@@ -1624,6 +1628,7 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 # comment1
@@ -1651,6 +1656,7 @@ obj: {value: 2} # comment2
 )";
 
             TString exp = R"(metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 # comment1
@@ -1683,6 +1689,7 @@ obj: {value: 2} # comment2
 
 ---
 metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 # comment1
@@ -1710,6 +1717,7 @@ obj: {value: 2} # comment2
             TString exp = R"(
 ---
 metadata:
+  kind: MainConfig
   cluster: "test"
   version: 1
 # comment1
@@ -1742,6 +1750,7 @@ obj: {value: 2} # comment2
             TString exp = R"(
 ---
 metadata:
+  kind: MainConfig
   cluster: ""
   version: 1
 # comment1

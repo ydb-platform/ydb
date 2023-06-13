@@ -1,8 +1,8 @@
 #pragma once
-#include "run_actor_params.h"
 
 #include <ydb/core/mon/mon.h>
 
+#include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
@@ -74,18 +74,6 @@ NActors::IActor* CreateResultWriter(
     const TString& traceId,
     const TInstant& deadline,
     ui64 resultBytesLimit);
-
-NActors::IActor* CreatePingerActor(
-    const TString& tenantName,
-    const NYdb::NFq::TScope& scope,
-    const TString& userId,
-    const TString& id,
-    const TString& owner,
-    const NActors::TActorId parent,
-    const NConfig::TPingerConfig& config,
-    TInstant deadline,
-    const ::NYql::NCommon::TServiceCounters& queryCounters,
-    TInstant createdAt);
 
 NActors::IActor* CreateRateLimiterResourceCreator(
     const NActors::TActorId& parent,

@@ -36,6 +36,7 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         Running,
         Cancelling,
         Cancelled,
+        Finishing,
         Finished,
     };
 public:
@@ -147,7 +148,7 @@ private:
 
         Send(ev->Sender, resp.Release());
 
-        if (!IsFinished() && !IsTruncated()) {
+        if (IsExecuting() && !IsTruncated()) {
             MergeResultSet(ev);
         }
     }
@@ -166,7 +167,7 @@ private:
 
     void Handle(TEvKqp::TEvFetchScriptResultsRequest::TPtr& ev) {
         auto resp = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
-        if (!IsFinished()) {
+        if (IsExecuting()) {
             if (RunState == ERunState::Created || RunState == ERunState::Running) {
                 resp->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
                 resp->Record.AddIssues()->set_message("Results are not ready");
@@ -215,6 +216,9 @@ private:
         case ERunState::Cancelled:
             Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"));
             break;
+        case ERunState::Finishing:
+            CancelRequests.emplace_front(std::move(ev));
+            break;
         case ERunState::Finished:
             Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
             break;
@@ -240,11 +244,23 @@ private:
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
         if (RunState == ERunState::Cancelling) {
             RunState = ERunState::Cancelled;
-            for (auto& req : CancelRequests) {
-                Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(ev->Get()->Status, ev->Get()->Issues));
-            }
-            CancelRequests.clear();
         }
+
+        if (RunState == ERunState::Finishing) {
+            RunState = ERunState::Finished;
+        }
+
+        Ydb::StatusIds::StatusCode status = ev->Get()->Status;
+        NYql::TIssues issues = std::move(ev->Get()->Issues);
+        if (RunState == ERunState::Finished) {
+            status = Ydb::StatusIds::PRECONDITION_FAILED;
+            issues.Clear();
+            issues.AddIssue("Already finished");
+        }
+        for (auto& req : CancelRequests) {
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(status, issues));
+        }
+        CancelRequests.clear();
     }
 
     void MergeResultSet(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
@@ -281,7 +297,7 @@ private:
         }
     }
 
-    void Finish(Ydb::StatusIds::StatusCode status, ERunState runState = ERunState::Finished) {
+    void Finish(Ydb::StatusIds::StatusCode status, ERunState runState = ERunState::Finishing) {
         RunState = runState;
         Status = status;
         Register(CreateScriptExecutionFinisher(ActorIdToScriptExecutionId(SelfId()), Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
@@ -297,8 +313,11 @@ private:
         NActors::TActorBootstrapped<TRunScriptActor>::PassAway();
     }
 
-    bool IsFinished() const {
-        return RunState == ERunState::Finished;
+    bool IsExecuting() const {
+        return RunState != ERunState::Finished
+            && RunState != ERunState::Finishing
+            && RunState != ERunState::Cancelled
+            && RunState != ERunState::Cancelling;
     }
 
     bool IsTruncated() const {

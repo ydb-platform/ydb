@@ -42,28 +42,11 @@ namespace NTabletFlatExecutor {
     private:
         const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId id) noexcept
         {
-            if (auto *page = Cache.Lookup(id, info)) {
-                if (Touches[info].insert(id).second) {
-                    ++CacheHits;
-                }
-                return page;
-            } else {
-                if (ToLoad[info].insert(id).second) {
-                    ++CacheMisses;
-                }
-                return nullptr;
-            }
+            return Cache.Lookup(id, info);
         }
 
     public:
         TPrivatePageCache& Cache;
-
-        /*_ Page collection cache pages load trace */
-
-        THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> Touches;
-        THashMap<TPrivatePageCache::TInfo*, THashSet<ui32>> ToLoad;
-        size_t CacheHits = 0;
-        size_t CacheMisses = 0;
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {

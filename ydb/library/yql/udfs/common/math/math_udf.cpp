@@ -50,18 +50,18 @@
     XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                  \
     XXL(Round, double(TAutoMap<double>, TPrecision), builder.OptionalArgs(1))
 
-#define MATH_UDF_IMPL(name, signature, options)                                                             \
-    UDF_IMPL(T##name, builder.SimpleSignature<signature>(); options;, ;, ;, "/llvm_bc/Math", #name "IR") {  \
-        TUnboxedValuePod res;                                                                               \
-        name##IR(this, &res, valueBuilder, args);                                                           \
-        return res;                                                                                         \
+#define MATH_UDF_IMPL(name, signature, options)                                                                   \
+    UDF_IMPL(T##name, builder.SimpleSignature<signature>(); options;, ;, ;, "/llvm_bc/Math", #name "IR", void) {  \
+        TUnboxedValuePod res;                                                                                     \
+        name##IR(this, &res, valueBuilder, args);                                                                 \
+        return res;                                                                                               \
     }
 
-#define MATH_STRICT_UDF_IMPL(name, signature, options)                                                             \
-    UDF_IMPL(T##name, builder.SimpleSignature<signature>().IsStrict(); options;, ;, ;, "/llvm_bc/Math", #name "IR") {  \
-        TUnboxedValuePod res;                                                                               \
-        name##IR(this, &res, valueBuilder, args);                                                           \
-        return res;                                                                                         \
+#define MATH_STRICT_UDF_IMPL(name, signature, options)                                                                       \
+    UDF_IMPL(T##name, builder.SimpleSignature<signature>().IsStrict(); options;, ;, ;, "/llvm_bc/Math", #name "IR", void) {  \
+        TUnboxedValuePod res;                                                                                                \
+        name##IR(this, &res, valueBuilder, args);                                                                            \
+        return res;                                                                                                          \
     }
 
 #define REGISTER_MATH_UDF(udfName, ...)         T##udfName,

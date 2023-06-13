@@ -74,6 +74,7 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     bool NeedGroups = true;
     bool NeedDisks = true;
     bool NeedDonors = true;
+    bool NeedAdditionalNodesRequests;
 
     enum class EWith {
         Everything,
@@ -109,6 +110,7 @@ public:
             FilterStoragePools.emplace(filterStoragePool);
         }
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
+        NeedAdditionalNodesRequests = !FilterNodeIds.empty();
         SplitIds(params.Get("group_id"), ',', FilterGroupIds);
         Sort(FilterGroupIds);
         NeedGroups = FromStringWithDefault<bool>(params.Get("need_groups"), true);
@@ -325,17 +327,19 @@ public:
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
+        ui64 nodeId = ev.Get()->Cookie;
         for (const auto& info : ev->Get()->Record.GetBSGroupStateInfo()) {
             TString storagePoolName = info.GetStoragePoolName();
             if (storagePoolName.empty()) {
                 continue;
             }
-            StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
+            if (FilterNodeIds.empty() || FilterNodeIds.contains(nodeId)) {
+                StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
+            }
             for (const auto& vDiskNodeId : info.GetVDiskNodeIds()) {
                 Group2NodeId[info.GetGroupID()].push_back(vDiskNodeId);
             }
         }
-        ui64 nodeId = ev.Get()->Cookie;
         BSGroupInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
@@ -476,7 +480,8 @@ public:
     }
 
     void ReplyAndPassAway() {
-        if (!FilterNodeIds.empty()) {
+        if (NeedAdditionalNodesRequests) {
+            NeedAdditionalNodesRequests = false;
             for (const auto& [nodeId, vDiskInfo] : VDiskInfo) {
                 if (FilterNodeIds.count(nodeId) == 0) {
                     continue;
@@ -494,8 +499,6 @@ public:
                     }
                 }
             }
-
-            FilterNodeIds.clear(); // we don't need it anymore
 
             if (Requests != 0) {
                 return; // retry requests for neighbours of our groups (when BSC wasn't available)

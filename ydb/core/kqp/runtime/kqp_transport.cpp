@@ -75,11 +75,11 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
     for (auto& part : data) {
         if (part.GetRows()) {
-            TUnboxedValueVector rows;
+            TUnboxedValueBatch rows(mkqlSrcRowType);
             dataSerializer.Deserialize(part, mkqlSrcRowType, rows);
-            for (auto& row : rows) {
-                ExportValueToProto(mkqlSrcRowType, row, *resultSet.add_rows(), columnOrder);
-            }
+            rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+                ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
+            });
         }
     }
 

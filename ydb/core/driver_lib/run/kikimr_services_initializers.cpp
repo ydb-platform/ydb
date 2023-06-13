@@ -1450,8 +1450,8 @@ void TLoggerInitializer::InitializeServices(
     // log settings must be initialized before calling this method
     NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, LogBackend, utilsCounters);
     NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::HTSwap, appData->IOPoolId);
-    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(LogSettings->LoggerActorId, loggerActorCmd);
-    setup->LocalServices.push_back(loggerActorPair);
+    std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(LogSettings->LoggerActorId, std::move(loggerActorCmd));
+    setup->LocalServices.push_back(std::move(loggerActorPair));
 
     IActor *configurator;
     if (PathToConfigCacheFile && !appData->FeatureFlags.GetEnableConfigurationCache()) {
@@ -1477,7 +1477,7 @@ void TSchedulerActorInitializer::InitializeServices(
     NActors::IActor *schedulerActor = CreateSchedulerActor(CreateSchedulerConfig(systemConfig.GetScheduler()));
     if (schedulerActor) {
         NActors::TActorSetupCmd schedulerActorCmd(schedulerActor, NActors::TMailboxType::ReadAsFilled, appData->SystemPoolId);
-        setup->LocalServices.emplace_back(MakeSchedulerActorId(), schedulerActorCmd);
+        setup->LocalServices.emplace_back(MakeSchedulerActorId(), std::move(schedulerActorCmd));
     }
 }
 
@@ -1493,7 +1493,7 @@ void TProfilerInitializer::InitializeServices(
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
     TActorSetupCmd profilerSetup(CreateProfilerActor(utilsCounters, "/var/tmp"), TMailboxType::HTSwap, 0);
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(NodeId), profilerSetup));
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(NodeId), std::move(profilerSetup)));
 }
 
 // TResourceBrokerInitializer
@@ -1522,7 +1522,7 @@ void TResourceBrokerInitializer::InitializeServices(
     auto counters = GetServiceCounters(appData->Counters, "tablets");
     TActorSetupCmd actorSetup = { NResourceBroker::CreateResourceBrokerActor(config, counters),
                                   TMailboxType::ReadAsFilled, appData->UserPoolId };
-    setup->LocalServices.push_back(std::make_pair(NResourceBroker::MakeResourceBrokerID(), actorSetup));
+    setup->LocalServices.push_back(std::make_pair(NResourceBroker::MakeResourceBrokerID(), std::move(actorSetup)));
 }
 
 // TRestartsCountPublisher
@@ -1618,7 +1618,7 @@ void TTabletMonitoringProxyInitializer::InitializeServices(
     proxyConfig.SetRetryLimitCount(Config.GetMonitoringConfig().GetTabletMonitoringRetries());
 
     TActorSetupCmd tabletMonitoringProxySetup(NTabletMonitoringProxy::CreateTabletMonitoringProxy(std::move(proxyConfig)), TMailboxType::ReadAsFilled, appData->UserPoolId);
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NTabletMonitoringProxy::MakeTabletMonitoringProxyID(), tabletMonitoringProxySetup));
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NTabletMonitoringProxy::MakeTabletMonitoringProxyID(), std::move(tabletMonitoringProxySetup)));
 
 }
 
@@ -1633,11 +1633,11 @@ void TTabletCountersAggregatorInitializer::InitializeServices(
             const NKikimr::TAppData* appData) {
     {
         TActorSetupCmd tabletCountersAggregatorSetup(CreateTabletCountersAggregator(false), TMailboxType::ReadAsFilled, appData->UserPoolId);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTabletCountersAggregatorID(NodeId, false), tabletCountersAggregatorSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTabletCountersAggregatorID(NodeId, false), std::move(tabletCountersAggregatorSetup)));
     }
     {
         TActorSetupCmd tabletCountersAggregatorSetup(CreateTabletCountersAggregator(true), TMailboxType::ReadAsFilled, appData->UserPoolId);
-        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTabletCountersAggregatorID(NodeId, true), tabletCountersAggregatorSetup));
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeTabletCountersAggregatorID(NodeId, true), std::move(tabletCountersAggregatorSetup)));
     }
 }
 
@@ -1651,7 +1651,7 @@ void TGRpcProxyStatusInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
     TActorSetupCmd gRpcProxyStatusSetup(CreateGRpcProxyStatus(), TMailboxType::ReadAsFilled, appData->UserPoolId);
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeGRpcProxyStatusID(NodeId), gRpcProxyStatusSetup));
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeGRpcProxyStatusID(NodeId), std::move(gRpcProxyStatusSetup)));
 
 }
 
@@ -1852,7 +1852,7 @@ void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSet
         if (IActor* traceService = BusServer.CreateMessageBusTraceService()) {
             TActorSetupCmd messageBusTraceServiceSetup(traceService, TMailboxType::HTSwap, appData->IOPoolId);
             setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NMessageBusTracer::MakeMessageBusTraceServiceID(),
-                                                                               messageBusTraceServiceSetup));
+                                                                               std::move(messageBusTraceServiceSetup)));
         }
     }
 }
@@ -2656,7 +2656,7 @@ void TTabletInfoInitializer::InitializeServices(
     NActors::TActorSystemSetup* setup,
     const NKikimr::TAppData* appData) {
     TActorSetupCmd tabletInfoSetup(NTabletInfo::CreateTabletInfo(), TMailboxType::ReadAsFilled, appData->UserPoolId);
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NTabletInfo::MakeTabletInfoID(), tabletInfoSetup));
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NTabletInfo::MakeTabletInfoID(), std::move(tabletInfoSetup)));
 }
 
 TConfigValidatorsInitializer::TConfigValidatorsInitializer(const TKikimrRunConfig& runConfig)

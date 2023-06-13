@@ -259,8 +259,6 @@ public:
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<ui32>& columnIds, bool withSpecials = false) const;
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<TString>& columnNames) const;
     std::shared_ptr<arrow::Field> ArrowColumnField(ui32 columnId) const;
-    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const TString& metadata,
-                                                         TString& strError) const;
 
     const THashSet<TString>& GetRequiredColumns() const {
         return RequiredColumns;

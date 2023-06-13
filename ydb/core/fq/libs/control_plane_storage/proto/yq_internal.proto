@@ -41,7 +41,9 @@ message QueryInternal {
     repeated Fq.Private.CompressedData dq_graph_compressed = 20;
     Fq.Private.TaskResources resources = 21;
     repeated Ydb.Issue.IssueMessage internal_issue = 22;
-    NYql.NDqProto.StatusIds.StatusCode status_code = 23;    
+    NYql.NDqProto.StatusIds.StatusCode status_code = 23;
+    string operation_id = 24;
+    string execution_id = 25;
 }
 
 message JobInternal {

@@ -69,9 +69,9 @@ bool TMeteringSink::IsCreated() const {
 }
 
 TString TMeteringSink::GetMeteringJson(const TString& metricBillingId, const TString& schemeName,
-                                      const THashMap<TString, ui64>& tags,
-                                      const TString& quantityUnit, ui64 quantity,
-                                      TInstant start, TInstant end, TInstant now, const TString& version) {
+                                       const THashMap<TString, ui64>& tags,
+                                       const TString& quantityUnit, ui64 quantity,
+                                       TInstant start, TInstant end, TInstant now, const TString& version) {
     MeteringCounter_.fetch_add(1);
     TStringStream output;
     NJson::TJsonWriter writer(&output, false);
@@ -238,22 +238,22 @@ void TMeteringSink::Flush(TInstant now, bool force) {
                 {"reserved_consumers_count", Parameters_.ConsumersCount}
             };
             auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
-            while (interval < now) {
+
+            auto tryFlush = [&](TInstant start, TInstant finish) {
                 const auto metricsJson = GetMeteringJson(
                     name, schema, tags, "second",
-                    Parameters_.PartitionsSize * (interval - LastFlush_[whichOne]).Seconds(),
-                    LastFlush_[whichOne], interval, now);
-                LastFlush_[whichOne] = interval;
+                    Parameters_.PartitionsSize * (finish.Seconds() - start.Seconds()),
+                    start, finish, now);
                 FlushFunction_(metricsJson);
+                LastFlush_[whichOne] = finish;
+            };
+
+            while (interval < now) {
+                tryFlush(LastFlush_[whichOne], interval);
                 interval += Parameters_.FlushLimit;
             }
             if (LastFlush_[whichOne] < now) {
-                const auto metricsJson = GetMeteringJson(
-                    name, schema, tags, "second",
-                    Parameters_.PartitionsSize * (now - LastFlush_[whichOne]).Seconds(),
-                    LastFlush_[whichOne], now, now);
-                LastFlush_[whichOne] = now;
-                FlushFunction_(metricsJson);
+                tryFlush(LastFlush_[whichOne], now);
             }
         }
         break;
@@ -266,24 +266,23 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             const TString name = "yds.reserved_resources";
             const TString schema = "yds.storage.reserved.v1";
             auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
-            while (interval < now) {
+            
+            auto tryFlush = [&](TInstant start, TInstant finish) {
                 const auto metricsJson = GetMeteringJson(
                     name, schema, {}, "mbyte*second",
                     Parameters_.PartitionsSize * (Parameters_.ReservedSpace / 1_MB) *
-                    (now - LastFlush_[whichOne]).Seconds(),
-                    LastFlush_[whichOne], interval, now);
-                LastFlush_[whichOne] = interval;
+                    (finish.Seconds() - start.Seconds()),
+                    start, finish, now);
                 FlushFunction_(metricsJson);
+                LastFlush_[whichOne] = finish;
+            };
+
+            while (interval < now) {
+                tryFlush(LastFlush_[whichOne], interval);
                 interval += Parameters_.FlushLimit;
             }
             if (LastFlush_[whichOne] < now) {
-                const auto metricsJson = GetMeteringJson(
-                    name, schema, {}, "mbyte*second",
-                    Parameters_.PartitionsSize * (Parameters_.ReservedSpace / 1_MB) *
-                    (now - LastFlush_[whichOne]).Seconds(),
-                    LastFlush_[whichOne], now, now);
-                LastFlush_[whichOne] = now;
-                FlushFunction_(metricsJson);
+                tryFlush(LastFlush_[whichOne], now);
             }
         }
         break;

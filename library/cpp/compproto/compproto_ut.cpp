@@ -20,7 +20,7 @@ static ui32 PseudoRandom(ui32 max) {
     gSeed *= 419;
     gSeed = gSeed ^ (ui64(max) << 17);
     return gSeed % max;
-};
+}
 
 enum ECompMode {
     CM_SINGLEPASS,

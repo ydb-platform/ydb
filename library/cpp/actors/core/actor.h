@@ -876,6 +876,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
+        Y_VERIFY(actor);
         return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfActorId);
     }
 
@@ -883,6 +884,7 @@ namespace NActors {
     template <ESendingType SendingType>
     TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
                         ui64 revolvingCounter, const TActorId& parentId) {
+        Y_VERIFY(actor);
         Y_VERIFY(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
                 (ui32)executorPool, (ui32)ExecutorPoolCount);
         if constexpr (SendingType == ESendingType::Common) {

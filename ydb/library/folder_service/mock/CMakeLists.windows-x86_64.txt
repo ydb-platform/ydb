@@ -19,5 +19,5 @@ target_link_libraries(library-folder_service-mock PUBLIC
   library-folder_service-proto
 )
 target_sources(library-folder_service-mock PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/mock/mock_folder_service.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/mock/mock_folder_service_adapter.cpp
 )

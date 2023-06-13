@@ -8,6 +8,7 @@ class TDatabase;
 namespace NKikimr::NOlap {
 
 struct TInsertedData;
+class TInsertTableAccessor;
 struct TColumnRecord;
 struct TGranuleRecord;
 class IColumnEngine;
@@ -23,9 +24,7 @@ public:
     virtual void EraseCommitted(const TInsertedData& data) = 0;
     virtual void EraseAborted(const TInsertedData& data) = 0;
 
-    virtual bool Load(THashMap<TWriteId, TInsertedData>& inserted,
-                      THashMap<ui64, TSet<TInsertedData>>& committed,
-                      THashMap<TWriteId, TInsertedData>& aborted,
+    virtual bool Load(TInsertTableAccessor& insertTable,
                       const TInstant& loadTime) = 0;
 
     virtual void WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) = 0;
@@ -54,9 +53,7 @@ public:
     void EraseCommitted(const TInsertedData& data) override;
     void EraseAborted(const TInsertedData& data) override;
 
-    bool Load(THashMap<TWriteId, TInsertedData>& inserted,
-              THashMap<ui64, TSet<TInsertedData>>& committed,
-              THashMap<TWriteId, TInsertedData>& aborted,
+    bool Load(TInsertTableAccessor& insertTable,
               const TInstant& loadTime) override;
 
     void WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) override;

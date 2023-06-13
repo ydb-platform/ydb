@@ -381,6 +381,11 @@ public:
 
         if (completeEdge) {
             Self->PromoteCompleteEdge(completeEdge, txc);
+            // NOTE: asynchronous indexes are inconsistent by their nature
+            // We just promote follower read edge to the latest version
+            // and say it's repeatable, even though we cannot possibly know
+            // which versions are consistent and repeatable.
+            Self->GetSnapshotManager().PromoteFollowerReadEdge(completeEdge, true, txc);
         }
 
         return true;

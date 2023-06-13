@@ -292,57 +292,56 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster->NodesCount("localhost"), 2);
 
         cluster->AddPDisk(MakePDiskConfig(1, 1));
-        cluster->AddPDisk(MakePDiskConfig(2, 2));
-        cluster->AddVDisk(MakeVSlotConfig(1, {0, 1, 0, 0, 0}, 1, 0));
-        cluster->AddVDisk(MakeVSlotConfig(2, {0, 1, 0, 1, 0}, 2, 0));
-        cluster->AddBSGroup(MakeBSGroup(0, "none", 1, 1, 0, 2, 2, 0));
-
         cluster->UpdatePDiskState(NCms::TPDiskID(1, 1), MakePDiskInfo(1));
         UNIT_ASSERT(cluster->HasPDisk(NCms::TPDiskID(1, 1)));
         UNIT_ASSERT(!cluster->HasPDisk(NCms::TPDiskID(1, 2)));
         UNIT_ASSERT(!cluster->HasPDisk(NCms::TPDiskID(2, 1)));
-        CheckPDisk(cluster->PDisk(NCms::TPDiskID(1, 1)), 1, 1, UP, 1);
+        CheckPDisk(cluster->PDisk(NCms::TPDiskID(1, 1)), 1, 1, UP, 0);
         UNIT_ASSERT(cluster->Node(1).PDisks.contains(NCms::TPDiskID(1, 1)));
 
+        cluster->AddVDisk(MakeVSlotConfig(1, {0, 1, 0, 0, 0}, 1, 0));
         cluster->UpdateVDiskState({0, 1, 0, 0, 0}, MakeVDiskInfo({0, 1, 0, 0, 0}, 1, 0));
         UNIT_ASSERT(cluster->HasVDisk({0, 1, 0, 0, 0}));
-        CheckVDisk(cluster->VDisk({0, 1, 0, 0, 0}), {0, 1, 0, 0, 0}, 1, UP, 1, 1);
+        UNIT_ASSERT(!cluster->HasVDisk({0, 1, 0, 1, 0}));
+        CheckVDisk(cluster->VDisk({0, 1, 0, 0, 0}), {0, 1, 0, 0, 0}, 1, UP, 1, 0);
         UNIT_ASSERT_VALUES_EQUAL(cluster->PDisk(NCms::TPDiskID(1, 1)).VDisks.size(), 1);
         UNIT_ASSERT(cluster->PDisk(NCms::TPDiskID(1, 1)).VDisks.contains(TVDiskID(0, 1, 0, 0, 0)));
 
+        cluster->AddPDisk(MakePDiskConfig(2, 2));
         cluster->UpdatePDiskState(NCms::TPDiskID(2, 2), MakePDiskInfo(2));
         UNIT_ASSERT(cluster->HasPDisk(NCms::TPDiskID(2, 2)));
-        CheckPDisk(cluster->PDisk(NCms::TPDiskID(2, 2)), 2, 2, UP, 1);
+        CheckPDisk(cluster->PDisk(NCms::TPDiskID(2, 2)), 2, 2, UP, 0);
 
+        cluster->AddVDisk(MakeVSlotConfig(2, {0, 1, 0, 1, 0}, 2, 0));
         cluster->UpdateVDiskState({0, 1, 0, 1, 0}, MakeVDiskInfo({0, 1, 0, 1, 0}, 2, 0));
         UNIT_ASSERT(cluster->HasVDisk({0, 1, 0, 1, 0}));
         UNIT_ASSERT(cluster->HasPDisk(NCms::TPDiskID(2, 2)));
         CheckPDisk(cluster->PDisk(NCms::TPDiskID(2, 2)), 2, 2, UP, 1);
         UNIT_ASSERT(cluster->PDisk(NCms::TPDiskID(2, 2)).VDisks.contains(TVDiskID(0, 1, 0, 1, 0)));
 
-        UNIT_ASSERT(cluster->HasBSGroup(0));
-        UNIT_ASSERT(!cluster->HasBSGroup(1));
-        CheckBSGroup(cluster->BSGroup(0), 0, TErasureType::ErasureNone, 2,
+        cluster->AddBSGroup(MakeBSGroup(1, "none", 1, 1, 0, 2, 2, 0));
+        UNIT_ASSERT(cluster->HasBSGroup(1));
+        UNIT_ASSERT(!cluster->HasBSGroup(2));
+        CheckBSGroup(cluster->BSGroup(1), 1, TErasureType::ErasureNone, 2,
                      TVDiskID(0, 1, 0, 0, 0), TVDiskID(0, 1, 0, 1, 0));
-        CheckVDisk(cluster->VDisk({0, 1, 0, 0, 0}), 1, 0);
-        CheckVDisk(cluster->VDisk({0, 1, 0, 1, 0}), 1, 0);
+        CheckVDisk(cluster->VDisk({0, 1, 0, 0, 0}), 1, 1);
+        CheckVDisk(cluster->VDisk({0, 1, 0, 1, 0}), 1, 1);
 
         cluster->AddPDisk(MakePDiskConfig(3, 3));
-        cluster->AddVDisk(MakeVSlotConfig(3, {0, 1, 0, 2, 0}, 3, 0));
-        cluster->AddBSGroup(MakeBSGroup(2, "none", 1, 1, 0, 3, 3, 0));
-
         cluster->UpdatePDiskState(NCms::TPDiskID(3, 3), MakePDiskInfo(3));
         UNIT_ASSERT(cluster->HasPDisk(NCms::TPDiskID(3, 3)));
-        CheckPDisk(cluster->PDisk(NCms::TPDiskID(3, 3)), 3, 3, UP, 1);
+        CheckPDisk(cluster->PDisk(NCms::TPDiskID(3, 3)), 3, 3, UP, 0);
 
+        cluster->AddVDisk(MakeVSlotConfig(3, {0, 1, 0, 2, 0}, 3, 0));
         cluster->UpdateVDiskState({0, 1, 0, 2, 0}, MakeVDiskInfo({0, 1, 0, 2, 0}, 3, 0));
         UNIT_ASSERT(cluster->HasVDisk({0, 1, 0, 2, 0}));
-        CheckVDisk(cluster->VDisk({0, 1, 0, 2, 0}), TVDiskID(0, 1, 0, 2, 0), 3, UP, 3, 1);
+        CheckVDisk(cluster->VDisk({0, 1, 0, 2, 0}), TVDiskID(0, 1, 0, 2, 0), 3, UP, 3, 0);
 
+        cluster->AddBSGroup(MakeBSGroup(2, "none", 1, 1, 0, 3, 3, 0));
         UNIT_ASSERT(cluster->HasBSGroup(2));
         CheckBSGroup(cluster->BSGroup(2), 2, TErasureType::ErasureNone, 2,
                      TVDiskID(0, 1, 0, 0, 0), TVDiskID(0, 1, 0, 2, 0));
-        CheckVDisk(cluster->VDisk({0, 1, 0, 0, 0}), 2, 0, 2);
+        CheckVDisk(cluster->VDisk({0, 1, 0, 0, 0}), 2, 1, 2);
         UNIT_ASSERT(cluster->HasVDisk({0, 1, 0, 2, 0}));
         CheckVDisk(cluster->VDisk({0, 1, 0, 2, 0}), TVDiskID(0, 1, 0, 2, 0), 3, UP, 3, 1, 2);
 

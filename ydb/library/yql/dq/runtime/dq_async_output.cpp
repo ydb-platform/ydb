@@ -67,6 +67,12 @@ public:
         ReportChunkIn();
     }
 
+    void WidePush(NUdf::TUnboxedValue* values, ui32 count) override {
+        Y_UNUSED(values);
+        Y_UNUSED(count);
+        YQL_ENSURE(false, "Wide stream is not supported");
+    }
+
     void Push(NDqProto::TWatermark&& watermark) override {
         const ui64 bytesSize = watermark.ByteSize();
         Values.emplace_back(std::move(watermark), bytesSize);
@@ -91,7 +97,7 @@ public:
         }
     }
 
-    ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueVector& batch, ui64 bytes) override {
+    ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
         batch.clear();
         ui64 valuesCount = 0;
         ui64 usedBytes = 0;
@@ -106,7 +112,6 @@ public:
         }
 
         // Reserve size and return data.
-        batch.reserve(valuesCount);
         while (valuesCount--) {
             batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(Values.front().Value)));
             Values.pop_front();
@@ -114,7 +119,7 @@ public:
         Y_VERIFY(EstimatedStoredBytes >= usedBytes);
         EstimatedStoredBytes -= usedBytes;
 
-        ReportChunkOut(batch.size(), usedBytes);
+        ReportChunkOut(batch.RowCount(), usedBytes);
 
         return usedBytes;
     }

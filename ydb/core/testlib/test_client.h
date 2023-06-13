@@ -115,6 +115,7 @@ namespace Tests {
         TLoggerInitializer LoggerInitializer;
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
+        bool EnableForceFollowers = false;
         bool EnableConsole = true;
         bool EnableNodeBroker = false;
         bool EnableConfigsDispatcher = true;
@@ -164,6 +165,7 @@ namespace Tests {
         TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(AppConfig); return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
+        TServerSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; }
         TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
         TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }

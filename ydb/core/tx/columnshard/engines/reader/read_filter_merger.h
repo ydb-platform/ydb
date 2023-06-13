@@ -121,7 +121,7 @@ private:
             , KeyColumns(batch, 0, keyColumns, reverseSort)
             , VersionColumns(batch, 0, TIndexInfo::GetSpecialColumnNames(), false)
             , RecordsCount(batch->num_rows())
-            , ReverseSortKff(reverseSort ? 1 : -1)
+            , ReverseSortKff(reverseSort ? -1 : 1)
             , PoolId(poolId)
             , Filter(filter)
         {

@@ -849,7 +849,6 @@ class TDescribeTableResult;
 class TBeginTransactionResult;
 class TCommitTransactionResult;
 class TKeepAliveResult;
-class TSessionPoolImpl;
 class TBulkUpsertResult;
 class TReadRowsResult;
 class TScanQueryPartIterator;
@@ -978,6 +977,7 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 };
 
 class TSession;
+class TSessionPool;
 struct TRetryState;
 
 enum class EDataFormat {
@@ -988,7 +988,7 @@ enum class EDataFormat {
 class TTableClient {
     friend class TSession;
     friend class TTransaction;
-    friend class TSessionPoolImpl;
+    friend class TSessionPool;
     friend class TRetryOperationContext;
 
 public:
@@ -1579,7 +1579,7 @@ class TSession {
     friend class TTableClient;
     friend class TDataQuery;
     friend class TTransaction;
-    friend class TSessionPoolImpl;
+    friend class TSessionPool;
 
 public:
     //! The following methods perform corresponding calls.
@@ -1647,7 +1647,7 @@ public:
 
     class TImpl;
 private:
-    TSession(std::shared_ptr<TTableClient::TImpl> client, const TString& sessionId, const TString& endpointId);
+    TSession(std::shared_ptr<TTableClient::TImpl> client, const TString& sessionId, const TString& endpointId, bool isOwnedBySessionPool);
     TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<TSession::TImpl> SessionImpl_);
 
     std::shared_ptr<TTableClient::TImpl> Client_;

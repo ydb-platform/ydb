@@ -33,6 +33,7 @@ message TDqAsyncInputBufferStats {
 message TDqInputChannelStats {
     // basic stats
     uint64 ChannelId = 1;
+    uint32 SrcStageId = 20;
     uint64 Chunks = 2;
     uint64 Bytes = 3;
     uint64 RowsIn = 4;
@@ -44,7 +45,11 @@ message TDqInputChannelStats {
 
     uint32 PollRequests = 8;
     uint32 ResentMessages = 9;
-    uint64 WaitTimeUs = 10;
+    uint64 IdleTimeUs = 11; // wait time until 1st message received
+    uint64 WaitTimeUs = 10; // wait time after 1st message received
+
+    uint64 FirstMessageMs = 30;
+    uint64 LastMessageMs = 31;
 
     google.protobuf.Any Extra = 100;
 }
@@ -69,6 +74,7 @@ message TDqAsyncOutputBufferStats {
 message TDqOutputChannelStats {
     // basic stats
     uint64 ChannelId = 1;
+    uint32 DstStageId = 20;
     uint64 Chunks = 2;
     uint64 Bytes = 3;
     uint64 RowsIn = 4;
@@ -85,6 +91,11 @@ message TDqOutputChannelStats {
     uint64 SpilledBytes = 12;
     uint64 SpilledRows = 13;
     uint64 SpilledBlobs = 14;
+
+    uint64 BlockedTimeUs = 15;
+
+    uint64 FirstMessageMs = 30;
+    uint64 LastMessageMs = 31;
 
     google.protobuf.Any Extra = 100;
 }

@@ -509,7 +509,7 @@ allowed_labels:
 selector_config: []
 )";
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
 
         UNIT_ASSERT(notifications == 0);
 
@@ -541,7 +541,7 @@ config: {yaml_config_enabled: false}
 allowed_labels: {}
 selector_config: []
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
 
         UNIT_ASSERT(notifications == 0);
 
@@ -554,30 +554,6 @@ selector_config: []
         ncdConfig->SetLastUpdateTimestamp(5);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
-    }
-
-    Y_UNIT_TEST(DoubleDrop) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        TString yamlConfig = R"(
----
-metadata:
-  cluster: ""
-  version: 0
-
-config:
-  log_config:
-    cluster_name: cluster1
-allowed_labels:
-  test:
-    type: enum
-    values:
-      ? true
-
-selector_config: []
-)";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig);
-        CheckDropConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1);
-        CheckDropConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1);
     }
 
     Y_UNIT_TEST(TestYamlEndToEnd) {
@@ -642,7 +618,7 @@ allowed_labels:
 
 selector_config: []
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
         UNIT_ASSERT(notifications == 0);
 
         TString yamlConfig2 = R"(
@@ -665,7 +641,7 @@ allowed_labels:
 selector_config: []
 )";
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
 
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster2");
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetDefaultLevel(5);
@@ -692,7 +668,7 @@ allowed_labels:
 
 selector_config: []
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig3);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig3);
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
@@ -728,8 +704,8 @@ allowed_labels:
 
 selector_config: []
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig4);
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig4);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig4);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig4);
         UNIT_ASSERT(notifications == 0);
 
         TString yamlConfig5 = R"(
@@ -762,7 +738,7 @@ selector_config:
       - component: AUDIT_LOG_WRITER
         level: 7
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig5);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig5);
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
@@ -778,20 +754,6 @@ selector_config:
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
         notifications = 0;
-
-        CheckDropConfig(runtime, Ydb::StatusIds::SUCCESS, "", 5);
-        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
-        expectedConfig = {};
-        label = expectedConfig.AddLabels();
-        label->SetName("test");
-        label->SetValue("true");
-        logConfig = expectedConfig.MutableLogConfig();
-        logConfig->SetClusterName("cluster2");
-        logConfig->SetDefaultLevel(5);
-        UNIT_ASSERT(notifications > 0);
-        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
-
-        CheckDropConfig(runtime, Ydb::StatusIds::SUCCESS, "", 5);
 
         TString yamlConfig6 = R"(
 ---
@@ -821,9 +783,9 @@ selector_config:
     log_config: !inherit
       entry:
       - component: AUDIT_LOG_WRITER
-        level: 7
+        level: 6
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig6);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig6);
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
@@ -835,7 +797,7 @@ selector_config:
         logConfig->SetDefaultLevel(5);
         entry = logConfig->AddEntry();
         entry->SetComponent("AUDIT_LOG_WRITER");
-        entry->SetLevel(7);
+        entry->SetLevel(6);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
         notifications = 0;
@@ -871,7 +833,7 @@ selector_config:
       - component: AUDIT_LOG_WRITER
         level: 7
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig7);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig7);
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};
@@ -909,7 +871,7 @@ selector_config:
   config:
     yaml_config_enabled: false
 )";
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig8);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig8);
 
         reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         expectedConfig = {};

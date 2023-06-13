@@ -7,6 +7,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
 
@@ -23,6 +24,7 @@ public:
     NDqProto::EDataTransportVersion GetTransportVersion() const;
 
     NDqProto::TData Serialize(const NUdf::TUnboxedValue& value, const NKikimr::NMiniKQL::TType* itemType) const;
+    NDqProto::TData Serialize(const NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, const NKikimr::NMiniKQL::TType* itemType) const;
 
     template <class TForwardIterator>
     NDqProto::TData Serialize(TForwardIterator first, TForwardIterator last, const NKikimr::NMiniKQL::TType* itemType) const {
@@ -41,7 +43,7 @@ public:
     }
 
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType,
-        NKikimr::NMiniKQL::TUnboxedValueVector& buffer) const;
+        NKikimr::NMiniKQL::TUnboxedValueBatch& buffer) const;
     void Deserialize(const NDqProto::TData& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
 
     struct TEstimateSizeSettings {

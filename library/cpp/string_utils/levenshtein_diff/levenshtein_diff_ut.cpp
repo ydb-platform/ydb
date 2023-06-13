@@ -8,19 +8,19 @@ namespace {
 
     float unaryZeroWeigher(const char&) {
         return 0.0f;
-    };
+    }
 
     float unaryMaxWeigher(const char&) {
         return 1.0f;
-    };
+    }
 
     float binaryZeroWeigher(const char&, const char&) {
         return 0.0f;
-    };
+    }
 
     float binaryMaxWeigher(const char&, const char&) {
         return 1.0f;
-    };
+    }
 
 }
 

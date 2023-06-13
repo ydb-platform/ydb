@@ -53,6 +53,7 @@ struct TEvTablet {
         EvCutTabletHistory,
         EvUpdateConfig,
         EvDropLease,
+        EvReady,
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -233,7 +234,7 @@ struct TEvTablet {
         {}
     };
 
-    // tablet is ready for operation
+    // tablet is restored, but may not yet be ready to accept messages
     struct TEvRestored : public TEventLocal<TEvRestored, EvRestored> {
         const ui64 TabletID;
         const ui32 Generation;
@@ -245,6 +246,19 @@ struct TEvTablet {
             , Generation(generation)
             , UserTabletActor(userTabletActor)
             , Follower(follower)
+        {}
+    };
+
+    // tablet is ready for operation
+    struct TEvReady : public TEventLocal<TEvReady, EvReady> {
+        const ui64 TabletID;
+        const ui32 Generation;
+        const TActorId UserTabletActor;
+
+        TEvReady(ui64 tabletId, ui32 generation, const TActorId &userTabletActor)
+            : TabletID(tabletId)
+            , Generation(generation)
+            , UserTabletActor(userTabletActor)
         {}
     };
 

@@ -6,18 +6,54 @@
 namespace NKikimr::NOlap {
 
 class TInsertionSummary {
+public:
+    struct TCounters {
+        ui64 Rows{};
+        ui64 Bytes{};
+        ui64 RawBytes{};
+    };
+
 private:
     friend class TPathInfo;
-
+    TCounters StatsPrepared;
+    TCounters StatsCommitted;
     const NColumnShard::TInsertTableCounters Counters;
-    YDB_READONLY(i64, CommittedSize, 0);
-    YDB_READONLY(i64, InsertedSize, 0);
+
+    THashMap<TWriteId, TInsertedData> Inserted;
+    THashMap<TWriteId, TInsertedData> Aborted;
+
     std::map<ui64, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
     void RemovePriority(const TPathInfo& pathInfo) noexcept;
     void AddPriority(const TPathInfo& pathInfo) noexcept;
 
+    void OnNewCommitted(const ui64 dataSize, const bool load = false) noexcept;
+    void OnEraseCommitted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
+    void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
+    void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
+
 public:
+    THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
+
+    THashSet<TWriteId> GetDeprecatedInsertions(const TInstant timeBorder) const;
+
+    const THashMap<TWriteId, TInsertedData>& GetInserted() const {
+        return Inserted;
+    }
+    const THashMap<TWriteId, TInsertedData>& GetAborted() const {
+        return Aborted;
+    }
+
+    const TInsertedData* AddAborted(TInsertedData&& data, const bool load = false);
+    bool EraseAborted(const TWriteId writeId);
+
+    bool EraseCommitted(const TInsertedData& data);
+
+    const TInsertedData* AddInserted(TInsertedData&& data, const bool load = false);
+    std::optional<TInsertedData> ExtractInserted(const TWriteId id);
+
+    const TCounters& GetCountersPrepared() const { return StatsPrepared; }
+    const TCounters& GetCountersCommitted() const { return StatsCommitted; }
     const NColumnShard::TInsertTableCounters& GetCounters() const {
         return Counters;
     }
@@ -33,6 +69,8 @@ public:
     void Clear();
 
     bool IsOverloaded(const ui64 pathId) const;
+
+
 
     const std::map<ui64, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;

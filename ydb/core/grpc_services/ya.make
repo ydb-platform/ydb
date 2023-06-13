@@ -12,32 +12,32 @@ SRCS(
     operation_helpers.cpp
     resolve_local_db_table.cpp
     rpc_alter_coordination_node.cpp
-    rpc_alter_table.cpp
-    rpc_begin_transaction.cpp
+    table/rpc_alter_table.cpp
+    table/rpc_begin_transaction.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
     rpc_cms.cpp
-    rpc_commit_transaction.cpp
+    table/rpc_commit_transaction.cpp
     rpc_dynamic_config.cpp
-    rpc_copy_table.cpp
-    rpc_copy_tables.cpp
+    table/rpc_copy_table.cpp
+    table/rpc_copy_tables.cpp
     rpc_export.cpp
     rpc_create_coordination_node.cpp
-    rpc_create_session.cpp
-    rpc_create_table.cpp
-    rpc_delete_session.cpp
+    table/rpc_create_session.cpp
+    table/rpc_create_table.cpp
+    table/rpc_delete_session.cpp
     rpc_describe_coordination_node.cpp
     rpc_describe_path.cpp
-    rpc_describe_table.cpp
-    rpc_describe_table_options.cpp
+    table/rpc_describe_table.cpp
+    table/rpc_describe_table_options.cpp
     rpc_drop_coordination_node.cpp
-    rpc_drop_table.cpp
+    table/rpc_drop_table.cpp
     rpc_discovery.cpp
-    rpc_execute_data_query.cpp
-    rpc_execute_scheme_query.cpp
-    rpc_execute_yql_script.cpp
-    rpc_explain_yql_script.cpp
-    rpc_explain_data_query.cpp
+    table/rpc_execute_data_query.cpp
+    table/rpc_execute_scheme_query.cpp
+    table/rpc_execute_yql_script.cpp
+    table/rpc_explain_yql_script.cpp
+    table/rpc_explain_data_query.cpp
     rpc_forget_operation.cpp
     rpc_fq_internal.cpp
     rpc_fq.cpp
@@ -51,24 +51,24 @@ SRCS(
     rpc_kqp_base.cpp
     rpc_list_operations.cpp
     rpc_login.cpp
-    rpc_load_rows.cpp
+    table/rpc_load_rows.cpp
     rpc_log_store.cpp
     rpc_long_tx.cpp
     rpc_node_registration.cpp
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
-    rpc_prepare_data_query.cpp
+    table/rpc_prepare_data_query.cpp
     rpc_rate_limiter_api.cpp
     rpc_read_columns.cpp
-    rpc_read_table.cpp
-    rpc_read_rows.cpp
+    table/rpc_read_table.cpp
+    table/rpc_read_rows.cpp
     rpc_remove_directory.cpp
-    rpc_rename_tables.cpp
-    rpc_rollback_transaction.cpp
+    table/rpc_rename_tables.cpp
+    table/rpc_rollback_transaction.cpp
     rpc_scheme_base.cpp
-    rpc_stream_execute_scan_query.cpp
-    rpc_stream_execute_yql_script.cpp
+    table/rpc_stream_execute_scan_query.cpp
+    table/rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     table_settings.cpp
 

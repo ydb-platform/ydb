@@ -155,7 +155,12 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         TString prevResult = "";
         for (ui32 i = 0; i < IterationsCount * 10 && successIteration < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
-            auto res = Execute(query, client);
+            std::pair<TString, TString> res;
+            try {
+                res = Execute(query, client);
+            } catch (...) {
+                res = std::make_pair<TString, TString>("", CurrentExceptionMessage());
+            }
             if (prevResult != res.first && !qInfo.IsCorrectResult(res.first)) {
                 outFStream << queryN << ": UNEXPECTED DIFF: " << Endl
                     << "RESULT: " << Endl << res.first << Endl
@@ -172,6 +177,12 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
                 if (successIteration == 1) {
                     outFStream << queryN << ": " << Endl
                         << res.first << res.second << Endl << Endl;
+                }
+                if (prevResult != res.first && !qInfo.IsCorrectResult(res.first)) {
+                    outFStream << queryN << ": UNEXPECTED DIFF: " << Endl
+                        << "RESULT: " << Endl << res.first << Endl
+                        << "EXPECTATION: " << Endl << qInfo.GetExpectedResult() << Endl;
+                    prevResult = res.first;
                 }
             } else {
                 Cout << "failed\t" << duration << " seconds" << Endl;

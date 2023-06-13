@@ -474,8 +474,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
     Y_VERIFY(minTs >= ts0.GetBorder());
 
     // It's an estimation of needed count cause numRows calculated before key replaces
-    ui32 numSplitInto = changes.NumSplitInto(numRows);
-    ui32 rowsInGranule = numRows / numSplitInto;
+    ui32 rowsInGranule = numRows / changes.NumSplitInto(numRows);
     Y_VERIFY(rowsInGranule);
 
     // Cannot split in case of one unique key
@@ -530,6 +529,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
         for (const auto& border : borders) {
             int offset = NArrow::LowerBound(keys, border, batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
+            Y_VERIFY(offset <= batch->num_rows());
             batchOffsets.push_back(offset);
         }
 
@@ -540,6 +540,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
     for (ui32 granuleNo = 0; granuleNo < borders.size() + 1; ++granuleNo) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> granuleBatches;
         granuleBatches.reserve(batches.size());
+        const bool lastGranule = (granuleNo == borders.size());
 
         // Extract granule: slice source batches with offsets
         i64 granuleNumRows = 0;
@@ -548,14 +549,12 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
             auto& batchOffsets = offsets[i];
 
             int offset = batchOffsets[granuleNo];
-            int end = batch->num_rows();
-            if (granuleNo < borders.size()) {
-                end = batchOffsets[granuleNo + 1];
-            }
+            int end = lastGranule ? batch->num_rows() : batchOffsets[granuleNo + 1];
             int size = end - offset;
             Y_VERIFY(size >= 0);
 
             if (size) {
+                Y_VERIFY(offset < batch->num_rows());
                 auto slice = batch->Slice(offset, size);
                 Y_VERIFY(slice->num_rows());
                 granuleNumRows += slice->num_rows();

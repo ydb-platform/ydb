@@ -71,8 +71,6 @@ jobs:
     needs: provide-runner
     with:
       runner_label: ${{ needs.provide-runner.outputs.label }}
-    secrets:
-      rc_auth: ${{ secrets.REMOTE_CACHE_AUTH }}  
 
   main:
     name: Build and test
@@ -94,7 +92,7 @@ jobs:
       uses: ./.github/actions/build
       with: 
         sanitizer: ${{ inputs.sanitizer }}
-        ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.rc_auth, vars.REMOTE_CACHE_URL) || ''}}
+        ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}
     - name: Run tests
       uses: ./.github/actions/test
       with:

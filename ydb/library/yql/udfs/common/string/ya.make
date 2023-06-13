@@ -20,8 +20,4 @@ PEERDIR(
     library/cpp/string_utils/quote
 )
 
-TIMEOUT(300)
-
-SIZE(MEDIUM)
-
 END()

@@ -623,7 +623,7 @@ message GetResultDataResult {
 // Binding API
 
 message Schema {
-    repeated Ydb.Column column = 1 [(Ydb.size).le = 100];
+    repeated Ydb.Column column = 1 [(Ydb.size).le = 1000];
 }
 
 message DataStreamsBinding {

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    api_adapters.cpp
     audit_log.cpp
     base_handler.h
     cluster_info.cpp

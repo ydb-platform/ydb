@@ -52,6 +52,7 @@ target_link_libraries(ydb-core-cms PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/api_adapters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/audit_log.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms.cpp

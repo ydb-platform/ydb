@@ -118,6 +118,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_log_store.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_long_tx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_node_registration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_maintenance.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_make_directory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_modify_permissions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_monitoring.cpp

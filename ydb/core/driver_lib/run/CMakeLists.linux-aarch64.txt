@@ -131,6 +131,7 @@ target_link_libraries(run PUBLIC
   ydb-services-fq
   ydb-services-kesus
   ydb-services-local_discovery
+  ydb-services-maintenance
   services-metadata-ds_table
   ydb-services-metadata
   services-bg_tasks-ds_table

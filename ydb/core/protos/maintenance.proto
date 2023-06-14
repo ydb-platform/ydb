@@ -1,0 +1,70 @@
+import "ydb/public/api/protos/draft/ydb_maintenance.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+package NKikimrMaintenance;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TListClusterNodesRequest {
+    optional Ydb.Maintenance.ListClusterNodesRequest Request = 1;
+}
+
+message TListClusterNodesResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Maintenance.ListClusterNodesResult Result = 3;
+}
+
+message TCreateMaintenanceTaskRequest {
+    optional Ydb.Maintenance.CreateMaintenanceTaskRequest Request = 1;
+    optional string UserSID = 2;
+}
+
+message TRefreshMaintenanceTaskRequest {
+    optional Ydb.Maintenance.RefreshMaintenanceTaskRequest Request = 1;
+}
+
+message TMaintenanceTaskResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Maintenance.MaintenanceTaskResult Result = 3;
+}
+
+message TGetMaintenanceTaskRequest {
+    optional Ydb.Maintenance.GetMaintenanceTaskRequest Request = 1;
+}
+
+message TGetMaintenanceTaskResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Maintenance.GetMaintenanceTaskResult Result = 3;
+}
+
+message TListMaintenanceTasksRequest {
+    optional Ydb.Maintenance.ListMaintenanceTasksRequest Request = 1;
+}
+
+message TListMaintenanceTasksResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Maintenance.ListMaintenanceTasksResult Result = 3;
+}
+
+message TDropMaintenanceTaskRequest {
+    optional Ydb.Maintenance.DropMaintenanceTaskRequest Request = 1;
+}
+
+message TManageMaintenanceTaskResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+}
+
+message TCompleteActionRequest {
+    optional Ydb.Maintenance.CompleteActionRequest Request = 1;
+}
+
+message TManageActionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Maintenance.ManageActionResult Result = 3;
+}

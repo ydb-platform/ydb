@@ -42,7 +42,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ID, Owner, Order, Content>;
     };
 
-
     struct WalleTask : Table<4> {
         struct TaskID : Column<1, NScheme::NTypeIds::Utf8> {};
         struct RequestID : Column<2, NScheme::NTypeIds::Utf8> {};
@@ -130,8 +129,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<NodeId, DiskId, Downtime>;
     };
 
+    struct MaintenanceTasks : Table<14> {
+        struct TaskID : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct RequestID : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Owner : Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<TaskID>;
+        using TColumns = TableColumns<TaskID, RequestID, Owner>;
+    };
+
     using TTables = SchemaTables<Param, Permission, Request, WalleTask, Notification, NodeTenant,
-        HostMarkers, NodeMarkers, PDiskMarkers, VDiskMarkers, LogRecords, NodeDowntimes, PDiskDowntimes>;
+        HostMarkers, NodeMarkers, PDiskMarkers, VDiskMarkers, LogRecords, NodeDowntimes, PDiskDowntimes,
+        MaintenanceTasks>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

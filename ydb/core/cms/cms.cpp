@@ -772,6 +772,7 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         }
 
         acceptTaskPermission(State->WalleTasks, State->WalleRequests, requestId, permission.GetId());
+        acceptTaskPermission(State->MaintenanceTasks, State->MaintenanceRequests, requestId, permission.GetId());
     }
 }
 
@@ -930,6 +931,8 @@ void TCms::RemoveEmptyTasks(const TActorContext &ctx)
 {
     for (auto &id : FindEmptyTasks(State->WalleTasks, ctx))
         Execute(CreateTxRemoveWalleTask(id), ctx);
+    for (auto &id : FindEmptyTasks(State->MaintenanceTasks, ctx))
+        Execute(CreateTxRemoveMaintenanceTask(id), ctx);
 }
 
 void TCms::Cleanup(const TActorContext &ctx)
@@ -1235,6 +1238,13 @@ void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const 
     if (!rec.GetUser()) {
         return ReplyWithError<TEvCms::TEvPermissionResponse>(
             ev, TStatus::WRONG_REQUEST, "Missing user in request", ctx);
+    }
+
+    if (rec.HasMaintenanceTaskId()) {
+        if (State->MaintenanceTasks.contains(rec.GetMaintenanceTaskId())) {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(
+                ev, TStatus::WRONG_REQUEST, "Maintenance task already exists", ctx);
+        }
     }
 
     EnqueueRequest(ev.Release(), ctx);
@@ -1581,7 +1591,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
 
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(reqId, std::move(scheduled));
-        } else if (user == WALLE_CMS_USER) {
+        } else if (user == WALLE_CMS_USER || rec.HasMaintenanceTaskId()) {
             scheduled.Owner = user;
             scheduled.RequestId = reqId;
 
@@ -1591,8 +1601,13 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         if (ok)
             AcceptPermissions(resp->Record, reqId, user, ctx);
 
+        TMaybe<TString> maintenanceTaskId;
+        if (rec.HasMaintenanceTaskId()) {
+            maintenanceTaskId.ConstructInPlace(rec.GetMaintenanceTaskId());
+        }
+
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
+        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy), maintenanceTaskId), ctx);
     }
 
     TabletCounters->Percentile()[COUNTER_LATENCY_PERMISSION_REQUEST].IncrementFor((TInstant::Now() - requestStartTime).MilliSeconds());

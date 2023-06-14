@@ -90,6 +90,7 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/kesus/grpc_service.h>
 #include <ydb/services/local_discovery/grpc_service.h>
+#include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
@@ -566,6 +567,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["scripting"] = &hasScripting;
         TServiceCfg hasCms = services.empty();
         names["cms"] = &hasCms;
+        TServiceCfg hasMaintenance = services.empty();
+        names["maintenance"] = &hasMaintenance;
         TServiceCfg hasKesus = services.empty();
         names["locking"] = names["kesus"] = &hasKesus;
         TServiceCfg hasMonitoring = services.empty();
@@ -813,6 +816,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
             server.AddService(new NGRpcService::TGRpcDynamicConfigService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
+        }
+
+        if (hasMaintenance) {
+            server.AddService(new NGRpcService::TGRpcMaintenanceService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasMaintenance.IsRlAllowed()));
         }
 
         if (hasDiscovery) {

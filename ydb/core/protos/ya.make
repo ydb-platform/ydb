@@ -72,6 +72,7 @@ SRCS(
     load_test.proto
     local.proto
     long_tx_service.proto
+    maintenance.proto
     metrics.proto
     minikql_engine.proto
     mon.proto

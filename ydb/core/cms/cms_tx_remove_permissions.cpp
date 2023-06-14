@@ -44,6 +44,11 @@ public:
                 Self->State->WalleTasks.find(taskId)->second.Permissions.erase(id);
             }
 
+            if (Self->State->MaintenanceRequests.contains(requestId)) {
+                auto taskId = Self->State->MaintenanceRequests.find(requestId)->second;
+                Self->State->MaintenanceTasks.find(taskId)->second.Permissions.erase(id);
+            }
+
             Self->AuditLog(ctx, TStringBuilder() << "Remove permission"
                 << ": id# " << id
                 << ", reason# " << (Request ? "explicit remove" : "scheduled cleanup"));

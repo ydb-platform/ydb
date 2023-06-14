@@ -52,4 +52,8 @@ ITransaction *TCms::CreateTxRemoveWalleTask(const TString &id) {
     return new TTxRemoveTask<Schema::WalleTask>(this, id, State->WalleTasks, State->WalleRequests);
 }
 
+ITransaction *TCms::CreateTxRemoveMaintenanceTask(const TString &id) {
+    return new TTxRemoveTask<Schema::MaintenanceTasks>(this, id, State->MaintenanceTasks, State->MaintenanceRequests);
+}
+
 } // namespace NKikimr::NCms

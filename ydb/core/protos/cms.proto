@@ -159,6 +159,7 @@ message TPermissionRequest {
   optional ETenantPolicy TenantPolicy = 8 [default = DEFAULT];
   // Availability mode is not preserved for scheduled events.
   optional EAvailabilityMode AvailabilityMode = 9 [default = MODE_MAX_AVAILABILITY];
+  optional string MaintenanceTaskId = 10;
 }
 
 enum EExtensionType {

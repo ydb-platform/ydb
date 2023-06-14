@@ -55,6 +55,7 @@ SRCS(
     rpc_log_store.cpp
     rpc_long_tx.cpp
     rpc_node_registration.cpp
+    rpc_maintenance.cpp
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp

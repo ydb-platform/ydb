@@ -9,6 +9,7 @@ RECURSE(
     kesus
     lib
     local_discovery
+    maintenance
     metadata
     monitoring
     persqueue_cluster_discovery

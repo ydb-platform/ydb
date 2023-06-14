@@ -8,12 +8,13 @@ namespace NKikimr::NCms {
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
 public:
     TTxStorePermissions(TCms *self, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-            const TString &owner, TAutoPtr<TRequestInfo> scheduled)
+            const TString &owner, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
         : TBase(self)
         , Request(std::move(req))
         , Response(std::move(resp))
         , Owner(owner)
         , Scheduled(scheduled)
+        , MaintenanceTaskId(maintenanceTaskId)
         , NextPermissionId(self->State->NextPermissionId)
         , NextRequestId(self->State->NextRequestId)
     {
@@ -29,6 +30,23 @@ public:
                                                 NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId));
 
         const auto &rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
+
+        if (MaintenanceTaskId) {
+            Y_VERIFY(Scheduled);
+
+            Self->State->MaintenanceRequests.emplace(Scheduled->RequestId, *MaintenanceTaskId);
+            Self->State->MaintenanceTasks.emplace(*MaintenanceTaskId, TTaskInfo{
+                .TaskId = *MaintenanceTaskId,
+                .RequestId = Scheduled->RequestId,
+                .Owner = Scheduled->Owner,
+            });
+
+            db.Table<Schema::MaintenanceTasks>().Key(*MaintenanceTaskId).Update(
+                NIceDb::TUpdate<Schema::MaintenanceTasks::RequestID>(Scheduled->RequestId),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::Owner>(Scheduled->Owner)
+            );
+        }
+
         for (const auto &permission : rec.GetPermissions()) {
             const auto &id = permission.GetId();
             const auto &requestId = Scheduled ? Scheduled->RequestId : "";
@@ -41,6 +59,11 @@ public:
                        NIceDb::TUpdate<Schema::Permission::Action>(actionStr),
                        NIceDb::TUpdate<Schema::Permission::Deadline>(deadline),
                        NIceDb::TUpdate<Schema::Permission::RequestID>(requestId));
+
+            if (MaintenanceTaskId) {
+                Y_VERIFY(Self->State->MaintenanceTasks.contains(*MaintenanceTaskId));
+                Self->State->MaintenanceTasks.at(*MaintenanceTaskId).Permissions.insert(id);
+            }
 
             Self->AuditLog(ctx, TStringBuilder() << "Store permission"
                 << ": id# " << id
@@ -92,14 +115,15 @@ private:
     TAutoPtr<IEventHandle> Response;
     TString Owner;
     TAutoPtr<TRequestInfo> Scheduled;
+    const TMaybe<TString> MaintenanceTaskId;
     ui64 NextPermissionId;
     ui64 NextRequestId;
 };
 
 ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-        const TString &owner, TAutoPtr<TRequestInfo> scheduled)
+        const TString &owner, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
 {
-    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled));
+    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled), maintenanceTaskId);
 }
 
 } // namespace NKikimr::NCms

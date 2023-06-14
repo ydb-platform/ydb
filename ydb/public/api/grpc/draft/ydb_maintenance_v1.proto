@@ -1,36 +1,25 @@
 syntax = "proto3";
 
 package Ydb.Maintenance.V1;
-option java_package = "com.yandex.ydb.maintenance.service.v1";
+option java_package = "com.yandex.ydb.maintenance.v1";
 
 import "ydb/public/api/protos/draft/ydb_maintenance.proto";
 
 service MaintenanceService {
-    // List cluster hosts
+    // List cluster nodes.
     rpc ListClusterNodes(ListClusterNodesRequest) returns (ListClusterNodesResponse);
-    // List node devices
-    rpc ListNodesDevices(ListNodesDevicesRequest) returns (ListNodesDevicesResponse);
 
-    // Request for permissions
+    // Create maintenance task.
     rpc CreateMaintenanceTask(CreateMaintenanceTaskRequest) returns (MaintenanceTaskResponse);
-    // Get new results
+    // Try to perform maintenance task's actions (polling).
     rpc RefreshMaintenanceTask(RefreshMaintenanceTaskRequest) returns (MaintenanceTaskResponse);
-    // Get scheduled task
-    rpc GetMaintenanceTaskDetails(GetMaintenanceTaskRequest) returns (GetMaintenanceTaskResponse);
-    // List maintenance tasks
+    // Get detailed task information.
+    rpc GetMaintenanceTask(GetMaintenanceTaskRequest) returns (GetMaintenanceTaskResponse);
+    // List maintenance tasks.
     rpc ListMaintenanceTasks(ListMaintenanceTasksRequest) returns (ListMaintenanceTasksResponse);
-
-    // Drop scheduled task
+    // Drop maintenance task.
     rpc DropMaintenanceTask(DropMaintenanceTaskRequest) returns (ManageMaintenanceTaskResponse);
-    // Update scheduled task deadline
-    rpc ProlongateMaintenanceTask(ProlongateMaintenanceTaskRequest) returns (ManageMaintenanceTaskResponse);
 
-    // Mark action result as no more needed
-    rpc ReleaseActionResult(ReleaseActionResultRequest) returns (ManageActionResultResponse);
-    // Update action result's deadline
-    rpc ProlongateActionResult(ProlongateActionResultRequest) returns (ManageActionResultResponse);
-
-    // Get detailed action state messages. Used for debugging service tasks to find out 
-    // the reason why an action does not get resolution.
-    rpc GetReadableActionReason(GetReadableActionReasonRequest) returns (GetReadableActionReasonResponse);
+    // Mark action as completed.
+    rpc CompleteAction(CompleteActionRequest) returns (ManageActionResponse);
 }

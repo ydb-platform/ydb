@@ -31,13 +31,18 @@ public:
         auto permissionRowset = db.Table<Schema::Permission>().Range().Select<Schema::Permission::TColumns>();
         auto requestRowset = db.Table<Schema::Request>().Range().Select<Schema::Request::TColumns>();
         auto walleTaskRowset = db.Table<Schema::WalleTask>().Range().Select<Schema::WalleTask::TColumns>();
+        auto maintenanceTasksRowset = db.Table<Schema::MaintenanceTasks>().Range().Select<Schema::MaintenanceTasks::TColumns>();
         auto notificationRowset = db.Table<Schema::Notification>().Range().Select<Schema::Notification::TColumns>();
         auto nodeTenantRowset = db.Table<Schema::NodeTenant>().Range().Select<Schema::NodeTenant::TColumns>();
         auto logRowset = db.Table<Schema::LogRecords>().Range().Select<Schema::LogRecords::Timestamp>();
 
-        if (!paramRow.IsReady() || !permissionRowset.IsReady()
-            || !requestRowset.IsReady() || !walleTaskRowset.IsReady()
-            || !notificationRowset.IsReady() || !logRowset.IsReady())
+        if (!paramRow.IsReady()
+            || !permissionRowset.IsReady()
+            || !requestRowset.IsReady()
+            || !walleTaskRowset.IsReady()
+            || !maintenanceTasksRowset.IsReady()
+            || !notificationRowset.IsReady()
+            || !logRowset.IsReady())
             return false;
 
         NKikimrCms::TCmsConfig config;
@@ -66,6 +71,8 @@ public:
 
         state->WalleTasks.clear();
         state->WalleRequests.clear();
+        state->MaintenanceTasks.clear();
+        state->MaintenanceRequests.clear();
         state->Permissions.clear();
         state->ScheduledRequests.clear();
         state->Notifications.clear();
@@ -108,6 +115,25 @@ public:
                 return false;
         }
 
+        while (!maintenanceTasksRowset.EndOfSet()) {
+            TString taskId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::TaskID>();
+            TString requestId = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::RequestID>();
+            TString owner = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::Owner>();
+
+            state->MaintenanceRequests.emplace(requestId, taskId);
+            state->MaintenanceTasks.emplace(taskId, TTaskInfo{
+                .TaskId = taskId,
+                .RequestId = requestId,
+                .Owner = owner,
+            });
+
+            LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded maintenance task %s mapped to request %s",
+                      taskId.data(), requestId.data());
+
+            if (!maintenanceTasksRowset.Next())
+                return false;
+        }
+
         while (!permissionRowset.EndOfSet()) {
             TString id = permissionRowset.GetValue<Schema::Permission::ID>();
             TString requestId = permissionRowset.GetValue<Schema::Permission::RequestID>();
@@ -132,6 +158,14 @@ public:
                 state->WalleTasks[taskId].Permissions.insert(id);
 
                 LOG_DEBUG(ctx, NKikimrServices::CMS, "Added permission %s to Wall-E task %s",
+                          id.data(), taskId.data());
+            }
+
+            if (state->MaintenanceRequests.contains(requestId)) {
+                const auto &taskId = state->MaintenanceRequests[requestId];
+                state->MaintenanceTasks[taskId].Permissions.insert(id);
+
+                LOG_DEBUG(ctx, NKikimrServices::CMS, "Added permission %s to maintenance task %s",
                           id.data(), taskId.data());
             }
 

@@ -39,7 +39,7 @@ public:
             Self->Reply(Request.Get(), Response, ctx);
         }
 
-        Self->RemoveEmptyWalleTasks(ctx);
+        Self->RemoveEmptyTasks(ctx);
     }
 
 private:

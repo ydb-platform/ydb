@@ -94,7 +94,7 @@ private:
     class TTxRemoveExpiredNotifications;
     class TTxRemoveRequest;
     class TTxRemovePermissions;
-    class TTxRemoveWalleTask;
+    template <typename TTable> class TTxRemoveTask;
     class TTxStorePermissions;
     class TTxStoreWalleTask;
     class TTxUpdateConfig;
@@ -336,7 +336,8 @@ private:
     void ScheduleLogCleanup(const TActorContext &ctx);
     void DoPermissionsCleanup(const TActorContext &ctx);
     void CleanupWalleTasks(const TActorContext &ctx);
-    void RemoveEmptyWalleTasks(const TActorContext &ctx);
+    TVector<TString> FindEmptyTasks(const THashMap<TString, TTaskInfo> &tasks, const TActorContext &ctx);
+    void RemoveEmptyTasks(const TActorContext &ctx);
     void StartCollecting();
     bool CheckNotificationDeadline(const NKikimrCms::TAction &action, TInstant time,
         TErrorInfo &error, const TActorContext &ctx) const;

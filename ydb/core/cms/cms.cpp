@@ -746,6 +746,20 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
 void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId,
                              const TString &owner, const TActorContext &ctx, bool check)
 {
+    auto acceptTaskPermission = [](auto &tasks, auto &requests, const TString &requestId, const TString &permissionId) {
+        auto reqIt = requests.find(requestId);
+        if (reqIt == requests.end()) {
+            return;
+        }
+
+        auto taskIt = tasks.find(reqIt->second);
+        if (taskIt == tasks.end()) {
+            return;
+        }
+
+        taskIt->second.Permissions.insert(permissionId);
+    };
+
     for (size_t i = 0; i < resp.PermissionsSize(); ++i) {
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
@@ -753,23 +767,11 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission");
         ClusterInfo->AddLocks(permission, requestId, owner, &ctx);
 
-        if (!check || owner != WALLE_CMS_USER) {
+        if (!check) {
             continue;
         }
 
-        auto reqIt = State->WalleRequests.find(requestId);
-        if (reqIt == State->WalleRequests.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS, "Cannot add permission to unknown wall-e request " << requestId);
-            continue;
-        }
-
-        auto taskIt = State->WalleTasks.find(reqIt->second);
-        if (taskIt == State->WalleTasks.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS, "Cannot add permission to unknown wall-e task" << reqIt->second);
-            continue;
-        }
-
-        taskIt->second.Permissions.insert(permission.GetId());
+        acceptTaskPermission(State->WalleTasks, State->WalleRequests, requestId, permission.GetId());
     }
 }
 
@@ -901,7 +903,7 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
     if (!permissionsToRemove.empty())
         Execute(CreateTxRemovePermissions(permissionsToRemove, nullptr, nullptr), ctx);
 
-    RemoveEmptyWalleTasks(ctx);
+    RemoveEmptyTasks(ctx);
 
     WalleCleanupTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
     CreateLongTimer(ctx, State->Config.DefaultWalleCleanupPeriod,
@@ -910,10 +912,10 @@ void TCms::CleanupWalleTasks(const TActorContext &ctx)
                     WalleCleanupTimerCookieHolder.Get());
 }
 
-void TCms::RemoveEmptyWalleTasks(const TActorContext &ctx)
+TVector<TString> TCms::FindEmptyTasks(const THashMap<TString, TTaskInfo> &tasks, const TActorContext &ctx)
 {
     TVector<TString> tasksToRemove;
-    for (const auto &entry : State->WalleTasks) {
+    for (const auto &entry : tasks) {
         const auto &task = entry.second;
         if (!State->ScheduledRequests.contains(task.RequestId) && task.Permissions.empty()) {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Found empty task %s", task.TaskId.data());
@@ -921,7 +923,12 @@ void TCms::RemoveEmptyWalleTasks(const TActorContext &ctx)
         }
     }
 
-    for (auto &id : tasksToRemove)
+    return tasksToRemove;
+}
+
+void TCms::RemoveEmptyTasks(const TActorContext &ctx)
+{
+    for (auto &id : FindEmptyTasks(State->WalleTasks, ctx))
         Execute(CreateTxRemoveWalleTask(id), ctx);
 }
 

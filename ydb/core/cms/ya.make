@@ -19,7 +19,7 @@ SRCS(
     cms_tx_remove_expired_notifications.cpp
     cms_tx_remove_permissions.cpp
     cms_tx_remove_request.cpp
-    cms_tx_remove_walle_task.cpp
+    cms_tx_remove_task.cpp
     cms_tx_store_permissions.cpp
     cms_tx_store_walle_task.cpp
     cms_tx_update_config.cpp

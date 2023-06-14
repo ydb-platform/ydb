@@ -65,7 +65,7 @@ target_sources(ydb-core-cms PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_remove_expired_notifications.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_remove_permissions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_remove_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_remove_walle_task.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_remove_task.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_store_permissions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_store_walle_task.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tx_update_config.cpp

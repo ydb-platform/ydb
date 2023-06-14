@@ -58,7 +58,7 @@ enum ETxTypes {
     TXTYPE_STORE_PERMISSIONS = 9                          [(TxTypeOpts) = {Name: "TxStorePermissions"}];
     TXTYPE_REMOVE_PERMISSIONS = 10                        [(TxTypeOpts) = {Name: "TxRemovePermissions"}];
     TXTYPE_REMOVE_REQUEST = 11                            [(TxTypeOpts) = {Name: "TxRemoveRequest"}];
-    TXTYPE_REMOVE_WALLE_TASK = 12                         [(TxTypeOpts) = {Name: "TxRemoveWalleTask"}];
+    TXTYPE_REMOVE_TASK = 12                               [(TxTypeOpts) = {Name: "TxRemoveTask"}];
     TXTYPE_STORE_WALLE_TASK = 13                          [(TxTypeOpts) = {Name: "TxStoreWalleTask"}];
     TXTYPE_UPDATE_CONFIG = 14                             [(TxTypeOpts) = {Name: "TxUpdateConfig"}];
     TXTYPE_UPDATE_DOWNTIMES = 15                          [(TxTypeOpts) = {Name: "TxUpdateDowntimes"}];

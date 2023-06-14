@@ -428,6 +428,6 @@ void depth_first_visit(const IncidenceGraph& g,
 }
 } // namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/depth_first_search.hpp>)
+
 
 #endif

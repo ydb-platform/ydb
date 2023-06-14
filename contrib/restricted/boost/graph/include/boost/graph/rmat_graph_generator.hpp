@@ -658,6 +658,6 @@ private:
 
 } // end namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/rmat_graph_generator.hpp>)
+
 
 #endif // BOOST_GRAPH_RMAT_GENERATOR_HPP

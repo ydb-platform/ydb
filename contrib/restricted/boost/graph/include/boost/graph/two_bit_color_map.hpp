@@ -103,6 +103,6 @@ inline two_bit_color_map< IndexMap > make_two_bit_color_map(
 
 } // end namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/two_bit_color_map.hpp>)
+
 
 #endif // BOOST_TWO_BIT_COLOR_MAP_HPP

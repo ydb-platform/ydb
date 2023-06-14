@@ -174,6 +174,6 @@ namespace graph
 }
 } // end namespace boost::graph
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/page_rank.hpp>)
+
 
 #endif // BOOST_GRAPH_PAGE_RANK_HPP

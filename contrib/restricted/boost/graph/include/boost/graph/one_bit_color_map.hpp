@@ -99,6 +99,6 @@ inline one_bit_color_map< IndexMap > make_one_bit_color_map(
 
 } // end namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/one_bit_color_map.hpp>)
+
 
 #endif // BOOST_ONE_BIT_COLOR_MAP_HPP

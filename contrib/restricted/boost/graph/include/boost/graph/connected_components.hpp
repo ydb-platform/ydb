@@ -109,6 +109,6 @@ connected_components(const Graph& g,
 
 } // namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/connected_components.hpp>)
+
 
 #endif // BOOST_GRAPH_CONNECTED_COMPONENTS_HPP

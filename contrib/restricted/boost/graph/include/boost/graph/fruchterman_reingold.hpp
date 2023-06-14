@@ -455,6 +455,6 @@ void fruchterman_reingold_force_directed_layout(
 
 } // end namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/fruchterman_reingold.hpp>)
+
 
 #endif // BOOST_GRAPH_FRUCHTERMAN_REINGOLD_FORCE_DIRECTED_LAYOUT_HPP

@@ -342,6 +342,6 @@ kosaraju_strong_components(
 
 } // namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/strong_components.hpp>)
+
 
 #endif // BOOST_GRAPH_STRONG_COMPONENTS_HPP

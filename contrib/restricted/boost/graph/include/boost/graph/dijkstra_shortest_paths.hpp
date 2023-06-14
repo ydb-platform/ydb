@@ -575,6 +575,6 @@ inline void dijkstra_shortest_paths(const VertexListGraph& g,
 
 } // namespace boost
 
-#include BOOST_GRAPH_MPI_INCLUDE(<boost/graph/distributed/dijkstra_shortest_paths.hpp>)
+
 
 #endif // BOOST_GRAPH_DIJKSTRA_HPP

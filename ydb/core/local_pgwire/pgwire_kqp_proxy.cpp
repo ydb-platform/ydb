@@ -59,15 +59,16 @@ protected:
         }
         request.SetKeepSession(true);
         // HACK
-        if (query.starts_with("BEGIN")) {
+        TString q(ToUpperUTF8(query.substr(0, 10)));
+        if (q.StartsWith("BEGIN")) {
             Tag_ = "BEGIN";
             request.SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
             request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        } else if (query.starts_with("COMMIT")) {
+        } else if (q.StartsWith("COMMIT")) {
             Tag_ = "COMMIT";
             request.SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
             request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
-        } else if (query.starts_with("ROLLBACK")) {
+        } else if (q.StartsWith("ROLLBACK")) {
             Tag_ = "ROLLBACK";
             if (Connection_.Transaction.Status == 'T') {
                 request.SetAction(NKikimrKqp::QUERY_ACTION_ROLLBACK_TX);
@@ -80,7 +81,7 @@ protected:
                 TBase::Send(TBase::SelfId(), evQueryResponse.Release());
             }
         } else {
-            if (query.starts_with("SELECT")) {
+            if (q.StartsWith("SELECT")) {
                 Tag_ = "SELECT";
             }
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);

@@ -48,6 +48,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-tx-datashard
   core-tx-sharding
   tx-long_tx_service-public
+  core-tx-ev_write
   ydb-core-ydb_convert
   ydb-library-aclib
   ydb-library-binary_json

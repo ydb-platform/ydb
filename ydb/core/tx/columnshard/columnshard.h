@@ -259,6 +259,12 @@ struct TEvColumnShard {
             Record.MutableMeta()->SetSchema(arrowSchema);
         }
 
+        void SetArrowData(const TString& arrowSchema, const TString& arrowData) {
+            Record.MutableMeta()->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
+            Record.MutableMeta()->SetSchema(arrowSchema);
+            Record.SetData(arrowData);
+        }
+
         TActorId GetSource() const {
             return ActorIdFromProto(Record.GetSource());
         }
@@ -281,6 +287,11 @@ struct TEvColumnShard {
             Record.SetTableId(tableId);
             Record.SetDedupId(dedupId);
             Record.SetStatus(status);
+        }
+
+        Ydb::StatusIds::StatusCode GetYdbStatus() const  {
+            const auto status = (NKikimrTxColumnShard::EResultStatus)Record.GetStatus();
+            return NColumnShard::ConvertToYdbStatus(status);
         }
     };
 

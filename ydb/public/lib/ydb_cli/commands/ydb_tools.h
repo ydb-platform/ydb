@@ -43,6 +43,7 @@ private:
     bool SavePartialResult = false;
     TString ConsistencyLevel;
     bool PreservePoolKinds = false;
+    bool Ordered = false;
 };
 
 class TCommandRestore : public TToolsCommand, public TCommandWithPath {

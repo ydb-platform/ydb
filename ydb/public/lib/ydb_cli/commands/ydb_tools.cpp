@@ -69,6 +69,8 @@ void TCommandDump::Config(TConfig& config) {
             " Takes more time and is more likely to impact workload;\n"
             "table - take consistent snapshot per each table independently.")
         .DefaultValue("database").StoreResult(&ConsistencyLevel);
+    config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
+            .StoreTrue(&Ordered);
 }
 
 void TCommandDump::Parse(TConfig& config) {
@@ -92,7 +94,7 @@ int TCommandDump::Run(TConfig& config) {
     try {
         TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
         NYdb::NBackup::BackupFolder(CreateDriver(config), config.Database, relPath, FilePath, ExclusionPatterns,
-            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds);
+            IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds, Ordered);
     } catch (const NYdb::NBackup::TYdbErrorException& e) {
         e.LogToStderr();
         return EXIT_FAILURE;

@@ -2192,6 +2192,9 @@ TDataDecompressionInfo<UseMigrationProtocol>::~TDataDecompressionInfo()
 template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::BuildBatchesMeta() {
     BatchesMeta.reserve(ServerMessage.batches_size());
+    if constexpr (!UseMigrationProtocol) {
+        MessagesMeta.reserve(ServerMessage.batches_size());
+    }
     for (const auto& batch : ServerMessage.batches()) {
         // Extra fields.
         typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr meta = MakeIntrusive<TAWriteSessionMeta<UseMigrationProtocol>>();
@@ -2206,6 +2209,16 @@ void TDataDecompressionInfo<UseMigrationProtocol>::BuildBatchesMeta() {
             for (const auto& [key, value] : batch.write_session_meta()) {
                 meta->Fields.emplace(key, value);
             }
+            MessagesMeta.emplace_back(TMetadataPtrVector{});
+            auto &currBatchMessagesMeta = MessagesMeta.back();
+            for (const auto &messageData: batch.message_data()) {
+                typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr msgMeta = MakeIntrusive<TAWriteSessionMeta<UseMigrationProtocol>>();
+                msgMeta->Fields.reserve(messageData.message_meta_size());
+                for (const auto &[key, value]: messageData.message_meta()) {
+                    msgMeta->Fields.emplace(key, value);
+                }
+                currBatchMessagesMeta.emplace_back(std::move(msgMeta));
+                }
         }
 
         BatchesMeta.emplace_back(std::move(meta));
@@ -2336,7 +2349,6 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
     i64 maxOffset = 0;
     auto& batch = *msg.mutable_batches(Batch);
     const auto& meta = Parent->GetBatchMeta(Batch);
-
     const TInstant batchWriteTimestamp = [&batch](){
         if constexpr (UseMigrationProtocol) {
             return TInstant::MilliSeconds(batch.write_timestamp_ms());
@@ -2375,14 +2387,18 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
                                             messageData.explicit_hash());
         }
     } else {
-        NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(messageData.offset(),
-                                                                                       batch.producer_id(),
-                                                                                       messageData.seq_no(),
-                                                                                       TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(messageData.created_at())),
-                                                                                       batchWriteTimestamp,
-                                                                                       meta,
-                                                                                       messageData.uncompressed_size(),
-                                                                                       messageData.message_group_id());
+        const auto &messageMeta = Parent->GetMessageMeta(Batch, Message);
+        NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
+                messageData.offset(),
+                batch.producer_id(),
+                messageData.seq_no(),
+                TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(messageData.created_at())),
+                batchWriteTimestamp,
+                meta,
+                messageMeta,
+                messageData.uncompressed_size(),
+                messageData.message_group_id()
+        );
 
         if (Parent->GetDoDecompress()) {
             messages.emplace_back(messageData.data(),

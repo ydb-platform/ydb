@@ -80,7 +80,6 @@ Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
             UNIT_ASSERT(res);
             writer->Close();
         };
-
         alterAndCheck(2);
         alterAndCheck(4);
         alterAndCheck(12);

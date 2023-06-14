@@ -387,7 +387,6 @@ bool FillBatchedData(
                     SetBatchExtraField(currentBatch, "logtype", header.GetLogType());
                 }
             }
-
             if (proto.HasExtraFields()) {
                 const auto& map = proto.GetExtraFields();
                 for (const auto& kv : map.GetItems()) {
@@ -424,6 +423,8 @@ bool FillBatchedData(
                 ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
 
             message->set_message_group_id(GetBatchSourceId(currentBatch));
+            auto* msgMeta = message->mutable_message_meta();
+            *msgMeta = (proto.GetMessageMeta());
         }
         hasData = true;
     }

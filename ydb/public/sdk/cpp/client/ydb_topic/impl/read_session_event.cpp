@@ -25,6 +25,7 @@ TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     TInstant createTime,
     TInstant writeTime,
     TWriteSessionMeta::TPtr meta,
+    TWriteSessionMeta::TPtr messageMeta,
     ui64 uncompressedSize,
     TString messageGroupId
 )
@@ -34,6 +35,7 @@ TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     , CreateTime(createTime)
     , WriteTime(writeTime)
     , Meta(meta)
+    , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
     , MessageGroupId(messageGroupId)
 {}
@@ -161,6 +163,10 @@ const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TMessage::
     return Information.Meta;
 }
 
+const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TMessage::GetMessageMeta() const {
+    return Information.MessageMeta;
+}
+
 void TReadSessionEvent::TDataReceivedEvent::TMessage::Commit() {
     static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())
         ->Commit(Information.Offset, Information.Offset + 1);
@@ -215,6 +221,10 @@ TInstant TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetWriteTime
 
 const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetMeta() const {
     return Information.Meta;
+}
+
+const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetMessageMeta() const {
+    return Information.MessageMeta;
 }
 
 ui64 TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetUncompressedSize() const {

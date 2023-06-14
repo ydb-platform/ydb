@@ -151,6 +151,8 @@ message StreamWriteMessage {
                 // Explicit partition id to write to.
                 int64 partition_id = 6;
             }
+            // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
+            map<string, string> message_meta = 7;
         }
     }
 
@@ -358,6 +360,8 @@ message StreamReadMessage {
 
             // Filled if message_group_id was set on message write.
             string message_group_id = 7;
+            map<string, string> message_meta = 8;
+
         }
 
         // Representation of sequence of client messages from one write session.

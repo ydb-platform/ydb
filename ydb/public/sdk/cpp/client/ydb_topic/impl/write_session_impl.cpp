@@ -10,6 +10,7 @@
 #include <util/generic/store_policy.h>
 #include <util/generic/utility.h>
 #include <util/stream/buffer.h>
+#include <util/generic/guid.h>
 
 
 namespace NYdb::NTopic {
@@ -125,8 +126,24 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     }
     return result;
 }
+TString GenerateProducerId() {
+    return CreateGuidAsString();
+}
 
 void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race yet as well.
+    if (!Settings.DeduplicationEnabled_.Defined()) {
+        Settings.DeduplicationEnabled_ = !(Settings.ProducerId_.empty());
+    }
+    else if (Settings.DeduplicationEnabled_.GetRef()) {
+        if (Settings.ProducerId_.empty()) {
+            Settings.ProducerId(GenerateProducerId());
+        }
+    } else {
+        if (!Settings.ProducerId_.empty()) {
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "ProducerId is not empty when deduplication is switched off");
+            ThrowFatalError("Cannot disable deduplication when non-empty ProducerId is provided");
+        }
+    }
     CompressionExecutor = Settings.CompressionExecutor_;
     IExecutor::TPtr executor;
     executor = CreateSyncExecutor();
@@ -139,6 +156,10 @@ void TWriteSessionImpl::InitWriter() { // No Lock, very initial start - no race 
 }
 // Client method
 NThreading::TFuture<ui64> TWriteSessionImpl::GetInitSeqNo() {
+    if (!Settings.DeduplicationEnabled_.GetOrElse(true)) {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "GetInitSeqNo called with deduplication disabled");
+        ThrowFatalError("Cannot call GetInitSeqNo when deduplication is disabled");
+    }
     if (Settings.ValidateSeqNo_) {
         if (AutoSeqNoMode.Defined() && *AutoSeqNoMode) {
             LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Cannot call GetInitSeqNo in Auto SeqNo mode");
@@ -177,6 +198,10 @@ ui64 TWriteSessionImpl::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
         }
     }
     if (seqNo.Defined()) {
+        if (!Settings.DeduplicationEnabled_.GetOrElse(true)) {
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "SeqNo is provided on write when deduplication is disabled");
+            ThrowFatalError("Cannot provide SeqNo on Write() when deduplication is disabled");
+        }
         if (*AutoSeqNoMode) {
             LOG_LAZY(DbDriverState->Log,
                 TLOG_ERR,
@@ -226,7 +251,8 @@ void TWriteSessionImpl::WriteInternal(
     bool readyToAccept = false;
     size_t bufferSize = data.size();
     with_lock(Lock) {
-        CurrentBatch.Add(GetNextSeqNoImpl(seqNo), createdAtValue, data, codec, originalSize);
+        //ToDo[message-meta] - Pass message meta here.
+        CurrentBatch.Add(GetNextSeqNoImpl(seqNo), createdAtValue, data, codec, originalSize, {});
 
         FlushWriteIfRequiredImpl();
         readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
@@ -591,9 +617,13 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             ui64 newLastSeqNo = initResponse.last_seq_no();
             // SeqNo increased, so there's a risk of loss, apply SeqNo shift.
             // MinUnsentSeqNo must be > 0 if anything was ever sent yet
-            if (MinUnsentSeqNo && OnSeqNoShift && newLastSeqNo > MinUnsentSeqNo) {
-                 SeqNoShift = newLastSeqNo - MinUnsentSeqNo;
-            }
+            if (Settings.DeduplicationEnabled_.GetOrElse(true)) {
+                 if(MinUnsentSeqNo && OnSeqNoShift && newLastSeqNo > MinUnsentSeqNo) {
+                     SeqNoShift = newLastSeqNo - MinUnsentSeqNo;
+                 }
+            } else {
+                newLastSeqNo = 1;
+	    }
             result.InitSeqNo = newLastSeqNo;
             LastSeqNo = newLastSeqNo;
 
@@ -878,29 +908,35 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     for (size_t i = 0; i != CurrentBatch.Messages.size();) {
         TBlock block{};
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
-            auto sequenceNumber = CurrentBatch.Messages[i].SeqNo;
-            auto createTs = CurrentBatch.Messages[i].CreatedAt;
+            auto& currMessage = CurrentBatch.Messages[i];
+            auto sequenceNumber = currMessage.SeqNo;
+            auto createTs = currMessage.CreatedAt;
 
             if (!block.MessageCount) {
                 block.Offset = sequenceNumber;
             }
 
             block.MessageCount += 1;
-            const auto& datum = CurrentBatch.Messages[i].DataRef;
+            const auto& datum = currMessage.DataRef;
             block.OriginalSize += datum.size();
             block.OriginalMemoryUsage = CurrentBatch.Data.size();
             block.OriginalDataRefs.emplace_back(datum);
             if (CurrentBatch.Messages[i].Codec.Defined()) {
                 Y_VERIFY(CurrentBatch.Messages.size() == 1);
-                block.CodecID = static_cast<ui32>(*CurrentBatch.Messages[i].Codec);
-                block.OriginalSize = CurrentBatch.Messages[i].OriginalSize;
+                block.CodecID = static_cast<ui32>(*currMessage.Codec);
+                block.OriginalSize = currMessage.OriginalSize;
                 block.Compressed = false;
             }
             size += datum.size();
             UpdateTimedCountersImpl();
             (*Counters->BytesInflightUncompressed) += datum.size();
             (*Counters->MessagesInflight)++;
-            OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size());
+            if (!currMessage.MessageMeta.empty()) {
+                OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size(),
+                                               std::move(currMessage.MessageMeta));
+            } else {
+                OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size());
+            }
         }
         block.Data = std::move(CurrentBatch.Data);
         if (skipCompression) {
@@ -984,6 +1020,12 @@ void TWriteSessionImpl::SendImpl() {
                 msgData->set_seq_no(message.SeqNo + SeqNoShift);
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
+                if (!message.MessageMeta.empty()) {
+                    auto* meta = msgData->mutable_message_meta();
+                    for (auto& [k, v] : message.MessageMeta) {
+                        (*meta)[k] = v;
+                    }
+                }
                 SentOriginalMessages.emplace(std::move(message));
                 OriginalMessagesToSend.pop();
 

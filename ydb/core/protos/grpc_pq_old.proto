@@ -37,4 +37,6 @@ message TDataChunk {
     optional TMapType ExtraFields     = 126;
 
     optional bytes Data           = 127; // ~ 64K
+
+    map<string, string> MessageMeta = 128;
 }

@@ -686,6 +686,7 @@ struct TReadSessionEvent {
                                 TInstant createTime,
                                 TInstant writeTime,
                                 TWriteSessionMeta::TPtr meta,
+                                TWriteSessionMeta::TPtr messageMeta,
                                 ui64 uncompressedSize,
                                 TString messageGroupId);
             ui64 Offset;
@@ -694,6 +695,7 @@ struct TReadSessionEvent {
             TInstant CreateTime;
             TInstant WriteTime;
             TWriteSessionMeta::TPtr Meta;
+            TWriteSessionMeta::TPtr MessageMeta;
             ui64 UncompressedSize;
             TString MessageGroupId;
         };
@@ -752,6 +754,9 @@ struct TReadSessionEvent {
             //! Metainfo.
             const TWriteSessionMeta::TPtr& GetMeta() const;
 
+            //! Message level meta info.
+            const TWriteSessionMeta::TPtr& GetMessageMeta() const;
+
             //! Commits single message.
             void Commit() override;
 
@@ -793,6 +798,9 @@ struct TReadSessionEvent {
 
             //! Metainfo.
             const TWriteSessionMeta::TPtr& GetMeta() const;
+
+            //! Message level meta info.
+            const TWriteSessionMeta::TPtr& GetMessageMeta() const;
 
             //! Uncompressed size.
             ui64 GetUncompressedSize() const;
@@ -1211,6 +1219,11 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! MessageGroupId to use.
     FLUENT_SETTING(TString, MessageGroupId);
+
+    //! Explicitly enables or disables deduplication for this write session.
+    //! If ProducerId option is defined deduplication will always be enabled.
+    //! If ProducerId option is empty, but deduplication is enable, a random ProducerId is generated.
+    FLUENT_SETTING_OPTIONAL(bool, DeduplicationEnabled);
 
     //! Write to an exact partition. Generally server assigns partition automatically by message_group_id.
     //! Using this option is not recommended unless you know for sure why you need it.

@@ -19,7 +19,7 @@ using namespace NPersQueue;
 namespace NKikimr {
 namespace NPQ {
 
-using TPersQueueReadEvent = NYdb::NPersQueue::TReadSessionEvent;
+using TPersQueueReadEvent = NYdb::NTopic::TReadSessionEvent;
 
 constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
     return NKikimrServices::TActivity::PERSQUEUE_MIRRORER;
@@ -107,22 +107,22 @@ bool TMirrorer::AddToWriteRequest(
             incorrectRequest = true;
             return false;
         }
-        request.SetCmdWriteOffset(message.GetOffset(0));
+        request.SetCmdWriteOffset(message.GetOffset());
     }
-    if (request.GetCmdWriteOffset() + request.CmdWriteSize() != message.GetOffset(0)) {
+    if (request.GetCmdWriteOffset() + request.CmdWriteSize() != message.GetOffset()) {
         return false;
     }
 
     auto write = request.AddCmdWrite();
     write->SetData(GetSerializedData(message));
-    write->SetSourceId(NSourceIdEncoding::EncodeSimple(message.GetMessageGroupId(0)));
-    write->SetSeqNo(message.GetSeqNo(0));
-    write->SetCreateTimeMS(message.GetCreateTime(0).MilliSeconds());
+    write->SetSourceId(NSourceIdEncoding::EncodeSimple(message.GetProducerId()));
+    write->SetSeqNo(message.GetSeqNo());
+    write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
     if (Config.GetSyncWriteTime()) {
-        write->SetWriteTimeMS(message.GetWriteTime(0).MilliSeconds());
+        write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
     }
     write->SetDisableDeduplication(true);
-    write->SetUncompressedSize(message.GetUncompressedSize(0));
+    write->SetUncompressedSize(message.GetUncompressedSize());
     return true;
 }
 
@@ -173,7 +173,7 @@ void TMirrorer::ProcessWriteResponse(
 ) {
     Y_VERIFY_S(response.CmdWriteResultSize() == WriteInFlight.size(), MirrorerDescription()
         << "CmdWriteResultSize=" << response.CmdWriteResultSize() << ", but expected=" << WriteInFlight.size()
-        << ". First expected offset= " << (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset(0))
+        << ". First expected offset= " << (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset())
         << " response: " << response);
 
     for (auto& result : response.GetCmdWriteResult()) {
@@ -189,10 +189,10 @@ void TMirrorer::ProcessWriteResponse(
         }
         auto& writtenMessageInfo = WriteInFlight.front();
         if (MirrorerTimeLags) {
-            TDuration lag = TInstant::MilliSeconds(result.GetWriteTimestampMS()) - writtenMessageInfo.GetWriteTime(0);
+            TDuration lag = TInstant::MilliSeconds(result.GetWriteTimestampMS()) - writtenMessageInfo.GetWriteTime();
             MirrorerTimeLags->IncFor(lag.MilliSeconds(), 1);
         }
-        ui64 offset = writtenMessageInfo.GetOffset(0);
+        ui64 offset = writtenMessageInfo.GetOffset();
         Y_VERIFY((ui64)result.GetOffset() == offset);
         Y_VERIFY_S(EndOffset <= offset, MirrorerDescription()
             << "end offset more the written " << EndOffset << ">" << offset);
@@ -254,7 +254,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
             LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
                 << "[STATE] has partition stream " << PartitionStream->GetTopicPath()
                 << ":" << PartitionStream->GetPartitionId()
-                << " with id " << PartitionStream->GetPartitionStreamId());
+                << " with id " << PartitionStream->GetPartitionSessionId());
         } else {
             LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << "[STATE] hasn't partition stream");
         }
@@ -435,7 +435,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " creating new read session");
 
     if (!Queue.empty()) {
-        OffsetToRead = Queue.front().GetOffset(0);
+        OffsetToRead = Queue.front().GetOffset();
         while (!Queue.empty()) {
             ui64 dataSize = Queue.back().GetData().size();
             Y_VERIFY(BytesInFlight >= dataSize);
@@ -499,15 +499,14 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
         req->SetTopic(TopicConverter->GetClientsideName());
         req->SetPartition(Partition);
         req->SetCookie(UPDATE_WRITE_TIMESTAMP);
-        req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteWatermark().MilliSeconds());
+        req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
         ctx.Send(TabletActor, request.Release());
     }
 }
 
 void TMirrorer::AddMessagesToQueue(TVector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
-        Y_VERIFY(msg.GetBlocksCount() == 1); // TODO support several compressed messages
-        ui64 offset = msg.GetOffset(0);
+        ui64 offset = msg.GetOffset();
         Y_VERIFY(OffsetToRead <= offset);
         ui64 messageSize = msg.GetData().size();
 
@@ -586,7 +585,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     if (!WaitNextReaderEventInFlight) {
         return;
     }
-    TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " got next reader event: " << bool(event));
 
     if (wakeup && !event) {
@@ -602,18 +601,18 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.GetRef())) {
         AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
-    } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TCreatePartitionStreamEvent>(&event.GetRef())) {
+    } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.GetRef())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
             MirrorerDescription() << " got create stream event for '" << createStream->DebugString()
                 << " and will set offset=" << OffsetToRead);
         if (PartitionStream) {
-            ProcessError(ctx, TStringBuilder() << " already has stream " << PartitionStream->GetPartitionStreamId()
-                << ", new stream " << createStream->GetPartitionStream()->GetPartitionStreamId());
+            ProcessError(ctx, TStringBuilder() << " already has stream " << PartitionStream->GetPartitionSessionId()
+                << ", new stream " << createStream->GetPartitionSession()->GetPartitionSessionId());
             ScheduleConsumerCreation(ctx);
             return;
         }
 
-        PartitionStream = createStream->GetPartitionStream();
+        PartitionStream = createStream->GetPartitionSession();
         if (Partition != PartitionStream->GetPartitionId()) {
             ProcessError(ctx, TStringBuilder() << " got stream for incorrect partition, stream: topic=" << PartitionStream->GetTopicPath()
                 << " partition=" << PartitionStream->GetPartitionId());
@@ -628,38 +627,38 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
 
         createStream->Confirm(OffsetToRead);
         RequestSourcePartitionStatus();
-    } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TDestroyPartitionStreamEvent>(&event.GetRef())) {
+    } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TStopPartitionSessionEvent>(&event.GetRef())) {
         destroyStream->Confirm();
 
         PartitionStream.Reset();
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
             MirrorerDescription()
                 << " got destroy stream event: " << destroyStream->DebugString());
-   } else if (auto* streamClosed = std::get_if<TPersQueueReadEvent::TPartitionStreamClosedEvent>(&event.GetRef())) {
+   } else if (auto* streamClosed = std::get_if<TPersQueueReadEvent::TPartitionSessionClosedEvent>(&event.GetRef())) {
         PartitionStream.Reset();
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
             MirrorerDescription()
                 << " got stream closed event for partition stream id: "
-                << streamClosed->GetPartitionStream()->GetPartitionStreamId()
+                << streamClosed->GetPartitionSession()->GetPartitionSessionId()
                 << " reason: " << streamClosed->GetReason());
 
         ProcessError(ctx, TStringBuilder() << " read session stream closed event");
         ScheduleConsumerCreation(ctx);
         return;
 
-    } else if (auto* streamStatus = std::get_if<TPersQueueReadEvent::TPartitionStreamStatusEvent >(&event.GetRef())) {
+    } else if (auto* streamStatus = std::get_if<TPersQueueReadEvent::TPartitionSessionStatusEvent >(&event.GetRef())) {
         if (PartitionStream
-            && PartitionStream->GetPartitionStreamId() == streamStatus->GetPartitionStream()->GetPartitionStreamId()
+            && PartitionStream->GetPartitionSessionId() == streamStatus->GetPartitionSession()->GetPartitionSessionId()
         ) {
-            StreamStatus = MakeHolder<TPersQueueReadEvent::TPartitionStreamStatusEvent>(*streamStatus);
+            StreamStatus = MakeHolder<TPersQueueReadEvent::TPartitionSessionStatusEvent>(*streamStatus);
 
             ctx.Schedule(TDuration::Seconds(1), new TEvPQ::TEvRequestPartitionStatus);
             TryUpdateWriteTimetsamp(ctx);
         }
-    } else if (auto* commitAck = std::get_if<TPersQueueReadEvent::TCommitAcknowledgementEvent>(&event.GetRef())) {
+    } else if (auto* commitAck = std::get_if<TPersQueueReadEvent::TCommitOffsetAcknowledgementEvent>(&event.GetRef())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " got commit responce, commited offset: " << commitAck->GetCommittedOffset());
-    } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&event.GetRef())) {
+    } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event.GetRef())) {
         ProcessError(ctx, TStringBuilder() << " read session closed: " << closeSessionEvent->DebugString());
         ScheduleConsumerCreation(ctx);
         return;

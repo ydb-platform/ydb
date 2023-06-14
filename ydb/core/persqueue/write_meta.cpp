@@ -41,6 +41,27 @@ TString GetSerializedData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceiv
     return str;
 }
 
+TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    NKikimrPQClient::TDataChunk proto;
+    for (const auto& item : message.GetMeta()->Fields) {
+        if (item.first == "_ip") {
+            proto.SetIp(item.second);
+        } else {
+            SetMetaField(proto, item.first, item.second);
+        }
+    }
+    proto.SetSeqNo(message.GetSeqNo());
+    proto.SetCreateTime(message.GetCreateTime().MilliSeconds());
+    auto codec = NPQ::FromTopicCodec(message.GetCodec());
+    proto.SetCodec(codec);
+    proto.SetData(message.GetData());
+
+    TString str;
+    bool res = proto.SerializeToString(&str);
+    Y_VERIFY(res);
+    return str;
+}
+
 NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
     NKikimrPQClient::TDataChunk proto;
     bool res = proto.ParseFromString(string);

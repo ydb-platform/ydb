@@ -11,6 +11,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 
@@ -96,7 +97,7 @@ private:
 
     bool AddToWriteRequest(
         NKikimrClient::TPersQueuePartitionRequest& request,
-        NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
+        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
         bool& incorrectRequest
     );
     void ProcessError(const TActorContext& ctx, const TString& msg);
@@ -145,7 +146,7 @@ public:
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
     void AddMessagesToQueue(
-        TVector<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
     );
     void StartWaitNextReaderEvent(const TActorContext& ctx);
 
@@ -159,17 +160,17 @@ private:
     ui64 OffsetToRead;
     NKikimrPQ::TMirrorPartitionConfig Config;
 
-    TDeque<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
-    TDeque<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
+    TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
+    TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     TDuration WriteRetryTimeout = WRITE_RETRY_TIMEOUT_START;
     TInstant WriteRequestTimestamp;
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
-    std::shared_ptr<NYdb::NPersQueue::IReadSession> ReadSession;
+    std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;
-    NYdb::NPersQueue::TPartitionStream::TPtr PartitionStream;
-    THolder<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent> StreamStatus;
+    NYdb::NTopic::TPartitionSession::TPtr PartitionStream;
+    THolder<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent> StreamStatus;
     TInstant LastInitStageTimestamp;
 
     TDuration ConsumerInitTimeout = CONSUMER_INIT_TIMEOUT_START;

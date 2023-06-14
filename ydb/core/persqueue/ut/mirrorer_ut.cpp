@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
                     const auto& dstMeta = dstMessages[i].GetMeta(0)->Fields;
                     const auto& srcMeta = srcMessages[i].GetMeta(0)->Fields;
-                    UNIT_ASSERT_EQUAL(dstMeta.size(), srcMeta.size());
+                    UNIT_ASSERT_VALUES_EQUAL(dstMeta.size(), srcMeta.size());
                     for (auto& item : srcMeta) {
                         UNIT_ASSERT(dstMeta.count(item.first));
                         UNIT_ASSERT_EQUAL(dstMeta.at(item.first), item.second);

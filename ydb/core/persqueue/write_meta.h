@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/string/vector.h>
 
@@ -66,6 +67,7 @@ TString GetSerializedData(const NKikimrPQClient::TDataChunk& init, TArgs&...args
 }
 
 TString GetSerializedData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message);
+TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message);
 
 NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string);
 

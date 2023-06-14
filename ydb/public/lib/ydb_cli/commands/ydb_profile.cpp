@@ -1,6 +1,5 @@
 #include "ydb_profile.h"
 
-#include <cstdlib>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 #include <util/folder/dirut.h>
